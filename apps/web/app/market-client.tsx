@@ -22,7 +22,7 @@ type ClubOperations = {
 type MatchRecord = {
   id: string; type: string; status: string; scheduledAt: string;
   homeClub: { id: string; name: string }; awayClub: { id: string; name: string };
-  homeScore: number | null; awayScore: number | null; attendance: number; ticketRevenue: string;
+  homeScore: number | null; awayScore: number | null; homePenalties: number | null; awayPenalties: number | null; winnerClubId: string | null; attendance: number; ticketRevenue: string;
   events: Array<{ minute: number; type: string; detail: string; playerId: string; playerName: string; relatedPlayerName: string | null }>;
 };
 type OpenLeague = { id: string; name: string; season: number; format: string; status: string; maxTeams: number; teams: number; joined: boolean; isCreator: boolean; creator: string };
@@ -465,7 +465,7 @@ export default function MarketPage() {
         <h2>برنامه و نتایج مسابقات</h2>
         {matches.length === 0 ? <p className="muted">هنوز مسابقه‌ای ثبت نشده است.</p> : matches.map((match) => <div className="operation-row" key={match.id}>
           <div>
-            <strong>{match.homeClub.name} {match.homeScore ?? "–"} : {match.awayScore ?? "–"} {match.awayClub.name}</strong>
+            <strong>{match.homeClub.name} {match.homeScore ?? "–"} : {match.awayScore ?? "–"} {match.awayClub.name}{match.homePenalties !== null ? ` (پنالتی ${match.homePenalties}-${match.awayPenalties})` : ""}</strong>
             <small>{match.type === "CUP" ? "جام حذفی" : match.type === "LEAGUE" ? "لیگ" : "دوستانه"} · {match.status === "COMPLETED" ? "پایان‌یافته" : match.status === "SCHEDULED" ? "برنامه‌ریزی‌شده" : "لغوشده"} · {new Date(match.scheduledAt).toLocaleString("fa-IR")}</small>
             {match.status === "COMPLETED" && <small>تماشاگر: {money(match.attendance)} · درآمد بلیت: {money(match.ticketRevenue)} Cash</small>}
             {match.events.slice(0, 8).map((event, index) => <small key={match.id + "-event-" + index}>{event.minute} دقیقه · {matchEventLabel[event.type] ?? event.type} · {event.playerName}{event.relatedPlayerName ? " (پاس گل: " + event.relatedPlayerName + ")" : ""}</small>)}
