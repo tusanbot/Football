@@ -2,11 +2,13 @@ import { randomInt } from "node:crypto";
 import { Prisma, type PlayerStatus, type TrainingFocus as DbTrainingFocus, type TrainingIntensity as DbTrainingIntensity } from "@prisma/client";
 import {
   advancePlayerDailyState,
+  applyAnnualAgeing,
   calculateContractDemand,
   calculateInjuryChanceBasisPoints,
   calculateTrainingResult,
   isTrainingFocusCompatible,
   type PlayerAttributes,
+  type PlayerPosition,
   type TrainingFocus,
   type TrainingIntensity,
 } from "@football/domain";
@@ -55,6 +57,7 @@ export async function settleClubDailyState(userId: string, now = new Date()) {
       select: {
         id: true, age: true, ageDays: true, contractDays: true, fitness: true,
         morale: true, status: true, injuryUntil: true, lineupSlot: true,
+        position: true, overall: true, attributes: true,
       },
     });
     let recovered = 0;
@@ -70,6 +73,7 @@ export async function settleClubDailyState(userId: string, now = new Date()) {
       }, elapsedDays, now, club.coach?.recoverySkill ?? 25);
       const totalAgeDays = player.ageDays + elapsedDays;
       const yearsGained = Math.floor(totalAgeDays / 365);
+      const aged = applyAnnualAgeing(player.position as PlayerPosition, player.attributes as unknown as PlayerAttributes, player.age, yearsGained);
       let status = next.status;
       if (player.age + yearsGained >= 40) status = "RETIRED";
       if (player.status === "INJURED" && status !== "INJURED") recovered++;
@@ -84,6 +88,7 @@ export async function settleClubDailyState(userId: string, now = new Date()) {
         data: {
           age: player.age + yearsGained,
           ageDays: totalAgeDays % 365,
+          ...(yearsGained > 0 ? { attributes: aged.attributes as unknown as Prisma.InputJsonValue, overall: Math.min(player.potential, aged.overall) } : {}),
           contractDays: next.contractDays,
           fitness: next.fitness,
           morale: next.morale,
