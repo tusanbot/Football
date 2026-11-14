@@ -166,8 +166,10 @@ export async function cancelGroupChallenge(i:{telegramUserId:string;telegramGrou
 }
 export async function listGroupLeagues(telegramUserId:string,telegramGroupId:string) {
  const {user,group}=await prisma.$transaction(async tx=>groupMember(tx,telegramUserId,telegramGroupId));
- const rows=await prisma.competition.findMany({where:{groupId:group.id},include:{_count:{select:{entries:true}},entries:{where:{clubId:user.club.id},select:{id:true}}},orderBy:{createdAt:"desc"},take:30});
- return {leagues:rows.map(c=>({id:c.id,name:c.name,status:c.status,maxTeams:c.maxTeams,teams:c._count.entries,joined:c.entries.length>0,createdByMe:c.createdByClubId===user.club.id}))};
+ const clubId=user.club?.id;
+ if(!clubId)throw new GroupServiceError("CLUB_NOT_FOUND");
+ const rows=await prisma.competition.findMany({where:{groupId:group.id},include:{_count:{select:{entries:true}},entries:{where:{clubId},select:{id:true}}},orderBy:{createdAt:"desc"},take:30});
+ return {leagues:rows.map(c=>({id:c.id,name:c.name,status:c.status,maxTeams:c.maxTeams,teams:c._count.entries,joined:c.entries.length>0,createdByMe:c.createdByClubId===clubId}))};
 }
 
 export async function getTelegramGroupSummary(telegramUserId: string, telegramGroupId: string) {
