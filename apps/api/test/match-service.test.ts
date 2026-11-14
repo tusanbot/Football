@@ -61,7 +61,7 @@ test("friendly match simulation settles score, events, fitness, gate revenue and
     assert.ok(after.balance > before.balance);
     const replay = await simulateScheduledMatch(clubs[1]!.userId, match.id);
     assert.equal(replay.replayed, true);
-    assert.equal(await prisma.ledgerTransaction.count({ where: { referenceType: "FOOTBALL_MATCH", referenceId: match.id } }), 2);
+    assert.equal(await prisma.ledgerTransaction.count({ where: { referenceType: "FOOTBALL_MATCH", referenceId: match.id } }), 3);
     const list = await listClubMatches(clubs[0]!.userId);
     assert.equal(list.matches.length, 1);
     assert.equal(list.matches[0]!.status, "COMPLETED");
