@@ -141,13 +141,22 @@ Non-negotiable product rules:
 
 ### Phase 3 — Match engine and competitions
 
-- Formation/tactics model and player-role compatibility.
-- Deterministic match simulation with versioned rules and reproducible inputs.
-- Match events, score, player performance, injuries, fatigue, and rewards.
-- Fixtures, schedules, league tables, promotion/relegation, cups, and seasons.
-- Match history and post-match reports in both clients.
+**Implemented foundation on `feat/foundation`:**
+- Deterministic 90-minute simulation with persisted seed, team/tactical strength, expected goals and reproducible results.
+- Chronological goal, yellow-card, red-card and injury events; per-player goals, assists, shots, passes, tackles, ratings and fitness loss.
+- Friendly opponent discovery, scheduled fixtures, participant authorization, match history and post-match reports.
+- Matchday attendance and gate revenue based on stadium capacity, ticket price, club reputation and team strength.
+- Atomic match settlement: player fitness/injury updates, lineup version changes, reputation, appearance/win/draw rewards, Cash ledger and club finance entries.
+- Round-robin league registration for 4–10 clubs, creator-controlled start, automatic single round-robin schedule, 3/1/0 standings, goal difference and completion state.
+- Bot commands and Mini App match center for friendlies, match simulation, league registration/join/start and standings.
 
-**Exit criteria:** users can play a complete season and all outcomes/rewards are auditable and applied once.
+**Still outstanding:**
+- Two-leg cup competitions, promotion/relegation and multi-division season administration.
+- Substitutions, tactical in-match changes, richer commentary and more detailed match reports.
+- Season reset/rollover, scheduled match workers and group-hosted competitions (Phase 5).
+- Balance simulations across large player populations and load/security testing.
+
+**Exit criteria:** users can play a complete season and all outcomes/rewards are auditable and applied once. The current implementation is the first playable competition slice, not the final completion of Phase 3.
 
 ### Phase 4 — Transfers and player lifecycle
 
