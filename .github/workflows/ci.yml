@@ -31,6 +31,8 @@ jobs:
         run: pnpm --filter @football/api exec prisma validate
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/football_empire
+      - name: Build shared domain package
+        run: pnpm --filter @football/domain build
       - name: Typecheck
         run: pnpm typecheck
       - name: Test
