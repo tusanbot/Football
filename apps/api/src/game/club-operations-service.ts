@@ -265,6 +265,7 @@ export async function upgradeClubFacility(
     if (!club) throw new ClubOperationsError("CLUB_NOT_FOUND");
     if (await replayCheck(tx, userId, club.id, idempotencyKey, reason)) return { facility, replayed: true };
     const currentLevel = facility === "STADIUM" ? club.stadiumLevel : facility === "TRAINING_GROUND" ? club.trainingGroundLevel : club.academyLevel;
+    if (currentLevel >= 10) throw new ClubOperationsError("FACILITY_MAX_LEVEL");
     const cost = calculateFacilityUpgradeCost(facility, currentLevel);
     await debitCash(tx, userId, club.id, cost, idempotencyKey, reason, "FACILITY_UPGRADE", `${facility} upgraded to level ${currentLevel + 1}`, now);
     const where = facility === "STADIUM" ? { id: club.id, stadiumLevel: currentLevel }
@@ -351,6 +352,7 @@ export async function upgradeClubCoach(userId: string, idempotencyKey: string, n
     if (!club) throw new ClubOperationsError("CLUB_NOT_FOUND");
     if (await replayCheck(tx, userId, club.id, idempotencyKey, reason)) return { replayed: true };
     if (!club.coach) throw new ClubOperationsError("COACH_NOT_FOUND");
+    if (club.coach.level >= 10) throw new ClubOperationsError("COACH_MAX_LEVEL");
     const cost = calculateCoachUpgradeCost(club.coach.level);
     await debitCash(tx, userId, club.id, cost, idempotencyKey, reason, "COACH_DEVELOPMENT", "Coach skill development", now);
     const coach = await tx.coach.update({
