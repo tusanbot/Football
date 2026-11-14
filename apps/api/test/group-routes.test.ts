@@ -91,3 +91,18 @@ test("new group routes require Bot authentication",async t=>{
  const rs=await Promise.all([app.inject({method:"GET",url:"/v1/groups/-100123/shop"}),app.inject({method:"POST",url:"/v1/groups/-100123/shop/purchase",payload:{}}),app.inject({method:"GET",url:"/v1/groups/-100123/challenges"}),app.inject({method:"POST",url:"/v1/groups/-100123/leagues",payload:{}})]);
  assert.deepEqual(rs.map(r=>r.statusCode),[401,401,401,401]);
 });
+
+test("Mini App group workspace requires Telegram initData",async t=>{
+ const app=buildApp();await app.ready();t.after(async()=>app.close());
+ const [mine,workspace]=await Promise.all([
+  app.inject({method:"GET",url:"/v1/groups/mine"}),
+  app.inject({method:"GET",url:"/v1/groups/-100123/workspace"})
+ ]);
+ assert.equal(mine.statusCode,401);assert.equal(workspace.statusCode,401);
+});
+test("group game activity validates its action payload",async t=>{
+ const old=process.env.BOT_API_SECRET;process.env.BOT_API_SECRET="group-test-secret";const app=buildApp();await app.ready();
+ t.after(async()=>{await app.close();if(old===undefined)delete process.env.BOT_API_SECRET;else process.env.BOT_API_SECRET=old;});
+ const response=await app.inject({method:"POST",url:"/v1/groups/-100123/activity/award",headers:{"x-football-bot-secret":"group-test-secret","x-telegram-user-id":"12345"},payload:{activityType:"MESSAGE_SPAM",referenceId:"x"}});
+ assert.equal(response.statusCode,400);assert.equal(response.json().error,"INVALID_GROUP_ACTIVITY");
+});
