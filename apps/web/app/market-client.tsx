@@ -71,9 +71,9 @@ export default function MarketPage() {
       const response = await fetch(API + path, { method, headers, ...(body ? { body: JSON.stringify(body) } : {}) });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error ?? "درخواست ناموفق بود");
-      if (data.acquisition?.specialPlayer?.fullName) setPackKeys((current) => { const next = { ...current }; delete next[data.acquisition.method ?? ""]; return next; });
       setMessage(data.acquisition?.specialPlayer?.fullName ? `بازیکن ویژه ${data.acquisition.specialPlayer.fullName} به باشگاه شما اضافه شد.` : "عملیات با موفقیت انجام شد.");
       await load();
+      if (data.acquisition?.specialPlayer?.fullName) setPackKeys((current) => { const next = { ...current }; delete next[data.acquisition.method ?? ""]; return next; });
     } catch (e) { setError(e instanceof Error ? e.message : "خطای نامشخص"); }
     finally { setBusy(""); }
   }
