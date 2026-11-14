@@ -192,17 +192,28 @@ export async function closeAllianceSeason(i: { telegramUserId: string; telegramG
     const { group } = await manager(tx, i.telegramUserId, i.telegramGroupId);
     const membership = await tx.allianceGroup.findUnique({ where: { groupId: group.id } });
     if (!membership || membership.role !== "FOUNDER") throw new AllianceServiceError("ALLIANCE_FOUNDER_REQUIRED");
-    const season = await tx.allianceSeason.findFirst({ where: { allianceId: membership.allianceId, status: "ACTIVE" }, orderBy: { number: "desc" } });
+    const season = await tx.allianceSeason.findFirst({ where: { allianceId: membership.allianceId }, orderBy: { number: "desc" } });
     if (!season) throw new AllianceServiceError("NO_ACTIVE_SEASON");
+    if (season.status === "COMPLETED") return { season, standings: season.standings, replayed: true };
+    if (season.status !== "ACTIVE") throw new AllianceServiceError("NO_ACTIVE_SEASON");
     const groups = await tx.allianceGroup.findMany({
       where: { allianceId: membership.allianceId },
-      include: { group: { select: { title: true, points: true } } },
+      include: { group: { select: { id: true, title: true, points: true } } },
     });
-    const standings = groups
-      .map(x => ({ group: x.group.title, points: x.group.points.toString() }))
-      .sort((a, b) => BigInt(b.points) > BigInt(a.points) ? 1 : BigInt(b.points) < BigInt(a.points) ? -1 : a.group.localeCompare(b.group))
-      .map((x, index) => ({ rank: index + 1, ...x }));
-    const updated = await tx.allianceSeason.update({ where: { id: season.id }, data: { status: "COMPLETED", closedAt: new Date(), standings } });
-    return { season: updated, standings };
+    const ranked = groups
+      .map(x => ({ groupId: x.group.id, group: x.group.title, points: x.group.points.toString() }))
+      .sort((a, b) => BigInt(b.points) > BigInt(a.points) ? 1 : BigInt(b.points) < BigInt(a.points) ? -1 : a.group.localeCompare(b.group));
+    const standings = ranked.map((x, index) => ({ rank: index + 1, group: x.group, points: x.points }));
+    const updated = await tx.allianceSeason.update({ where: { id: season.id, status: "ACTIVE" }, data: { status: "COMPLETED", closedAt: new Date(), standings } });
+    const prize = await tx.alliance.findUniqueOrThrow({ where: { id: membership.allianceId }, select: { treasuryPoints: true } });
+    const winner = ranked[0];
+    if (winner && prize.treasuryPoints > 0n) {
+      const payoutKey = "alliance-season-payout:" + season.id;
+      await tx.telegramGroup.update({ where: { id: winner.groupId }, data: { points: { increment: prize.treasuryPoints } } });
+      await tx.alliance.update({ where: { id: membership.allianceId }, data: { treasuryPoints: 0n } });
+      await tx.allianceLedger.create({ data: { allianceId: membership.allianceId, idempotencyKey: payoutKey, amount: -prize.treasuryPoints, source: "SEASON_CHAMPION_REWARD", description: "Season " + season.number + " champion payout to " + winner.group } });
+      await tx.groupPointLedger.create({ data: { idempotencyKey: payoutKey, groupId: winner.groupId, amount: prize.treasuryPoints, source: "ADMIN_ADJUSTMENT", description: "Alliance season champion reward" } });
+    }
+    return { season: updated, standings, replayed: false, winner: winner?.group ?? null, prize: prize.treasuryPoints.toString() };
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 }
