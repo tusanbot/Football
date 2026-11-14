@@ -27,17 +27,21 @@ A Telegram-first football management MMO. Telegram Bot, Telegram Mini App and Te
 - Shared Telegram account provisioning service used by both Mini App `initData` and authenticated Bot onboarding (`/start`); creates the primary club, Cash/Gold wallets, starter ledger grants and 18-player squad atomically.
 - Generated starter squad, automatic strongest-available 4-3-3 starting XI, and authenticated squad/wallet/profile APIs.
 - Server-validated starting XI management with 4-3-3, 4-4-2, 3-5-2 and 4-2-3-1 formations, tactical presets, ownership/position validation and optimistic version checks.
+- Player development lifecycle: focus-based daily training, intensity/cost, potential- and age-weighted progression, positional overall ratings, fatigue, injury risk, coach training/recovery/medical effects, morale, recovery, annual ageing and retirement.
+- Contract management with 90/180/365-day renewals, server-calculated acceptable weekly wage ranges, expiry/suspension, and idempotent renewal history.
+- Weekly player/coach payroll with pro-rated contract expiry, atomic Cash debit and ledger record, wage arrears carry-forward, and morale penalties when payroll cannot be fully paid.
+- Lazy, idempotent UTC daily settlement for fitness recovery, injury return, morale, contract countdown, annual ageing, listing expiry and weekly payroll.
 - Special-player catalog (curated real-world footballers) with rarity, gameplay ratings and acquisition-method metadata.
 - Gold-priced Epic, Legendary and Icon packs with server-side random selection, per-club ownership limits, atomic wallet debit, acquisition history and immutable ledger entries.
 - Idempotent special-player catalog seed command.
 - Transfer market for generated players: create/cancel listings, expiry handling, atomic purchase, player ownership transfer and buyer/seller ledger entries.
-- Persian RTL Mini App: browse listings, sell owned players, manage own listings, view the special-player catalog, and configure starting XI/formation/tactics.
-- Telegram bot commands: `/start` (Bot-only account/club creation), `/club`, `/wallet`, `/rename`, `/players`, `/lineup`, `/setlineup`, `/market`, `/sell PLAYER_ID PRICE`, `/buy LISTING_ID`, `/special`, and `/pack`.
+- Persian RTL Mini App: browse listings, sell owned players, manage own listings, view the special-player catalog, configure starting XI/formation/tactics, and manage player training, fitness, morale, injuries, contracts and payroll.
+- Telegram bot commands: `/start` (Bot-only account/club creation), `/club`, `/wallet`, `/rename`, `/players`, `/lineup`, `/setlineup`, `/development`, `/train PLAYER_ID FOCUS INTENSITY`, `/renew PLAYER_ID DAYS WEEKLY_WAGE`, `/market`, `/sell PLAYER_ID PRICE`, `/buy LISTING_ID`, `/special`, and `/pack`.
 - Both clients use the same authenticated API; the bot does not implement game/economy rules.
 
-The project is still an early development foundation, not a production-ready game. Group competitions, match simulation, special-player acquisition/reward execution, and comprehensive economy/security/load testing remain in development.
+The project is still an early development foundation, not a production-ready game. Full club facilities, academy, sponsorship and match-day revenue, match simulation, leagues/cups, complete group competitions, admin controls, and comprehensive economy/security/load testing remain in development. Weekly payroll is implemented, but the broader sponsorship/income model is not yet complete.
 
-## Transfer-market configuration
+## Runtime configuration
 
 Set these values in the API and Bot runtime environments:
 
@@ -72,7 +76,7 @@ The seed is safe to rerun: it upserts catalog records by stable slug. Run migrat
 
 ## Remaining development sequence
 
-1. Complete special-player acquisition flows and reward issuance.
-2. Match simulation, fixtures, leagues, tournaments and group challenges.
-3. Full feature parity for remaining game actions across Bot and Mini App.
-4. Security, economy, concurrency and load testing before any production release.
+1. Complete club facilities, academy, coach progression, sponsorship, and revenue/expense statements.
+2. Match simulation, fixtures, leagues, tournaments, and group challenges.
+3. Complete remaining Bot/Mini App parity and group operations.
+4. Security, economy simulation, concurrency, and load testing before any production release.
