@@ -452,7 +452,7 @@ export async function simulateScheduledMatch(userId: string, matchId: string, no
     })) });
     const injuredIds = new Set(result.events.filter((event) => event.type === "INJURY").map((event) => event.playerId));
     const playerById = new Map(
-      [...home.players, ...home.bench, ...away.players, ...away.bench]
+      [...homeSide.players, ...(homeSide.bench ?? []), ...awaySide.players, ...(awaySide.bench ?? [])]
         .map((player) => [player.id, player] as const),
     );
     const injuredClubIds = new Set<string>();
