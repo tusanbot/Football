@@ -62,7 +62,7 @@ export function registerGameRoutes(app: FastifyInstance) {
         id: true, name: true, formation: true, mentality: true, pressing: true,
         tempo: true, passingStyle: true, lineupVersion: true,
         players: {
-          where: { lineupSlot: { not: null } },
+          where: { lineupSlot: { not: null }, status: "ACTIVE" },
           orderBy: { lineupSlot: "asc" },
           select: { id: true, firstName: true, lastName: true, position: true, overall: true, morale: true, fitness: true, lineupSlot: true },
         },
