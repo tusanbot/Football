@@ -6,6 +6,13 @@ type Player = { id: string; firstName: string; lastName: string; nationality: st
 type Listing = { id: string; askingPrice: string; status?: string; expiresAt: string; createdAt: string; player: Player; sellerClub?: { name: string } };
 type SpecialPlayer = { id: string; fullName: string; nationality: string; positions: string[]; rarity: string; overall: number; potential: number; acquisitionMethods: string[] };
 type PackOffer = { method: "epic_pack" | "legendary_pack" | "icon_pack"; rarity: string; priceGold: string };
+type Lineup = {
+  formation: string;
+  tactics: { mentality: string; pressing: string; tempo: string; passingStyle: string };
+  lineupVersion: number;
+  players: Array<{ id: string; firstName: string; lastName: string; position: string; overall: number; lineupSlot: number }>;
+};
+const formationOptions = ["4-3-3", "4-4-2", "3-5-2", "4-2-3-1"];
 declare global { interface Window { Telegram?: { WebApp?: { initData?: string; ready?: () => void; expand?: () => void } } } }
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
@@ -20,14 +27,14 @@ export default function MarketPage() {
   const [special, setSpecial] = useState<SpecialPlayer[]>([]);
   const [cash, setCash] = useState("0");
   const [gold, setGold] = useState("0");
-  const [packOffers, setPackOffers] = useState<PackOffer[]>([]);
+  const [packOffers, setPackOffers] = useState<PackOffer[]>([]);\n  const [lineup, setLineup] = useState<Lineup | null>(null);\n  const [formation, setFormation] = useState("4-3-3");\n  const [selectedLineupIds, setSelectedLineupIds] = useState<string[]>([]);\n  const [tactics, setTactics] = useState({ mentality: "BALANCED", pressing: "MID_BLOCK", tempo: "NORMAL", passingStyle: "MIXED" });
   const [packKeys, setPackKeys] = useState<Record<string, string>>({});
   const [selectedPlayer, setSelectedPlayer] = useState("");
   const [price, setPrice] = useState("1000");
   const [busy, setBusy] = useState("");
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
-  const [tab, setTab] = useState<"market" | "club" | "special">("market");
+  const [tab, setTab] = useState<"market" | "club" | "lineup" | "special">("market");
 
   const headers = useMemo(() => ({ "content-type": "application/json", "x-telegram-init-data": initData }), [initData]);
 
@@ -55,6 +62,14 @@ export default function MarketPage() {
     if (m.ok) setListings((await m.json()).listings);
     if (own.ok) setMine((await own.json()).listings);
     if (s.ok) { const data = await s.json(); setSpecial(data.players); setPackOffers(data.packOffers ?? []); }
+    if (l.ok) {
+      const data = await l.json();
+      const currentLineup: Lineup = data.club;
+      setLineup(currentLineup);
+      setFormation(currentLineup.formation);
+      setTactics(currentLineup.tactics);
+      setSelectedLineupIds([...currentLineup.players].sort((a, b) => a.lineupSlot - b.lineupSlot).map((player) => player.id));
+    }
   }, [headers, initData]);
 
   useEffect(() => {
@@ -107,6 +122,62 @@ export default function MarketPage() {
       <div className="market-card"><h2>آگهی‌های من</h2>{mine.length === 0 ? <p className="muted">هنوز آگهی ثبت نکرده‌اید.</p> : mine.map((item) => <div className="my-listing" key={item.id}><div><strong>{item.player.firstName} {item.player.lastName}</strong><p>{money(item.askingPrice)} Cash · {item.status}</p></div>{item.status === "OPEN" && <button className="secondary" disabled={busy === item.id} onClick={() => void action(item.id, "/v1/market/listings/" + item.id, "DELETE")}>لغو آگهی</button>}</div>)}</div>
     </section>}
 
+    {tab === "lineup" && <section className="club-market">
+      <div className="market-card">
+        <h2>ترکیب اصلی و تاکتیک‌ها</h2>
+        <p>۱۱ بازیکن اصلی را به ترتیب جایگاه انتخاب کنید. سرور مالکیت بازیکنان، پست و اعتبار نسخه ترکیب را بررسی می‌کند.</p>
+        <label>آرایش تیم
+          <select value={formation} onChange={(e) => setFormation(e.target.value)}>
+            {formationOptions.map((item) => <option key={item} value={item}>{item}</option>)}
+          </select>
+        </label>
+        <div className="lineup-grid">
+          {Array.from({ length: 11 }, (_, index) => {
+            const currentId = selectedLineupIds[index] ?? "";
+            const usedElsewhere = new Set(selectedLineupIds.filter((id, slot) => slot !== index));
+            return <label key={index}>جایگاه {index + 1}
+              <select value={currentId} onChange={(e) => setSelectedLineupIds((current) => {
+                const next = [...current];
+                next[index] = e.target.value;
+                return next;
+              })}>
+                <option value="">انتخاب بازیکن</option>
+                {players.filter((player) => !usedElsewhere.has(player.id)).map((player) => (
+                  <option key={player.id} value={player.id}>{player.firstName} {player.lastName} · {player.position} · OVR {player.overall}</option>
+                ))}
+              </select>
+            </label>;
+          })}
+        </div>
+        <h3>دستورهای تاکتیکی</h3>
+        <div className="lineup-grid">
+          <label>ذهنیت
+            <select value={tactics.mentality} onChange={(e) => setTactics((current) => ({ ...current, mentality: e.target.value }))}>
+              <option value="DEFENSIVE">دفاعی</option><option value="BALANCED">متعادل</option><option value="ATTACKING">هجومی</option>
+            </select>
+          </label>
+          <label>فشار
+            <select value={tactics.pressing} onChange={(e) => setTactics((current) => ({ ...current, pressing: e.target.value }))}>
+              <option value="LOW_BLOCK">بلوک پایین</option><option value="MID_BLOCK">بلوک میانی</option><option value="HIGH_PRESS">پرس شدید</option>
+            </select>
+          </label>
+          <label>سرعت بازی
+            <select value={tactics.tempo} onChange={(e) => setTactics((current) => ({ ...current, tempo: e.target.value }))}>
+              <option value="SLOW">آرام</option><option value="NORMAL">معمولی</option><option value="FAST">سریع</option>
+            </select>
+          </label>
+          <label>سبک پاس
+            <select value={tactics.passingStyle} onChange={(e) => setTactics((current) => ({ ...current, passingStyle: e.target.value }))}>
+              <option value="SHORT">کوتاه</option><option value="MIXED">ترکیبی</option><option value="DIRECT">مستقیم</option>
+            </select>
+          </label>
+        </div>
+        <button disabled={busy === "lineup" || selectedLineupIds.length !== 11 || selectedLineupIds.some((id) => !id)} onClick={() => void action("lineup", "/v1/club/lineup", "PUT", { formation, playerIds: selectedLineupIds, expectedVersion: lineup?.lineupVersion ?? 0, tactics })}>
+          {busy === "lineup" ? "در حال ذخیره…" : "ذخیره ترکیب و تاکتیک‌ها"}
+        </button>
+        <p className="muted">نسخه فعلی ترکیب: {lineup?.lineupVersion ?? 0} · پس از هر ذخیره موفق، نسخه افزایش می‌یابد.</p>
+      </div>
+    </section>}
     {tab === "special" && <><section className="special-packs"><div className="market-card"><h2>جذب ستاره‌های ویژه</h2><p>هر بسته یک بازیکن تصادفی از رده مشخص‌شده می‌دهد. هر بازیکن ویژه را فقط یک‌بار می‌توانید در باشگاه خود داشته باشید.</p><div className="pack-actions">{packOffers.map((offer) => <button key={offer.method} disabled={!!busy || Number(gold) < Number(offer.priceGold)} onClick={() => { const key = packKeys[offer.method] ?? crypto.randomUUID(); if (!packKeys[offer.method]) setPackKeys((current) => ({ ...current, [offer.method]: key })); void action("pack-" + offer.method, "/v1/players/special/acquire", "POST", { method: offer.method, idempotencyKey: key }); }}>{busy === "pack-" + offer.method ? "در حال جذب…" : `${rarityLabel[offer.rarity] ?? offer.rarity} · ${money(offer.priceGold)} Gold`}</button>)}</div></div></section><section className="special-grid">{special.map((p) => <article className="special-card" key={p.id}><div className="special-top"><span>{rarityLabel[p.rarity] ?? p.rarity}</span><strong>{p.overall}</strong></div><h3>{p.fullName}</h3><p>{p.nationality} · {p.positions.join(" / ")}</p><div className="potential">Potential <strong>{p.potential}</strong></div><small>روش‌های جذب: {p.acquisitionMethods.join("، ")}</small></article>)}</section></>}
     <footer className="market-footer">بازیکنان ویژه در بازار عادی قابل معامله نیستند. خرید بازیکنان معمولی با Cash و بسته‌های جذب ستاره با Gold، به‌صورت امن در سرور ثبت می‌شوند.</footer>
   </main>;
