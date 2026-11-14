@@ -587,7 +587,7 @@ export default function MarketPage() {
           <h3>جوایز دریافت‌شده من</h3>
           {groupWorkspace.personal.rewards.length === 0 ? <p className="muted">هنوز جایزه‌ای دریافت نکرده‌اید.</p> : groupWorkspace.personal.rewards.map((reward) => <div className="operation-row" key={reward.id}><div><strong>{reward.item}</strong><small>{reward.description} · {new Date(reward.grantedAt).toLocaleDateString("fa-IR")}</small></div><span>{reward.scope === "GROUP" ? "گروهی" : "انفرادی"}</span></div>)}
           <h3>تاریخچه امتیاز شخصی</h3>
-          {groupWorkspace.personal.history.slice(0,10).map((entry) => <div className="operation-row" key={entry.id}><div><strong>{entry.description}</strong><small>{entry.source} · {new Date(entry.createdAt).toLocaleString("fa-IR")}</small></div><strong>{BigInt(entry.amount) > 0n ? "+" : ""}{money(entry.amount)}</strong></div>)}
+          {groupWorkspace.personal.history.slice(0,10).map((entry) => <div className="operation-row" key={entry.id}><div><strong>{entry.description}</strong><small>{entry.source} · {new Date(entry.createdAt).toLocaleString("fa-IR")}</small></div><strong>{BigInt(entry.amount) > BigInt(0) ? "+" : ""}{money(entry.amount)}</strong></div>)}
         </div>
         <div className="market-card">
           <h2>چالش‌های اختصاصی گروه</h2>
