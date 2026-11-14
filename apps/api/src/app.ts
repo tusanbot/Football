@@ -2,6 +2,7 @@ import Fastify from "fastify";
 import cors from "@fastify/cors";
 import { z } from "zod";
 import { registerTelegramAuthRoutes } from "./auth/routes.js";
+import { registerBotAuthRoutes } from "./auth/bot-routes.js";
 import { registerGameRoutes } from "./game/routes.js";
 import { registerPlayerMarketRoutes } from "./players/market-routes.js";
 import { prisma } from "./db.js";
@@ -40,6 +41,7 @@ export function buildApp() {
 
   // Route registration is synchronous; handlers perform their own async work.
   registerTelegramAuthRoutes(app);
+  registerBotAuthRoutes(app);
   registerGameRoutes(app);
   registerPlayerMarketRoutes(app);
 
