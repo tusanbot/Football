@@ -129,8 +129,11 @@ export function registerGameRoutes(app: FastifyInstance) {
       if (!saved) return reply.code(409).send({ error: "LINEUP_VERSION_CONFLICT" });
       return { ok: true, lineupVersion: parsed.data.expectedVersion + 1 };
     } catch (error) {
+      if (typeof error === "object" && error !== null && "code" in error && error.code === "P2034") {
+        return reply.code(409).send({ error: "LINEUP_UPDATE_CONFLICT" });
+      }
       request.log.error({ error }, "Lineup update failed");
-      return reply.code(409).send({ error: "LINEUP_UPDATE_CONFLICT" });
+      return reply.code(500).send({ error: "LINEUP_UPDATE_FAILED" });
     }
   });
 
