@@ -468,7 +468,7 @@ export default function MarketPage() {
             <strong>{match.homeClub.name} {match.homeScore ?? "–"} : {match.awayScore ?? "–"} {match.awayClub.name}{match.homePenalties !== null ? ` (پنالتی ${match.homePenalties}-${match.awayPenalties})` : ""}</strong>
             <small>{match.type === "CUP" ? "جام حذفی" : match.type === "LEAGUE" ? "لیگ" : "دوستانه"} · {match.status === "COMPLETED" ? "پایان‌یافته" : match.status === "SCHEDULED" ? "برنامه‌ریزی‌شده" : "لغوشده"} · {new Date(match.scheduledAt).toLocaleString("fa-IR")}</small>
             {match.status === "COMPLETED" && <small>تماشاگر: {money(match.attendance)} · درآمد بلیت: {money(match.ticketRevenue)} Cash</small>}
-            {match.events.slice(0, 8).map((event, index) => <small key={match.id + "-event-" + index}>{event.minute} دقیقه · {matchEventLabel[event.type] ?? event.type} · {event.playerName}{event.relatedPlayerName ? " (پاس گل: " + event.relatedPlayerName + ")" : ""}</small>)}
+            {match.events.slice(0, 8).map((event, index) => <small key={match.id + "-event-" + index}>{event.minute} دقیقه · {matchEventLabel[event.type] ?? event.type} · {event.playerName}{event.relatedPlayerName ? (event.type === "SUBSTITUTION" ? " (ورود: " : " (پاس گل: ") + event.relatedPlayerName + ")" : ""}</small>)}
           </div>
           {match.status === "SCHEDULED" && new Date(match.scheduledAt).getTime() <= Date.now() && <button disabled={!!busy} onClick={() => void action("play-" + match.id, "/v1/matches/" + match.id + "/simulate", "POST", {})}>شبیه‌سازی مسابقه</button>}
         </div>)}
