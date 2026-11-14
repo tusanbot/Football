@@ -488,9 +488,17 @@ bot.command("play", async (ctx) => {
   try {
     const result = await api<{ result: { replayed: boolean; homeClub?: string; awayClub?: string; homeScore: number | null; awayScore: number | null; homePenalties?: number | null; awayPenalties?: number | null; attendance?: number; ticketRevenue?: string; events?: Array<{ minute: number; type: string; detail: string; playerName?: string; relatedPlayerName?: string | null }> } }>(`/v1/matches/${encodeURIComponent(matchId)}/simulate`, ctx.from.id, "POST", {});
     const match = result.result;
-    const events = (match.events ?? []).slice(0, 18).map((event) =>
-      `${event.minute}' · ${event.type} · ${event.playerName ?? "Player"}${event.relatedPlayerName ? " (assist: " + event.relatedPlayerName + ")" : ""}`,
-    );
+    const eventLabels: Record<string, string> = {
+      GOAL: "گل", YELLOW_CARD: "کارت زرد", RED_CARD: "کارت قرمز",
+      INJURY: "مصدومیت", SUBSTITUTION: "تعویض",
+    };
+    const events = (match.events ?? []).slice(0, 24).map((event) => {
+      const label = eventLabels[event.type] ?? event.type;
+      const related = event.type === "SUBSTITUTION"
+        ? (event.relatedPlayerName ? " · ورود: " + event.relatedPlayerName : "")
+        : event.relatedPlayerName ? " · پاس گل: " + event.relatedPlayerName : "";
+      return `${event.minute}' · ${label} · ${event.playerName ?? "بازیکن"}${related}`;
+    });
     await ctx.reply(
       `${match.homeClub ?? "Home"} ${match.homeScore ?? 0} – ${match.awayScore ?? 0} ${match.awayClub ?? "Away"}${match.homePenalties !== null && match.homePenalties !== undefined ? " (pens " + match.homePenalties + "–" + match.awayPenalties + ")" : ""}\nAttendance: ${match.attendance ?? 0}\nGate revenue: ${cash(match.ticketRevenue ?? "0")} Cash\n${match.replayed ? "Already simulated; no rewards were repeated." : "Full-time."}\n\n${events.join("\n") || "No major events."}`,
     );
