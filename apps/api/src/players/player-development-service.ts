@@ -150,7 +150,7 @@ export async function settleClubDailyState(userId: string, now = new Date()) {
       nextWageArrears = arrearsAfter;
       if (arrearsAfter > 0n && totalDue > 0n) {
         const moralePenalty = Math.min(12, 2 + Number((arrearsAfter * 10n + totalDue - 1n) / totalDue));
-        const eligible = { clubId: club.id, status: { in: ["ACTIVE", "INJURED", "CONTRACT_EXPIRED", "LISTED"] as const } };
+        const eligible = { clubId: club.id, status: { in: ["ACTIVE", "INJURED", "CONTRACT_EXPIRED", "LISTED"] } } satisfies Prisma.PlayerWhereInput;
         await tx.player.updateMany({
           where: { ...eligible, morale: { gt: moralePenalty } },
           data: { morale: { decrement: moralePenalty } },
