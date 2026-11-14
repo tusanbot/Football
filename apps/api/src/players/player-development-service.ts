@@ -49,7 +49,7 @@ export async function settleClubDailyState(userId: string, now = new Date()) {
     if (elapsedDays === 0) return { elapsedDays: 0, gameDate: today.toISOString().slice(0, 10), recovered: 0, expiredContracts: 0 };
 
     const players = await tx.player.findMany({
-      where: { clubId: club.id, status: { in: ["ACTIVE", "INJURED", "CONTRACT_EXPIRED"] } },
+      where: { clubId: club.id, status: { in: ["ACTIVE", "INJURED", "CONTRACT_EXPIRED", "LISTED"] } },
       select: {
         id: true, age: true, ageDays: true, contractDays: true, fitness: true,
         morale: true, status: true, injuryUntil: true, lineupSlot: true,
@@ -72,6 +72,9 @@ export async function settleClubDailyState(userId: string, now = new Date()) {
       if (player.age + yearsGained >= 40) status = "RETIRED";
       if (player.status === "INJURED" && status !== "INJURED") recovered++;
       if (player.contractDays > 0 && next.contractDays === 0) expiredContracts++;
+      if (player.status === "LISTED" && status === "CONTRACT_EXPIRED") {
+        await tx.playerMarketListing.updateMany({ where: { playerId: player.id, status: "OPEN" }, data: { status: "EXPIRED" } });
+      }
       const shouldClearLineup = player.lineupSlot !== null && (status === "CONTRACT_EXPIRED" || status === "RETIRED");
       if (shouldClearLineup) lineupChanged = true;
       await tx.player.update({
