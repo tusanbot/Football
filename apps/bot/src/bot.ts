@@ -11,8 +11,9 @@ const bot = new Bot(token);
 
 // Group replies are transient by default; preserve administrative and ranking messages.
 const persistentGroupCommands = new Set([
-  "group-register", "group-check", "group-give", "group-challenge-complete",
-  "group-challenge-cancel", "group-league-start", "group-league-table", "group-leagues",
+  "group-register", "group-check", "group-give", "group-challenge",
+  "group-challenge-complete", "group-challenge-cancel",
+  "group-league", "group-league-start", "group-league-table", "group-leagues",
   "alliance", "alliance-create", "alliance-invite", "alliance-accept",
   "alliance-decline", "alliance-championship", "alliance-championship-join",
   "alliance-championship-start", "alliance-season-start", "alliance-season-close",
@@ -20,11 +21,10 @@ const persistentGroupCommands = new Set([
 ]);
 function isPersistentGroupReply(command: string | undefined, messageText: string): boolean {
   if (command && persistentGroupCommands.has(command)) return true;
-  return /(?:ranking|leaderboard|standings|rank|رنک|رتبه|جدول)/i.test(messageText);
-}
-
-bot.use(async (ctx, next) => {
-  if (ctx.chat.type === "group" || ctx.chat.type === "supergroup") {
+  return /(?:ranking|leaderboard|standings|rank|رنbot.use(async (ctx, next) => {
+  const chat = ctx.chat;
+  if (chat && (chat.type === "group" || chat.type === "supergroup")) {
+    const chatId = chat.id;
     const originalReply = ctx.reply.bind(ctx);
     const command = ctx.message?.text?.match(/^\/([a-z0-9_-]+)/i)?.[1]?.toLowerCase();
     Object.defineProperty(ctx, "reply", {
@@ -33,7 +33,7 @@ bot.use(async (ctx, next) => {
         const sent = await originalReply(...args);
         if (!isPersistentGroupReply(command, String(args[0] ?? ""))) {
           const timer = setTimeout(() => {
-            void ctx.api.deleteMessage(ctx.chat.id, sent.message_id).catch((error: unknown) => {
+            void ctx.api.deleteMessage(chatId, sent.message_id).catch((error: unknown) => {
               console.debug("Transient group reply could not be deleted:", error instanceof Error ? error.message : error);
             });
           }, 60_000);
@@ -41,6 +41,10 @@ bot.use(async (ctx, next) => {
         }
         return sent;
       },
+    });
+  }
+  await next();
+});   },
     });
   }
   await next();
@@ -79,6 +83,19 @@ async function apiSystem(path:string,body:unknown):Promise<void>{
  const response=await fetch(new URL(path,apiUrl),{method:"POST",headers:{"content-type":"application/json","x-football-bot-secret":botApiSecret},body:JSON.stringify(body)});
  if(!response.ok)throw new Error("System API failed ("+response.status+")");
 }
+function privateMenuKeyboard() {
+  const keyboard = new Keyboard()
+    .text("/club").text("/wallet").row()
+    .text("/players").text("/lineup").row()
+    .text("/development").text("/operations").row()
+    .text("/finance").text("/scout").row()
+    .text("/opponents").text("/matches").row()
+    .text("/leagues").text("/market").row()
+    .text("/special").text("/help").row()
+    .text("/menu");
+  if (webAppUrl) keyboard.webApp("Open Football Empire", webAppUrl);
+  return keyboard.resized().persistent();
+}
 function cash(value: string) { return BigInt(value).toLocaleString("en-US"); }
 function playerName(player: ApiPlayer) { return `${player.firstName} ${player.lastName}`; }
 
@@ -101,22 +118,14 @@ bot.command("start", async (ctx) => {
 
     const cashBalance = account.wallets.find((wallet) => wallet.asset === "CASH")?.balance ?? "0";
     const goldBalance = account.wallets.find((wallet) => wallet.asset === "GOLD")?.balance ?? "0";
-    const keyboard = new Keyboard()
-      .text("/club").text("/wallet").row()
-      .text("/players").text("/lineup").row()
-      .text("/development").text("/operations").row()
-      .text("/matches").text("/leagues").row()
-      .text("/market").text("/special").row()
-      .text("/help");
-    if (webAppUrl) keyboard.webApp("Open Football Empire", webAppUrl);
-    keyboard.resized().persistent();
+    const keyboard = privateMenuKeyboard();
 
     await ctx.reply(
       `Welcome, ${account.user.displayName}! Your club is ready.\n\n` +
       `Club: ${account.club?.name ?? "Not created"} (Level ${account.club?.level ?? 1})\n` +
       `Starter balance: ${cash(cashBalance)} Cash · ${cash(goldBalance)} Gold\n\n` +
       `You can manage your club directly here or continue in the Mini App.\n\n` +
-      `Commands: /club /wallet /rename /players /lineup /development /train /renew /market /special /pack /sell /buy`,
+      `Commands: /club /wallet /rename /players /lineup /development /train /renew /market /special /pack /sell /buy /menu`,
       { reply_markup: keyboard },
     );
   } catch (error) {
@@ -124,8 +133,15 @@ bot.command("start", async (ctx) => {
   }
 });
 
+bot.command("menu", async (ctx) => {
+  if (ctx.chat.type !== "private") return;
+  await ctx.reply("منوی اصلی Football Empire آماده است. برای عملیات دارای ورودی، از /help راهنمای دستورها را ببینید.", {
+    reply_markup: privateMenuKeyboard(),
+  });
+});
+
 bot.command("help", async (ctx) => ctx.reply(
-  "Football Empire commands:\n/club — club profile\n/wallet — Cash and Gold balances\n/rename NEW NAME — rename your club\n/players — your active squad\n/lineup — view starting XI and tactics\n/setlineup FORMATION ID1 ... ID11 — set your XI\n/development — player development overview\n/train PLAYER_ID FOCUS INTENSITY — train a player\n/renew PLAYER_ID DAYS WEEKLY_WAGE — renew a contract\n/operations — facilities, academy, sponsors and finance\n/finance [DAYS] — income and expense statement\n/upgrade stadium|training|academy — upgrade a facility\n/ticket-price PRICE — set stadium ticket price\n/scout — find academy prospects\n/recruit PROSPECT_ID — sign an academy prospect\n/sponsor OFFER_ID — sign a sponsor\n/coach-upgrade — develop your coach\n/hire-coach balanced|youth|performance — hire a coach\n/opponents — clubs available for friendlies\n/friendly CLUB_ID — schedule a friendly\n/matches — your fixtures and results\n/play MATCH_ID — simulate a due match\n/league NAME [4-10] — create a league\n/cup NAME [4|8] — create a knockout cup\n/leagues — open leagues\n/joinleague ID — join a league\n/startleague ID — start your league\n/startcup ID — start your cup\n/table ID — league table or cup bracket\n/group-register — register this Telegram group (admins only)\n/group-join — join this group with your club\n/group — show group status and treasury\n/group-activity — earn one daily group point\n/group-shop — reward shop\n/group-buy ITEM [USER_ID] — purchase reward\n/group-challenges — list challenges\n/group-challenge TITLE|START_ISO|END_ISO|POINTS — create challenge\n/group-challenge-join ID — join challenge\n/group-challenge-complete ID USER_ID — settle challenge\n/group-check — refresh member threshold\n/group-league NAME [4-10] — create local league\n/group-league-join ID — join local league\n/group-league-start ID — start local league\n/group-league-table ID — standings\n/alliance — alliance status and invitations\n/alliance-create NAME — create an alliance\n/alliance-invite GROUP_ID — invite a group\n/alliance-contribute AMOUNT — contribute group points to alliance treasury\n/alliance-accept ID / /alliance-decline ID — respond to invite\n/alliance-championship NAME|TEAMS — cross-group tournament\n/alliance-championship-join ID / alliance-championship-start ID\n/alliance-season-start [DAYS] / alliance-season-close\n/alliance-season-review SEASON_ID approve|reject — flagged prize review (authorized reviewer)\n/market — open transfer listings\n/sell PLAYER_ID PRICE — list a generated player\n/buy LISTING_ID — buy a listed player\n/special — view special players and pack prices\n/pack epic|legendary|icon — acquire a special player\n\nSpecial players are not tradeable in the regular market.",
+  "Football Empire commands:\n/menu — show the private Reply Keyboard again\n/club — club profile\n/wallet — Cash and Gold balances\n/rename NEW NAME — rename your club\n/players — your active squad\n/lineup — view starting XI and tactics\n/setlineup FORMATION ID1 ... ID11 — set your XI\n/development — player development overview\n/train PLAYER_ID FOCUS INTENSITY — train a player\n/renew PLAYER_ID DAYS WEEKLY_WAGE — renew a contract\n/operations — facilities, academy, sponsors and finance\n/finance [DAYS] — income and expense statement\n/upgrade stadium|training|academy — upgrade a facility\n/ticket-price PRICE — set stadium ticket price\n/scout — find academy prospects\n/recruit PROSPECT_ID — sign an academy prospect\n/sponsor OFFER_ID — sign a sponsor\n/coach-upgrade — develop your coach\n/hire-coach balanced|youth|performance — hire a coach\n/opponents — clubs available for friendlies\n/friendly CLUB_ID — schedule a friendly\n/matches — your fixtures and results\n/play MATCH_ID — simulate a due match\n/league NAME [4-10] — create a league\n/cup NAME [4|8] — create a knockout cup\n/leagues — open leagues\n/joinleague ID — join a league\n/startleague ID — start your league\n/startcup ID — start your cup\n/table ID — league table or cup bracket\n/group-register — register this Telegram group (admins only)\n/group-join — join this group with your club\n/group — show group status and treasury\n/group-activity — earn one daily group point\n/group-shop — reward shop\n/group-buy ITEM [USER_ID] — purchase reward\n/group-challenges — list challenges\n/group-challenge TITLE|START_ISO|END_ISO|POINTS — create challenge\n/group-challenge-join ID — join challenge\n/group-challenge-complete ID USER_ID — settle challenge\n/group-check — refresh member threshold\n/group-league NAME [4-10] — create local league\n/group-league-join ID — join local league\n/group-league-start ID — start local league\n/group-league-table ID — standings\n/alliance — alliance status and invitations\n/alliance-create NAME — create an alliance\n/alliance-invite GROUP_ID — invite a group\n/alliance-contribute AMOUNT — contribute group points to alliance treasury\n/alliance-accept ID / /alliance-decline ID — respond to invite\n/alliance-championship NAME|TEAMS — cross-group tournament\n/alliance-championship-join ID / alliance-championship-start ID\n/alliance-season-start [DAYS] / alliance-season-close\n/alliance-season-review SEASON_ID approve|reject — flagged prize review (authorized reviewer)\n/market — open transfer listings\n/sell PLAYER_ID PRICE — list a generated player\n/buy LISTING_ID — buy a listed player\n/special — view special players and pack prices\n/pack epic|legendary|icon — acquire a special player\n\nSpecial players are not tradeable in the regular market.",
 ));
 
 bot.command("group-register", async (ctx) => {
