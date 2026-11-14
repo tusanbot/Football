@@ -195,6 +195,21 @@ export async function startLeague(userId: string, competitionId: string, now = n
     return { fixturesCreated: fixtures.length, rounds, teams: teams.length };
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 }
+export async function listOpenLeagues(userId: string) {
+  const club = await getOwnedClub(userId);
+  const competitions = await prisma.competition.findMany({
+    where: { status: "REGISTRATION" },
+    include: { entries: { select: { clubId: true, club: { select: { name: true } } } } },
+    orderBy: { createdAt: "desc" }, take: 30,
+  });
+  return competitions.map((competition) => ({
+    id: competition.id, name: competition.name, season: competition.season,
+    status: competition.status, maxTeams: competition.maxTeams,
+    teams: competition.entries.length,
+    joined: competition.entries.some((entry) => entry.clubId === club.id),
+    creator: competition.entries.find((entry) => entry.clubId === competition.createdByClubId)?.club.name ?? "Club",
+  }));
+}
 export async function getLeague(userId: string, competitionId: string) {
   const club = await getOwnedClub(userId);
   const competition = await prisma.competition.findUnique({
