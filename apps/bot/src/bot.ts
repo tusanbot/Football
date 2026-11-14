@@ -173,12 +173,12 @@ bot.command("development", async (ctx) => {
       players: Array<{ id: string; firstName: string; lastName: string; overall: number; potential: number; age: number; fitness: number; morale: number; contractDays: number; status: string; minimumWeeklyWage: string }>;
     } }>("/v1/club/development", ctx.from.id);
     const lines = result.club.players.slice(0, 15).map((p) =>
-      \`• \${p.firstName} \${p.lastName} · OVR \${p.overall}/\${p.potential} · Age \${p.age}\\n  Fitness \${p.fitness} · Morale \${p.morale} · Contract \${p.contractDays}d · \${p.status}\\n  Renew from \${cash(p.minimumWeeklyWage)} Cash/week\\n  ID: \${p.id}\`,
+      \`• \${p.firstName} \${p.lastName} · OVR \${p.overall}/\${p.potential} · Age \${p.age}\n  Fitness \${p.fitness} · Morale \${p.morale} · Contract \${p.contractDays}d · \${p.status}\n  Renew from \${cash(p.minimumWeeklyWage)} Cash/week\n  ID: \${p.id}\`,
     );
     await ctx.reply(
-      \`Player development · Training ground Lv.\${result.club.trainingGroundLevel}\\nCoach: \${result.club.coach.name} (Lv.\${result.club.coach.level})\\nTraining \${result.club.coach.trainingSkill} · Recovery \${result.club.coach.recoverySkill} · Medical \${result.club.coach.medicalSkill}\\n\\n\` +
-      (lines.join("\\n\\n") || "No players found.") +
-      "\\n\\n/train PLAYER_ID BALANCED|SHOOTING|... LIGHT|NORMAL|INTENSE\\n/renew PLAYER_ID 90|180|365 WEEKLY_WAGE",
+      \`Player development · Training ground Lv.\${result.club.trainingGroundLevel}\nCoach: \${result.club.coach.name} (Lv.\${result.club.coach.level})\nTraining \${result.club.coach.trainingSkill} · Recovery \${result.club.coach.recoverySkill} · Medical \${result.club.coach.medicalSkill}\n\n\` +
+      (lines.join("\n\n") || "No players found.") +
+      "\n\n/train PLAYER_ID BALANCED|SHOOTING|... LIGHT|NORMAL|INTENSE\n/renew PLAYER_ID 90|180|365 WEEKLY_WAGE",
     );
   } catch (error) { await ctx.reply(\`Could not load player development: \${error instanceof Error ? error.message : "unknown error"}\`); }
 });
@@ -186,12 +186,12 @@ bot.command("development", async (ctx) => {
 bot.command("train", async (ctx) => {
   if (!ctx.from) return;
   if (ctx.chat.type !== "private") return ctx.reply("Use /train in a private chat.");
-  const [playerId, focusRaw, intensityRaw] = String(ctx.match ?? "").trim().split(/\\s+/);
+  const [playerId, focusRaw, intensityRaw] = String(ctx.match ?? "").trim().split(/\s+/);
   const focus = focusRaw?.toUpperCase();
   const intensity = intensityRaw?.toUpperCase();
   const focuses = ["BALANCED", "GOALKEEPING", "DEFENDING", "PASSING", "PLAYMAKING", "DRIBBLING", "SHOOTING", "PHYSICAL"];
   if (!playerId || !focus || !focuses.includes(focus) || !["LIGHT", "NORMAL", "INTENSE"].includes(intensity ?? "")) {
-    return ctx.reply("Usage: /train PLAYER_ID FOCUS INTENSITY\\nFocus: BALANCED, GOALKEEPING, DEFENDING, PASSING, PLAYMAKING, DRIBBLING, SHOOTING, PHYSICAL\\nIntensity: LIGHT, NORMAL, INTENSE");
+    return ctx.reply("Usage: /train PLAYER_ID FOCUS INTENSITY\nFocus: BALANCED, GOALKEEPING, DEFENDING, PASSING, PLAYMAKING, DRIBBLING, SHOOTING, PHYSICAL\nIntensity: LIGHT, NORMAL, INTENSE");
   }
   try {
     const result = await api<{ training: { overallBefore: number; overallAfter: number; fitnessBefore: number; fitnessAfter: number; injuryOccurred: boolean; injuryUntil: string | null; cashCost: string; replayed: boolean } }>(
@@ -201,8 +201,8 @@ bot.command("train", async (ctx) => {
     const t = result.training;
     await ctx.reply(
       \`Training complete. OVR \${t.overallBefore} → \${t.overallAfter}; fitness \${t.fitnessBefore} → \${t.fitnessAfter}. Cost: \${cash(t.cashCost)} Cash.\` +
-      (t.injuryOccurred ? \`\\nInjury: player unavailable until \${t.injuryUntil}.\` : "") +
-      (t.replayed ? "\\nThis was a repeated request." : ""),
+      (t.injuryOccurred ? \`\nInjury: player unavailable until \${t.injuryUntil}.\` : "") +
+      (t.replayed ? "\nThis was a repeated request." : ""),
     );
   } catch (error) { await ctx.reply(\`Training failed: \${error instanceof Error ? error.message : "unknown error"}\`); }
 });
@@ -210,10 +210,10 @@ bot.command("train", async (ctx) => {
 bot.command("renew", async (ctx) => {
   if (!ctx.from) return;
   if (ctx.chat.type !== "private") return ctx.reply("Use /renew in a private chat.");
-  const [playerId, daysRaw, wageRaw] = String(ctx.match ?? "").trim().split(/\\s+/);
+  const [playerId, daysRaw, wageRaw] = String(ctx.match ?? "").trim().split(/\s+/);
   const days = Number(daysRaw);
   if (!playerId || ![90, 180, 365].includes(days) || !wageRaw || !/^[1-9][0-9]{0,8}$/.test(wageRaw)) {
-    return ctx.reply("Usage: /renew PLAYER_ID 90|180|365 WEEKLY_WAGE\\nUse /development to see the minimum acceptable weekly wage.");
+    return ctx.reply("Usage: /renew PLAYER_ID 90|180|365 WEEKLY_WAGE\nUse /development to see the minimum acceptable weekly wage.");
   }
   try {
     const result = await api<{ contract: { contractDays: number; weeklyWage: string; replayed: boolean } }>(
