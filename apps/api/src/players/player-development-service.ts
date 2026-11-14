@@ -39,7 +39,8 @@ function sameTrainingCommand(previous: {
 
 export async function settleClubDailyState(userId: string, now = new Date()) {
   const today = utcDay(now);
-  return prisma.$transaction(async (tx) => {
+  try {
+    return await prisma.$transaction(async (tx) => {
     const club = await tx.club.findUnique({
       where: { ownerId: userId },
       include: { coach: { select: { recoverySkill: true } } },
@@ -105,7 +106,13 @@ export async function settleClubDailyState(userId: string, now = new Date()) {
       data: { clubId: club.id, gameDate: today, elapsedDays },
     });
     return { elapsedDays, gameDate: today.toISOString().slice(0, 10), recovered, expiredContracts };
-  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && ["P2002", "P2034"].includes(error.code)) {
+      return { elapsedDays: 0, gameDate: today.toISOString().slice(0, 10), recovered: 0, expiredContracts: 0 };
+    }
+    throw error;
+  }
 }
 
 export async function getClubDevelopment(userId: string, now = new Date()) {
@@ -129,8 +136,10 @@ export async function getClubDevelopment(userId: string, now = new Date()) {
     },
   });
   if (!club) throw new PlayerDevelopmentError("CLUB_NOT_FOUND");
-  const coach = club.coach ?? await prisma.coach.create({
-    data: { clubId: club.id, name: "Academy Coach", trainingSkill: 35, recoverySkill: 30, medicalSkill: 25, weeklySalary: 100n },
+  const coach = club.coach ?? await prisma.coach.upsert({
+    where: { clubId: club.id },
+    create: { clubId: club.id, name: "Academy Coach", trainingSkill: 35, recoverySkill: 30, medicalSkill: 25, weeklySalary: 100n },
+    update: {},
   });
   return {
     club: {
