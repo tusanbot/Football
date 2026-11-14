@@ -30,7 +30,7 @@ type ClubCompetition = { id: string; name: string; season: number; format: strin
 type LeagueDetails = {
   competition: { id: string; name: string; season: number; format: string; status: string; startsAt: string | null };
   standings: Array<{ position: number; clubId: string; clubName: string; played: number; won: number; drawn: number; lost: number; goalsFor: number; goalsAgainst: number; goalDifference: number; points: number }>;
-  matches: Array<{ id: string; round: number | null; scheduledAt: string; status: string; homeClub: { id: string; name: string }; awayClub: { id: string; name: string }; homeScore: number | null; awayScore: number | null }>;
+  matches: Array<{ id: string; round: number | null; scheduledAt: string; status: string; homeClub: { id: string; name: string }; awayClub: { id: string; name: string }; homeScore: number | null; awayScore: number | null; homePenalties: number | null; awayPenalties: number | null; winnerClubId: string | null }>;
 };
 type Lineup = {
   formation: string;
