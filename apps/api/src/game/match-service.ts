@@ -315,7 +315,7 @@ export async function listClubMatches(userId: string) {
   };
 }
 export async function simulateScheduledMatch(userId: string, matchId: string, now = new Date()) {
-  return prisma.$transaction(async (tx) => {
+  const settlement = await prisma.$transaction(async (tx) => {
     const match = await tx.footballMatch.findUnique({ where: { id: matchId } });
     if (!match) throw new MatchServiceError("MATCH_NOT_FOUND");
     const [home, away] = await Promise.all([
@@ -339,7 +339,7 @@ export async function simulateScheduledMatch(userId: string, matchId: string, no
       });
       const names = new Map(eventPlayers.map((player) => [player.id, player.firstName + " " + player.lastName]));
       return {
-        replayed: true, matchId: completed.id, homeClub: completed.homeClub.name,
+        replayed: true, matchId: completed.id, competitionId: match.competitionId, homeClub: completed.homeClub.name,
         awayClub: completed.awayClub.name, homeScore: completed.homeScore, awayScore: completed.awayScore,
         attendance: completed.attendance, ticketRevenue: completed.ticketRevenue.toString(),
         events: completed.events.map((event) => ({
@@ -420,15 +420,13 @@ export async function simulateScheduledMatch(userId: string, matchId: string, no
         where: { competitionId_clubId: { competitionId: match.competitionId, clubId: away.id } },
         data: { played: { increment: 1 }, won: { increment: awayPoints === 3 ? 1 : 0 }, drawn: { increment: awayPoints === 1 ? 1 : 0 }, lost: { increment: awayPoints === 0 ? 1 : 0 }, goalsFor: { increment: result.awayScore }, goalsAgainst: { increment: result.homeScore }, points: { increment: awayPoints } },
       });
-      const remaining = await tx.footballMatch.count({ where: { competitionId: match.competitionId, status: "SCHEDULED", id: { not: match.id } } });
-      if (remaining === 0) await tx.competition.update({ where: { id: match.competitionId }, data: { status: "COMPLETED", completedAt: now } });
     }
     const final = await tx.footballMatch.findUniqueOrThrow({ where: { id: match.id }, include: {
       homeClub: { select: { name: true } }, awayClub: { select: { name: true } },
       events: { orderBy: { sequence: "asc" } },
     } });
     return {
-      replayed: false, matchId: final.id, homeClub: final.homeClub.name, awayClub: final.awayClub.name,
+      replayed: false, matchId: final.id, competitionId: final.competitionId, homeClub: final.homeClub.name, awayClub: final.awayClub.name,
       homeScore: final.homeScore, awayScore: final.awayScore, attendance: final.attendance,
       ticketRevenue: final.ticketRevenue.toString(), events: final.events.map((event) => ({
         ...event,
@@ -441,4 +439,16 @@ export async function simulateScheduledMatch(userId: string, matchId: string, no
       })),
     };
   });
+  if (settlement.competitionId) {
+    const remaining = await prisma.footballMatch.count({
+      where: { competitionId: settlement.competitionId, status: "SCHEDULED" },
+    });
+    if (remaining === 0) {
+      await prisma.competition.updateMany({
+        where: { id: settlement.competitionId, status: "ACTIVE" },
+        data: { status: "COMPLETED", completedAt: now },
+      });
+    }
+  }
+  return settlement;
 }
