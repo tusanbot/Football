@@ -348,8 +348,10 @@ export async function simulateScheduledMatch(userId: string, matchId: string, no
     }
     const homeReward = result.homeScore > result.awayScore ? 250n : result.homeScore === result.awayScore ? 150n : 100n;
     const awayReward = result.awayScore > result.homeScore ? 250n : result.homeScore === result.awayScore ? 150n : 100n;
-    await creditMatchCash(tx, home, result.ticketRevenue + homeReward, `match:${match.id}:home-revenue`,
-      "MATCH_GATE_AND_REWARD", "MATCH_GATE_REVENUE", `Match attendance ${result.attendance}; home reward ${homeReward}`, now);
+    await creditMatchCash(tx, home, result.ticketRevenue, `match:${match.id}:home-gate`,
+      "MATCH_GATE_REVENUE", "MATCH_GATE_REVENUE", `Match gate receipts for attendance ${result.attendance}`, now);
+    await creditMatchCash(tx, home, homeReward, `match:${match.id}:home-reward`,
+      "MATCH_APPEARANCE_REWARD", "MATCH_REWARD", `Home match reward ${homeReward}`, now);
     await creditMatchCash(tx, away, awayReward, `match:${match.id}:away-reward`,
       "MATCH_APPEARANCE_REWARD", "MATCH_REWARD", `Away match reward ${awayReward}`, now);
     if (result.homeScore !== result.awayScore) {
@@ -388,5 +390,5 @@ export async function simulateScheduledMatch(userId: string, matchId: string, no
           : null,
       })),
     };
-  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+  });
 }
