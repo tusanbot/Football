@@ -29,7 +29,8 @@ export interface WalletEntryInput {
  */
 export async function applyWalletEntry(input: WalletEntryInput) {
   try {
-    assertIdempotencyKey(input.idempotencyKey);
+    try { assertIdempotencyKey(input.idempotencyKey); }
+    catch (error) { throw new WalletOperationError(error instanceof Error ? error.message : "Invalid idempotency key", "INVALID_AMOUNT"); }
     const result = await prisma.$transaction(async (tx) => {
       const previous = await tx.ledgerTransaction.findUnique({
         where: { idempotencyKey: input.idempotencyKey },
@@ -41,7 +42,9 @@ export async function applyWalletEntry(input: WalletEntryInput) {
           previous.asset === input.asset &&
           previous.direction === input.direction &&
           previous.amount === input.amount &&
-          previous.reason === input.reason;
+          previous.reason === input.reason &&
+          previous.referenceType === (input.referenceType ?? null) &&
+          previous.referenceId === (input.referenceId ?? null);
         if (!sameCommand) throw new WalletOperationError("Idempotency key already used for another command", "IDEMPOTENCY_CONFLICT");
         const wallet = await tx.wallet.findUnique({
           where: { userId_asset: { userId: input.userId, asset: input.asset } },
