@@ -25,13 +25,14 @@ A Telegram-first football management MMO. Telegram Bot, Telegram Mini App and Te
 
 - Fastify API, Telegram Mini App `initData` HMAC validation and Telegram bot-to-API shared-secret authentication.
 - Shared Telegram account provisioning service used by both Mini App `initData` and authenticated Bot onboarding (`/start`); creates the primary club, Cash/Gold wallets, starter ledger grants and 18-player squad atomically.
-- Generated starter squad and authenticated squad/wallet/profile APIs.
+- Generated starter squad, automatic strongest-available 4-3-3 starting XI, and authenticated squad/wallet/profile APIs.
+- Server-validated starting XI management with 4-3-3, 4-4-2, 3-5-2 and 4-2-3-1 formations, tactical presets, ownership/position validation and optimistic version checks.
 - Special-player catalog (curated real-world footballers) with rarity, gameplay ratings and acquisition-method metadata.
 - Gold-priced Epic, Legendary and Icon packs with server-side random selection, per-club ownership limits, atomic wallet debit, acquisition history and immutable ledger entries.
 - Idempotent special-player catalog seed command.
 - Transfer market for generated players: create/cancel listings, expiry handling, atomic purchase, player ownership transfer and buyer/seller ledger entries.
-- Persian RTL Mini App market interface: browse listings, sell owned players, manage own listings, view special-player catalog and Cash balance.
-- Telegram bot commands: `/start` (Bot-only account/club creation), `/players`, `/market`, `/sell PLAYER_ID PRICE`, `/buy LISTING_ID`, `/special`, and `/pack`.
+- Persian RTL Mini App: browse listings, sell owned players, manage own listings, view the special-player catalog, and configure starting XI/formation/tactics.
+- Telegram bot commands: `/start` (Bot-only account/club creation), `/club`, `/wallet`, `/rename`, `/players`, `/lineup`, `/setlineup`, `/market`, `/sell PLAYER_ID PRICE`, `/buy LISTING_ID`, `/special`, and `/pack`.
 - Both clients use the same authenticated API; the bot does not implement game/economy rules.
 
 The project is still an early development foundation, not a production-ready game. Group competitions, match simulation, special-player acquisition/reward execution, and comprehensive economy/security/load testing remain in development.
