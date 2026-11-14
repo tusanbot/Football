@@ -450,6 +450,7 @@ export default function MarketPage() {
     {tab === "matches" && <section className="club-market">
       <div className="market-card">
         <h2>مسابقات دوستانه</h2>
+        <button className="secondary" disabled={!!busy} onClick={() => void load()}>به‌روزرسانی مسابقات</button>
         <p>با باشگاه‌هایی که ترکیب کامل ۱۱ نفره دارند مسابقه دوستانه برگزار کنید. مسابقه پنج دقیقه پس از ثبت، آماده شبیه‌سازی می‌شود.</p>
         {opponents.length === 0 ? <p className="muted">فعلاً حریف واجد شرایطی پیدا نشد.</p> : opponents.map((opponent) => <div className="operation-row" key={opponent.id}>
           <div><strong>{opponent.name}</strong><small>سطح {opponent.level} · اعتبار {opponent.reputation}</small></div>
