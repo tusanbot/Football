@@ -17,3 +17,5 @@ export * from "./lineup.js";
 
 export * from "./player-development.js";
 export * from "./club-economy.js";
+
+export * from "./match-engine.js";
