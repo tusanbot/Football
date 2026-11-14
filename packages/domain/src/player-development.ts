@@ -19,6 +19,11 @@ export interface DevelopmentPlayer {
   morale: number;
 }
 
+
+export function isTrainingFocusCompatible(position: PlayerPosition, focus: TrainingFocus): boolean {
+  return focus !== "GOALKEEPING" || position === "GK";
+}
+
 export interface TrainingResult {
   attributes: PlayerAttributes;
   overall: number;
