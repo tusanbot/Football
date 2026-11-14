@@ -47,6 +47,10 @@ test("friendly match simulation settles score, events, fitness, gate revenue and
     const before = await prisma.wallet.findUniqueOrThrow({
       where: { userId_asset: { userId: clubs[0]!.userId, asset: "CASH" } },
     });
+    const benchBefore = await prisma.player.findMany({
+      where: { clubId: { in: clubs.map((club) => club.clubId) }, lineupSlot: null },
+      select: { id: true, fitness: true },
+    });
     const result = await simulateScheduledMatch(clubs[0]!.userId, created.match.id);
     assert.equal(result.replayed, false);
     assert.ok((result.homeScore ?? -1) >= 0);
@@ -59,6 +63,11 @@ test("friendly match simulation settles score, events, fitness, gate revenue and
     assert.equal(await prisma.playerMatchPerformance.count({ where: { matchId: match.id } }), 36);
     assert.ok(await prisma.matchEvent.count({ where: { matchId: match.id, type: "SUBSTITUTION" } }) > 0);
     assert.ok(await prisma.playerMatchPerformance.count({ where: { matchId: match.id, minutesPlayed: { gt: 0, lt: 90 } } }) > 0);
+    const benchAfter = await prisma.player.findMany({
+      where: { id: { in: benchBefore.map((player) => player.id) } },
+      select: { id: true, fitness: true },
+    });
+    assert.ok(benchAfter.some((player) => player.fitness < (benchBefore.find((beforePlayer) => beforePlayer.id === player.id)?.fitness ?? 100)));
     const after = await prisma.wallet.findUniqueOrThrow({
       where: { userId_asset: { userId: clubs[0]!.userId, asset: "CASH" } },
     });
