@@ -2,7 +2,7 @@ import { timingSafeEqual } from "node:crypto";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
 import { requireTelegramUser } from "../auth/require-telegram-user.js";
-import { AllianceServiceError, closeAllianceSeason, createAlliance, createAllianceChampionship, getAllianceWorkspace, inviteAllianceGroup, joinAllianceChampionship, respondAllianceInvitation, startAllianceChampionship, startAllianceSeason } from "./alliance-service.js";
+import { AllianceServiceError, closeAllianceSeason, contributeAllianceTreasury, createAlliance, createAllianceChampionship, getAllianceWorkspace, inviteAllianceGroup, joinAllianceChampionship, respondAllianceInvitation, startAllianceChampionship, startAllianceSeason } from "./alliance-service.js";
 
 function sendError(reply: FastifyReply, error: unknown) {
   if (!(error instanceof AllianceServiceError)) {
@@ -11,7 +11,7 @@ function sendError(reply: FastifyReply, error: unknown) {
   }
   const notFound = ["ACCOUNT_NOT_FOUND","CLUB_NOT_FOUND","GROUP_NOT_REGISTERED","TARGET_GROUP_NOT_FOUND","INVITATION_NOT_FOUND","COMPETITION_NOT_FOUND","NO_ACTIVE_SEASON"];
   const forbidden = ["GROUP_MANAGER_REQUIRED","ALLIANCE_FOUNDER_REQUIRED","ONLY_CREATOR_CAN_START"];
-  const conflict = ["GROUP_ALREADY_IN_ALLIANCE","TARGET_ALREADY_IN_ALLIANCE","ALLIANCE_NOT_FOUND","ALLIANCE_INACTIVE","GROUP_INACTIVE","TARGET_GROUP_INACTIVE","COMPETITION_NOT_OPEN","COMPETITION_FULL","SEASON_ALREADY_ACTIVE"];
+  const conflict = ["GROUP_ALREADY_IN_ALLIANCE","TARGET_ALREADY_IN_ALLIANCE","ALLIANCE_NOT_FOUND","ALLIANCE_INACTIVE","GROUP_INACTIVE","TARGET_GROUP_INACTIVE","COMPETITION_NOT_OPEN","COMPETITION_FULL","SEASON_ALREADY_ACTIVE","INSUFFICIENT_GROUP_POINTS"];
   return reply.code(notFound.includes(error.code) ? 404 : forbidden.includes(error.code) ? 403 : conflict.includes(error.code) ? 409 : 422).send({ error: error.code });
 }
 const groupId = z.string().regex(/^-?\d{1,20}$/);
@@ -36,6 +36,14 @@ export function registerAllianceRoutes(app: FastifyInstance) {
   app.post("/v1/alliances/:telegramGroupId/championships", async (request, reply) => { const id=await actor(request,reply); if(!id)return; const p=z.object({telegramGroupId:groupId}).safeParse(request.params), b=z.object({name:z.string().trim().min(3).max(60),maxTeams:z.number().int().min(4).max(20),idempotencyKey:key}).safeParse(request.body); if(!p.success||!b.success)return reply.code(400).send({error:"INVALID_CHAMPIONSHIP"}); try{return await createAllianceChampionship({telegramUserId:id,...p.data,...b.data});}catch(e){return sendError(reply,e);} });
   app.post("/v1/alliances/:telegramGroupId/championships/:competitionId/join", async (request, reply) => { const id=await actor(request,reply); if(!id)return; const p=z.object({telegramGroupId:groupId,competitionId:z.string().min(1).max(64)}).safeParse(request.params); if(!p.success)return reply.code(400).send({error:"INVALID_COMPETITION_ID"}); try{return await joinAllianceChampionship({telegramUserId:id,...p.data});}catch(e){return sendError(reply,e);} });
   app.post("/v1/alliances/:telegramGroupId/championships/:competitionId/start", async (request, reply) => { const id=await actor(request,reply); if(!id)return; const p=z.object({telegramGroupId:groupId,competitionId:z.string().min(1).max(64)}).safeParse(request.params); if(!p.success)return reply.code(400).send({error:"INVALID_COMPETITION_ID"}); try{return await startAllianceChampionship({telegramUserId:id,...p.data});}catch(e){return sendError(reply,e);} });
+
+  app.post("/v1/alliances/:telegramGroupId/treasury/contribute", async (request, reply) => {
+    const id=await actor(request,reply); if(!id)return;
+    const p=z.object({telegramGroupId:groupId}).safeParse(request.params);
+    const b=z.object({amount:z.string().regex(/^\\d{1,12}$/),idempotencyKey:key}).safeParse(request.body);
+    if(!p.success||!b.success)return reply.code(400).send({error:"INVALID_TREASURY_CONTRIBUTION"});
+    try{return await contributeAllianceTreasury({telegramUserId:id,...p.data,amount:BigInt(b.data.amount),idempotencyKey:b.data.idempotencyKey});}catch(e){return sendError(reply,e);}
+  });
   app.post("/v1/alliances/:telegramGroupId/seasons", async (request, reply) => { const id=await actor(request,reply); if(!id)return; const p=z.object({telegramGroupId:groupId}).safeParse(request.params), b=z.object({durationDays:z.number().int().min(7).max(90)}).safeParse(request.body); if(!p.success||!b.success)return reply.code(400).send({error:"INVALID_SEASON"}); try{return await startAllianceSeason({telegramUserId:id,...p.data,...b.data});}catch(e){return sendError(reply,e);} });
   app.post("/v1/alliances/:telegramGroupId/seasons/close", async (request, reply) => { const id=await actor(request,reply); if(!id)return; const p=z.object({telegramGroupId:groupId}).safeParse(request.params); if(!p.success)return reply.code(400).send({error:"INVALID_GROUP_ID"}); try{return await closeAllianceSeason({telegramUserId:id,...p.data});}catch(e){return sendError(reply,e);} });
 }
