@@ -293,12 +293,23 @@ export async function listClubMatches(userId: string) {
       select: { id: true, name: true, season: true, status: true }, orderBy: { createdAt: "desc" }, take: 20,
     }),
   ]);
+  const eventPlayerIds = [...new Set(matches.flatMap((match) => match.events.flatMap((event) =>
+    [event.playerId, ...(event.relatedPlayerId ? [event.relatedPlayerId] : [])])))];
+  const eventPlayers = await prisma.player.findMany({
+    where: { id: { in: eventPlayerIds } }, select: { id: true, firstName: true, lastName: true },
+  });
+  const playerNames = new Map(eventPlayers.map((player) => [player.id, player.firstName + " " + player.lastName]));
   return {
     matches: matches.map((match) => ({
       id: match.id, type: match.type, status: match.status, scheduledAt: match.scheduledAt.toISOString(),
       homeClub: match.homeClub, awayClub: match.awayClub, homeScore: match.homeScore, awayScore: match.awayScore,
       attendance: match.attendance, ticketRevenue: match.ticketRevenue.toString(), round: match.round,
-      events: match.events.map((event) => ({ minute: event.minute, type: event.type, teamId: event.teamId, playerId: event.playerId, relatedPlayerId: event.relatedPlayerId, detail: event.detail })),
+      events: match.events.map((event) => ({
+        minute: event.minute, type: event.type, teamId: event.teamId, playerId: event.playerId,
+        relatedPlayerId: event.relatedPlayerId, detail: event.detail,
+        playerName: playerNames.get(event.playerId) ?? "Player",
+        relatedPlayerName: event.relatedPlayerId ? playerNames.get(event.relatedPlayerId) ?? null : null,
+      })),
     })),
     competitions,
   };
