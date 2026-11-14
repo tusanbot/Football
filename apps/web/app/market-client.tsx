@@ -32,6 +32,15 @@ export default function MarketPage() {
 
   const load = useCallback(async () => {
     if (!initData) return;
+    const authResponse = await fetch(API + "/v1/auth/telegram", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ initData }),
+    });
+    if (!authResponse.ok) {
+      const authError = await authResponse.json().catch(() => ({}));
+      throw new Error(authError.error ?? "احراز هویت تلگرام ناموفق بود.");
+    }
     const requests = await Promise.all([
       fetch(API + "/v1/club/players", { headers }),
       fetch(API + "/v1/wallet", { headers }),
