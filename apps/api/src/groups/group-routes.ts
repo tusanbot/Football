@@ -67,7 +67,7 @@ export function registerGroupRoutes(app: FastifyInstance) {
     try { return { membership: await joinTelegramGroup({ telegramUserId, ...parsed.data }) }; } catch (error) { return sendGroupError(reply, error); }
   });
   app.post("/v1/groups/activity", async (request, reply) => {
-    const telegramUserId = authenticateBot(request, reply); if (!telegramUserId) return;
+    const telegramUserId = await authenticateBot(request, reply); if (!telegramUserId) return;
     const parsed = z.object({ telegramGroupId: groupId }).safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ error: "INVALID_GROUP_ACTIVITY" });
     try { return { activity: await awardDailyGroupActivity({ telegramUserId, ...parsed.data }) }; } catch (error) { return sendGroupError(reply, error); }
@@ -86,7 +86,7 @@ export function registerGroupRoutes(app: FastifyInstance) {
   app.get("/v1/groups/:telegramGroupId/leagues/:competitionId",async(request,reply)=>{const id=await authenticateGroupActor(request,reply);if(!id)return;const p=z.object({telegramGroupId:groupId,competitionId:z.string().min(1).max(64)}).safeParse(request.params);if(!p.success)return reply.code(400).send({error:"INVALID_COMPETITION_ID"});try{return await getGroupLeagueTable(id,p.data.telegramGroupId,p.data.competitionId);}catch(e){return sendGroupError(reply,e);}});
 
   app.get("/v1/groups/:telegramGroupId", async (request, reply) => {
-    const telegramUserId = authenticateBot(request, reply); if (!telegramUserId) return;
+    const telegramUserId = await authenticateBot(request, reply); if (!telegramUserId) return;
     const parsed = z.object({ telegramGroupId: groupId }).safeParse(request.params);
     if (!parsed.success) return reply.code(400).send({ error: "INVALID_GROUP_ID" });
     try { return await getTelegramGroupSummary(telegramUserId, parsed.data.telegramGroupId); } catch (error) { return sendGroupError(reply, error); }
