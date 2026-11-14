@@ -3,6 +3,11 @@ import type { Prisma } from "@prisma/client";
 import { buildDefaultLineup, type LineupCandidate, generateStarterSquad } from "@football/domain";
 
 export async function ensureStarterSquad(tx: Prisma.TransactionClient, clubId: string) {
+  await tx.coach.upsert({
+    where: { clubId },
+    create: { clubId, name: "Academy Coach", level: 1, trainingSkill: 35, recoverySkill: 30, medicalSkill: 25, weeklySalary: 100n },
+    update: {},
+  });
   const existingCount = await tx.player.count({ where: { clubId } });
   if (existingCount === 0) {
     const squad = generateStarterSquad(randomInt);
