@@ -169,3 +169,33 @@ export function simulateFootballMatch(input: {
   }));
   return { homeScore, awayScore, attendance, ticketRevenue, events: chronologicalEvents, performances: performanceRows, homeExpectedGoals: round(homeXg), awayExpectedGoals: round(awayXg) };
 }
+
+/** Deterministic penalty shootout used to resolve knockout ties. */
+export function simulatePenaltyShootout(input: { seed: string; home: MatchSide; away: MatchSide }) {
+  const rng = random(hashSeed(input.seed + ":penalties"));
+  const goalkeeper = (side: MatchSide) => side.players.find((player) => player.position === "GK")?.attributes.goalkeeping ?? 50;
+  const shooters = (side: MatchSide) => side.players.filter((player) => player.position !== "GK");
+  const scoringChance = (side: MatchSide, opponent: MatchSide) => {
+    const list = shooters(side);
+    const averageShooting = list.reduce((sum, player) => sum + player.attributes.shooting, 0) / Math.max(1, list.length);
+    return clamp(0.74 + (averageShooting - goalkeeper(opponent)) / 700, 0.58, 0.88);
+  };
+  const homeChance = scoringChance(input.home, input.away);
+  const awayChance = scoringChance(input.away, input.home);
+  let homePenalties = 0, awayPenalties = 0;
+  for (let kick = 0; kick < 5; kick++) {
+    if (rng() < homeChance) homePenalties++;
+    if (rng() < awayChance) awayPenalties++;
+  }
+  let suddenDeath = 0;
+  while (homePenalties === awayPenalties && suddenDeath < 10) {
+    if (rng() < homeChance) homePenalties++;
+    if (rng() < awayChance) awayPenalties++;
+    suddenDeath++;
+  }
+  if (homePenalties === awayPenalties) {
+    if (rng() < 0.5) homePenalties++;
+    else awayPenalties++;
+  }
+  return { homePenalties, awayPenalties, winner: homePenalties > awayPenalties ? "HOME" as const : "AWAY" as const };
+}
