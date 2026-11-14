@@ -152,7 +152,19 @@ export async function startLeague(userId: string, competitionId: string, now = n
   const club = await getOwnedClub(userId);
   return prisma.$transaction(async (tx) => {
     const competition = await tx.competition.findUnique({
-      where: { id: competitionId }, include: { entries: { include: { club: { select: { id: true, players: { where: { lineupSlot: { not: null }, status: "ACTIVE" }, select: { id: true } } } } } },
+      where: { id: competitionId },
+      include: {
+        entries: {
+          include: {
+            club: {
+              select: {
+                id: true,
+                players: { where: { lineupSlot: { not: null }, status: "ACTIVE" }, select: { id: true } },
+              },
+            },
+          },
+        },
+      },
     });
     if (!competition) throw new MatchServiceError("COMPETITION_NOT_FOUND");
     if (competition.createdByClubId !== club.id) throw new MatchServiceError("ONLY_CREATOR_CAN_START");
