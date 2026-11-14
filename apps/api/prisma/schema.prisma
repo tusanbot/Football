@@ -78,6 +78,12 @@ enum TrainingIntensity {
   INTENSE
 }
 
+enum AcademyProspectStatus {
+  AVAILABLE
+  RECRUITED
+  RELEASED
+}
+
 model User {
   id                 String              @id @default(cuid())
   telegramId         String              @unique
@@ -111,6 +117,10 @@ model Club {
   lastDailyTickAt DateTime @default(now())
   lastPayrollAt DateTime @default(now())
   wageArrears BigInt @default(0)
+  stadiumLevel Int @default(1)
+  academyLevel Int @default(0)
+  lastEconomyTickAt DateTime @default(now())
+  operatingArrears BigInt @default(0)
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
   owner      User     @relation(fields: [ownerId], references: [id], onDelete: Restrict)
@@ -123,6 +133,10 @@ model Club {
   payrolls ClubPayroll[]
   trainingLogs PlayerTrainingLog[]
   contractRenewals PlayerContractRenewal[]
+  sponsors SponsorContract[]
+  academyProspects AcademyProspect[]
+  financeEntries ClubFinanceEntry[]
+  economyTicks ClubEconomyTick[]
 }
 
 model Player {
@@ -253,6 +267,72 @@ model PlayerContractRenewal {
   player          Player   @relation(fields: [playerId], references: [id], onDelete: Restrict)
   @@index([clubId, createdAt])
   @@index([playerId, createdAt])
+}
+
+
+model SponsorContract {
+  id             String   @id @default(cuid())
+  idempotencyKey String   @unique
+  clubId         String
+  partnerName    String
+  tier           String
+  dailyIncome    BigInt
+  signingBonus   BigInt
+  startedAt      DateTime
+  endsAt         DateTime
+  status         String   @default("ACTIVE")
+  createdAt      DateTime @default(now())
+  club           Club     @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  @@index([clubId, status, endsAt])
+}
+
+model AcademyProspect {
+  id                String   @id @default(cuid())
+  clubId            String
+  firstName         String
+  lastName          String
+  nationality       String   @db.VarChar(2)
+  age               Int
+  position          PlayerPosition
+  overall           Int
+  potential         Int
+  attributes        Json
+  recruitmentCost   BigInt
+  status            AcademyProspectStatus @default(AVAILABLE)
+  recruitedPlayerId String?  @unique
+  createdAt         DateTime @default(now())
+  recruitedAt       DateTime?
+  club              Club     @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  @@index([clubId, status, createdAt])
+}
+
+model ClubFinanceEntry {
+  id             String   @id @default(cuid())
+  idempotencyKey String   @unique
+  clubId         String
+  category       String
+  direction      LedgerDirection
+  amount         BigInt
+  description    String
+  occurredAt     DateTime @default(now())
+  club           Club     @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  @@index([clubId, occurredAt])
+  @@index([clubId, category, occurredAt])
+}
+
+model ClubEconomyTick {
+  id          String   @id @default(cuid())
+  clubId      String
+  gameDate    DateTime @db.Date
+  elapsedDays Int
+  income      BigInt
+  expenses    BigInt
+  paid        BigInt
+  arrears     BigInt
+  createdAt   DateTime @default(now())
+  club        Club     @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  @@unique([clubId, gameDate])
+  @@index([gameDate])
 }
 
 model SpecialPlayer {
