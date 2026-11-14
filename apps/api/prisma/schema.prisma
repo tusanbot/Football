@@ -33,6 +33,7 @@ enum GroupPointSource {
   CHALLENGE_REWARD
   LEAGUE_REWARD
   ADMIN_ADJUSTMENT
+  SHOP_PURCHASE
 }
 enum PlayerOrigin {
   GENERATED
@@ -135,6 +136,8 @@ model User {
   wallets            Wallet[]
   ledgerTransactions LedgerTransaction[]
   groupMemberships   GroupMembership[]
+  groupChallengeParticipations GroupChallengeParticipant[]
+  groupRewardBalances GroupMemberRewardBalance[]
   groupPointEntries   GroupPointLedger[]
   specialAcquisitions SpecialPlayerAcquisition[]
   trainingLogs PlayerTrainingLog[]
@@ -591,6 +594,7 @@ model TelegramGroup {
   createdAt   DateTime         @default(now())
   memberships GroupMembership[]
   challenges  GroupChallenge[]
+  rewardBalances GroupMemberRewardBalance[]
   pointEntries GroupPointLedger[]
   localCompetitions Competition[]
   rewardGrants GroupRewardGrant[]
@@ -618,9 +622,34 @@ model GroupChallenge {
   status    ChallengeStatus  @default(DRAFT)
   startsAt  DateTime?
   endsAt    DateTime?
+  rewardPoints BigInt @default(0)
+  createdByUserId String @default("")
   createdAt DateTime         @default(now())
   group     TelegramGroup    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  participants GroupChallengeParticipant[]
   @@index([groupId, status])
+}
+
+model GroupChallengeParticipant {
+  id String @id @default(cuid())
+  challengeId String
+  userId String
+  joinedAt DateTime @default(now())
+  challenge GroupChallenge @relation(fields: [challengeId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@unique([challengeId, userId])
+  @@index([userId, joinedAt])
+}
+
+model GroupMemberRewardBalance {
+  id String @id @default(cuid())
+  groupId String
+  userId String
+  balance BigInt @default(0)
+  updatedAt DateTime @updatedAt
+  group TelegramGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@unique([groupId, userId])
 }
 
 model GroupPointLedger {
