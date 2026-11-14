@@ -9,3 +9,5 @@ export interface GamePrincipal { userId: UserId; telegramId: TelegramId; }
 
 /** Clients identify commands independently of transport. */
 export interface GameCommandContext { principal: GamePrincipal; idempotencyKey: string; requestedAt: Date; }
+
+export * from "./economy.js";
