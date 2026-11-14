@@ -101,6 +101,7 @@ enum MatchEventType {
   YELLOW_CARD
   RED_CARD
   INJURY
+  SUBSTITUTION
 }
 
 enum CompetitionStatus {
