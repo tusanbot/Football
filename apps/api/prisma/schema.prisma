@@ -18,6 +18,7 @@ model User {
   updatedAt DateTime @updatedAt
   club Club?
   wallets Wallet[]
+  ledgerTransactions LedgerTransaction[]
   groupMemberships GroupMembership[]
 }
 model Club {
@@ -53,6 +54,7 @@ model LedgerTransaction {
   referenceType String?
   referenceId String?
   createdAt DateTime @default(now())
+  user User @relation(fields: [userId], references: [id], onDelete: Restrict)
   @@index([userId, createdAt])
   @@index([referenceType, referenceId])
 }
