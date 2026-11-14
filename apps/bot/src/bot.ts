@@ -63,7 +63,29 @@ bot.command("market", async (ctx) => {
   } catch (error) { await ctx.reply(`Could not load market: ${error instanceof Error ? error.message : "unknown error"}`); }
 });
 
-bot.command("special", async (ctx) => {\n  if (!ctx.from) return;\n  try {\n    const result = await api<{ players: Array<{ fullName: string; rarity: string; overall: number }>; packOffers: Array<{ method: string; rarity: string; priceGold: string }> }>("/v1/players/special", ctx.from.id);\n    const offers = result.packOffers.map((offer) => `• ${offer.rarity}: ${offer.priceGold} Gold — /pack ${offer.method.replace("_pack", "")}`);\n    const featured = result.players.slice(0, 10).map((player) => `• ${player.fullName} | ${player.rarity} | OVR ${player.overall}`);\n    await ctx.reply("Special player packs:\\n" + offers.join("\\n") + "\\n\\nFeatured players:\\n" + featured.join("\\n"));\n  } catch (error) { await ctx.reply(`Could not load special players: ${error instanceof Error ? error.message : "unknown error"}`); }\n});\n\nbot.command("pack", async (ctx) => {\n  if (!ctx.from) return;\n  const requested = String(ctx.match ?? "").trim().toLowerCase();\n  const method = ({ epic: "epic_pack", legendary: "legendary_pack", icon: "icon_pack" } as const)[requested as "epic" | "legendary" | "icon"];\n  if (!method) return ctx.reply("Usage: /pack epic|legendary|icon");\n  try {\n    const result = await api<{ acquisition: { specialPlayer: { fullName: string; rarity: string; overall: number }; goldBalance: string; replayed: boolean } }>("/v1/players/special/acquire", ctx.from.id, "POST", { method, idempotencyKey: randomUUID() });\n    const item = result.acquisition.specialPlayer;\n    await ctx.reply(`Acquired ${item.fullName} (${item.rarity}, OVR ${item.overall})!\\nRemaining Gold: ${cash(result.acquisition.goldBalance)}${result.acquisition.replayed ? "\\nThis was a repeated request." : ""}`);\n  } catch (error) { await ctx.reply(`Could not acquire a player: ${error instanceof Error ? error.message : "unknown error"}`); }\n});\n\nbot.command("sell", async (ctx) => {
+bot.command("special", async (ctx) => {
+  if (!ctx.from) return;
+  try {
+    const result = await api<{ players: Array<{ fullName: string; rarity: string; overall: number }>; packOffers: Array<{ method: string; rarity: string; priceGold: string }> }>("/v1/players/special", ctx.from.id);
+    const offers = result.packOffers.map((offer) => `• ${offer.rarity}: ${offer.priceGold} Gold — /pack ${offer.method.replace("_pack", "")}`);
+    const featured = result.players.slice(0, 10).map((player) => `• ${player.fullName} | ${player.rarity} | OVR ${player.overall}`);
+    await ctx.reply("Special player packs:\n" + offers.join("\n") + "\n\nFeatured players:\n" + featured.join("\n"));
+  } catch (error) { await ctx.reply(`Could not load special players: ${error instanceof Error ? error.message : "unknown error"}`); }
+});
+
+bot.command("pack", async (ctx) => {
+  if (!ctx.from) return;
+  const requested = String(ctx.match ?? "").trim().toLowerCase();
+  const method = ({ epic: "epic_pack", legendary: "legendary_pack", icon: "icon_pack" } as const)[requested as "epic" | "legendary" | "icon"];
+  if (!method) return ctx.reply("Usage: /pack epic|legendary|icon");
+  try {
+    const result = await api<{ acquisition: { specialPlayer: { fullName: string; rarity: string; overall: number }; goldBalance: string; replayed: boolean } }>("/v1/players/special/acquire", ctx.from.id, "POST", { method, idempotencyKey: randomUUID() });
+    const item = result.acquisition.specialPlayer;
+    await ctx.reply(`Acquired ${item.fullName} (${item.rarity}, OVR ${item.overall})!\nRemaining Gold: ${cash(result.acquisition.goldBalance)}${result.acquisition.replayed ? "\nThis was a repeated request." : ""}`);
+  } catch (error) { await ctx.reply(`Could not acquire a player: ${error instanceof Error ? error.message : "unknown error"}`); }
+});
+
+bot.command("sell", async (ctx) => {
   if (!ctx.from) return;
   const parts = String(ctx.match ?? "").trim().split(/\s+/);
   const [playerId, price] = parts;
