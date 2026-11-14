@@ -5,6 +5,7 @@ import {
   calculateContractDemand,
   calculateInjuryChanceBasisPoints,
   calculateTrainingResult,
+  isTrainingFocusCompatible,
   type PlayerAttributes,
   type TrainingFocus,
   type TrainingIntensity,
@@ -204,6 +205,7 @@ export async function trainPlayer(
       if (player.status === "INJURED") throw new PlayerDevelopmentError("PLAYER_INJURED");
       if (player.status === "CONTRACT_EXPIRED") throw new PlayerDevelopmentError("CONTRACT_EXPIRED");
       if (player.status !== "ACTIVE") throw new PlayerDevelopmentError("PLAYER_NOT_AVAILABLE");
+      if (!isTrainingFocusCompatible(player.position, focus)) throw new PlayerDevelopmentError("INCOMPATIBLE_TRAINING_FOCUS");
       const alreadyTrained = await tx.playerTrainingLog.findUnique({
         where: { playerId_trainingDate: { playerId, trainingDate } },
         select: { id: true },
