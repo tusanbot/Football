@@ -5,7 +5,7 @@ import { verifyTelegramInitData } from "./telegram-init-data.js";
 
 const requestSchema = z.object({ initData: z.string().min(1).max(8192) });
 
-export async function registerTelegramAuthRoutes(app: FastifyInstance) {
+export function registerTelegramAuthRoutes(app: FastifyInstance) {
   app.post("/v1/auth/telegram", async (request, reply) => {
     const parsed = requestSchema.safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ error: "INVALID_REQUEST" });
