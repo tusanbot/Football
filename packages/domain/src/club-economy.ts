@@ -82,3 +82,18 @@ export function calculateCoachUpgradeCost(level: number): bigint {
   }
   return BigInt(1_500 * level * level);
 }
+
+/** Calculates gross gate receipts for a completed fixture; attendance is server-simulated. */
+export function calculateMatchdayTicketRevenue(
+  stadiumCapacity: number,
+  ticketPrice: bigint,
+  attendanceBasisPoints: number,
+): bigint {
+  if (!Number.isInteger(stadiumCapacity) || stadiumCapacity < 0
+    || ticketPrice < 0n || !Number.isInteger(attendanceBasisPoints)
+    || attendanceBasisPoints < 0 || attendanceBasisPoints > 10_000) {
+    throw new Error("Matchday ticket inputs are invalid.");
+  }
+  const attendees = Math.floor(stadiumCapacity * attendanceBasisPoints / 10_000);
+  return BigInt(attendees) * ticketPrice;
+}
