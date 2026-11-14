@@ -1,6 +1,7 @@
-import type { FastifyInstance } from "fastify";
+import type { FastifyInstance, FastifyReply } from "fastify";
 import { z } from "zod";
 import { requireTelegramUser } from "../auth/require-telegram-user.js";
+import { prisma } from "../db.js";
 import { buyMarketListing, cancelMarketListing, createMarketListing, getOpenMarketListings, MarketError } from "./market-service.js";
 
 const createSchema = z.object({
@@ -11,7 +12,7 @@ const createSchema = z.object({
 
 const idSchema = z.object({ id: z.string().min(1).max(64) });
 
-function sendMarketError(reply: Parameters<Parameters<FastifyInstance["get"]>[1]>[1], error: unknown) {
+function sendMarketError(reply: FastifyReply, error: unknown) {
   if (error instanceof MarketError) {
     const status = error.code === "INSUFFICIENT_FUNDS" ? 409
       : error.code === "CLUB_NOT_FOUND" || error.code === "PLAYER_NOT_FOUND" || error.code === "LISTING_NOT_FOUND" ? 404
@@ -21,7 +22,7 @@ function sendMarketError(reply: Parameters<Parameters<FastifyInstance["get"]>[1]
   throw error;
 }
 
-export function registerPlayerMarketRoutes(app: FastifyInstance) {
+export function registerPlayerMarketRoutes(app: FastifyInstance) {\n  app.get("/v1/players/special", async (request, reply) => {\n    const user = await requireTelegramUser(request);\n    if (!user) return reply.code(401).send({ error: "UNAUTHENTICATED" });\n    const players = await prisma.specialPlayer.findMany({ where: { active: true }, orderBy: [{ rarity: "desc" }, { overall: "desc" }], select: { id: true, slug: true, fullName: true, nationality: true, birthDate: true, positions: true, rarity: true, overall: true, potential: true, attributes: true, acquisitionMethods: true } });\n    return { players };\n  });
   app.get("/v1/market/listings", async (request, reply) => {
     const user = await requireTelegramUser(request);
     if (!user) return reply.code(401).send({ error: "UNAUTHENTICATED" });
