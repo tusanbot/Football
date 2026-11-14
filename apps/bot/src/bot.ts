@@ -176,14 +176,14 @@ bot.command("development", async (ctx) => {
       players: Array<{ id: string; firstName: string; lastName: string; overall: number; potential: number; age: number; fitness: number; morale: number; contractDays: number; status: string; minimumWeeklyWage: string; maximumWeeklyWage: string }>;
     } }>("/v1/club/development", ctx.from.id);
     const lines = result.club.players.slice(0, 15).map((p) =>
-      \`• \${p.firstName} \${p.lastName} · OVR \${p.overall}/\${p.potential} · Age \${p.age}\n  Fitness \${p.fitness} · Morale \${p.morale} · Contract \${p.contractDays}d · \${p.status}\n  Renew from \${cash(p.minimumWeeklyWage)} Cash/week\n  ID: \${p.id}\`,
+      `• ${p.firstName} ${p.lastName} · OVR ${p.overall}/${p.potential} · Age ${p.age}\n  Fitness ${p.fitness} · Morale ${p.morale} · Contract ${p.contractDays}d · ${p.status}\n  Renew from ${cash(p.minimumWeeklyWage)} Cash/week\n  ID: ${p.id}`,
     );
     await ctx.reply(
-      \`Player development · Training ground Lv.\${result.club.trainingGroundLevel}\nCoach: \${result.club.coach.name} (Lv.\${result.club.coach.level})\nTraining \${result.club.coach.trainingSkill} · Recovery \${result.club.coach.recoverySkill} · Medical \${result.club.coach.medicalSkill}\n\n\` +
+      `Player development · Training ground Lv.${result.club.trainingGroundLevel}\nCoach: ${result.club.coach.name} (Lv.${result.club.coach.level})\nTraining ${result.club.coach.trainingSkill} · Recovery ${result.club.coach.recoverySkill} · Medical ${result.club.coach.medicalSkill}\n\n` +
       (lines.join("\n\n") || "No players found.") +
       "\n\n/train PLAYER_ID BALANCED|SHOOTING|... LIGHT|NORMAL|INTENSE\n/renew PLAYER_ID 90|180|365 WEEKLY_WAGE",
     );
-  } catch (error) { await ctx.reply(\`Could not load player development: \${error instanceof Error ? error.message : "unknown error"}\`); }
+  } catch (error) { await ctx.reply(`Could not load player development: ${error instanceof Error ? error.message : "unknown error"}`); }
 });
 
 bot.command("train", async (ctx) => {
@@ -198,16 +198,16 @@ bot.command("train", async (ctx) => {
   }
   try {
     const result = await api<{ training: { overallBefore: number; overallAfter: number; fitnessBefore: number; fitnessAfter: number; injuryOccurred: boolean; injuryUntil: string | null; cashCost: string; replayed: boolean } }>(
-      \`/v1/club/players/\${encodeURIComponent(playerId)}/train\`, ctx.from.id, "POST",
-      { focus, intensity, idempotencyKey: \`tg-train-\${ctx.from.id}-\${ctx.update.update_id}\` },
+      `/v1/club/players/${encodeURIComponent(playerId)}/train`, ctx.from.id, "POST",
+      { focus, intensity, idempotencyKey: `tg-train-${ctx.from.id}-${ctx.update.update_id}` },
     );
     const t = result.training;
     await ctx.reply(
-      \`Training complete. OVR \${t.overallBefore} → \${t.overallAfter}; fitness \${t.fitnessBefore} → \${t.fitnessAfter}. Cost: \${cash(t.cashCost)} Cash.\` +
-      (t.injuryOccurred ? \`\nInjury: player unavailable until \${t.injuryUntil}.\` : "") +
+      `Training complete. OVR ${t.overallBefore} → ${t.overallAfter}; fitness ${t.fitnessBefore} → ${t.fitnessAfter}. Cost: ${cash(t.cashCost)} Cash.` +
+      (t.injuryOccurred ? `\nInjury: player unavailable until ${t.injuryUntil}.` : "") +
       (t.replayed ? "\nThis was a repeated request." : ""),
     );
-  } catch (error) { await ctx.reply(\`Training failed: \${error instanceof Error ? error.message : "unknown error"}\`); }
+  } catch (error) { await ctx.reply(`Training failed: ${error instanceof Error ? error.message : "unknown error"}`); }
 });
 
 bot.command("renew", async (ctx) => {
@@ -220,11 +220,11 @@ bot.command("renew", async (ctx) => {
   }
   try {
     const result = await api<{ contract: { contractDays: number; weeklyWage: string; replayed: boolean } }>(
-      \`/v1/club/players/\${encodeURIComponent(playerId)}/contract/renew\`, ctx.from.id, "POST",
-      { extensionDays: days, weeklyWage: wageRaw, idempotencyKey: \`tg-renew-\${ctx.from.id}-\${ctx.update.update_id}\` },
+      `/v1/club/players/${encodeURIComponent(playerId)}/contract/renew`, ctx.from.id, "POST",
+      { extensionDays: days, weeklyWage: wageRaw, idempotencyKey: `tg-renew-${ctx.from.id}-${ctx.update.update_id}` },
     );
-    await ctx.reply(\`Contract renewed: \${result.contract.contractDays} days remaining · \${cash(result.contract.weeklyWage)} Cash/week.\${result.contract.replayed ? " This was a repeated request." : ""}\`);
-  } catch (error) { await ctx.reply(\`Contract renewal failed: \${error instanceof Error ? error.message : "unknown error"}\`); }
+    await ctx.reply(`Contract renewed: ${result.contract.contractDays} days remaining · ${cash(result.contract.weeklyWage)} Cash/week.${result.contract.replayed ? " This was a repeated request." : ""}`);
+  } catch (error) { await ctx.reply(`Contract renewal failed: ${error instanceof Error ? error.message : "unknown error"}`); }
 });
 
 bot.command("market", async (ctx) => {
