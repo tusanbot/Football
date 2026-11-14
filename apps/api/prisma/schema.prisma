@@ -109,6 +109,8 @@ model Club {
   lineupVersion Int   @default(0)
   trainingGroundLevel Int @default(1)
   lastDailyTickAt DateTime @default(now())
+  lastPayrollAt DateTime @default(now())
+  wageArrears BigInt @default(0)
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
   owner      User     @relation(fields: [ownerId], references: [id], onDelete: Restrict)
@@ -118,6 +120,7 @@ model Club {
   specialAcquisitions SpecialPlayerAcquisition[]
   coach Coach?
   dailyTicks ClubDailyTick[]
+  payrolls ClubPayroll[]
   trainingLogs PlayerTrainingLog[]
   contractRenewals PlayerContractRenewal[]
 }
@@ -185,6 +188,25 @@ model ClubDailyTick {
   club        Club     @relation(fields: [clubId], references: [id], onDelete: Cascade)
   @@unique([clubId, gameDate])
   @@index([gameDate])
+}
+
+
+model ClubPayroll {
+  id             String   @id @default(cuid())
+  clubId         String
+  payrollDate    DateTime @db.Date
+  weeksCovered   Int
+  playerWages    BigInt
+  coachWages     BigInt
+  arrearsBefore  BigInt
+  totalDue       BigInt
+  cashPaid       BigInt
+  arrearsAfter   BigInt
+  playersCount   Int
+  createdAt      DateTime @default(now())
+  club           Club     @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  @@unique([clubId, payrollDate])
+  @@index([payrollDate])
 }
 
 model PlayerTrainingLog {
