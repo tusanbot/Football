@@ -415,6 +415,7 @@ model FootballMatch {
   startedAt      DateTime?
   completedAt    DateTime?
   seed           String
+  simulationVersion Int @default(1)
   homeScore      Int?
   awayScore      Int?
   attendance     Int @default(0)
