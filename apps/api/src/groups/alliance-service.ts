@@ -88,13 +88,51 @@ export async function respondAllianceInvitation(i: { telegramUserId: string; tel
 
 export async function getAllianceWorkspace(telegramUserId: string, telegramGroupId: string) {
   const { group } = await prisma.$transaction(tx => manager(tx, telegramUserId, telegramGroupId, false));
-  const membership = await prisma.allianceGroup.findUnique({ where: { groupId: group.id }, include: { alliance: { include: { groups: { include: { group: { select: { telegramId: true, title: true, memberCount: true, points: true } } }, invitations: { where: { groupId: group.id, status: "PENDING" } }, seasons: { orderBy: { number: "desc" }, take: 5 }, competitions: { where: { status: { in: ["REGISTRATION", "ACTIVE", "COMPLETED"] } }, include: { _count: { select: { entries: true } }, entries: { include: { club: { select: { name: true } } }, orderBy: [{ points: "desc" }, { goalsFor: "desc" }, { goalsAgainst: "asc" }] } }, orderBy: { createdAt: "desc" }, take: 20 } } } } });
+  const membership = await prisma.allianceGroup.findUnique({ where: { groupId: group.id }, include: { alliance: true } });
   if (!membership) {
-    const invitations = await prisma.allianceInvitation.findMany({ where: { groupId: group.id, status: "PENDING" }, include: { alliance: { select: { name: true, description: true } } }, orderBy: { createdAt: "desc" } });
+    const invitations = await prisma.allianceInvitation.findMany({
+      where: { groupId: group.id, status: "PENDING" },
+      include: { alliance: { select: { name: true, description: true } } },
+      orderBy: { createdAt: "desc" },
+    });
     return { alliance: null, invitations };
   }
-  const a = membership.alliance;
-  return { alliance: { id: a.id, name: a.name, description: a.description, treasuryPoints: a.treasuryPoints.toString(), groups: a.groups.map(x => ({ title: x.group.title, telegramGroupId: x.group.telegramId, memberCount: x.group.memberCount, points: x.group.points.toString(), role: x.role })), seasons: a.seasons, competitions: a.competitions.map(c => ({ id: c.id, name: c.name, status: c.status, teams: c._count.entries, standings: c.entries.map((e, index) => ({ rank: index + 1, club: e.club.name, played: e.played, points: e.points, goalsFor: e.goalsFor, goalsAgainst: e.goalsAgainst })) })) }, invitations: [] };
+  const allianceId = membership.allianceId;
+  const [groups, seasons, competitions] = await Promise.all([
+    prisma.allianceGroup.findMany({
+      where: { allianceId },
+      include: { group: { select: { telegramId: true, title: true, memberCount: true, points: true } } },
+      orderBy: { joinedAt: "asc" },
+    }),
+    prisma.allianceSeason.findMany({ where: { allianceId }, orderBy: { number: "desc" }, take: 5 }),
+    prisma.competition.findMany({
+      where: { allianceId, status: { in: ["REGISTRATION", "ACTIVE", "COMPLETED"] } },
+      include: {
+        _count: { select: { entries: true } },
+        entries: {
+          include: { club: { select: { name: true } } },
+          orderBy: [{ points: "desc" }, { goalsFor: "desc" }, { goalsAgainst: "asc" }],
+        },
+      },
+      orderBy: { createdAt: "desc" },
+      take: 20,
+    }),
+  ]);
+  return {
+    alliance: {
+      id: membership.alliance.id,
+      name: membership.alliance.name,
+      description: membership.alliance.description,
+      treasuryPoints: membership.alliance.treasuryPoints.toString(),
+      groups: groups.map(x => ({ title: x.group.title, telegramGroupId: x.group.telegramId, memberCount: x.group.memberCount, points: x.group.points.toString(), role: x.role })),
+      seasons,
+      competitions: competitions.map(x => ({
+        id: x.id, name: x.name, status: x.status, teams: x._count.entries,
+        standings: x.entries.map((entry, index) => ({ rank: index + 1, club: entry.club.name, played: entry.played, points: entry.points, goalsFor: entry.goalsFor, goalsAgainst: entry.goalsAgainst })),
+      })),
+    },
+    invitations: [],
+  };
 }
 
 export async function createAllianceChampionship(i: { telegramUserId: string; telegramGroupId: string; name: string; maxTeams: number; idempotencyKey: string }) {
@@ -152,11 +190,18 @@ export async function startAllianceSeason(i: { telegramUserId: string; telegramG
 export async function closeAllianceSeason(i: { telegramUserId: string; telegramGroupId: string }) {
   return prisma.$transaction(async tx => {
     const { group } = await manager(tx, i.telegramUserId, i.telegramGroupId);
-    const membership = await tx.allianceGroup.findUnique({ where: { groupId: group.id }, include: { alliance: { include: { groups: { include: { group: { select: { title: true, points: true } } }, seasons: { where: { status: "ACTIVE" }, orderBy: { number: "desc" }, take: 1 } } } } });
+    const membership = await tx.allianceGroup.findUnique({ where: { groupId: group.id } });
     if (!membership || membership.role !== "FOUNDER") throw new AllianceServiceError("ALLIANCE_FOUNDER_REQUIRED");
-    const season = membership.alliance.seasons[0];
+    const season = await tx.allianceSeason.findFirst({ where: { allianceId: membership.allianceId, status: "ACTIVE" }, orderBy: { number: "desc" } });
     if (!season) throw new AllianceServiceError("NO_ACTIVE_SEASON");
-    const standings = membership.alliance.groups.map(x => ({ group: x.group.title, points: x.group.points.toString() })).sort((a,b) => BigInt(b.points) > BigInt(a.points) ? 1 : BigInt(b.points) < BigInt(a.points) ? -1 : a.group.localeCompare(b.group)).map((x,index) => ({ rank: index+1, ...x }));
+    const groups = await tx.allianceGroup.findMany({
+      where: { allianceId: membership.allianceId },
+      include: { group: { select: { title: true, points: true } } },
+    });
+    const standings = groups
+      .map(x => ({ group: x.group.title, points: x.group.points.toString() }))
+      .sort((a, b) => BigInt(b.points) > BigInt(a.points) ? 1 : BigInt(b.points) < BigInt(a.points) ? -1 : a.group.localeCompare(b.group))
+      .map((x, index) => ({ rank: index + 1, ...x }));
     const updated = await tx.allianceSeason.update({ where: { id: season.id }, data: { status: "COMPLETED", closedAt: new Date(), standings } });
     return { season: updated, standings };
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
