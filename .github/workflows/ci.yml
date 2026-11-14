@@ -55,7 +55,7 @@ jobs:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/football_empire
       - name: Verify seeded special-player catalog
         run: |
-          pnpm --filter @football/api exec prisma db execute --stdin <<< "SELECT COUNT(*) AS special_player_count FROM \"SpecialPlayer\";"
+          pnpm --filter @football/api exec tsx -e 'import { PrismaClient } from "@prisma/client"; void (async () => { const prisma = new PrismaClient(); try { const count = await prisma.specialPlayer.count(); console.log(`Seeded special players: ${count}`); if (count !== 15) process.exitCode = 1; } finally { await prisma.$disconnect(); } })();'
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/football_empire
       - name: Build shared domain package
