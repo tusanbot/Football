@@ -1,6 +1,7 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "../db.js";
 import { MatchServiceError, startLeague } from "../game/match-service.js";
+import { buildAllianceSeasonStandings, type AllianceSeasonLedgerEntry, type AllianceSeasonGroupInput } from "./alliance-security.js";
 
 export class AllianceServiceError extends Error {
   constructor(readonly code: string) { super(code); this.name = "AllianceServiceError"; }
@@ -18,6 +19,28 @@ async function manager(tx: Prisma.TransactionClient, telegramId: string, telegra
   return { user, group };
 }
 
+async function audit(tx: Prisma.TransactionClient, input: { allianceId: string; actorTelegramId: string; groupTelegramId: string; action: string; metadata?: Prisma.InputJsonObject }) {
+  await tx.allianceAuditLog.create({ data: { ...input, metadata: input.metadata ?? {} } });
+}
+
+function allianceReviewers() {
+  return new Set((process.env.ALLIANCE_REVIEWER_TELEGRAM_IDS ?? "").split(",").map(x => x.trim()).filter(x => /^\d{1,20}$/.test(x)));
+}
+
+async function payAllianceSeasonPrize(tx: Prisma.TransactionClient, allianceId: string, seasonId: string, seasonNumber: number, standings: Array<{ groupId: string; group: string; points: string }>) {
+  const winner = standings[0];
+  const alliance = await tx.alliance.findUniqueOrThrow({ where: { id: allianceId }, select: { treasuryPoints: true } });
+  if (!winner || BigInt(winner.points) <= BigInt(0) || alliance.treasuryPoints <= BigInt(0)) return { winner: null, prize: "0" };
+  const payoutKey = "alliance-season-payout:" + seasonId;
+  const prior = await tx.allianceLedger.findUnique({ where: { idempotencyKey: payoutKey } });
+  if (prior) return { winner: winner.group, prize: (-prior.amount).toString(), replayed: true };
+  await tx.telegramGroup.update({ where: { id: winner.groupId }, data: { points: { increment: alliance.treasuryPoints } } });
+  await tx.alliance.update({ where: { id: allianceId }, data: { treasuryPoints: 0n } });
+  await tx.allianceLedger.create({ data: { allianceId, idempotencyKey: payoutKey, amount: -alliance.treasuryPoints, source: "SEASON_CHAMPION_REWARD", description: "Season " + seasonNumber + " champion payout to " + winner.group } });
+  await tx.groupPointLedger.create({ data: { idempotencyKey: payoutKey, groupId: winner.groupId, amount: alliance.treasuryPoints, source: "ADMIN_ADJUSTMENT", description: "Alliance season champion reward" } });
+  return { winner: winner.group, prize: alliance.treasuryPoints.toString(), replayed: false };
+}
+
 export async function createAlliance(i: { telegramUserId: string; telegramGroupId: string; name: string; description?: string; idempotencyKey: string }) {
   return prisma.$transaction(async tx => {
     const { group } = await manager(tx, i.telegramUserId, i.telegramGroupId);
@@ -31,6 +54,7 @@ export async function createAlliance(i: { telegramUserId: string; telegramGroupI
     const slug = i.idempotencyKey;
     const alliance = await tx.alliance.create({ data: { slug, name: i.name, description: i.description ?? "", createdByGroupId: group.id, groups: { create: { groupId: group.id, role: "FOUNDER" } } } });
     await tx.allianceSeason.create({ data: { allianceId: alliance.id, number: 1, endsAt: new Date(Date.now() + 30 * 86400000) } });
+    await audit(tx, { allianceId: alliance.id, actorTelegramId: i.telegramUserId, groupTelegramId: group.telegramId, action: "ALLIANCE_CREATED", metadata: { name: i.name } });
     return { alliance, replayed: false };
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 }
@@ -50,6 +74,7 @@ export async function inviteAllianceGroup(i: { telegramUserId: string; telegramG
       create: { allianceId: membership.allianceId, groupId: target.id, invitedByGroupId: group.id },
       update: { status: "PENDING", invitedByGroupId: group.id, respondedAt: null },
     });
+    await audit(tx, { allianceId: membership.allianceId, actorTelegramId: i.telegramUserId, groupTelegramId: group.telegramId, action: "GROUP_INVITED", metadata: { targetGroupId: target.telegramId, invitationId: invitation.id } });
     return { invitation, alliance: { id: membership.alliance.id, name: membership.alliance.name } };
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 }
@@ -58,9 +83,12 @@ export async function inviteAllianceGroup(i: { telegramUserId: string; telegramG
 export async function contributeAllianceTreasury(i: { telegramUserId: string; telegramGroupId: string; amount: bigint; idempotencyKey: string }) {
   if (i.amount <= 0n || i.amount > 1000000000n) throw new AllianceServiceError("INVALID_CONTRIBUTION_AMOUNT");
   return prisma.$transaction(async tx => {
-    const { group } = await manager(tx, i.telegramUserId, i.telegramGroupId);
+    const { user, group } = await manager(tx, i.telegramUserId, i.telegramGroupId);
     const membership = await tx.allianceGroup.findUnique({ where: { groupId: group.id } });
     if (!membership) throw new AllianceServiceError("ALLIANCE_NOT_FOUND");
+    const userIdForLedger = user.id;
+    const activeSeason = await tx.allianceSeason.findFirst({ where: { allianceId: membership.allianceId, status: "ACTIVE" } });
+    if (!activeSeason) throw new AllianceServiceError("SEASON_REVIEW_REQUIRED");
     const old = await tx.allianceLedger.findUnique({ where: { idempotencyKey: i.idempotencyKey } });
     if (old) {
       if (old.allianceId !== membership.allianceId) throw new AllianceServiceError("IDEMPOTENCY_CONFLICT");
@@ -70,7 +98,8 @@ export async function contributeAllianceTreasury(i: { telegramUserId: string; te
     if (!debited.count) throw new AllianceServiceError("INSUFFICIENT_GROUP_POINTS");
     const alliance = await tx.alliance.update({ where: { id: membership.allianceId }, data: { treasuryPoints: { increment: i.amount } }, select: { treasuryPoints: true } });
     await tx.allianceLedger.create({ data: { allianceId: membership.allianceId, idempotencyKey: i.idempotencyKey, amount: i.amount, source: "GROUP_CONTRIBUTION", description: "Contribution from Telegram group " + group.title } });
-    await tx.groupPointLedger.create({ data: { idempotencyKey: "alliance-contribution:" + i.idempotencyKey, groupId: group.id, amount: -i.amount, source: "ADMIN_ADJUSTMENT", description: "Contribution to alliance treasury" } });
+    await tx.groupPointLedger.create({ data: { idempotencyKey: "alliance-contribution:" + i.idempotencyKey, groupId: group.id, userId: userIdForLedger, amount: -i.amount, source: "ADMIN_ADJUSTMENT", description: "Contribution to alliance treasury" } });
+    await audit(tx, { allianceId: membership.allianceId, actorTelegramId: i.telegramUserId, groupTelegramId: group.telegramId, action: "TREASURY_CONTRIBUTION", metadata: { amount: i.amount.toString(), idempotencyKey: i.idempotencyKey } });
     return { contributed: true, replayed: false, treasuryPoints: alliance.treasuryPoints.toString(), groupPoints: (group.id ? (await tx.telegramGroup.findUniqueOrThrow({where:{id:group.id},select:{points:true}})).points.toString() : "0") };
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 }
@@ -88,6 +117,7 @@ export async function respondAllianceInvitation(i: { telegramUserId: string; tel
       await tx.allianceGroup.create({ data: { allianceId: invitation.allianceId, groupId: group.id } });
     }
     await tx.allianceInvitation.update({ where: { id: invitation.id }, data: { status: i.accept ? "ACCEPTED" : "DECLINED", respondedAt: new Date() } });
+    await audit(tx, { allianceId: invitation.allianceId, actorTelegramId: i.telegramUserId, groupTelegramId: group.telegramId, action: i.accept ? "INVITATION_ACCEPTED" : "INVITATION_DECLINED", metadata: { invitationId: invitation.id } });
     return { accepted: i.accept, replayed: false, allianceName: invitation.alliance.name };
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 }
@@ -104,7 +134,7 @@ export async function getAllianceWorkspace(telegramUserId: string, telegramGroup
     return { alliance: null, invitations };
   }
   const allianceId = membership.allianceId;
-  const [groups, seasons, competitions] = await Promise.all([
+  const [groups, seasons, competitions, auditLogs] = await Promise.all([
     prisma.allianceGroup.findMany({
       where: { allianceId },
       include: { group: { select: { telegramId: true, title: true, memberCount: true, points: true } } },
@@ -123,6 +153,7 @@ export async function getAllianceWorkspace(telegramUserId: string, telegramGroup
       orderBy: { createdAt: "desc" },
       take: 20,
     }),
+    prisma.allianceAuditLog.findMany({ where: { allianceId }, orderBy: { createdAt: "desc" }, take: 50 }),
   ]);
   return {
     alliance: {
@@ -131,7 +162,9 @@ export async function getAllianceWorkspace(telegramUserId: string, telegramGroup
       description: membership.alliance.description,
       treasuryPoints: membership.alliance.treasuryPoints.toString(),
       groups: groups.map(x => ({ title: x.group.title, telegramGroupId: x.group.telegramId, memberCount: x.group.memberCount, points: x.group.points.toString(), role: x.role })),
+      canReview: membership.role === "FOUNDER" && allianceReviewers().has(telegramUserId),
       seasons,
+      auditLogs: auditLogs.map(x => ({ id: x.id, actorTelegramId: x.actorTelegramId, groupTelegramId: x.groupTelegramId, action: x.action, metadata: x.metadata, createdAt: x.createdAt.toISOString() })),
       competitions: competitions.map(x => ({
         id: x.id, name: x.name, status: x.status, teams: x._count.entries,
         standings: x.entries.map((entry, index) => ({ rank: index + 1, club: entry.club.name, played: entry.played, points: entry.points, goalsFor: entry.goalsFor, goalsAgainst: entry.goalsAgainst })),
@@ -153,7 +186,9 @@ export async function createAllianceChampionship(i: { telegramUserId: string; te
       return { competition: existing, replayed: true };
     }
     const season = await tx.allianceSeason.findFirst({ where: { allianceId: membership.allianceId, status: "ACTIVE" }, orderBy: { number: "desc" } });
+    if (!season) throw new AllianceServiceError("SEASON_REVIEW_REQUIRED");
     const competition = await tx.competition.create({ data: { idempotencyKey: i.idempotencyKey, name: i.name, season: season?.number ?? 1, format: "LEAGUE", maxTeams: i.maxTeams, createdByClubId: clubId, allianceId: membership.allianceId, ...(season ? { allianceSeasonId: season.id } : {}), entries: { create: { clubId } } } });
+    await audit(tx, { allianceId: membership.allianceId, actorTelegramId: i.telegramUserId, groupTelegramId: group.telegramId, action: "CHAMPIONSHIP_CREATED", metadata: { competitionId: competition.id, name: competition.name, maxTeams: competition.maxTeams } });
     return { competition, replayed: false };
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 }
@@ -169,6 +204,7 @@ export async function joinAllianceChampionship(i: { telegramUserId: string; tele
     if (c.entries.some(e => e.clubId === user.club!.id)) return { joined: true, replayed: true, teams: c.entries.length };
     if (c.entries.length >= c.maxTeams) throw new AllianceServiceError("COMPETITION_FULL");
     await tx.competitionEntry.create({ data: { competitionId: c.id, clubId: user.club!.id } });
+    await audit(tx, { allianceId: membership.allianceId, actorTelegramId: i.telegramUserId, groupTelegramId: group.telegramId, action: "CHAMPIONSHIP_JOINED", metadata: { competitionId: c.id, clubId: user.club!.id } });
     return { joined: true, replayed: false, teams: c.entries.length + 1 };
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 }
@@ -180,8 +216,11 @@ export async function startAllianceChampionship(i: { telegramUserId: string; tel
   const competition = await prisma.competition.findFirst({ where: { id: i.competitionId, allianceId: membership.allianceId }, select: { id: true, createdByClubId: true } });
   if (!competition) throw new AllianceServiceError("COMPETITION_NOT_FOUND");
   if (competition.createdByClubId !== user.club!.id) throw new AllianceServiceError("ONLY_CREATOR_CAN_START");
-  try { return await startLeague(user.id, competition.id); }
-  catch (error) { if (error instanceof MatchServiceError) throw new AllianceServiceError(error.code); throw error; }
+  try {
+    const result = await startLeague(user.id, competition.id);
+    await prisma.allianceAuditLog.create({ data: { allianceId: membership.allianceId, actorTelegramId: i.telegramUserId, groupTelegramId: group.telegramId, action: "CHAMPIONSHIP_STARTED", metadata: { competitionId: competition.id } } });
+    return result;
+  } catch (error) { if (error instanceof MatchServiceError) throw new AllianceServiceError(error.code); throw error; }
 }
 
 export async function startAllianceSeason(i: { telegramUserId: string; telegramGroupId: string; durationDays: number }) {
@@ -190,9 +229,12 @@ export async function startAllianceSeason(i: { telegramUserId: string; telegramG
     const membership = await tx.allianceGroup.findUnique({ where: { groupId: group.id }, include: { alliance: { include: { seasons: { orderBy: { number: "desc" }, take: 1 } } } } });
     if (!membership || membership.role !== "FOUNDER") throw new AllianceServiceError("ALLIANCE_FOUNDER_REQUIRED");
     const active = membership.alliance.seasons[0];
+    if (membership.alliance.status !== "ACTIVE") throw new AllianceServiceError("ALLIANCE_INACTIVE");
     if (active?.status === "ACTIVE") throw new AllianceServiceError("SEASON_ALREADY_ACTIVE");
+    if (active?.reviewStatus === "FLAGGED") throw new AllianceServiceError("SEASON_REVIEW_REQUIRED");
     const number = (active?.number ?? 0) + 1;
-    const season = await tx.allianceSeason.create({ data: { allianceId: membership.allianceId, number, endsAt: new Date(Date.now() + i.durationDays * 86400000) } });
+    const season = await tx.allianceSeason.create({ data: { allianceId: membership.allianceId, number, startsAt: new Date(), endsAt: new Date(Date.now() + i.durationDays * 86400000) } });
+    await audit(tx, { allianceId: membership.allianceId, actorTelegramId: i.telegramUserId, groupTelegramId: group.telegramId, action: "SEASON_STARTED", metadata: { seasonId: season.id, number, durationDays: i.durationDays } });
     return { season, replayed: false };
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 }
@@ -204,26 +246,61 @@ export async function closeAllianceSeason(i: { telegramUserId: string; telegramG
     if (!membership || membership.role !== "FOUNDER") throw new AllianceServiceError("ALLIANCE_FOUNDER_REQUIRED");
     const season = await tx.allianceSeason.findFirst({ where: { allianceId: membership.allianceId }, orderBy: { number: "desc" } });
     if (!season) throw new AllianceServiceError("NO_ACTIVE_SEASON");
-    if (season.status === "COMPLETED") return { season, standings: season.standings, replayed: true };
+    if (season.status === "COMPLETED") return { season, standings: season.standings, replayed: true, reviewStatus: season.reviewStatus };
     if (season.status !== "ACTIVE") throw new AllianceServiceError("NO_ACTIVE_SEASON");
-    const groups = await tx.allianceGroup.findMany({
+    const now = new Date();
+    if (season.endsAt > now) throw new AllianceServiceError("SEASON_NOT_ENDED");
+    const memberships = await tx.allianceGroup.findMany({
       where: { allianceId: membership.allianceId },
-      include: { group: { select: { id: true, title: true, points: true } } },
+      include: { group: { select: { id: true, title: true } } },
     });
-    const ranked = groups
-      .map(x => ({ groupId: x.group.id, group: x.group.title, points: x.group.points.toString() }))
-      .sort((a, b) => BigInt(b.points) > BigInt(a.points) ? 1 : BigInt(b.points) < BigInt(a.points) ? -1 : a.group.localeCompare(b.group));
-    const standings = ranked.map((x, index) => ({ rank: index + 1, group: x.group, points: x.points }));
-    const updated = await tx.allianceSeason.update({ where: { id: season.id, status: "ACTIVE" }, data: { status: "COMPLETED", closedAt: new Date(), standings } });
-    const prize = await tx.alliance.findUniqueOrThrow({ where: { id: membership.allianceId }, select: { treasuryPoints: true } });
-    const winner = ranked[0];
-    if (winner && prize.treasuryPoints > 0n) {
-      const payoutKey = "alliance-season-payout:" + season.id;
-      await tx.telegramGroup.update({ where: { id: winner.groupId }, data: { points: { increment: prize.treasuryPoints } } });
-      await tx.alliance.update({ where: { id: membership.allianceId }, data: { treasuryPoints: 0n } });
-      await tx.allianceLedger.create({ data: { allianceId: membership.allianceId, idempotencyKey: payoutKey, amount: -prize.treasuryPoints, source: "SEASON_CHAMPION_REWARD", description: "Season " + season.number + " champion payout to " + winner.group } });
-      await tx.groupPointLedger.create({ data: { idempotencyKey: payoutKey, groupId: winner.groupId, amount: prize.treasuryPoints, source: "ADMIN_ADJUSTMENT", description: "Alliance season champion reward" } });
+    const ledger = await tx.groupPointLedger.findMany({
+      where: {
+        groupId: { in: memberships.map(x => x.groupId) },
+        createdAt: { gte: season.startsAt, lt: season.endsAt },
+        source: { in: ["DAILY_ACTIVITY", "GAME_ACTIVITY", "CHALLENGE_REWARD", "LEAGUE_REWARD"] },
+      },
+      select: { groupId: true, userId: true, amount: true, source: true, createdAt: true },
+    });
+    const groups: AllianceSeasonGroupInput[] = memberships.map(x => ({ groupId: x.groupId, group: x.group.title, joinedAt: x.joinedAt }));
+    const entries: AllianceSeasonLedgerEntry[] = ledger.map(x => ({ groupId: x.groupId, userId: x.userId, amount: x.amount, source: x.source, createdAt: x.createdAt }));
+    const result = buildAllianceSeasonStandings(groups, entries, season.startsAt, season.endsAt);
+    const reviewStatus = result.securityFlags.length ? "FLAGGED" : "APPROVED";
+    const changed = await tx.allianceSeason.updateMany({
+      where: { id: season.id, status: "ACTIVE" },
+      data: { status: "COMPLETED", closedAt: now, standings: result.standings, securityFlags: result.securityFlags, reviewStatus },
+    });
+    if (!changed.count) throw new AllianceServiceError("SEASON_ALREADY_SETTLED");
+    await audit(tx, { allianceId: membership.allianceId, actorTelegramId: i.telegramUserId, groupTelegramId: group.telegramId, action: "SEASON_CLOSED", metadata: { seasonId: season.id, reviewStatus, securityFlags: result.securityFlags.length } });
+    let payout = { winner: null as string | null, prize: "0" };
+    if (reviewStatus === "APPROVED") {
+      const paid = await payAllianceSeasonPrize(tx, membership.allianceId, season.id, season.number, result.standings);
+      payout = { winner: paid.winner, prize: paid.prize };
+      if (paid.prize !== "0") await audit(tx, { allianceId: membership.allianceId, actorTelegramId: i.telegramUserId, groupTelegramId: group.telegramId, action: "SEASON_PRIZE_PAID", metadata: { seasonId: season.id, winner: paid.winner, prize: paid.prize } });
     }
-    return { season: updated, standings, replayed: false, winner: winner?.group ?? null, prize: prize.treasuryPoints.toString() };
+    const updated = await tx.allianceSeason.findUniqueOrThrow({ where: { id: season.id } });
+    return { season: updated, standings: result.standings, replayed: false, reviewStatus, securityFlags: result.securityFlags, ...payout };
+  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+}
+
+export async function reviewAllianceSeason(i: { telegramUserId: string; telegramGroupId: string; seasonId: string; decision: "APPROVE" | "REJECT" }) {
+  return prisma.$transaction(async tx => {
+    const { user, group } = await manager(tx, i.telegramUserId, i.telegramGroupId);
+    const membership = await tx.allianceGroup.findUnique({ where: { groupId: group.id } });
+    if (!membership || membership.role !== "FOUNDER") throw new AllianceServiceError("ALLIANCE_FOUNDER_REQUIRED");
+    if (!allianceReviewers().has(i.telegramUserId)) throw new AllianceServiceError("ALLIANCE_REVIEWER_REQUIRED");
+    const season = await tx.allianceSeason.findFirst({ where: { id: i.seasonId, allianceId: membership.allianceId } });
+    if (!season) throw new AllianceServiceError("SEASON_NOT_FOUND");
+    if (season.reviewStatus === "APPROVED" || season.reviewStatus === "REJECTED") return { reviewStatus: season.reviewStatus, replayed: true, prize: "0" };
+    if (season.status !== "COMPLETED" || season.reviewStatus !== "FLAGGED") throw new AllianceServiceError("SEASON_NOT_FLAGGED");
+    const updated = await tx.allianceSeason.update({ where: { id: season.id }, data: { reviewStatus: i.decision === "APPROVE" ? "APPROVED" : "REJECTED", reviewedAt: new Date(), reviewedByUserId: user.id } });
+    let payout = { winner: null as string | null, prize: "0" };
+    if (i.decision === "APPROVE") {
+      const standings = (season.standings ?? []) as unknown as Array<{ groupId: string; group: string; points: string }>;
+      const paid = await payAllianceSeasonPrize(tx, membership.allianceId, season.id, season.number, standings);
+      payout = { winner: paid.winner, prize: paid.prize };
+    }
+    await audit(tx, { allianceId: membership.allianceId, actorTelegramId: i.telegramUserId, groupTelegramId: group.telegramId, action: "SEASON_SECURITY_REVIEW", metadata: { seasonId: season.id, decision: i.decision, prize: payout.prize } });
+    return { season: updated, reviewStatus: updated.reviewStatus, replayed: false, ...payout };
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 }
