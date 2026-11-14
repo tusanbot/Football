@@ -32,6 +32,16 @@ type LeagueDetails = {
   standings: Array<{ position: number; clubId: string; clubName: string; played: number; won: number; drawn: number; lost: number; goalsFor: number; goalsAgainst: number; goalDifference: number; points: number }>;
   matches: Array<{ id: string; round: number | null; scheduledAt: string; status: string; homeClub: { id: string; name: string }; awayClub: { id: string; name: string }; homeScore: number | null; awayScore: number | null; homePenalties: number | null; awayPenalties: number | null; winnerClubId: string | null }>;
 };
+
+type GroupWorkspace = {
+ group:{telegramGroupId:string;title:string;role:"OWNER"|"ADMIN"|"MEMBER";memberCount:number;isActive:boolean;points:string;lastMemberCountCheckAt:string|null};
+ personal:{points:string;rewards:Array<{id:string;item:string;description:string;scope:string;grantedAt:string}>;history:Array<{id:string;amount:string;source:string;description:string;createdAt:string}>};
+ shop:Array<{slug:string;name:string;description:string;cost:string;scope:string}>;
+ challenges:Array<{id:string;title:string;status:string;startsAt:string|null;endsAt:string|null;rewardPoints:string;participants:number;joined:boolean;createdByMe:boolean}>;
+ leagues:Array<{id:string;name:string;status:string;maxTeams:number;teams:number;joined:boolean;createdByMe:boolean}>;
+};
+type GroupLeagueTable = {competition:{id:string;name:string;status:string;teams:Array<{rank:number;club:string;played:number;won:number;drawn:number;lost:number;goalsFor:number;goalsAgainst:number;points:number}>}};
+
 type Lineup = {
   formation: string;
   tactics: { mentality: string; pressing: string; tempo: string; passingStyle: string };
@@ -77,6 +87,18 @@ export default function MarketPage() {
   const [openLeagues, setOpenLeagues] = useState<OpenLeague[]>([]);
   const [clubCompetitions, setClubCompetitions] = useState<ClubCompetition[]>([]);
   const [leagueDetail, setLeagueDetail] = useState<LeagueDetails | null>(null);
+  const [groups, setGroups] = useState<Array<{telegramGroupId:string;title:string;role:string;memberCount:number;isActive:boolean;points:string}>>([]);
+  const [selectedGroupTelegramId, setSelectedGroupTelegramId] = useState("");
+  const [groupWorkspace, setGroupWorkspace] = useState<GroupWorkspace | null>(null);
+  const [groupChallengeTitle, setGroupChallengeTitle] = useState("");
+  const [groupChallengeStart, setGroupChallengeStart] = useState("");
+  const [groupChallengeEnd, setGroupChallengeEnd] = useState("");
+  const [groupChallengeReward, setGroupChallengeReward] = useState("10");
+  const [groupWinnerTelegramId, setGroupWinnerTelegramId] = useState("");
+  const [groupRecipientTelegramId, setGroupRecipientTelegramId] = useState("");
+  const [groupLeagueName, setGroupLeagueName] = useState("");
+  const [groupLeagueCapacity, setGroupLeagueCapacity] = useState("8");
+  const [groupLeagueTable, setGroupLeagueTable] = useState<GroupLeagueTable | null>(null);
   const [leagueName, setLeagueName] = useState("");
   const [leagueCapacity, setLeagueCapacity] = useState("8");
   const [competitionFormat, setCompetitionFormat] = useState("LEAGUE");
@@ -103,7 +125,7 @@ export default function MarketPage() {
   const [busy, setBusy] = useState("");
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
-  const [tab, setTab] = useState<"market" | "club" | "operations" | "lineup" | "development" | "matches" | "special">("market");
+  const [tab, setTab] = useState<"market" | "club" | "operations" | "lineup" | "development" | "matches" | "groups" | "special">("market");
 
   const headers = useMemo(() => ({ "content-type": "application/json", "x-telegram-init-data": initData }), [initData]);
 
@@ -130,13 +152,29 @@ export default function MarketPage() {
       fetch(API + "/v1/matches", { headers }),
       fetch(API + "/v1/matches/opponents", { headers }),
       fetch(API + "/v1/competitions", { headers }),
+      fetch(API + "/v1/groups/mine", { headers }),
     ]);
-    const [p, w, m, own, s, l, d, o, matchResponse, opponentResponse, leagueResponse] = requests;
+    const [p, w, m, own, s, l, d, o, matchResponse, opponentResponse, leagueResponse, groupResponse] = requests;
     if (p.ok) setPlayers((await p.json()).players);
     if (o.ok) { const clubOperations = (await o.json()).club as ClubOperations; setOperations(clubOperations); setTicketPriceInput(clubOperations.ticketPrice); }
     if (matchResponse.ok) { const data = await matchResponse.json(); setMatches(data.matches ?? []); setClubCompetitions(data.competitions ?? []); }
     if (opponentResponse.ok) setOpponents((await opponentResponse.json()).opponents ?? []);
     if (leagueResponse.ok) setOpenLeagues((await leagueResponse.json()).competitions ?? []);
+    if (groupResponse.ok) {
+      const groupData = await groupResponse.json();
+      const nextGroups = groupData.groups ?? [];
+      setGroups(nextGroups);
+      const selected = nextGroups.find((item: {telegramGroupId:string}) => item.telegramGroupId === selectedGroupTelegramId) ?? nextGroups[0];
+      if (selected) {
+        setSelectedGroupTelegramId(selected.telegramGroupId);
+        const workspaceResponse = await fetch(API + "/v1/groups/" + encodeURIComponent(selected.telegramGroupId) + "/workspace", { headers });
+        if (workspaceResponse.ok) setGroupWorkspace(await workspaceResponse.json());
+        else setGroupWorkspace(null);
+      } else {
+        setSelectedGroupTelegramId("");
+        setGroupWorkspace(null);
+      }
+    }
     const financeResponse = await fetch(API + "/v1/club/finance?days=30", { headers });
     if (financeResponse.ok) setFinanceSummary(await financeResponse.json());
     if (d.ok) {
@@ -164,7 +202,7 @@ export default function MarketPage() {
       setTactics(currentLineup.tactics);
       setSelectedLineupIds([...currentLineup.players].sort((a, b) => a.lineupSlot - b.lineupSlot).map((player) => player.id));
     }
-  }, [headers, initData]);
+  }, [headers, initData, selectedGroupTelegramId]);
 
   useEffect(() => {
     const data = window.Telegram?.WebApp?.initData ?? "";
@@ -209,6 +247,7 @@ export default function MarketPage() {
       <button className={tab === "lineup" ? "active" : ""} onClick={() => setTab("lineup")}>ترکیب</button>
       <button className={tab === "development" ? "active" : ""} onClick={() => setTab("development")}>توسعه بازیکن</button>
       <button className={tab === "matches" ? "active" : ""} onClick={() => setTab("matches")}>مسابقات و لیگ</button>
+      <button className={tab === "groups" ? "active" : ""} onClick={() => setTab("groups")}>گروه‌ها و جوایز</button>
       <button className={tab === "special" ? "active" : ""} onClick={() => setTab("special")}>ستاره‌های ویژه</button>
     </nav>
     {message && <div className="notice success">{message}</div>}{error && <div className="notice error">{error}</div>}
@@ -509,6 +548,86 @@ export default function MarketPage() {
         </div>)}
       </div>}
     </section>}
+
+    {tab === "groups" && <section className="club-market">
+      <div className="market-card">
+        <h2>باشگاه‌های گروهی تلگرام</h2>
+        <p>مدیریت خزانه، چالش‌ها، لیگ محلی و جوایز اعضا. ابتدا ربات را در گروهی با حداقل ۱۰ عضو فعال و با دستورهای <strong>/group-register</strong> و <strong>/group-join</strong> ثبت کنید.</p>
+        {groups.length === 0 ? <p className="notice">هنوز عضو هیچ گروه ثبت‌شده‌ای نیستید. ثبت گروه و احراز مدیر بودن از داخل خود گروه و توسط ربات انجام می‌شود.</p> : <>
+          <label>انتخاب گروه
+            <select value={selectedGroupTelegramId} onChange={(event) => setSelectedGroupTelegramId(event.target.value)}>
+              {groups.map((group) => <option key={group.telegramGroupId} value={group.telegramGroupId}>{group.title} · {group.role}</option>)}
+            </select>
+          </label>
+          <button className="secondary" disabled={!!busy || !selectedGroupTelegramId} onClick={() => void load()}>به‌روزرسانی گروه</button>
+        </>}
+      </div>
+      {groupWorkspace && <>
+        <div className="market-card">
+          <h2>{groupWorkspace.group.title}</h2>
+          <div className="development-stats">
+            <div><span>وضعیت گروه</span><strong>{groupWorkspace.group.isActive ? "فعال" : "غیرفعال"}</strong></div>
+            <div><span>اعضا</span><strong>{money(groupWorkspace.group.memberCount)}</strong></div>
+            <div><span>خزانه گروه</span><strong>{money(groupWorkspace.group.points)}</strong></div>
+            <div><span>نقش شما</span><strong>{groupWorkspace.group.role}</strong></div>
+            <div><span>امتیاز شخصی</span><strong>{money(groupWorkspace.personal.points)}</strong></div>
+          </div>
+          {!groupWorkspace.group.isActive && <p className="notice error">گروه غیرفعال است؛ حداقل ۱۰ عضو لازم است. مدیر گروه باید /group-check را اجرا کند یا تغییر عضویت جدید ثبت شود.</p>}
+          <p className="muted">امتیاز خودکار فقط برای اقدامات معتبر بازی ثبت می‌شود؛ سقف دریافت هر عضو ۳ امتیاز در روز است. پیام عادی و اسپم امتیاز ندارد.</p>
+        </div>
+        <div className="market-card">
+          <h2>فروشگاه و جوایز گروه</h2>
+          <label>شناسه تلگرام عضو برای جایزه شخصی
+            <input value={groupRecipientTelegramId} onChange={(event) => setGroupRecipientTelegramId(event.target.value.replace(/[^0-9]/g, ""))} placeholder="Telegram User ID"/>
+          </label>
+          {groupWorkspace.shop.map((item) => <div className="operation-row" key={item.slug}>
+            <div><strong>{item.name}</strong><small>{item.description} · {item.scope === "GROUP" ? "جایزه مشترک گروه" : "جایزه انفرادی"} · {money(item.cost)} امتیاز</small></div>
+            <button className="secondary" disabled={!!busy || groupWorkspace.group.role === "MEMBER" || (item.scope === "PERSONAL" && !groupRecipientTelegramId)} onClick={() => void action("group-buy-" + item.slug, "/v1/groups/" + encodeURIComponent(selectedGroupTelegramId) + "/shop/purchase", "POST", { itemSlug:item.slug, ...(item.scope === "PERSONAL" ? {recipientTelegramId:groupRecipientTelegramId} : {}), idempotencyKey:"mini-group-buy-"+crypto.randomUUID() })}>خرید / اعطا</button>
+          </div>)}
+          <h3>جوایز دریافت‌شده من</h3>
+          {groupWorkspace.personal.rewards.length === 0 ? <p className="muted">هنوز جایزه‌ای دریافت نکرده‌اید.</p> : groupWorkspace.personal.rewards.map((reward) => <div className="operation-row" key={reward.id}><div><strong>{reward.item}</strong><small>{reward.description} · {new Date(reward.grantedAt).toLocaleDateString("fa-IR")}</small></div><span>{reward.scope === "GROUP" ? "گروهی" : "انفرادی"}</span></div>)}
+          <h3>تاریخچه امتیاز شخصی</h3>
+          {groupWorkspace.personal.history.slice(0,10).map((entry) => <div className="operation-row" key={entry.id}><div><strong>{entry.description}</strong><small>{entry.source} · {new Date(entry.createdAt).toLocaleString("fa-IR")}</small></div><strong>{BigInt(entry.amount) > 0n ? "+" : ""}{money(entry.amount)}</strong></div>)}
+        </div>
+        <div className="market-card">
+          <h2>چالش‌های اختصاصی گروه</h2>
+          {groupWorkspace.challenges.map((challenge) => <div className="operation-row" key={challenge.id}>
+            <div><strong>{challenge.title}</strong><small>{challenge.status} · {challenge.participants} شرکت‌کننده · جایزه {money(challenge.rewardPoints)} امتیاز</small><small>{challenge.startsAt ? new Date(challenge.startsAt).toLocaleString("fa-IR") : "—"} تا {challenge.endsAt ? new Date(challenge.endsAt).toLocaleString("fa-IR") : "—"}</small></div>
+            {!challenge.joined && challenge.status === "OPEN" && <button className="secondary" disabled={!!busy || !groupWorkspace.group.isActive} onClick={() => void action("challenge-join-"+challenge.id,"/v1/groups/"+encodeURIComponent(selectedGroupTelegramId)+"/challenges/"+challenge.id+"/join","POST",{})}>شرکت</button>}
+            {challenge.createdByMe && challenge.status === "OPEN" && groupWorkspace.group.role !== "MEMBER" && <button className="secondary" disabled={!!busy} onClick={() => void action("challenge-cancel-"+challenge.id,"/v1/groups/"+encodeURIComponent(selectedGroupTelegramId)+"/challenges/"+challenge.id+"/cancel","POST",{})}>لغو و بازگشت جایزه</button>}
+            {challenge.status === "OPEN" && groupWorkspace.group.role !== "MEMBER" && <button className="secondary" disabled={!!busy || !groupWinnerTelegramId} onClick={() => void action("challenge-complete-"+challenge.id,"/v1/groups/"+encodeURIComponent(selectedGroupTelegramId)+"/challenges/"+challenge.id+"/complete","POST",{winnerTelegramId:groupWinnerTelegramId})}>ثبت برنده</button>}
+          </div>)}
+          {groupWorkspace.group.role !== "MEMBER" && <>
+            <h3>ایجاد چالش جدید</h3>
+            <label>عنوان چالش<input value={groupChallengeTitle} maxLength={80} onChange={(event) => setGroupChallengeTitle(event.target.value)} placeholder="مثلاً بیشترین برد هفتگی"/></label>
+            <div className="lineup-grid">
+              <label>شروع<input type="datetime-local" value={groupChallengeStart} onChange={(event) => setGroupChallengeStart(event.target.value)}/></label>
+              <label>پایان<input type="datetime-local" value={groupChallengeEnd} onChange={(event) => setGroupChallengeEnd(event.target.value)}/></label>
+            </div>
+            <label>جایزه از خزانه گروه<input inputMode="numeric" value={groupChallengeReward} onChange={(event) => setGroupChallengeReward(event.target.value.replace(/[^0-9]/g,""))}/></label>
+            <button disabled={!!busy || !groupWorkspace.group.isActive || groupChallengeTitle.trim().length<3 || !groupChallengeStart || !groupChallengeEnd || new Date(groupChallengeEnd)<=new Date(groupChallengeStart)} onClick={() => void action("group-challenge-create","/v1/groups/"+encodeURIComponent(selectedGroupTelegramId)+"/challenges","POST",{title:groupChallengeTitle.trim(),startsAt:new Date(groupChallengeStart).toISOString(),endsAt:new Date(groupChallengeEnd).toISOString(),rewardPoints:groupChallengeReward,idempotencyKey:"mini-group-challenge-"+crypto.randomUUID()})}>ایجاد و رزرو جایزه</button>
+            <label>شناسه تلگرام برنده برای تسویه<input value={groupWinnerTelegramId} onChange={(event) => setGroupWinnerTelegramId(event.target.value.replace(/[^0-9]/g,""))} placeholder="Telegram User ID"/></label>
+          </>}
+        </div>
+        <div className="market-card">
+          <h2>لیگ محلی گروه</h2>
+          {groupWorkspace.leagues.map((league) => <div className="operation-row" key={league.id}>
+            <div><strong>{league.name}</strong><small>{league.status} · {league.teams}/{league.maxTeams} باشگاه</small></div>
+            {!league.joined && league.status === "REGISTRATION" && <button className="secondary" disabled={!!busy || !groupWorkspace.group.isActive || league.teams>=league.maxTeams} onClick={() => void action("group-league-join-"+league.id,"/v1/groups/"+encodeURIComponent(selectedGroupTelegramId)+"/leagues/"+league.id+"/join","POST",{})}>عضویت</button>}
+            {league.createdByMe && league.status === "REGISTRATION" && <button className="secondary" disabled={!!busy || league.teams<4} onClick={() => void action("group-league-start-"+league.id,"/v1/groups/"+encodeURIComponent(selectedGroupTelegramId)+"/leagues/"+league.id+"/start","POST",{})}>شروع لیگ</button>}
+            <button className="secondary" disabled={!!busy} onClick={async()=>{setBusy("group-table-"+league.id);try{const response=await fetch(API+"/v1/groups/"+encodeURIComponent(selectedGroupTelegramId)+"/leagues/"+league.id,{headers});const data=await response.json();if(!response.ok)throw new Error(data.error??"دریافت جدول ناموفق بود");setGroupLeagueTable(data as GroupLeagueTable);}catch(e){setError(e instanceof Error?e.message:"خطای نامشخص");}finally{setBusy("");}}}>جدول</button>
+          </div>)}
+          {groupWorkspace.group.role !== "MEMBER" && <>
+            <h3>ایجاد لیگ جدید</h3>
+            <label>نام لیگ<input value={groupLeagueName} maxLength={40} onChange={(event) => setGroupLeagueName(event.target.value)} placeholder="لیگ محلی گروه"/></label>
+            <label>ظرفیت<select value={groupLeagueCapacity} onChange={(event) => setGroupLeagueCapacity(event.target.value)}>{["4","6","8","10"].map(value=><option key={value} value={value}>{value} باشگاه</option>)}</select></label>
+            <button disabled={!!busy || !groupWorkspace.group.isActive || groupLeagueName.trim().length<3} onClick={() => void action("group-league-create","/v1/groups/"+encodeURIComponent(selectedGroupTelegramId)+"/leagues","POST",{name:groupLeagueName.trim(),maxTeams:Number(groupLeagueCapacity),idempotencyKey:"mini-group-league-"+crypto.randomUUID()})}>ایجاد لیگ</button>
+          </>}
+          {groupLeagueTable && <><h3>{groupLeagueTable.competition.name} · جدول</h3>{groupLeagueTable.competition.teams.map(team=><div className="operation-row" key={team.rank}><strong>{team.rank}. {team.club}</strong><small>{team.points} امتیاز · {team.played} بازی · برد {team.won} · مساوی {team.drawn} · باخت {team.lost}</small></div>)}</>}
+        </div>
+      </>}
+    </section>}
+
     {tab === "special" && <><section className="special-packs"><div className="market-card"><h2>جذب ستاره‌های ویژه</h2><p>هر بسته یک بازیکن تصادفی از رده مشخص‌شده می‌دهد. هر بازیکن ویژه را فقط یک‌بار می‌توانید در باشگاه خود داشته باشید.</p><div className="pack-actions">{packOffers.map((offer) => <button key={offer.method} disabled={!!busy || Number(gold) < Number(offer.priceGold)} onClick={() => { const key = packKeys[offer.method] ?? crypto.randomUUID(); if (!packKeys[offer.method]) setPackKeys((current) => ({ ...current, [offer.method]: key })); void action("pack-" + offer.method, "/v1/players/special/acquire", "POST", { method: offer.method, idempotencyKey: key }); }}>{busy === "pack-" + offer.method ? "در حال جذب…" : `${rarityLabel[offer.rarity] ?? offer.rarity} · ${money(offer.priceGold)} Gold`}</button>)}</div></div></section><section className="special-grid">{special.map((p) => <article className="special-card" key={p.id}><div className="special-top"><span>{rarityLabel[p.rarity] ?? p.rarity}</span><strong>{p.overall}</strong></div><h3>{p.fullName}</h3><p>{p.nationality} · {p.positions.join(" / ")}</p><div className="potential">Potential <strong>{p.potential}</strong></div><small>روش‌های جذب: {p.acquisitionMethods.join("، ")}</small></article>)}</section></>}
     <footer className="market-footer">بازیکنان ویژه در بازار عادی قابل معامله نیستند. خرید بازیکنان معمولی با Cash و بسته‌های جذب ستاره با Gold، به‌صورت امن در سرور ثبت می‌شوند.</footer>
   </main>;
