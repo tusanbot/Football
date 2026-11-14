@@ -40,3 +40,23 @@ test("season security review does not flag balanced member contributions or smal
   assert.equal(result.standings[0]?.points, "40");
   assert.equal(result.securityFlags.length, 0);
 });
+
+test("flags repeated high-value scoring by the same account across multiple alliance groups", () => {
+ const groups=[{groupId:"g1",group:"Alpha",joinedAt:startsAt},{groupId:"g2",group:"Beta",joinedAt:startsAt}];
+ const entries=[
+  {groupId:"g1",userId:"shared-user",amount:60n,source:"GAME_ACTIVITY",createdAt:new Date("2026-01-10T00:00:00Z")},
+  {groupId:"g2",userId:"shared-user",amount:55n,source:"LEAGUE_REWARD",createdAt:new Date("2026-01-11T00:00:00Z")},
+  {groupId:"g1",userId:"other-user",amount:20n,source:"DAILY_ACTIVITY",createdAt:new Date("2026-01-12T00:00:00Z")},
+ ];
+ const result=buildAllianceSeasonStandings(groups,entries,startsAt,endsAt),flag=result.securityFlags.find(item=>item.code==="CROSS_GROUP_MEMBER_OVERLAP");
+ assert.ok(flag);
+ if(flag?.code==="CROSS_GROUP_MEMBER_OVERLAP"){assert.equal(flag.groupCount,2);assert.equal(flag.memberPoints,"115");assert.deepEqual(flag.groups.map(group=>group.group),["Alpha","Beta"]);}
+});
+test("does not flag cross-group overlap below minimum contribution thresholds", () => {
+ const groups=[{groupId:"g1",group:"Alpha",joinedAt:startsAt},{groupId:"g2",group:"Beta",joinedAt:startsAt}];
+ const entries=[
+  {groupId:"g1",userId:"shared-user",amount:20n,source:"GAME_ACTIVITY",createdAt:new Date("2026-01-10T00:00:00Z")},
+  {groupId:"g2",userId:"shared-user",amount:20n,source:"GAME_ACTIVITY",createdAt:new Date("2026-01-11T00:00:00Z")},
+ ];
+ assert.equal(buildAllianceSeasonStandings(groups,entries,startsAt,endsAt).securityFlags.some(item=>item.code==="CROSS_GROUP_MEMBER_OVERLAP"),false);
+});
