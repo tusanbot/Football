@@ -11,3 +11,4 @@ export interface GamePrincipal { userId: UserId; telegramId: TelegramId; }
 export interface GameCommandContext { principal: GamePrincipal; idempotencyKey: string; requestedAt: Date; }
 
 export * from "./economy.js";
+export * from "./players.js";
