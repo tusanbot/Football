@@ -32,7 +32,7 @@ CREATE TABLE "SpecialPlayer" (
   "fullName" TEXT NOT NULL,
   "nationality" VARCHAR(2) NOT NULL,
   "birthDate" TIMESTAMP(3),
-  "positions" TEXT[],
+  "positions" TEXT[] NOT NULL,
   "overall" INTEGER NOT NULL,
   "potential" INTEGER NOT NULL,
   "attributes" JSONB NOT NULL,
