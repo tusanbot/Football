@@ -161,6 +161,29 @@ export function advancePlayerDailyState(
   };
 }
 
+
+export function applyAnnualAgeing(
+  position: PlayerPosition,
+  source: PlayerAttributes,
+  ageAtStart: number,
+  yearsElapsed: number,
+): { attributes: PlayerAttributes; overall: number } {
+  if (!Number.isInteger(yearsElapsed) || yearsElapsed < 0) throw new Error("Years elapsed must be a non-negative integer.");
+  const attributes = { ...source };
+  for (let year = 0; year < yearsElapsed; year++) {
+    const age = ageAtStart + year;
+    if (age >= 30) {
+      const decline = age >= 34 ? 2 : 1;
+      attributes.pace = clamp(attributes.pace - decline, 20, 99);
+      attributes.physical = clamp(attributes.physical - decline, 20, 99);
+    }
+    if (position === "GK" && age >= 36) {
+      attributes.goalkeeping = clamp(attributes.goalkeeping - 1, 20, 99);
+    }
+  }
+  return { attributes, overall: calculatePlayerOverall(position, attributes) };
+}
+
 export interface ContractDemandInput {
   age: number;
   overall: number;
