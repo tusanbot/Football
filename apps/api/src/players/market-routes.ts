@@ -1,0 +1,69 @@
+import type { FastifyInstance } from "fastify";
+import { z } from "zod";
+import { requireTelegramUser } from "../auth/require-telegram-user.js";
+import { buyMarketListing, cancelMarketListing, createMarketListing, getOpenMarketListings, MarketError } from "./market-service.js";
+
+const createSchema = z.object({
+  playerId: z.string().min(1).max(64),
+  askingPrice: z.string().regex(/^[1-9][0-9]{0,14}$/),
+  expiresInHours: z.number().int().min(1).max(168).default(72),
+});
+
+const idSchema = z.object({ id: z.string().min(1).max(64) });
+
+function sendMarketError(reply: Parameters<Parameters<FastifyInstance["get"]>[1]>[1], error: unknown) {
+  if (error instanceof MarketError) {
+    const status = error.code === "INSUFFICIENT_FUNDS" ? 409
+      : error.code === "CLUB_NOT_FOUND" || error.code === "PLAYER_NOT_FOUND" || error.code === "LISTING_NOT_FOUND" ? 404
+      : error.code === "WALLET_NOT_FOUND" ? 409 : 400;
+    return reply.code(status).send({ error: error.code });
+  }
+  throw error;
+}
+
+export function registerPlayerMarketRoutes(app: FastifyInstance) {
+  app.get("/v1/market/listings", async (request, reply) => {
+    const user = await requireTelegramUser(request);
+    if (!user) return reply.code(401).send({ error: "UNAUTHENTICATED" });
+    return { listings: await getOpenMarketListings() };
+  });
+
+  app.post("/v1/market/listings", async (request, reply) => {
+    const user = await requireTelegramUser(request);
+    if (!user) return reply.code(401).send({ error: "UNAUTHENTICATED" });
+    const parsed = createSchema.safeParse(request.body);
+    if (!parsed.success) return reply.code(400).send({ error: "INVALID_LISTING", details: parsed.error.flatten() });
+    try {
+      const listing = await createMarketListing(user.id, parsed.data.playerId, BigInt(parsed.data.askingPrice), parsed.data.expiresInHours);
+      return reply.code(201).send({ listing: { ...listing, askingPrice: listing.askingPrice.toString() } });
+    } catch (error) {
+      return sendMarketError(reply, error);
+    }
+  });
+
+  app.post("/v1/market/listings/:id/buy", async (request, reply) => {
+    const user = await requireTelegramUser(request);
+    if (!user) return reply.code(401).send({ error: "UNAUTHENTICATED" });
+    const parsed = idSchema.safeParse(request.params);
+    if (!parsed.success) return reply.code(400).send({ error: "INVALID_LISTING_ID" });
+    try {
+      const result = await buyMarketListing(user.id, parsed.data.id);
+      if ("error" in result) return reply.code(410).send({ error: result.error });
+      return { purchase: result };
+    } catch (error) {
+      return sendMarketError(reply, error);
+    }
+  });
+
+  app.delete("/v1/market/listings/:id", async (request, reply) => {
+    const user = await requireTelegramUser(request);
+    if (!user) return reply.code(401).send({ error: "UNAUTHENTICATED" });
+    const parsed = idSchema.safeParse(request.params);
+    if (!parsed.success) return reply.code(400).send({ error: "INVALID_LISTING_ID" });
+    try {
+      return { listing: await cancelMarketListing(user.id, parsed.data.id) };
+    } catch (error) {
+      return sendMarketError(reply, error);
+    }
+  });
+}
