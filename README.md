@@ -35,7 +35,7 @@ A Telegram-first football management MMO. Telegram Bot, Telegram Mini App and Te
 - Coach operations: hire from specialist candidate profiles or invest in coach progression; skills affect training, recovery and injury prevention, and salary changes feed into payroll.
 - Sponsor contracts with reputation/level-gated offers, signing bonuses, daily income, expiry and idempotent accrual.
 - Club finance statements with categorized income/expense entries for training, academy, facilities, coaches, sponsorship, transfer purchases/sales and paid weekly payroll; daily operating arrears and immutable Cash ledger movements.
-- Deterministic 90-minute match engine with reproducible seeds, tactical/player strength inputs, expected goals, score, chronological goal/card/injury events, per-player ratings and match statistics.
+- Deterministic 90-minute match engine with persisted simulation version and reproducible seeds, tactical/player/coach inputs, expected goals, score, chronological goal/card/injury events, per-player ratings and match statistics.
 - Friendly fixtures with opponent discovery, scheduled kickoff, participant-only simulation, post-match fitness/injury effects, attendance, ticket revenue, reputation and Cash rewards.
 - Round-robin league registration for 4–10 clubs, owner-controlled league start, automatic fixture generation, live standings (3/1/0 points), goal difference and season completion.
 - Match results and rewards settle atomically with wallet ledger and club finance entries; repeat simulation cannot duplicate results or payments.
