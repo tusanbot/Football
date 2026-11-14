@@ -29,6 +29,20 @@ export function registerPlayerMarketRoutes(app: FastifyInstance) {
     const players = await prisma.specialPlayer.findMany({ where: { active: true }, orderBy: [{ rarity: "desc" }, { overall: "desc" }], select: { id: true, slug: true, fullName: true, nationality: true, birthDate: true, positions: true, rarity: true, overall: true, potential: true, attributes: true, acquisitionMethods: true } });
     return { players };
   });
+  app.get("/v1/market/my-listings", async (request, reply) => {
+    const user = await requireTelegramUser(request);
+    if (!user) return reply.code(401).send({ error: "UNAUTHENTICATED" });
+    const club = await prisma.club.findUnique({ where: { ownerId: user.id }, select: { id: true } });
+    if (!club) return reply.code(404).send({ error: "CLUB_NOT_FOUND" });
+    const listings = await prisma.playerMarketListing.findMany({
+      where: { sellerClubId: club.id, status: { in: ["OPEN", "SOLD", "CANCELLED", "EXPIRED"] } },
+      orderBy: { createdAt: "desc" }, take: 50,
+      select: { id: true, askingPrice: true, status: true, expiresAt: true, createdAt: true,
+        player: { select: { id: true, firstName: true, lastName: true, overall: true, position: true } } },
+    });
+    return { listings: listings.map((item) => ({ ...item, askingPrice: item.askingPrice.toString() })) };
+  });
+
   app.get("/v1/market/listings", async (request, reply) => {
     const user = await requireTelegramUser(request);
     if (!user) return reply.code(401).send({ error: "UNAUTHENTICATED" });
