@@ -118,6 +118,7 @@ bot.command("players", async (ctx) => {
   if (!ctx.from) return;
   if (ctx.chat.type !== "private") return ctx.reply("Use /players in a private chat to view your squad.");
   try {
+    await api("/v1/club/development", ctx.from.id);
     const result = await api<{ players: ApiPlayer[] }>("/v1/club/players", ctx.from.id);
     if (!result.players.length) return ctx.reply("Your squad is empty. Open the Mini App to complete club setup.");
     const lines = result.players.map((p) => `• ${playerName(p)} | ${p.position} | OVR ${p.overall} | POT ${p.potential}${p.lineupSlot ? ` | XI #${p.lineupSlot}` : ""}\n  Fitness ${p.fitness ?? "-"} · Morale ${p.morale ?? "-"} · Contract ${p.contractDays ?? "-"}d · Wage ${p.wage ? cash(p.wage) : "-"} / week · ${p.status ?? "ACTIVE"}\n  ID: ${p.id}`);
@@ -129,6 +130,7 @@ bot.command("lineup", async (ctx) => {
   if (!ctx.from) return;
   if (ctx.chat.type !== "private") return ctx.reply("Use /lineup in a private chat to view your starting XI.");
   try {
+    await api("/v1/club/development", ctx.from.id);
     const result = await api<{ club: {
       formation: string;
       tactics: { mentality: string; pressing: string; tempo: string; passingStyle: string };
