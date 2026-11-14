@@ -313,7 +313,7 @@ export async function listClubMatches(userId: string) {
     }),
     prisma.competition.findMany({
       where: { entries: { some: { clubId: club.id } } },
-      select: { id: true, name: true, season: true, status: true }, orderBy: { createdAt: "desc" }, take: 20,
+      select: { id: true, name: true, season: true, format: true, status: true }, orderBy: { createdAt: "desc" }, take: 20,
     }),
   ]);
   const eventPlayerIds = [...new Set(matches.flatMap((match) => match.events.flatMap((event) =>
