@@ -7,7 +7,7 @@ type Listing = { id: string; askingPrice: string; status?: string; expiresAt: st
 type SpecialPlayer = { id: string; fullName: string; nationality: string; positions: string[]; rarity: string; overall: number; potential: number; acquisitionMethods: string[] };
 type PackOffer = { method: "epic_pack" | "legendary_pack" | "icon_pack"; rarity: string; priceGold: string };
 type ClubOperations = {
-  stadiumLevel: number; stadiumCapacity: number; trainingGroundLevel: number; academyLevel: number;
+  stadiumLevel: number; stadiumCapacity: number; ticketPrice: string; trainingGroundLevel: number; academyLevel: number;
   dailyMaintenance: string; operatingArrears: string; cashBalance: string;
   nextUpgradeCosts: { stadium: string | null; trainingGround: string | null; academy: string | null };
   scoutingCost: string | null; coachUpgradeCost: string | null;
@@ -46,6 +46,7 @@ export default function MarketPage() {
   const [weeklyWageBill, setWeeklyWageBill] = useState("0");
   const [wageArrears, setWageArrears] = useState("0");
   const [operations, setOperations] = useState<ClubOperations | null>(null);
+  const [ticketPriceInput, setTicketPriceInput] = useState("50");
   const [recentPayrolls, setRecentPayrolls] = useState<Array<{ payrollDate: string; totalDue: string; cashPaid: string; arrearsAfter: string }>>([]);
   const [recentTraining, setRecentTraining] = useState<Array<{ id: string; playerId: string; focus: string; intensity: string; overallBefore: number; overallAfter: number; injuryOccurred: boolean; createdAt: string }>>([]);
   const [developmentPlayerId, setDevelopmentPlayerId] = useState("");
@@ -89,7 +90,7 @@ export default function MarketPage() {
     ]);
     const [p, w, m, own, s, l, d, o] = requests;
     if (p.ok) setPlayers((await p.json()).players);
-    if (o.ok) setOperations((await o.json()).club);
+    if (o.ok) { const clubOperations = (await o.json()).club as ClubOperations; setOperations(clubOperations); setTicketPriceInput(clubOperations.ticketPrice); }
     if (d.ok) {
       const development = (await d.json()).club;
       setPlayers(development.players);
@@ -176,6 +177,13 @@ export default function MarketPage() {
         <p>ارتقای امکانات ظرفیت و توان توسعه باشگاه را افزایش می‌دهد؛ هزینه نگهداری روزانه نیز با هر ارتقا بیشتر می‌شود.</p>
         <div className="operation-stat"><span>ورزشگاه · سطح {operations.stadiumLevel}</span><strong>{money(operations.stadiumCapacity)} صندلی</strong>
           <button disabled={!operations.nextUpgradeCosts.stadium || !!busy} onClick={() => void action("upgrade-stadium", "/v1/club/facilities/STADIUM/upgrade", "POST", { idempotencyKey: `mini-stadium-${crypto.randomUUID()}` })}>{operations.nextUpgradeCosts.stadium ? `ارتقا · ${money(operations.nextUpgradeCosts.stadium)} Cash` : "حداکثر سطح"}</button>
+        </div>
+        <div className="ticket-price-setting">
+          <label>قیمت بلیت هر تماشاگر (۱۰ تا ۵۰۰ Cash)
+            <input inputMode="numeric" value={ticketPriceInput} onChange={(event) => setTicketPriceInput(event.target.value.replace(/[^0-9]/g, ""))}/>
+          </label>
+          <button className="secondary" disabled={!!busy || !ticketPriceInput || ticketPriceInput === operations.ticketPrice || Number(ticketPriceInput) < 10 || Number(ticketPriceInput) > 500} onClick={() => void action("ticket-price", "/v1/club/stadium/ticket-price", "PATCH", { ticketPrice: ticketPriceInput, expectedTicketPrice: operations.ticketPrice })}>ذخیره قیمت بلیت</button>
+          <p className="muted">درآمد بلیت پس از اتصال برنامه مسابقات به ورزشگاه و ثبت نتیجه بازی محاسبه می‌شود.</p>
         </div>
         <div className="operation-stat"><span>زمین تمرین · سطح {operations.trainingGroundLevel}</span><strong>تأثیر بر رشد بازیکنان</strong>
           <button disabled={!operations.nextUpgradeCosts.trainingGround || !!busy} onClick={() => void action("upgrade-training-ground", "/v1/club/facilities/TRAINING_GROUND/upgrade", "POST", { idempotencyKey: `mini-training-${crypto.randomUUID()}` })}>{operations.nextUpgradeCosts.trainingGround ? `ارتقا · ${money(operations.nextUpgradeCosts.trainingGround)} Cash` : "حداکثر سطح"}</button>
