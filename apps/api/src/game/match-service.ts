@@ -243,12 +243,15 @@ export async function getLeague(userId: string, competitionId: string) {
   const competition = await prisma.competition.findUnique({
     where: { id: competitionId },
     include: {
-      entries: { include: { club: { select: { id: true, name: true, level: true } } }, orderBy: [{ points: "desc" }, { goalsFor: "desc" }, { goalsAgainst: "asc" }] },
+      entries: { include: { club: { select: { id: true, name: true, level: true } } }, orderBy: { points: "desc" } },
       matches: { include: { homeClub: { select: { id: true, name: true } }, awayClub: { select: { id: true, name: true } } }, orderBy: [{ round: "asc" }, { scheduledAt: "asc" }] },
     },
   });
   if (!competition) throw new MatchServiceError("COMPETITION_NOT_FOUND");
   if (!competition.entries.some((entry) => entry.clubId === club.id)) throw new MatchServiceError("NOT_COMPETITION_MEMBER");
+  competition.entries.sort((a, b) => b.points - a.points
+    || (b.goalsFor - b.goalsAgainst) - (a.goalsFor - a.goalsAgainst)
+    || b.goalsFor - a.goalsFor || a.club.name.localeCompare(b.club.name));
   return {
     competition: { id: competition.id, name: competition.name, season: competition.season, status: competition.status, startsAt: competition.startsAt?.toISOString() ?? null },
     standings: competition.entries.map((entry, index) => ({
