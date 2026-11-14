@@ -15,9 +15,12 @@ export async function createMarketListing(userId: string, playerId: string, aski
     if (player.status !== "ACTIVE") throw new MarketError("PLAYER_NOT_AVAILABLE");
     const changed = await tx.player.updateMany({
       where: { id: player.id, clubId: club.id, status: "ACTIVE", origin: "GENERATED" },
-      data: { status: "LISTED" },
+      data: { status: "LISTED", lineupSlot: null },
     });
     if (changed.count !== 1) throw new MarketError("PLAYER_NOT_AVAILABLE");
+    if (player.lineupSlot !== null) {
+      await tx.club.update({ where: { id: club.id }, data: { lineupVersion: { increment: 1 } } });
+    }
     return tx.playerMarketListing.create({
       data: {
         playerId: player.id, sellerClubId: club.id, askingPrice,
