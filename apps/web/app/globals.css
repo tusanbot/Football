@@ -1,0 +1,9 @@
+* { box-sizing: border-box; }
+html, body { margin: 0; min-height: 100%; }
+body { background: #0b1220; color: #f4f7fb; font-family: Arial, Helvetica, sans-serif; }
+.shell { min-height: 100vh; display: grid; place-items: center; padding: 24px; }
+.panel { width: min(720px, 100%); padding: 48px; border: 1px solid #26364d; border-radius: 24px; background: linear-gradient(145deg, #142238, #101a2b); }
+.eyebrow { color: #72d6ad; font-size: 12px; letter-spacing: .18em; font-weight: 700; }
+h1 { margin: 24px 0 16px; font-size: clamp(42px, 8vw, 72px); line-height: 1.02; letter-spacing: -.05em; }
+.intro { max-width: 520px; color: #a9b8ca; font-size: 17px; line-height: 1.7; }
+.status { margin-top: 36px; padding: 14px 16px; border-radius: 12px; background: #1a3040; color: #9ce7c7; }
