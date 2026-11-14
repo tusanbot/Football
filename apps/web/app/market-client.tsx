@@ -29,7 +29,7 @@ export default function MarketPage() {
   const [gold, setGold] = useState("0");
   const [packOffers, setPackOffers] = useState<PackOffer[]>([]);
   const [lineup, setLineup] = useState<Lineup | null>(null);
-  const [coach, setCoach] = useState<{ name: string; level: number; trainingSkill: number; recoverySkill: number; medicalSkill: number } | null>(null);
+  const [coach, setCoach] = useState<{ name: string; level: number; trainingSkill: number; recoverySkill: number; medicalSkill: number; weeklySalary: string } | null>(null);
   const [trainingGroundLevel, setTrainingGroundLevel] = useState(1);
   const [developmentPlayerId, setDevelopmentPlayerId] = useState("");
   const [trainingFocus, setTrainingFocus] = useState("BALANCED");
@@ -209,7 +209,7 @@ export default function MarketPage() {
         {coach && <div className="coach-panel">
           <strong>{coach.name} · سطح {coach.level}</strong>
           <span>مهارت تمرین {coach.trainingSkill} · بازیابی {coach.recoverySkill} · پزشکی {coach.medicalSkill}</span>
-          <small>زمین تمرین سطح {trainingGroundLevel} · دستمزد مربی {money("100")} Cash در هفته</small>
+          <small>زمین تمرین سطح {trainingGroundLevel} · دستمزد مربی {money(coach.weeklySalary)} Cash در هفته</small>
         </div>}
         <label>بازیکن
           <select value={developmentPlayerId} onChange={(e) => {
