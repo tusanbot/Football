@@ -8,6 +8,7 @@ import {
 } from "../src/game/match-service.js";
 
 const positions = ["GK","RB","CB","CB","LB","CDM","CM","CAM","RW","ST","LW"] as const;
+const squadPositions = [...positions, "GK", "CB", "RB", "LB", "CM", "ST", "RW"] as const;
 async function makeClub(suffix: string, index: number) {
   const user = await prisma.user.create({
     data: {
@@ -17,7 +18,7 @@ async function makeClub(suffix: string, index: number) {
     }, include: { club: true },
   });
   const clubId = user.club!.id;
-  await prisma.player.createMany({ data: positions.map((position, slot) => ({
+  await prisma.player.createMany({ data: squadPositions.map((position, slot) => ({
     clubId, firstName: `Player${slot}`, lastName: `Club${index}`, nationality: "IR",
     age: 22 + (slot % 8), position, overall: 55 + index * 3, potential: 75 + index * 2,
     attributes: {
@@ -25,7 +26,7 @@ async function makeClub(suffix: string, index: number) {
       dribbling: 60 + index * 3, defending: 60 + index * 3, physical: 60 + index * 3,
       goalkeeping: position === "GK" ? 70 + index * 2 : 25,
     },
-    wage: 100n, contractDays: 300, morale: 75, fitness: 95, lineupSlot: slot + 1,
+    wage: 100n, contractDays: 300, morale: 75, fitness: 95, lineupSlot: slot < positions.length ? slot + 1 : null,
   })) });
   return { userId: user.id, clubId };
 }
