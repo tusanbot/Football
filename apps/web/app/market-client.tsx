@@ -466,7 +466,7 @@ export default function MarketPage() {
         {matches.length === 0 ? <p className="muted">هنوز مسابقه‌ای ثبت نشده است.</p> : matches.map((match) => <div className="operation-row" key={match.id}>
           <div>
             <strong>{match.homeClub.name} {match.homeScore ?? "–"} : {match.awayScore ?? "–"} {match.awayClub.name}</strong>
-            <small>{match.type === "LEAGUE" ? "لیگ" : "دوستانه"} · {match.status === "COMPLETED" ? "پایان‌یافته" : match.status === "SCHEDULED" ? "برنامه‌ریزی‌شده" : "لغوشده"} · {new Date(match.scheduledAt).toLocaleString("fa-IR")}</small>
+            <small>{match.type === "CUP" ? "جام حذفی" : match.type === "LEAGUE" ? "لیگ" : "دوستانه"} · {match.status === "COMPLETED" ? "پایان‌یافته" : match.status === "SCHEDULED" ? "برنامه‌ریزی‌شده" : "لغوشده"} · {new Date(match.scheduledAt).toLocaleString("fa-IR")}</small>
             {match.status === "COMPLETED" && <small>تماشاگر: {money(match.attendance)} · درآمد بلیت: {money(match.ticketRevenue)} Cash</small>}
             {match.events.slice(0, 8).map((event, index) => <small key={match.id + "-event-" + index}>{event.minute} دقیقه · {matchEventLabel[event.type] ?? event.type} · {event.playerName}{event.relatedPlayerName ? " (پاس گل: " + event.relatedPlayerName + ")" : ""}</small>)}
           </div>
