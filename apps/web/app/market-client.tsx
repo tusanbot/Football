@@ -31,6 +31,9 @@ export default function MarketPage() {
   const [lineup, setLineup] = useState<Lineup | null>(null);
   const [coach, setCoach] = useState<{ name: string; level: number; trainingSkill: number; recoverySkill: number; medicalSkill: number; weeklySalary: string } | null>(null);
   const [trainingGroundLevel, setTrainingGroundLevel] = useState(1);
+  const [weeklyWageBill, setWeeklyWageBill] = useState("0");
+  const [wageArrears, setWageArrears] = useState("0");
+  const [recentPayrolls, setRecentPayrolls] = useState<Array<{ payrollDate: string; totalDue: string; cashPaid: string; arrearsAfter: string }>>([]);
   const [developmentPlayerId, setDevelopmentPlayerId] = useState("");
   const [trainingFocus, setTrainingFocus] = useState("BALANCED");
   const [trainingIntensity, setTrainingIntensity] = useState("NORMAL");
@@ -76,6 +79,9 @@ export default function MarketPage() {
       setPlayers(development.players);
       setCoach(development.coach);
       setTrainingGroundLevel(development.trainingGroundLevel);
+      setWeeklyWageBill(development.weeklyWageBill);
+      setWageArrears(development.wageArrears);
+      setRecentPayrolls(development.recentPayrolls ?? []);
       setDevelopmentPlayerId((current) => development.players.some((player: Player) => player.id === current) ? current : (development.players.find((player: Player) => player.status === "ACTIVE")?.id ?? development.players[0]?.id ?? ""));
       const chosen = development.players.find((player: Player) => player.id === developmentPlayerId) ?? development.players.find((player: Player) => player.status === "ACTIVE") ?? development.players[0];
       if (chosen?.minimumWeeklyWage) setContractWage((current) => current || chosen.minimumWeeklyWage);
@@ -210,6 +216,7 @@ export default function MarketPage() {
           <strong>{coach.name} · سطح {coach.level}</strong>
           <span>مهارت تمرین {coach.trainingSkill} · بازیابی {coach.recoverySkill} · پزشکی {coach.medicalSkill}</span>
           <small>زمین تمرین سطح {trainingGroundLevel} · دستمزد مربی {money(coach.weeklySalary)} Cash در هفته</small>
+          <small>کل حقوق هفتگی: {money(weeklyWageBill)} Cash · معوقات حقوق: {money(wageArrears)} Cash</small>
         </div>}
         <label>بازیکن
           <select value={developmentPlayerId} onChange={(e) => {
@@ -271,6 +278,13 @@ export default function MarketPage() {
       <div className="market-card">
         <h2>وضعیت تیم</h2>
         <p>بازیکنان مصدوم و قراردادهای منقضی‌شده در این فهرست باقی می‌مانند تا امکان مدیریت و تمدید آن‌ها را داشته باشید.</p>
+        {recentPayrolls.length > 0 && <div className="payroll-history">
+          <h3>آخرین پرداخت حقوق</h3>
+          {recentPayrolls.map((payroll) => <div className="development-player-row" key={payroll.payrollDate}>
+            <div><strong>{new Date(payroll.payrollDate).toLocaleDateString("fa-IR")}</strong><small>مطالبات {money(payroll.totalDue)} Cash</small></div>
+            <div><strong>{money(payroll.cashPaid)} Cash</strong><small>معوقات {money(payroll.arrearsAfter)}</small></div>
+          </div>)}
+        </div>}
         {players.map((player) => <div className="development-player-row" key={player.id}>
           <div><strong>{player.firstName} {player.lastName}</strong><small>{player.position} · OVR {player.overall} · POT {player.potential}</small></div>
           <div><strong>{player.fitness ?? 0}%</strong><small>{player.status === "ACTIVE" ? "آماده" : player.status === "INJURED" ? "مصدوم" : "قرارداد تمام‌شده"}</small></div>
