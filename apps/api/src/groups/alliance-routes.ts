@@ -37,7 +37,7 @@ export function registerAllianceRoutes(app: FastifyInstance) {
       await verifyTelegramGroupActor({ telegramGroupId: params.data.telegramGroupId, telegramUserId: id, requireManager });
     } catch (error) {
       if (error instanceof TelegramGroupAuthorizationError) {
-        const status = error.code === "TELEGRAM_GROUP_MANAGER_REQUIRED" || error.code === "TELEGRAM_GROUP_ACCESS_REVOKED" ? 403 : error.code === "TELEGRAM_BOT_TOKEN_NOT_CONFIGURED" ? 503 : 502;
+        const status = error.code === "TELEGRAM_GROUP_MANAGER_REQUIRED" || error.code === "TELEGRAM_GROUP_ACCESS_REVOKED" || error.code === "TELEGRAM_BOT_NOT_GROUP_ADMIN" ? 403 : error.code === "TELEGRAM_BOT_TOKEN_NOT_CONFIGURED" ? 503 : 502;
         reply.code(status).send({ error: error.code }); return null;
       }
       throw error;
