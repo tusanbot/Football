@@ -61,7 +61,7 @@ export default function MarketPage() {
       const response = await fetch(API + path, { method, headers, ...(body ? { body: JSON.stringify(body) } : {}) });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error ?? "درخواست ناموفق بود");
-      setMessage("عملیات با موفقیت انجام شد.");
+      setMessage(data.acquisition?.specialPlayer?.fullName ? `بازیکن ویژه ${data.acquisition.specialPlayer.fullName} به باشگاه شما اضافه شد.` : "عملیات با موفقیت انجام شد.");
       await load();
     } catch (e) { setError(e instanceof Error ? e.message : "خطای نامشخص"); }
     finally { setBusy(""); }
@@ -97,6 +97,6 @@ export default function MarketPage() {
     </section>}
 
     {tab === "special" && <><section className="special-packs"><div className="market-card"><h2>جذب ستاره‌های ویژه</h2><p>هر بسته یک بازیکن تصادفی از رده مشخص‌شده می‌دهد. هر بازیکن ویژه را فقط یک‌بار می‌توانید در باشگاه خود داشته باشید.</p><div className="pack-actions">{packOffers.map((offer) => <button key={offer.method} disabled={!!busy || Number(gold) < Number(offer.priceGold)} onClick={() => void action("pack-" + offer.method, "/v1/players/special/acquire", "POST", { method: offer.method, idempotencyKey: crypto.randomUUID() })}>{busy === "pack-" + offer.method ? "در حال جذب…" : `${rarityLabel[offer.rarity] ?? offer.rarity} · ${money(offer.priceGold)} Gold`}</button>)}</div></div></section><section className="special-grid">{special.map((p) => <article className="special-card" key={p.id}><div className="special-top"><span>{rarityLabel[p.rarity] ?? p.rarity}</span><strong>{p.overall}</strong></div><h3>{p.fullName}</h3><p>{p.nationality} · {p.positions.join(" / ")}</p><div className="potential">Potential <strong>{p.potential}</strong></div><small>روش‌های جذب: {p.acquisitionMethods.join("، ")}</small></article>)}</section></>}
-    <footer className="market-footer">بازیکنان ویژه در بازار عادی قابل معامله نیستند. همه خریدها با موجودی Cash و از طریق سرور انجام می‌شوند.</footer>
+    <footer className="market-footer">بازیکنان ویژه در بازار عادی قابل معامله نیستند. خرید بازیکنان معمولی با Cash و بسته‌های جذب ستاره با Gold، به‌صورت امن در سرور ثبت می‌شوند.</footer>
   </main>;
 }
