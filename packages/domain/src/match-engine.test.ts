@@ -34,6 +34,32 @@ test("match simulation is deterministic, produces valid score/events/performance
   assert.ok(first.performances.every((row) => row.rating >= 3 && row.rating <= 10));
 });
 
+test("match simulation uses the bench and records deterministic substitutions and realistic minutes", () => {
+  const home = side("home-bench", 74);
+  const away = side("away-bench", 69);
+  const benchPositions = ["RB", "CB", "CM", "ST", "LW"] as const;
+  home.bench = benchPositions.map((position, index) => ({
+    ...home.players[index + 1]!, id: "home-bench-sub-" + index, name: "Home substitute " + index, position,
+  }));
+  away.bench = benchPositions.map((position, index) => ({
+    ...away.players[index + 1]!, id: "away-bench-sub-" + index, name: "Away substitute " + index, position,
+  }));
+  const result = simulateFootballMatch({ seed: "substitution-seed-2026", home, away });
+  const substitutions = result.events.filter((event) => event.type === "SUBSTITUTION");
+  assert.ok(substitutions.length >= 1);
+  assert.ok(substitutions.length <= 10);
+  for (const event of substitutions) {
+    assert.ok(event.relatedPlayerId);
+    const outgoing = result.performances.find((line) => line.playerId === event.playerId)!;
+    const incoming = result.performances.find((line) => line.playerId === event.relatedPlayerId)!;
+    assert.equal(outgoing.minutesPlayed + incoming.minutesPlayed, 90);
+    assert.ok(outgoing.minutesPlayed >= 8 && outgoing.minutesPlayed < 90);
+    assert.ok(incoming.minutesPlayed > 0 && incoming.minutesPlayed < 90);
+  }
+  assert.equal(result.performances.length, 32);
+  assert.ok(result.performances.some((line) => line.minutesPlayed === 0) === false);
+});
+
 test("match simulation rejects invalid sides", () => {
   assert.throws(() => simulateFootballMatch({
     seed: "same", home: side("same", 60), away: side("same", 60),
