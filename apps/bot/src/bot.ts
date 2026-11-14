@@ -20,13 +20,13 @@ const persistentGroupCommands = new Set([
 ]);
 function isPersistentGroupReply(command: string | undefined, messageText: string): boolean {
   if (command && persistentGroupCommands.has(command)) return true;
-  return /(?:ranking|leaderboard|standings|\\brank\\b|رنک(?:ینگ)?|رتبه(?:بندی)?|جدول(?:\\s+(?:رده|لیگ|مسابقات))?)/i.test(messageText);
+  return /(?:ranking|leaderboard|standings|rank|رنک|رتبه|جدول)/i.test(messageText);
 }
 
 bot.use(async (ctx, next) => {
   if (ctx.chat.type === "group" || ctx.chat.type === "supergroup") {
     const originalReply = ctx.reply.bind(ctx);
-    const command = ctx.message?.text?.match(/^\\/([a-z0-9_-]+)/i)?.[1]?.toLowerCase();
+    const command = ctx.message?.text?.match(/^\/([a-z0-9_-]+)/i)?.[1]?.toLowerCase();
     Object.defineProperty(ctx, "reply", {
       configurable: true,
       value: async (...args: Parameters<typeof ctx.reply>) => {
