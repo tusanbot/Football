@@ -3,6 +3,7 @@ import cors from "@fastify/cors";
 import { z } from "zod";
 import { registerTelegramAuthRoutes } from "./auth/routes.js";
 import { registerGameRoutes } from "./game/routes.js";
+import { registerPlayerMarketRoutes } from "./players/market-routes.js";
 import { prisma } from "./db.js";
 
 const healthResponse = z.object({
@@ -40,6 +41,7 @@ export function buildApp() {
   // Route registration is synchronous; handlers perform their own async work.
   registerTelegramAuthRoutes(app);
   registerGameRoutes(app);
+  registerPlayerMarketRoutes(app);
 
   app.get("/v1", async () => ({
     name: "Football Empire API",
