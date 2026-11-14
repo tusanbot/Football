@@ -231,6 +231,111 @@ bot.command("renew", async (ctx) => {
   } catch (error) { await ctx.reply(`Contract renewal failed: ${error instanceof Error ? error.message : "unknown error"}`); }
 });
 
+bot.command("operations", async (ctx) => {
+  if (!ctx.from) return;
+  if (ctx.chat.type !== "private") return ctx.reply("Use /operations in a private chat.");
+  try {
+    const result = await api<{ club: {
+      stadiumLevel: number; stadiumCapacity: number; trainingGroundLevel: number; academyLevel: number;
+      dailyMaintenance: string; operatingArrears: string; coach: { name: string; level: number; weeklySalary: string } | null;
+      activeSponsor: { partnerName: string; tier: string; dailyIncome: string; endsAt: string } | null;
+      sponsorOffers: Array<{ id: string; partnerName: string; tier: string; dailyIncome: string; signingBonus: string; durationDays: number }>;
+      coachOffers: Array<{ id: string; name: string; signingFee: string; weeklySalary: string }>;
+      prospects: Array<{ id: string; firstName: string; lastName: string; age: number; position: string; overall: number; potential: number; recruitmentCost: string }>;
+      financeEntries: Array<{ category: string; direction: string; amount: string; description: string }>;
+    } }>("/v1/club/operations", ctx.from.id);
+    const club = result.club;
+    const prospects = club.prospects.map((p) => `• ${p.firstName} ${p.lastName} · ${p.age}y · ${p.position} · OVR ${p.overall}/POT ${p.potential} · ${cash(p.recruitmentCost)} Cash\n  ID: ${p.id}`);
+    const sponsor = club.activeSponsor ? `${club.activeSponsor.partnerName} · ${club.activeSponsor.tier} · ${cash(club.activeSponsor.dailyIncome)} Cash/day` : "No active sponsor";
+    await ctx.reply(
+      `Club facilities\nStadium Lv.${club.stadiumLevel} · ${club.stadiumCapacity} seats\nTraining ground Lv.${club.trainingGroundLevel} · Academy Lv.${club.academyLevel}\nDaily maintenance: ${cash(club.dailyMaintenance)} Cash · Operating arrears: ${cash(club.operatingArrears)} Cash\nCoach: ${club.coach?.name ?? "None"} (Lv.${club.coach?.level ?? 0}) · Salary ${cash(club.coach?.weeklySalary ?? "0")} Cash/week\nSponsor: ${sponsor}\n\nAcademy prospects:\n${prospects.join("\n\n") || "No available prospects"}\n\n/upgrade stadium|training|academy\n/scout\n/recruit PROSPECT_ID\n/sponsor local-partner|regional-brand|national-network\n/coach-upgrade\n/hire-coach balanced|youth|performance`,
+    );
+  } catch (error) { await ctx.reply(`Could not load club operations: ${error instanceof Error ? error.message : "unknown error"}`); }
+});
+
+bot.command("upgrade", async (ctx) => {
+  if (!ctx.from) return;
+  if (ctx.chat.type !== "private") return ctx.reply("Use /upgrade in a private chat.");
+  const facility = String(ctx.match ?? "").trim().toLowerCase();
+  const value = ({ stadium: "STADIUM", training: "TRAINING_GROUND", academy: "ACADEMY" } as const)[facility as "stadium" | "training" | "academy"];
+  if (!value) return ctx.reply("Usage: /upgrade stadium|training|academy");
+  try {
+    const result = await api<{ upgrade: { level?: number; cost?: string; replayed: boolean } }>(
+      `/v1/club/facilities/${value}/upgrade`, ctx.from.id, "POST",
+      { idempotencyKey: `tg-upgrade-${ctx.from.id}-${ctx.update.update_id}` },
+    );
+    await ctx.reply(result.upgrade.replayed ? "This upgrade request was already processed." : `${facility} upgraded to level ${result.upgrade.level}. Cost: ${cash(result.upgrade.cost ?? "0")} Cash.`);
+  } catch (error) { await ctx.reply(`Facility upgrade failed: ${error instanceof Error ? error.message : "unknown error"}`); }
+});
+
+bot.command("scout", async (ctx) => {
+  if (!ctx.from) return;
+  if (ctx.chat.type !== "private") return ctx.reply("Use /scout in a private chat.");
+  try {
+    const result = await api<{ scouting: { prospects: Array<{ id: string; firstName: string; lastName: string; age: number; position: string; overall: number; potential: number; recruitmentCost: string }>; scoutingCost?: string; replayed: boolean } }>(
+      "/v1/club/academy/scout", ctx.from.id, "POST",
+      { idempotencyKey: `tg-scout-${ctx.from.id}-${ctx.update.update_id}` },
+    );
+    if (result.scouting.replayed) return ctx.reply("This scouting request was already processed.");
+    const lines = result.scouting.prospects.map((p) => `• ${p.firstName} ${p.lastName} · ${p.age}y · ${p.position} · OVR ${p.overall}/POT ${p.potential}\n  Cost ${cash(p.recruitmentCost)} Cash · ID ${p.id}`);
+    await ctx.reply(`Scouting complete. Cost: ${cash(result.scouting.scoutingCost ?? "0")} Cash\n\n${lines.join("\n\n")}\n\nRecruit with /recruit PROSPECT_ID`);
+  } catch (error) { await ctx.reply(`Academy scouting failed: ${error instanceof Error ? error.message : "unknown error"}`); }
+});
+
+bot.command("recruit", async (ctx) => {
+  if (!ctx.from) return;
+  if (ctx.chat.type !== "private") return ctx.reply("Use /recruit in a private chat.");
+  const prospectId = String(ctx.match ?? "").trim();
+  if (!prospectId) return ctx.reply("Usage: /recruit PROSPECT_ID");
+  try {
+    const result = await api<{ recruitment: { player?: { firstName: string; lastName: string; overall: number; potential: number }; cost?: string; replayed: boolean } }>(
+      `/v1/club/academy/${encodeURIComponent(prospectId)}/recruit`, ctx.from.id, "POST",
+      { idempotencyKey: `tg-recruit-${ctx.from.id}-${ctx.update.update_id}` },
+    );
+    await ctx.reply(result.recruitment.replayed ? "This recruitment request was already processed." : `Signed ${result.recruitment.player?.firstName} ${result.recruitment.player?.lastName} · OVR ${result.recruitment.player?.overall}/POT ${result.recruitment.player?.potential}. Cost: ${cash(result.recruitment.cost ?? "0")} Cash.`);
+  } catch (error) { await ctx.reply(`Recruitment failed: ${error instanceof Error ? error.message : "unknown error"}`); }
+});
+
+bot.command("sponsor", async (ctx) => {
+  if (!ctx.from) return;
+  if (ctx.chat.type !== "private") return ctx.reply("Use /sponsor in a private chat.");
+  const offerId = String(ctx.match ?? "").trim().toLowerCase();
+  if (!["local-partner", "regional-brand", "national-network"].includes(offerId)) return ctx.reply("Usage: /sponsor local-partner|regional-brand|national-network");
+  try {
+    const result = await api<{ contract: { sponsor?: { partnerName: string; tier: string; dailyIncome: string }; replayed: boolean } }>(
+      "/v1/club/sponsors/sign", ctx.from.id, "POST",
+      { offerId, idempotencyKey: `tg-sponsor-${ctx.from.id}-${ctx.update.update_id}` },
+    );
+    await ctx.reply(result.contract.replayed ? "This sponsor contract was already signed." : `Signed ${result.contract.sponsor?.partnerName} (${result.contract.sponsor?.tier}). Daily income: ${cash(result.contract.sponsor?.dailyIncome ?? "0")} Cash.`);
+  } catch (error) { await ctx.reply(`Sponsor signing failed: ${error instanceof Error ? error.message : "unknown error"}`); }
+});
+
+bot.command("coach-upgrade", async (ctx) => {
+  if (!ctx.from) return;
+  if (ctx.chat.type !== "private") return ctx.reply("Use /coach-upgrade in a private chat.");
+  try {
+    const result = await api<{ upgrade: { coach?: { level: number; trainingSkill: number; recoverySkill: number; medicalSkill: number }; cost?: string; replayed: boolean } }>(
+      "/v1/club/coach/upgrade", ctx.from.id, "POST",
+      { idempotencyKey: `tg-coach-upgrade-${ctx.from.id}-${ctx.update.update_id}` },
+    );
+    await ctx.reply(result.upgrade.replayed ? "This coach upgrade was already processed." : `Coach upgraded to Lv.${result.upgrade.coach?.level}. Training ${result.upgrade.coach?.trainingSkill}, recovery ${result.upgrade.coach?.recoverySkill}, medical ${result.upgrade.coach?.medicalSkill}. Cost: ${cash(result.upgrade.cost ?? "0")} Cash.`);
+  } catch (error) { await ctx.reply(`Coach upgrade failed: ${error instanceof Error ? error.message : "unknown error"}`); }
+});
+
+bot.command("hire-coach", async (ctx) => {
+  if (!ctx.from) return;
+  if (ctx.chat.type !== "private") return ctx.reply("Use /hire-coach in a private chat.");
+  const candidateId = String(ctx.match ?? "").trim().toLowerCase();
+  if (!["balanced", "youth", "performance"].includes(candidateId)) return ctx.reply("Usage: /hire-coach balanced|youth|performance");
+  try {
+    const result = await api<{ hiring: { coach?: { name: string; weeklySalary: string }; signingFee?: string; replayed: boolean } }>(
+      "/v1/club/coach/hire", ctx.from.id, "POST",
+      { candidateId, idempotencyKey: `tg-coach-hire-${ctx.from.id}-${ctx.update.update_id}` },
+    );
+    await ctx.reply(result.hiring.replayed ? "This coach hiring request was already processed." : `Hired ${result.hiring.coach?.name}. Signing fee: ${cash(result.hiring.signingFee ?? "0")} Cash · Weekly salary: ${cash(result.hiring.coach?.weeklySalary ?? "0")} Cash.`);
+  } catch (error) { await ctx.reply(`Coach hiring failed: ${error instanceof Error ? error.message : "unknown error"}`); }
+});
+
 bot.command("market", async (ctx) => {
   if (!ctx.from) return;
   try {
