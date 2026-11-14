@@ -7,6 +7,7 @@ import {
   calculatePlayerOverall,
   calculateTrainingResult,
   calculateContractDemand,
+  calculatePayrollSettlement,
   isTrainingFocusCompatible,
 } from "./player-development.js";
 import type { PlayerAttributes } from "./players.js";
@@ -96,4 +97,39 @@ test("annual ageing gradually reduces pace and physical attributes", () => {
   assert.equal(result.attributes.pace, attributes.pace - 3);
   assert.equal(result.attributes.physical, attributes.physical - 3);
   assert.ok(result.overall <= calculatePlayerOverall("ST", attributes));
+});
+
+test("weekly payroll prorates expiring contracts and excludes retired players", () => {
+  const payroll = calculatePayrollSettlement({
+    players: [
+      { weeklyWage: 70n, contractDays: 7, status: "ACTIVE" },
+      { weeklyWage: 140n, contractDays: 3, status: "INJURED" },
+      { weeklyWage: 300n, contractDays: 0, status: "CONTRACT_EXPIRED" },
+      { weeklyWage: 500n, contractDays: 7, status: "RETIRED" },
+    ],
+    coachWeeklyWage: 100n,
+    elapsedDays: 7,
+    weeksCovered: 1,
+    arrearsBefore: 0n,
+    cashAvailable: 1_000n,
+  });
+  assert.equal(payroll.playerWages, 130n);
+  assert.equal(payroll.coachWages, 100n);
+  assert.equal(payroll.totalDue, 230n);
+  assert.equal(payroll.cashPaid, 230n);
+  assert.equal(payroll.playersCount, 2);
+});
+
+test("weekly payroll carries unpaid balances forward without overdrawing cash", () => {
+  const payroll = calculatePayrollSettlement({
+    players: [{ weeklyWage: 300n, contractDays: 30, status: "ACTIVE" }],
+    coachWeeklyWage: 100n,
+    elapsedDays: 7,
+    weeksCovered: 1,
+    arrearsBefore: 50n,
+    cashAvailable: 200n,
+  });
+  assert.equal(payroll.totalDue, 450n);
+  assert.equal(payroll.cashPaid, 200n);
+  assert.equal(payroll.arrearsAfter, 250n);
 });
