@@ -12,6 +12,20 @@ permissions:
 jobs:
   validate:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: football_empire
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d football_empire"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -29,6 +43,19 @@ jobs:
         run: pnpm db:generate
       - name: Validate Prisma schema
         run: pnpm --filter @football/api exec prisma validate
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/football_empire
+      - name: Apply migrations to ephemeral PostgreSQL
+        run: pnpm db:migrate:deploy
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/football_empire
+      - name: Seed special-player catalog in ephemeral PostgreSQL
+        run: pnpm --filter @football/api db:seed:special
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/football_empire
+      - name: Verify seeded special-player catalog
+        run: |
+          pnpm --filter @football/api exec prisma db execute --stdin <<< "SELECT COUNT(*) AS special_player_count FROM \"SpecialPlayer\";"
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/football_empire
       - name: Build shared domain package
