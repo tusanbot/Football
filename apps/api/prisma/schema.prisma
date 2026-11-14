@@ -854,7 +854,7 @@ model GiftCodeRedemption {
  redeemedAt DateTime @default(now())
  giftCode GiftCode @relation(fields:[giftCodeId], references:[id], onDelete:Restrict)
  user User @relation(fields:[userId], references:[id], onDelete:Restrict)
- @@unique([giftCodeId,userId])
+ @@index([giftCodeId,userId])
  @@index([userId,redeemedAt])
 }
 model AdminAuditLog {
