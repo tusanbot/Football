@@ -459,13 +459,44 @@ export async function simulateScheduledMatch(userId: string, matchId: string, no
         data: { played: { increment: 1 }, won: { increment: awayPoints === 3 ? 1 : 0 }, drawn: { increment: awayPoints === 1 ? 1 : 0 }, lost: { increment: awayPoints === 0 ? 1 : 0 }, goalsFor: { increment: result.awayScore }, goalsAgainst: { increment: result.homeScore }, points: { increment: awayPoints } },
       });
     }
+    if (match.competitionId && competition?.format === "CUP") {
+      const currentRound = await tx.footballMatch.findMany({
+        where: { competitionId: match.competitionId, round: match.round },
+        select: { id: true, winnerClubId: true, status: true },
+        orderBy: { id: "asc" },
+      });
+      if (currentRound.length > 0 && currentRound.every((fixture) => fixture.status === "COMPLETED" && fixture.winnerClubId)) {
+        const winners = currentRound.map((fixture) => fixture.winnerClubId!).filter(Boolean);
+        if (winners.length === 1) {
+          await tx.competition.updateMany({
+            where: { id: match.competitionId, status: "ACTIVE" },
+            data: { status: "COMPLETED", completedAt: now },
+          });
+        } else {
+          const nextRound = (match.round ?? 1) + 1;
+          const nextFixtures = [];
+          for (let index = 0; index < winners.length; index += 2) {
+            const homeClubId = winners[index]!;
+            const awayClubId = winners[index + 1]!;
+            const idempotencyKey = "cup:" + match.competitionId + ":r" + nextRound + ":" + homeClubId + ":" + awayClubId;
+            nextFixtures.push({
+              idempotencyKey, type: "CUP" as const, competitionId: match.competitionId,
+              round: nextRound, homeClubId, awayClubId,
+              scheduledAt: new Date(now.getTime() + 3 * DAY_MS), seed: idempotencyKey,
+            });
+          }
+          await tx.footballMatch.createMany({ data: nextFixtures, skipDuplicates: true });
+        }
+      }
+    }
     const final = await tx.footballMatch.findUniqueOrThrow({ where: { id: match.id }, include: {
       homeClub: { select: { name: true } }, awayClub: { select: { name: true } },
       events: { orderBy: { sequence: "asc" } },
     } });
     return {
       replayed: false, matchId: final.id, competitionId: final.competitionId, homeClub: final.homeClub.name, awayClub: final.awayClub.name,
-      homeScore: final.homeScore, awayScore: final.awayScore, attendance: final.attendance,
+      homeScore: final.homeScore, awayScore: final.awayScore, homePenalties: final.homePenalties,
+      awayPenalties: final.awayPenalties, winnerClubId: final.winnerClubId, attendance: final.attendance,
       ticketRevenue: final.ticketRevenue.toString(), events: final.events.map((event) => ({
         ...event,
         playerName: [...home.players, ...away.players].find((player) => player.id === event.playerId)?.firstName
