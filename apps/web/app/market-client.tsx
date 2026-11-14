@@ -68,7 +68,14 @@ export default function MarketPage() {
   const [cash, setCash] = useState("0");
   const [gold, setGold] = useState("0");
   const [packOffers, setPackOffers] = useState<PackOffer[]>([]);
-  const [lineup, setLineup] = useState<Lineup | null>(null);\n  const [matches, setMatches] = useState<MatchRecord[]>([]);\n  const [opponents, setOpponents] = useState<Array<{ id: string; name: string; level: number; reputation: number }>>([]);\n  const [openLeagues, setOpenLeagues] = useState<OpenLeague[]>([]);\n  const [clubCompetitions, setClubCompetitions] = useState<ClubCompetition[]>([]);\n  const [leagueDetail, setLeagueDetail] = useState<LeagueDetails | null>(null);\n  const [leagueName, setLeagueName] = useState("");\n  const [leagueCapacity, setLeagueCapacity] = useState("8");
+  const [lineup, setLineup] = useState<Lineup | null>(null);
+  const [matches, setMatches] = useState<MatchRecord[]>([]);
+  const [opponents, setOpponents] = useState<Array<{ id: string; name: string; level: number; reputation: number }>>([]);
+  const [openLeagues, setOpenLeagues] = useState<OpenLeague[]>([]);
+  const [clubCompetitions, setClubCompetitions] = useState<ClubCompetition[]>([]);
+  const [leagueDetail, setLeagueDetail] = useState<LeagueDetails | null>(null);
+  const [leagueName, setLeagueName] = useState("");
+  const [leagueCapacity, setLeagueCapacity] = useState("8");
   const [coach, setCoach] = useState<{ name: string; level: number; trainingSkill: number; recoverySkill: number; medicalSkill: number; weeklySalary: string } | null>(null);
   const [trainingGroundLevel, setTrainingGroundLevel] = useState(1);
   const [weeklyWageBill, setWeeklyWageBill] = useState("0");
@@ -185,7 +192,8 @@ export default function MarketPage() {
       <button className={tab === "club" ? "active" : ""} onClick={() => setTab("club")}>بازار باشگاه</button>
       <button className={tab === "operations" ? "active" : ""} onClick={() => setTab("operations")}>امکانات و اقتصاد</button>
       <button className={tab === "lineup" ? "active" : ""} onClick={() => setTab("lineup")}>ترکیب</button>
-      <button className={tab === "development" ? "active" : ""} onClick={() => setTab("development")}>توسعه بازیکن</button>\n      <button className={tab === "matches" ? "active" : ""} onClick={() => setTab("matches")}>مسابقات و لیگ</button>
+      <button className={tab === "development" ? "active" : ""} onClick={() => setTab("development")}>توسعه بازیکن</button>
+      <button className={tab === "matches" ? "active" : ""} onClick={() => setTab("matches")}>مسابقات و لیگ</button>
       <button className={tab === "special" ? "active" : ""} onClick={() => setTab("special")}>ستاره‌های ویژه</button>
     </nav>
     {message && <div className="notice success">{message}</div>}{error && <div className="notice error">{error}</div>}
