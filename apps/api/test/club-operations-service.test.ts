@@ -55,6 +55,8 @@ test("club facilities, academy, coach, sponsor income and finance ledger are tra
     });
     const ticketing = await updateStadiumTicketPrice(userId, 75n, 50n);
     assert.equal(ticketing.ticketPrice, "75");
+    const replayedTicketing = await updateStadiumTicketPrice(userId, 75n, 50n);
+    assert.equal(replayedTicketing.replayed, true);
     await assert.rejects(
       updateStadiumTicketPrice(userId, 80n, 50n),
       (error: unknown) => typeof error === "object" && error !== null && "code" in error
