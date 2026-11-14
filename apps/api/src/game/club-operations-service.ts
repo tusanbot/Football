@@ -261,7 +261,7 @@ export async function upgradeClubFacility(
   assertKey(idempotencyKey);
   await settleClubDailyState(userId, now);
   await settleClubEconomy(userId, now);
-  const reason = "CLUB_FACILITY_UPGRADE";
+  const reason = `CLUB_FACILITY_UPGRADE:${facility}`;
   return prisma.$transaction(async (tx) => {
     const club = await tx.club.findUnique({ where: { ownerId: userId } });
     if (!club) throw new ClubOperationsError("CLUB_NOT_FOUND");
@@ -322,7 +322,7 @@ export async function recruitAcademyProspect(userId: string, prospectId: string,
   assertKey(idempotencyKey);
   await settleClubDailyState(userId, now);
   await settleClubEconomy(userId, now);
-  const reason = "ACADEMY_PROSPECT_RECRUITMENT";
+  const reason = `ACADEMY_PROSPECT_RECRUITMENT:${prospectId}`;
   return prisma.$transaction(async (tx) => {
     const club = await tx.club.findUnique({ where: { ownerId: userId } });
     if (!club) throw new ClubOperationsError("CLUB_NOT_FOUND");
@@ -380,7 +380,7 @@ export async function hireClubCoach(userId: string, candidateId: string, idempot
   await settleClubEconomy(userId, now);
   const candidate = COACH_CANDIDATES.find((item) => item.id === candidateId);
   if (!candidate) throw new ClubOperationsError("COACH_CANDIDATE_NOT_FOUND");
-  const reason = "COACH_HIRING";
+  const reason = `COACH_HIRING:${candidateId}`;
   return prisma.$transaction(async (tx) => {
     const club = await tx.club.findUnique({ where: { ownerId: userId } });
     if (!club) throw new ClubOperationsError("CLUB_NOT_FOUND");
@@ -400,7 +400,7 @@ export async function signClubSponsor(userId: string, offerId: string, idempoten
   assertKey(idempotencyKey);
   await settleClubDailyState(userId, now);
   await settleClubEconomy(userId, now);
-  const reason = "SPONSOR_CONTRACT_SIGNING";
+  const reason = `SPONSOR_CONTRACT_SIGNING:${offerId}`;
   return prisma.$transaction(async (tx) => {
     const club = await tx.club.findUnique({ where: { ownerId: userId }, include: { sponsors: { where: { status: "ACTIVE" } } } });
     if (!club) throw new ClubOperationsError("CLUB_NOT_FOUND");
@@ -428,10 +428,13 @@ export async function updateStadiumTicketPrice(
   if (ticketPrice < 10n || ticketPrice > 500n) throw new ClubOperationsError("INVALID_TICKET_PRICE");
   const club = await prisma.club.findUnique({ where: { ownerId: userId }, select: { id: true, ticketPrice: true } });
   if (!club) throw new ClubOperationsError("CLUB_NOT_FOUND");
+  if (club.ticketPrice === ticketPrice) {
+    return { ticketPrice: ticketPrice.toString(), previousTicketPrice: expectedTicketPrice.toString(), replayed: true };
+  }
   const updated = await prisma.club.updateMany({
     where: { id: club.id, ownerId: userId, ticketPrice: expectedTicketPrice },
     data: { ticketPrice },
   });
   if (updated.count !== 1) throw new ClubOperationsError("TICKET_PRICE_CONFLICT");
-  return { ticketPrice: ticketPrice.toString(), previousTicketPrice: club.ticketPrice.toString() };
+  return { ticketPrice: ticketPrice.toString(), previousTicketPrice: club.ticketPrice.toString(), replayed: false };
 }
