@@ -2,7 +2,7 @@
 
 Last reviewed: 2026-11-14
 Branch reviewed: `feat/foundation`
-Reviewed commit: `daa2b124a03c6d61169f897c7bcee54fa705343a`
+Reviewed baseline commit: `daa2b124a03c6d61169f897c7bcee54fa705343a`
 
 ## Product and architecture principles
 
@@ -47,6 +47,19 @@ Non-negotiable product rules:
 9. **Economy operations need a full domain design.** Daily settlement, sponsorship, ticketing, wages, maintenance, training costs, transfer fees, rewards, and administrative tuning need explicit ledger-backed services and idempotent schedules.
 10. **Security and reliability coverage is early.** Add authorization boundary tests, concurrency/idempotency tests, rate limiting, audit events, input validation, abuse controls, and operational observability.
 11. **The web client needs production-grade state handling.** API errors, loading/empty states, retry behavior, duplicate submissions, and Telegram-unavailable behavior need consistent treatment.
+
+## Implementation progress
+
+### Completed on 2026-11-14 — Bot-only onboarding foundation
+
+- Added a transport-neutral Telegram account provisioning service shared by Mini App authentication and Bot onboarding.
+- Added authenticated `POST /v1/auth/bot`, requiring the server-to-server Bot secret and a validated Telegram sender ID.
+- Changed private Bot `/start` to create or load the account and primary club without requiring Mini App launch; group `/start` does not expose account information.
+- Added API tests for missing Bot secret, invalid Bot secret, and invalid profile input.
+- Corrected CI seed verification to query the Prisma model and fail unless exactly 15 curated special-player records exist.
+- Updated README implementation notes.
+
+**Not yet complete:** Bot onboarding still depends on the existing Bot runtime and API being configured; no Cloudflare Worker, webhook, live Telegram webhook, or real database deployment was created. Formation/tactics, club operations, match simulation, competitions, full Bot/Mini App feature parity, and operational hardening remain open.
 
 ## Recommended development sequence
 
