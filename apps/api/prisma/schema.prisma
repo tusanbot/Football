@@ -397,6 +397,9 @@ model Competition {
   createdByClubId String
   groupId String?
   group TelegramGroup? @relation(fields: [groupId], references: [id], onDelete: SetNull)
+  allianceId String?
+  alliance Alliance? @relation(fields: [allianceId], references: [id], onDelete: SetNull)
+  allianceSeasonId String?
   startsAt    DateTime?
   completedAt DateTime?
   createdAt   DateTime @default(now())
@@ -599,6 +602,9 @@ model TelegramGroup {
   rewardBalances GroupMemberRewardBalance[]
   pointEntries GroupPointLedger[]
   localCompetitions Competition[]
+  createdAlliances Alliance[] @relation("AllianceCreatorGroup")
+  allianceMembership AllianceGroup?
+  allianceInvitations AllianceInvitation[]
   rewardGrants GroupRewardGrant[]
   memberCount Int @default(0)
   isActive Boolean @default(false)

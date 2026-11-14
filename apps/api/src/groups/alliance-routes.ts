@@ -1,5 +1,4 @@
-import { timingSafeEqual } from "node:crypto";
-import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
+import type { FastifyInstance, FastifyReply } from "fastify";
 import { z } from "zod";
 import { requireTelegramUser } from "../auth/require-telegram-user.js";
 import { AllianceServiceError, closeAllianceSeason, createAlliance, createAllianceChampionship, getAllianceWorkspace, inviteAllianceGroup, joinAllianceChampionship, respondAllianceInvitation, startAllianceChampionship, startAllianceSeason } from "./alliance-service.js";
@@ -17,14 +16,7 @@ function sendError(reply: FastifyReply, error: unknown) {
 const groupId = z.string().regex(/^-?\d{1,20}$/);
 const key = z.string().regex(/^[A-Za-z0-9_-]{12,64}$/);
 export function registerAllianceRoutes(app: FastifyInstance) {
-  const actor = async (request: FastifyRequest, reply: FastifyReply) => {
-    const expected = process.env.BOT_API_SECRET;
-    const received = request.headers["x-football-bot-secret"];
-    const telegramId = request.headers["x-telegram-user-id"];
-    if (expected && typeof received === "string") {
-      const a = Buffer.from(received), b = Buffer.from(expected);
-      if (a.length === b.length && timingSafeEqual(a, b) && typeof telegramId === "string" && /^\\d{1,20}$/.test(telegramId)) return telegramId;
-    }
+  const actor = async (request: Parameters<typeof requireTelegramUser>[0], reply: FastifyReply) => {
     const user = await requireTelegramUser(request);
     if (!user) { reply.code(401).send({ error: "UNAUTHENTICATED" }); return null; }
     return user.telegramId;
