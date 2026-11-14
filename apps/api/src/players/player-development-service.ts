@@ -206,6 +206,7 @@ export async function getClubDevelopment(userId: string, now = new Date()) {
       },
       trainingLogs: { orderBy: { createdAt: "desc" }, take: 10, select: { id: true, playerId: true, focus: true, intensity: true, overallBefore: true, overallAfter: true, injuryOccurred: true, createdAt: true } },
       contractRenewals: { orderBy: { createdAt: "desc" }, take: 10, select: { id: true, playerId: true, extensionDays: true, oldWage: true, newWage: true, createdAt: true } },
+      payrolls: { orderBy: { payrollDate: "desc" }, take: 8, select: { id: true, payrollDate: true, weeksCovered: true, playerWages: true, coachWages: true, totalDue: true, cashPaid: true, arrearsAfter: true, playersCount: true } },
     },
   });
   if (!club) throw new PlayerDevelopmentError("CLUB_NOT_FOUND");
@@ -217,6 +218,8 @@ export async function getClubDevelopment(userId: string, now = new Date()) {
   return {
     club: {
       id: club.id, name: club.name, trainingGroundLevel: club.trainingGroundLevel,
+      wageArrears: club.wageArrears.toString(), lastPayrollAt: club.lastPayrollAt.toISOString(),
+      weeklyWageBill: (club.players.filter((player) => player.contractDays > 0 && player.status !== "RETIRED").reduce((total, player) => total + player.wage, club.coach?.weeklySalary ?? 0n)).toString(),
       coach: {
         id: coach.id, name: coach.name, level: coach.level,
         trainingSkill: coach.trainingSkill, recoverySkill: coach.recoverySkill,
@@ -240,6 +243,11 @@ export async function getClubDevelopment(userId: string, now = new Date()) {
       recentRenewals: club.contractRenewals.map((renewal) => ({
         ...renewal, oldWage: renewal.oldWage.toString(), newWage: renewal.newWage.toString(),
         createdAt: renewal.createdAt.toISOString(),
+      })),
+      recentPayrolls: club.payrolls.map((payroll) => ({
+        ...payroll, payrollDate: payroll.payrollDate.toISOString().slice(0, 10),
+        playerWages: payroll.playerWages.toString(), coachWages: payroll.coachWages.toString(),
+        totalDue: payroll.totalDue.toString(), cashPaid: payroll.cashPaid.toString(), arrearsAfter: payroll.arrearsAfter.toString(),
       })),
     },
   };
