@@ -83,6 +83,12 @@ model Club {
   slug       String   @unique
   level      Int      @default(1)
   reputation Int      @default(0)
+  formation  String   @default("4-3-3")
+  mentality  String   @default("BALANCED")
+  pressing   String   @default("MID_BLOCK")
+  tempo      String   @default("NORMAL")
+  passingStyle String @default("MIXED")
+  lineupVersion Int   @default(0)
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
   owner      User     @relation(fields: [ownerId], references: [id], onDelete: Restrict)
@@ -109,6 +115,7 @@ model Player {
   fitness         Int            @default(100)
   origin          PlayerOrigin   @default(GENERATED)
   status          PlayerStatus   @default(ACTIVE)
+  lineupSlot      Int?
   specialPlayerId String?
   createdAt       DateTime       @default(now())
   updatedAt       DateTime       @updatedAt
@@ -119,6 +126,7 @@ model Player {
 
   @@index([clubId, status])
   @@index([clubId, position])
+  @@unique([clubId, lineupSlot])
   @@index([nationality])
   @@unique([clubId, specialPlayerId])
 }
