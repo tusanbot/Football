@@ -1,3 +1,5 @@
+ALTER TYPE "MatchType" ADD VALUE 'CUP';
+
 CREATE TYPE "CompetitionFormat" AS ENUM ('LEAGUE', 'CUP');
 
 ALTER TABLE "Competition"
