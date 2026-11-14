@@ -3,8 +3,9 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
 import { awardDailyGroupActivity, getTelegramGroupSummary, GroupServiceError, joinTelegramGroup, registerTelegramGroup, listGroupShop, purchaseGroupReward, listGroupChallenges, createGroupChallenge, joinGroupChallenge, completeGroupChallenge, checkTelegramGroupMembers, createGroupLeague, joinGroupLeague, startGroupLeague, getGroupLeagueTable, recordGroupGameActivity, listMyTelegramGroups, getGroupWorkspace, cancelGroupChallenge, listGroupLeagues } from "./group-service.js";
 import { requireTelegramUser } from "../auth/require-telegram-user.js";
+import { prisma } from "../db.js";
 
-function authenticateBot(request: FastifyRequest, reply: FastifyReply): string | null {
+async function authenticateBot(request: FastifyRequest, reply: FastifyReply): Promise<string | null> {
   const expected = process.env.BOT_API_SECRET;
   const received = request.headers["x-football-bot-secret"];
   const telegramId = request.headers["x-telegram-user-id"];
@@ -27,7 +28,7 @@ function authenticateBot(request: FastifyRequest, reply: FastifyReply): string |
 
 async function authenticateGroupActor(request:FastifyRequest,reply:FastifyReply):Promise<string|null>{
  const expected=process.env.BOT_API_SECRET,received=request.headers["x-football-bot-secret"],telegramId=request.headers["x-telegram-user-id"];
- if(expected&&typeof received==="string"){const a=Buffer.from(received),b=Buffer.from(expected);if(a.length===b.length&&timingSafeEqual(a,b)&&typeof telegramId==="string"&&/^\d{1,20}$/.test(telegramId))return telegramId;}
+ if(expected&&typeof received==="string"){const a=Buffer.from(received),b=Buffer.from(expected);if(a.length===b.length&&timingSafeEqual(a,b)&&typeof telegramId==="string"&&/^\d{1,20}$/.test(telegramId)){const user=await requireTelegramUser(request);if(!user){reply.code(403).send({error:"PLAYER_ACCOUNT_SUSPENDED"});return null;}const gid=(request.params as {telegramGroupId?:string}).telegramGroupId??(request.body as {telegramGroupId?:string}|null)?.telegramGroupId;if(gid){const group=await prisma.telegramGroup.findUnique({where:{telegramId:gid},select:{isSuspended:true}});if(group?.isSuspended){reply.code(403).send({error:"TELEGRAM_GROUP_SUSPENDED"});return null;}}return telegramId;}}
  const user=await requireTelegramUser(request);if(!user){reply.code(401).send({error:"UNAUTHENTICATED"});return null;}return user.telegramId;
 }
 function authenticateSystemBot(request:FastifyRequest,reply:FastifyReply):boolean{
@@ -54,7 +55,7 @@ export function registerGroupRoutes(app: FastifyInstance) {
   app.post("/v1/groups/system/member-count",async(request,reply)=>{if(!authenticateSystemBot(request,reply))return;const b=z.object({telegramGroupId:groupId,memberCount:z.number().int().min(0).max(1000000)}).safeParse(request.body);if(!b.success)return reply.code(400).send({error:"INVALID_GROUP_CHECK"});return checkTelegramGroupMembers(b.data.telegramGroupId,b.data.memberCount);});
 
   app.post("/v1/groups/register", async (request, reply) => {
-    const telegramUserId = authenticateBot(request, reply); if (!telegramUserId) return;
+    const telegramUserId = await authenticateBot(request, reply); if (!telegramUserId) return;
     const parsed = z.object({ telegramGroupId: groupId, title: z.string().trim().min(1).max(255), role: z.enum(["OWNER", "ADMIN"]), memberCount: z.number().int().min(0).max(1_000_000) }).safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ error: "INVALID_GROUP_REGISTRATION" });
     try { return { registration: await registerTelegramGroup({ telegramUserId, ...parsed.data }) }; } catch (error) { return sendGroupError(reply, error); }

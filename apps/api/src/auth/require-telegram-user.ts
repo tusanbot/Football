@@ -29,8 +29,8 @@ export async function requireTelegramUser(request: FastifyRequest) {
     const verified = verifyTelegramInitData(initData, botToken);
     return await prisma.user.findUnique({
       where: { telegramId: String(verified.user.id) },
-      select: { id: true, telegramId: true, username: true, displayName: true, createdAt: true },
-    });
+      select: { id: true, telegramId: true, username: true, displayName: true, createdAt: true, isSuspended: true },
+    }).then((account) => account?.isSuspended ? null : account);
   } catch {
     return null;
   }
