@@ -1,4 +1,5 @@
 import "dotenv/config";
+import { randomUUID } from "node:crypto";
 import { Bot, InlineKeyboard } from "grammy";
 
 const token = process.env.TELEGRAM_BOT_TOKEN;
@@ -69,7 +70,7 @@ bot.command("start", async (ctx) => {
 });
 
 bot.command("help", async (ctx) => ctx.reply(
-  "Football Empire commands:\n/club — club profile\n/wallet — Cash and Gold balances\n/rename NEW NAME — rename your club\n/players — your active squad\n/lineup — view starting XI and tactics\n/setlineup FORMATION ID1 ... ID11 — set your XI\n/development — player development overview\n/train PLAYER_ID FOCUS INTENSITY — train a player\n/renew PLAYER_ID DAYS WEEKLY_WAGE — renew a contract\n/operations — facilities, academy, sponsors and finance\n/finance [DAYS] — income and expense statement\n/upgrade stadium|training|academy — upgrade a facility\n/ticket-price PRICE — set stadium ticket price\n/scout — find academy prospects\n/recruit PROSPECT_ID — sign an academy prospect\n/sponsor OFFER_ID — sign a sponsor\n/coach-upgrade — develop your coach\n/hire-coach balanced|youth|performance — hire a coach\n/market — open transfer listings\n/sell PLAYER_ID PRICE — list a generated player\n/buy LISTING_ID — buy a listed player\n/special — view special players and pack prices\n/pack epic|legendary|icon — acquire a special player\n\nSpecial players are not tradeable in the regular market.",
+  "Football Empire commands:\n/club — club profile\n/wallet — Cash and Gold balances\n/rename NEW NAME — rename your club\n/players — your active squad\n/lineup — view starting XI and tactics\n/setlineup FORMATION ID1 ... ID11 — set your XI\n/development — player development overview\n/train PLAYER_ID FOCUS INTENSITY — train a player\n/renew PLAYER_ID DAYS WEEKLY_WAGE — renew a contract\n/operations — facilities, academy, sponsors and finance\n/finance [DAYS] — income and expense statement\n/upgrade stadium|training|academy — upgrade a facility\n/ticket-price PRICE — set stadium ticket price\n/scout — find academy prospects\n/recruit PROSPECT_ID — sign an academy prospect\n/sponsor OFFER_ID — sign a sponsor\n/coach-upgrade — develop your coach\n/hire-coach balanced|youth|performance — hire a coach\n/opponents — clubs available for friendlies\n/friendly CLUB_ID — schedule a friendly\n/matches — your fixtures and results\n/play MATCH_ID — simulate a due match\n/league NAME [4-10] — create a league\n/leagues — open leagues\n/joinleague ID — join a league\n/startleague ID — start your league\n/table ID — league standings\n/market — open transfer listings\n/sell PLAYER_ID PRICE — list a generated player\n/buy LISTING_ID — buy a listed player\n/special — view special players and pack prices\n/pack epic|legendary|icon — acquire a special player\n\nSpecial players are not tradeable in the regular market.",
 ));
 
 bot.command("club", async (ctx) => {
@@ -445,6 +446,115 @@ bot.command("buy", async (ctx) => {
     );
     await ctx.reply(`Purchase completed. Paid ${cash(result.purchase.price)} Cash.${result.purchase.replayed ? " This was an already completed purchase." : ""}`);
   } catch (error) { await ctx.reply(`Could not complete purchase: ${error instanceof Error ? error.message : "unknown error"}`); }
+});
+
+bot.command("opponents", async (ctx) => {
+  if (!ctx.from || ctx.chat.type !== "private") return;
+  try {
+    const result = await api<{ opponents: Array<{ id: string; name: string; level: number; reputation: number }> }>("/v1/matches/opponents", ctx.from.id);
+    const lines = result.opponents.map((club) => `• ${club.name} · Level ${club.level} · Rep ${club.reputation}\n  ID: ${club.id}`);
+    await ctx.reply("Clubs ready for a friendly:\n" + (lines.join("\n\n") || "No eligible opponents yet.") + "\n\n/friendly CLUB_ID");
+  } catch (error) { await ctx.reply(`Could not load opponents: ${error instanceof Error ? error.message : "unknown error"}`); }
+});
+
+bot.command("friendly", async (ctx) => {
+  if (!ctx.from || ctx.chat.type !== "private") return;
+  const opponentClubId = String(ctx.match ?? "").trim().split(/\s+/)[0];
+  if (!opponentClubId) return ctx.reply("Usage: /friendly CLUB_ID\nUse /opponents to find a club.");
+  try {
+    const result = await api<{ match: { id: string; scheduledAt: string }; replayed: boolean }>("/v1/matches/friendly", ctx.from.id, "POST", {
+      opponentClubId, idempotencyKey: `bot-friendly-${ctx.from.id}-${ctx.update.update_id}`,
+    });
+    await ctx.reply(`Friendly scheduled. Match ID: ${result.match.id}\nKickoff: ${new Date(result.match.scheduledAt).toLocaleString("en-US")}\nUse /play ${result.match.id} when kickoff is due.`);
+  } catch (error) { await ctx.reply(`Could not schedule friendly: ${error instanceof Error ? error.message : "unknown error"}`); }
+});
+
+bot.command("matches", async (ctx) => {
+  if (!ctx.from || ctx.chat.type !== "private") return;
+  try {
+    const result = await api<{ matches: Array<{ id: string; type: string; status: string; scheduledAt: string; homeClub: { name: string }; awayClub: { name: string }; homeScore: number | null; awayScore: number | null; attendance: number }> }>("/v1/matches", ctx.from.id);
+    const lines = result.matches.map((match) =>
+      `• ${match.homeClub.name} ${match.homeScore ?? "–"} : ${match.awayScore ?? "–"} ${match.awayClub.name}\n  ${match.type} · ${match.status} · ${new Date(match.scheduledAt).toLocaleString("en-US")}\n  ID: ${match.id}`,
+    );
+    await ctx.reply("Your matches:\n" + (lines.join("\n\n") || "No matches scheduled yet."));
+  } catch (error) { await ctx.reply(`Could not load matches: ${error instanceof Error ? error.message : "unknown error"}`); }
+});
+
+bot.command("play", async (ctx) => {
+  if (!ctx.from || ctx.chat.type !== "private") return;
+  const matchId = String(ctx.match ?? "").trim().split(/\s+/)[0];
+  if (!matchId) return ctx.reply("Usage: /play MATCH_ID");
+  try {
+    const result = await api<{ result: { replayed: boolean; homeClub?: string; awayClub?: string; homeScore: number | null; awayScore: number | null; attendance?: number; ticketRevenue?: string; events?: Array<{ minute: number; type: string; detail: string; playerName?: string; relatedPlayerName?: string | null }> } }>(`/v1/matches/${encodeURIComponent(matchId)}/simulate`, ctx.from.id, "POST", {});
+    const match = result.result;
+    const events = (match.events ?? []).slice(0, 18).map((event) =>
+      `${event.minute}' · ${event.type} · ${event.playerName ?? "Player"}${event.relatedPlayerName ? " (assist: " + event.relatedPlayerName + ")" : ""}`,
+    );
+    await ctx.reply(
+      `${match.homeClub ?? "Home"} ${match.homeScore ?? 0} – ${match.awayScore ?? 0} ${match.awayClub ?? "Away"}\nAttendance: ${match.attendance ?? 0}\nGate revenue: ${cash(match.ticketRevenue ?? "0")} Cash\n${match.replayed ? "Already simulated; no rewards were repeated." : "Full-time."}\n\n${events.join("\n") || "No major events."}`,
+    );
+  } catch (error) { await ctx.reply(`Could not simulate match: ${error instanceof Error ? error.message : "unknown error"}`); }
+});
+
+bot.command("league", async (ctx) => {
+  if (!ctx.from || ctx.chat.type !== "private") return;
+  const parts = String(ctx.match ?? "").trim().split(/\s+/).filter(Boolean);
+  const last = parts.at(-1);
+  const maxTeams = last && /^\d+$/.test(last) ? Number(parts.pop()) : 8;
+  const name = parts.join(" ");
+  if (name.length < 3 || name.length > 40 || !Number.isInteger(maxTeams) || maxTeams < 4 || maxTeams > 10) {
+    return ctx.reply("Usage: /league LEAGUE NAME [4-10]");
+  }
+  try {
+    const result = await api<{ competition: { id: string; name: string; maxTeams: number }; replayed: boolean }>("/v1/competitions", ctx.from.id, "POST", {
+      name, maxTeams, idempotencyKey: `bot-league-${ctx.from.id}-${ctx.update.update_id}`,
+    });
+    await ctx.reply(`League created: ${result.competition.name}\nID: ${result.competition.id}\nCapacity: ${result.competition.maxTeams} clubs\nInvite other managers with /leagues.`);
+  } catch (error) { await ctx.reply(`Could not create league: ${error instanceof Error ? error.message : "unknown error"}`); }
+});
+
+bot.command("leagues", async (ctx) => {
+  if (!ctx.from || ctx.chat.type !== "private") return;
+  try {
+    const result = await api<{ competitions: Array<{ id: string; name: string; season: number; teams: number; maxTeams: number; joined: boolean; isCreator: boolean }> }>("/v1/competitions", ctx.from.id);
+    const lines = result.competitions.map((item) =>
+      `• ${item.name} · ${item.teams}/${item.maxTeams} clubs · Season ${item.season}${item.joined ? " · joined" : ""}\n  ID: ${item.id}`,
+    );
+    await ctx.reply("Open leagues:\n" + (lines.join("\n\n") || "No open leagues.") + "\n\n/joinleague ID");
+  } catch (error) { await ctx.reply(`Could not load leagues: ${error instanceof Error ? error.message : "unknown error"}`); }
+});
+
+bot.command("joinleague", async (ctx) => {
+  if (!ctx.from || ctx.chat.type !== "private") return;
+  const id = String(ctx.match ?? "").trim().split(/\s+/)[0];
+  if (!id) return ctx.reply("Usage: /joinleague COMPETITION_ID");
+  try {
+    const result = await api<{ joined: boolean; replayed: boolean; teams: number }>(`/v1/competitions/${encodeURIComponent(id)}/join`, ctx.from.id, "POST", {});
+    await ctx.reply(`You are registered. Clubs in league: ${result.teams}.`);
+  } catch (error) { await ctx.reply(`Could not join league: ${error instanceof Error ? error.message : "unknown error"}`); }
+});
+
+bot.command("startleague", async (ctx) => {
+  if (!ctx.from || ctx.chat.type !== "private") return;
+  const id = String(ctx.match ?? "").trim().split(/\s+/)[0];
+  if (!id) return ctx.reply("Usage: /startleague COMPETITION_ID");
+  try {
+    const result = await api<{ fixturesCreated: number; rounds: number; teams: number }>(`/v1/competitions/${encodeURIComponent(id)}/start`, ctx.from.id, "POST", {});
+    await ctx.reply(`League started with ${result.teams} clubs. ${result.fixturesCreated} fixtures across ${result.rounds} rounds have been scheduled.`);
+  } catch (error) { await ctx.reply(`Could not start league: ${error instanceof Error ? error.message : "unknown error"}`); }
+});
+
+bot.command("table", async (ctx) => {
+  if (!ctx.from || ctx.chat.type !== "private") return;
+  const id = String(ctx.match ?? "").trim().split(/\s+/)[0];
+  if (!id) return ctx.reply("Usage: /table COMPETITION_ID");
+  try {
+    const result = await api<{ competition: { name: string; status: string }; standings: Array<{ position: number; clubName: string; played: number; won: number; drawn: number; lost: number; goalDifference: number; points: number }> }>(`/v1/competitions/${encodeURIComponent(id)}`, ctx.from.id);
+    const rows = result.standings.map((row) =>
+      `${row.position}. ${row.clubName} · Pts ${row.points} · P ${row.played} · W ${row.won} D ${row.drawn} L ${row.lost} · GD ${row.goalDifference}`,
+    );
+    await ctx.reply(`${result.competition.name} · ${result.competition.status}\n\n${rows.join("\n")}`);
+  } catch (error) { await ctx.reply(`Could not load standings: ${error instanceof Error ? error.message : "unknown error"}`); }
 });
 
 bot.catch((error) => console.error("Telegram bot error:", error));
