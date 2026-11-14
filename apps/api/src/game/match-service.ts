@@ -136,6 +136,8 @@ export async function createFriendlyMatch(userId: string, opponentClubId: string
 }
 export async function createLeague(userId: string, name: string, maxTeams: number, idempotencyKey: string, format: "LEAGUE" | "CUP" = "LEAGUE") {
   keyValid(idempotencyKey);
+  if (format === "CUP" && ![4, 8].includes(maxTeams)) throw new MatchServiceError("CUP_SIZE_MUST_BE_FOUR_OR_EIGHT");
+  if (format === "LEAGUE" && (maxTeams < 4 || maxTeams > 10)) throw new MatchServiceError("INVALID_LEAGUE_SIZE");
   const club = await getOwnedClub(userId);
   const existing = await prisma.competition.findUnique({ where: { idempotencyKey } });
   if (existing) {
