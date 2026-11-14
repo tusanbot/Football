@@ -5,6 +5,7 @@ import {
   calculateCoachUpgradeCost,
   calculateDailyOperatingCost,
   calculateFacilityUpgradeCost,
+  calculateMatchdayTicketRevenue,
   calculateProspectRecruitmentCost,
   calculateStadiumCapacity,
   getSponsorOffers,
@@ -41,4 +42,11 @@ test("coach progression costs rise with each level", () => {
   assert.equal(calculateCoachUpgradeCost(1), 1_500n);
   assert.equal(calculateCoachUpgradeCost(3), 13_500n);
   assert.throws(() => calculateCoachUpgradeCost(10));
+});
+
+test("matchday ticket revenue respects stadium capacity and simulated attendance", () => {
+  assert.equal(calculateMatchdayTicketRevenue(1_000, 50n, 7_500), 37_500n);
+  assert.equal(calculateMatchdayTicketRevenue(1_400, 60n, 10_000), 84_000n);
+  assert.equal(calculateMatchdayTicketRevenue(1_000, 50n, 0), 0n);
+  assert.throws(() => calculateMatchdayTicketRevenue(1_000, 50n, 10_001));
 });
