@@ -124,8 +124,16 @@ export function advancePlayerDailyState(
   recoverySkill: number,
 ): DailyPlayerState {
   if (!Number.isInteger(elapsedDays) || elapsedDays < 0) throw new Error("Elapsed days must be a non-negative integer.");
-  if (elapsedDays === 0 || player.status === "RETIRED" || player.status === "LISTED") return player;
+  if (elapsedDays === 0 || player.status === "RETIRED") return player;
   const contractDays = Math.max(0, player.contractDays - elapsedDays);
+  if (player.status === "LISTED") {
+    return {
+      ...player,
+      contractDays,
+      fitness: clamp(player.fitness + elapsedDays * Math.max(4, Math.min(12, 5 + Math.floor(clamp(recoverySkill, 0, 100) / 20)))),
+      status: contractDays === 0 ? "CONTRACT_EXPIRED" : "LISTED",
+    };
+  }
   const recoveryPerDay = Math.max(4, Math.min(12, 5 + Math.floor(clamp(recoverySkill, 0, 100) / 20)));
   let fitness = clamp(player.fitness + elapsedDays * recoveryPerDay);
   let status = player.status;
