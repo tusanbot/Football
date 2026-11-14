@@ -59,7 +59,17 @@ Non-negotiable product rules:
 - Corrected CI seed verification to query the Prisma model and fail unless exactly 15 curated special-player records exist.
 - Updated README implementation notes.
 
-**Not yet complete:** Bot onboarding still depends on the existing Bot runtime and API being configured; no Cloudflare Worker, webhook, live Telegram webhook, or real database deployment was created. Formation/tactics, club operations, match simulation, competitions, full Bot/Mini App feature parity, and operational hardening remain open.
+### Completed on 2026-11-14 — Starting XI and tactics foundation
+
+- Added domain-level formation slot contracts and lineup validation for 4-3-3, 4-4-2, 3-5-2 and 4-2-3-1.
+- Added Club formation/tactics/version fields and Player lineup slots with a uniqueness constraint and a committed Prisma migration.
+- Existing clubs with a squad but no lineup receive a default strongest-available 4-3-3 once; existing configured lineups are preserved.
+- Added authenticated GET/PUT lineup API endpoints with active-player ownership checks, positional validation, exactly-one-goalkeeper rule, and optimistic version protection.
+- Listing a starting player for transfer clears that lineup slot and advances the club lineup version.
+- Added Bot commands `/lineup` and `/setlineup`, plus starting-XI visibility in `/players`.
+- Added a Mini App lineup/tactics editor using the same API and domain rules.
+
+**Not yet complete:** These are foundation slices, not a complete playable game. Player development, contracts, injuries, club facilities, finance settlement, match simulation, competitions, full group lifecycle, complete Bot/Mini App parity, admin controls, and operational hardening remain open. No Cloudflare Worker, live webhook, production deployment, or real database provisioning has been performed.
 
 ## Recommended development sequence
 
