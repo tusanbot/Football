@@ -1,11 +1,13 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "../db.js";
+import { settleClubDailyState } from "./player-development-service.js";
 
 export class MarketError extends Error {
   constructor(public readonly code: string) { super(code); this.name = "MarketError"; }
 }
 
 export async function createMarketListing(userId: string, playerId: string, askingPrice: bigint, expiresInHours: number) {
+  await settleClubDailyState(userId);
   const club = await prisma.club.findUnique({ where: { ownerId: userId }, select: { id: true } });
   if (!club) throw new MarketError("CLUB_NOT_FOUND");
   return prisma.$transaction(async (tx) => {
@@ -32,6 +34,9 @@ export async function createMarketListing(userId: string, playerId: string, aski
 }
 
 export async function buyMarketListing(userId: string, listingId: string) {
+  await settleClubDailyState(userId);
+  const sellerIdentity = await prisma.playerMarketListing.findUnique({ where: { id: listingId }, select: { sellerClub: { select: { ownerId: true } } } });
+  if (sellerIdentity?.sellerClub.ownerId) await settleClubDailyState(sellerIdentity.sellerClub.ownerId);
   const buyerClub = await prisma.club.findUnique({ where: { ownerId: userId }, select: { id: true } });
   if (!buyerClub) throw new MarketError("CLUB_NOT_FOUND");
 
@@ -47,9 +52,14 @@ export async function buyMarketListing(userId: string, listingId: string) {
     if (listing.status !== "OPEN") throw new MarketError("LISTING_NOT_OPEN");
     if (listing.sellerClubId === buyerClub.id) throw new MarketError("CANNOT_BUY_OWN_PLAYER");
     const now = new Date();
+    if (listing.player.contractDays <= 0) {
+      await tx.playerMarketListing.update({ where: { id: listing.id }, data: { status: "EXPIRED" } });
+      await tx.player.updateMany({ where: { id: listing.playerId, status: "LISTED", clubId: listing.sellerClubId }, data: { status: "CONTRACT_EXPIRED" } });
+      return { error: "PLAYER_CONTRACT_EXPIRED" as const };
+    }
     if (listing.expiresAt <= now) {
       await tx.playerMarketListing.update({ where: { id: listing.id }, data: { status: "EXPIRED" } });
-      await tx.player.updateMany({ where: { id: listing.playerId, status: "LISTED", clubId: listing.sellerClubId }, data: { status: "ACTIVE" } });
+      await tx.player.updateMany({ where: { id: listing.playerId, status: "LISTED", clubId: listing.sellerClubId }, data: { status: listing.player.contractDays > 0 ? "ACTIVE" : "CONTRACT_EXPIRED" } });
       return { error: "LISTING_EXPIRED" as const };
     }
 
@@ -90,15 +100,16 @@ export async function buyMarketListing(userId: string, listingId: string) {
 }
 
 export async function cancelMarketListing(userId: string, listingId: string) {
+  await settleClubDailyState(userId);
   const club = await prisma.club.findUnique({ where: { ownerId: userId }, select: { id: true } });
   if (!club) throw new MarketError("CLUB_NOT_FOUND");
   return prisma.$transaction(async (tx) => {
-    const listing = await tx.playerMarketListing.findFirst({ where: { id: listingId, sellerClubId: club.id } });
+    const listing = await tx.playerMarketListing.findFirst({ where: { id: listingId, sellerClubId: club.id }, include: { player: { select: { contractDays: true } } } });
     if (!listing) throw new MarketError("LISTING_NOT_FOUND");
     if (listing.status !== "OPEN") throw new MarketError("LISTING_NOT_OPEN");
     const changed = await tx.playerMarketListing.updateMany({ where: { id: listing.id, status: "OPEN" }, data: { status: "CANCELLED" } });
     if (changed.count !== 1) throw new MarketError("LISTING_NOT_OPEN");
-    await tx.player.updateMany({ where: { id: listing.playerId, clubId: club.id, status: "LISTED" }, data: { status: "ACTIVE" } });
+    await tx.player.updateMany({ where: { id: listing.playerId, clubId: club.id, status: "LISTED" }, data: { status: listing.player.contractDays > 0 ? "ACTIVE" : "CONTRACT_EXPIRED" } });
     return { listingId, status: "CANCELLED" as const };
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 }
@@ -106,11 +117,11 @@ export async function cancelMarketListing(userId: string, listingId: string) {
 export async function getOpenMarketListings() {
   const now = new Date();
   await prisma.$transaction(async (tx) => {
-    const expired = await tx.playerMarketListing.findMany({ where: { status: "OPEN", expiresAt: { lte: now } }, select: { id: true, playerId: true, sellerClubId: true } });
+    const expired = await tx.playerMarketListing.findMany({ where: { status: "OPEN", expiresAt: { lte: now } }, select: { id: true, playerId: true, sellerClubId: true, player: { select: { contractDays: true } } } });
     if (!expired.length) return;
     await tx.playerMarketListing.updateMany({ where: { id: { in: expired.map((item) => item.id) }, status: "OPEN" }, data: { status: "EXPIRED" } });
     for (const item of expired) {
-      await tx.player.updateMany({ where: { id: item.playerId, clubId: item.sellerClubId, status: "LISTED" }, data: { status: "ACTIVE" } });
+      await tx.player.updateMany({ where: { id: item.playerId, clubId: item.sellerClubId, status: "LISTED" }, data: { status: item.player.contractDays > 0 ? "ACTIVE" : "CONTRACT_EXPIRED" } });
     }
   });
   return prisma.playerMarketListing.findMany({
