@@ -183,6 +183,17 @@ export default function MarketPage() {
     finally { setBusy(""); }
   }
 
+  async function viewLeague(id: string) {
+    setBusy("league-view"); setError("");
+    try {
+      const response = await fetch(API + "/v1/competitions/" + encodeURIComponent(id), { headers });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error ?? "دریافت جدول لیگ ناموفق بود.");
+      setLeagueDetail(data as LeagueDetails);
+    } catch (e) { setError(e instanceof Error ? e.message : "خطای نامشخص"); }
+    finally { setBusy(""); }
+  }
+
   if (!initData) return <main className="market-shell"><section className="market-card"><p className="market-kicker">FOOTBALL EMPIRE</p><h1>بازار نقل‌وانتقالات</h1><p>برای استفاده از بازار، بازی را از طریق ربات تلگرام و Mini App باز کنید.</p></section></main>;
 
   return <main className="market-shell">
@@ -435,6 +446,62 @@ export default function MarketPage() {
           <div><strong>{player.fitness ?? 0}%</strong><small>{player.status === "ACTIVE" ? "آماده" : player.status === "INJURED" ? "مصدوم" : player.status === "LISTED" ? "در بازار" : "قرارداد تمام‌شده"}</small></div>
         </div>)}
       </div>
+    </section>}
+    {tab === "matches" && <section className="club-market">
+      <div className="market-card">
+        <h2>مسابقات دوستانه</h2>
+        <p>با باشگاه‌هایی که ترکیب کامل ۱۱ نفره دارند مسابقه دوستانه برگزار کنید. مسابقه پنج دقیقه پس از ثبت، آماده شبیه‌سازی می‌شود.</p>
+        {opponents.length === 0 ? <p className="muted">فعلاً حریف واجد شرایطی پیدا نشد.</p> : opponents.map((opponent) => <div className="operation-row" key={opponent.id}>
+          <div><strong>{opponent.name}</strong><small>سطح {opponent.level} · اعتبار {opponent.reputation}</small></div>
+          <button className="secondary" disabled={!!busy} onClick={() => void action("friendly-" + opponent.id, "/v1/matches/friendly", "POST", { opponentClubId: opponent.id, idempotencyKey: "mini-friendly-" + crypto.randomUUID() })}>برگزاری دوستانه</button>
+        </div>)}
+      </div>
+      <div className="market-card">
+        <h2>برنامه و نتایج مسابقات</h2>
+        {matches.length === 0 ? <p className="muted">هنوز مسابقه‌ای ثبت نشده است.</p> : matches.map((match) => <div className="operation-row" key={match.id}>
+          <div>
+            <strong>{match.homeClub.name} {match.homeScore ?? "–"} : {match.awayScore ?? "–"} {match.awayClub.name}</strong>
+            <small>{match.type === "LEAGUE" ? "لیگ" : "دوستانه"} · {match.status === "COMPLETED" ? "پایان‌یافته" : match.status === "SCHEDULED" ? "برنامه‌ریزی‌شده" : "لغوشده"} · {new Date(match.scheduledAt).toLocaleString("fa-IR")}</small>
+            {match.status === "COMPLETED" && <small>تماشاگر: {money(match.attendance)} · درآمد بلیت: {money(match.ticketRevenue)} Cash</small>}
+            {match.events.filter((event) => event.type === "GOAL").slice(0, 4).map((event, index) => <small key={match.id + "-goal-" + index}>{event.minute}' · گل</small>)}
+          </div>
+          {match.status === "SCHEDULED" && new Date(match.scheduledAt).getTime() <= Date.now() && <button disabled={!!busy} onClick={() => void action("play-" + match.id, "/v1/matches/" + match.id + "/simulate", "POST", {})}>شبیه‌سازی مسابقه</button>}
+        </div>)}
+      </div>
+      <div className="market-card">
+        <h2>ایجاد لیگ جدید</h2>
+        <p>لیگ دوره‌ای تک‌مرحله‌ای بسازید. پس از ثبت‌نام حداقل چهار باشگاه، مدیر لیگ می‌تواند برنامه مسابقات را تولید کند.</p>
+        <label>نام لیگ<input value={leagueName} maxLength={40} onChange={(event) => setLeagueName(event.target.value)} placeholder="مثلاً لیگ دوستان توسن"/></label>
+        <label>تعداد باشگاه‌ها<select value={leagueCapacity} onChange={(event) => setLeagueCapacity(event.target.value)}><option value="4">۴ باشگاه</option><option value="6">۶ باشگاه</option><option value="8">۸ باشگاه</option><option value="10">۱۰ باشگاه</option></select></label>
+        <button disabled={!!busy || leagueName.trim().length < 3} onClick={() => void action("create-league", "/v1/competitions", "POST", { name: leagueName.trim(), maxTeams: Number(leagueCapacity), idempotencyKey: "mini-league-" + crypto.randomUUID() })}>ایجاد لیگ</button>
+      </div>
+      <div className="market-card">
+        <h2>لیگ‌های در حال ثبت‌نام</h2>
+        {openLeagues.length === 0 ? <p className="muted">لیگ بازی برای ثبت‌نام باز نیست.</p> : openLeagues.map((league) => <div className="operation-row" key={league.id}>
+          <div><strong>{league.name}</strong><small>فصل {league.season} · {league.teams}/{league.maxTeams} باشگاه · سازنده: {league.creator}</small></div>
+          {!league.joined ? <button className="secondary" disabled={!!busy || league.teams >= league.maxTeams} onClick={() => void action("join-" + league.id, "/v1/competitions/" + league.id + "/join", "POST", {})}>عضویت</button>
+            : league.isCreator ? <button className="secondary" disabled={!!busy || league.teams < 4} onClick={() => void action("start-" + league.id, "/v1/competitions/" + league.id + "/start", "POST", {})}>شروع لیگ</button>
+              : <span className="muted">عضو هستید</span>}
+          <button className="secondary" onClick={() => void viewLeague(league.id)}>جدول</button>
+        </div>)}
+        <h3>لیگ‌های باشگاه من</h3>
+        {clubCompetitions.map((league) => <div className="operation-row" key={league.id}>
+          <div><strong>{league.name}</strong><small>فصل {league.season} · {league.status}</small></div>
+          <button className="secondary" disabled={busy === "league-view"} onClick={() => void viewLeague(league.id)}>مشاهده جدول</button>
+        </div>)}
+      </div>
+      {leagueDetail && <div className="market-card">
+        <h2>{leagueDetail.competition.name} · جدول لیگ</h2>
+        <p>فصل {leagueDetail.competition.season} · {leagueDetail.competition.status}</p>
+        <div className="finance-summary">
+          {leagueDetail.standings.map((row) => <div key={row.clubId}><span>{row.position}. {row.clubName}</span><strong>{row.points} امتیاز · {row.played} بازی · تفاضل {row.goalDifference}</strong></div>)}
+        </div>
+        <h3>برنامه مسابقات</h3>
+        {leagueDetail.matches.map((match) => <div className="operation-row" key={match.id}>
+          <div><strong>{match.homeClub.name} {match.homeScore ?? "–"} : {match.awayScore ?? "–"} {match.awayClub.name}</strong><small>هفته {match.round ?? "—"} · {match.status} · {new Date(match.scheduledAt).toLocaleDateString("fa-IR")}</small></div>
+          {match.status === "SCHEDULED" && new Date(match.scheduledAt).getTime() <= Date.now() && <button disabled={!!busy} onClick={() => void action("play-" + match.id, "/v1/matches/" + match.id + "/simulate", "POST", {})}>شبیه‌سازی</button>}
+        </div>)}
+      </div>}
     </section>}
     {tab === "special" && <><section className="special-packs"><div className="market-card"><h2>جذب ستاره‌های ویژه</h2><p>هر بسته یک بازیکن تصادفی از رده مشخص‌شده می‌دهد. هر بازیکن ویژه را فقط یک‌بار می‌توانید در باشگاه خود داشته باشید.</p><div className="pack-actions">{packOffers.map((offer) => <button key={offer.method} disabled={!!busy || Number(gold) < Number(offer.priceGold)} onClick={() => { const key = packKeys[offer.method] ?? crypto.randomUUID(); if (!packKeys[offer.method]) setPackKeys((current) => ({ ...current, [offer.method]: key })); void action("pack-" + offer.method, "/v1/players/special/acquire", "POST", { method: offer.method, idempotencyKey: key }); }}>{busy === "pack-" + offer.method ? "در حال جذب…" : `${rarityLabel[offer.rarity] ?? offer.rarity} · ${money(offer.priceGold)} Gold`}</button>)}</div></div></section><section className="special-grid">{special.map((p) => <article className="special-card" key={p.id}><div className="special-top"><span>{rarityLabel[p.rarity] ?? p.rarity}</span><strong>{p.overall}</strong></div><h3>{p.fullName}</h3><p>{p.nationality} · {p.positions.join(" / ")}</p><div className="potential">Potential <strong>{p.potential}</strong></div><small>روش‌های جذب: {p.acquisitionMethods.join("، ")}</small></article>)}</section></>}
     <footer className="market-footer">بازیکنان ویژه در بازار عادی قابل معامله نیستند. خرید بازیکنان معمولی با Cash و بسته‌های جذب ستاره با Gold، به‌صورت امن در سرور ثبت می‌شوند.</footer>
