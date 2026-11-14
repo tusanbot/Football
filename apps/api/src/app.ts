@@ -4,6 +4,7 @@ import { z } from "zod";
 import { registerTelegramAuthRoutes } from "./auth/routes.js";
 import { registerBotAuthRoutes } from "./auth/bot-routes.js";
 import { registerGameRoutes } from "./game/routes.js";
+import { registerClubOperationsRoutes } from "./game/club-operations-routes.js";
 import { registerPlayerMarketRoutes } from "./players/market-routes.js";
 import { registerPlayerDevelopmentRoutes } from "./players/player-development-routes.js";
 import { prisma } from "./db.js";
@@ -44,6 +45,7 @@ export function buildApp() {
   registerTelegramAuthRoutes(app);
   registerBotAuthRoutes(app);
   registerGameRoutes(app);
+  registerClubOperationsRoutes(app);
   registerPlayerMarketRoutes(app);
   registerPlayerDevelopmentRoutes(app);
 
