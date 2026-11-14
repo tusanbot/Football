@@ -1,6 +1,6 @@
 import "dotenv/config";
 import { randomUUID } from "node:crypto";
-import { Bot, InlineKeyboard } from "grammy";
+import { Bot, Keyboard } from "grammy";
 
 const token = process.env.TELEGRAM_BOT_TOKEN;
 if (!token) throw new Error("TELEGRAM_BOT_TOKEN is required to start the bot.");
@@ -8,6 +8,43 @@ const webAppUrl = process.env.TELEGRAM_WEB_APP_URL;
 const apiUrl = process.env.FOOTBALL_API_URL;
 const botApiSecret = process.env.BOT_API_SECRET;
 const bot = new Bot(token);
+
+// Group replies are transient by default; preserve administrative and ranking messages.
+const persistentGroupCommands = new Set([
+  "group-register", "group-check", "group-give", "group-challenge-complete",
+  "group-challenge-cancel", "group-league-start", "group-league-table", "group-leagues",
+  "alliance", "alliance-create", "alliance-invite", "alliance-accept",
+  "alliance-decline", "alliance-championship", "alliance-championship-join",
+  "alliance-championship-start", "alliance-season-start", "alliance-season-close",
+  "alliance-season-review", "alliance-contribute",
+]);
+function isPersistentGroupReply(command: string | undefined, messageText: string): boolean {
+  if (command && persistentGroupCommands.has(command)) return true;
+  return /(?:ranking|leaderboard|standings|\\brank\\b|رنک(?:ینگ)?|رتبه(?:بندی)?|جدول(?:\\s+(?:رده|لیگ|مسابقات))?)/i.test(messageText);
+}
+
+bot.use(async (ctx, next) => {
+  if (ctx.chat.type === "group" || ctx.chat.type === "supergroup") {
+    const originalReply = ctx.reply.bind(ctx);
+    const command = ctx.message?.text?.match(/^\\/([a-z0-9_-]+)/i)?.[1]?.toLowerCase();
+    Object.defineProperty(ctx, "reply", {
+      configurable: true,
+      value: async (...args: Parameters<typeof ctx.reply>) => {
+        const sent = await originalReply(...args);
+        if (!isPersistentGroupReply(command, String(args[0] ?? ""))) {
+          const timer = setTimeout(() => {
+            void ctx.api.deleteMessage(ctx.chat.id, sent.message_id).catch((error: unknown) => {
+              console.debug("Transient group reply could not be deleted:", error instanceof Error ? error.message : error);
+            });
+          }, 60_000);
+          timer.unref();
+        }
+        return sent;
+      },
+    });
+  }
+  await next();
+});
 
 type ApiPlayer = { id: string; firstName: string; lastName: string; position: string; overall: number; potential: number; status?: string; lineupSlot?: number | null; age?: number; fitness?: number; morale?: number; contractDays?: number; wage?: string };
 type ApiListing = { id: string; askingPrice: string; player: ApiPlayer; sellerClub?: { name: string } };
@@ -64,8 +101,15 @@ bot.command("start", async (ctx) => {
 
     const cashBalance = account.wallets.find((wallet) => wallet.asset === "CASH")?.balance ?? "0";
     const goldBalance = account.wallets.find((wallet) => wallet.asset === "GOLD")?.balance ?? "0";
-    const keyboard = new InlineKeyboard();
+    const keyboard = new Keyboard()
+      .text("/club").text("/wallet").row()
+      .text("/players").text("/lineup").row()
+      .text("/development").text("/operations").row()
+      .text("/matches").text("/leagues").row()
+      .text("/market").text("/special").row()
+      .text("/help");
     if (webAppUrl) keyboard.webApp("Open Football Empire", webAppUrl);
+    keyboard.resized().persistent();
 
     await ctx.reply(
       `Welcome, ${account.user.displayName}! Your club is ready.\n\n` +
