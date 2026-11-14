@@ -8,7 +8,7 @@ const apiUrl = process.env.FOOTBALL_API_URL;
 const botApiSecret = process.env.BOT_API_SECRET;
 const bot = new Bot(token);
 
-type ApiPlayer = { id: string; firstName: string; lastName: string; position: string; overall: number; potential: number; status?: string; lineupSlot?: number | null };
+type ApiPlayer = { id: string; firstName: string; lastName: string; position: string; overall: number; potential: number; status?: string; lineupSlot?: number | null; age?: number; fitness?: number; morale?: number; contractDays?: number; wage?: string };
 type ApiListing = { id: string; askingPrice: string; player: ApiPlayer; sellerClub?: { name: string } };
 
 async function api<T>(path: string, telegramId: number, method = "GET", body?: unknown): Promise<T> {
@@ -57,7 +57,7 @@ bot.command("start", async (ctx) => {
       `Club: ${account.club?.name ?? "Not created"} (Level ${account.club?.level ?? 1})\n` +
       `Starter balance: ${cash(cashBalance)} Cash · ${cash(goldBalance)} Gold\n\n` +
       `You can manage your club directly here or continue in the Mini App.\n\n` +
-      `Commands: /club /wallet /rename /players /market /special /pack /sell /buy`,
+      `Commands: /club /wallet /rename /players /lineup /development /train /renew /market /special /pack /sell /buy`,
       { reply_markup: keyboard },
     );
   } catch (error) {
@@ -66,7 +66,7 @@ bot.command("start", async (ctx) => {
 });
 
 bot.command("help", async (ctx) => ctx.reply(
-  "Football Empire commands:\n/club — club profile\n/wallet — Cash and Gold balances\n/rename NEW NAME — rename your club\n/players — your active squad\n/lineup — view starting XI and tactics\n/setlineup FORMATION ID1 ... ID11 — set your XI\n/market — open transfer listings\n/sell PLAYER_ID PRICE — list a generated player\n/buy LISTING_ID — buy a listed player\n/special — view special players and pack prices\n/pack epic|legendary|icon — acquire a special player\n\nSpecial players are not tradeable in the regular market.",
+  "Football Empire commands:\n/club — club profile\n/wallet — Cash and Gold balances\n/rename NEW NAME — rename your club\n/players — your active squad\n/lineup — view starting XI and tactics\n/setlineup FORMATION ID1 ... ID11 — set your XI\n/development — player development overview\n/train PLAYER_ID FOCUS INTENSITY — train a player\n/renew PLAYER_ID DAYS WEEKLY_WAGE — renew a contract\n/market — open transfer listings\n/sell PLAYER_ID PRICE — list a generated player\n/buy LISTING_ID — buy a listed player\n/special — view special players and pack prices\n/pack epic|legendary|icon — acquire a special player\n\nSpecial players are not tradeable in the regular market.",
 ));
 
 bot.command("club", async (ctx) => {
@@ -117,7 +117,7 @@ bot.command("players", async (ctx) => {
   try {
     const result = await api<{ players: ApiPlayer[] }>("/v1/club/players", ctx.from.id);
     if (!result.players.length) return ctx.reply("Your squad is empty. Open the Mini App to complete club setup.");
-    const lines = result.players.map((p) => `• ${playerName(p)} | ${p.position} | OVR ${p.overall} | POT ${p.potential}${p.lineupSlot ? ` | XI #${p.lineupSlot}` : ""}\n  ID: ${p.id}`);
+    const lines = result.players.map((p) => `• ${playerName(p)} | ${p.position} | OVR ${p.overall} | POT ${p.potential}${p.lineupSlot ? ` | XI #${p.lineupSlot}` : ""}\n  Fitness ${p.fitness ?? "-"} · Morale ${p.morale ?? "-"} · Contract ${p.contractDays ?? "-"}d · Wage ${p.wage ? cash(p.wage) : "-"} / week · ${p.status ?? "ACTIVE"}\n  ID: ${p.id}`);
     await ctx.reply("Your active squad:\n\n" + lines.join("\n"));
   } catch (error) { await ctx.reply(`Could not load squad: ${error instanceof Error ? error.message : "unknown error"}`); }
 });
@@ -161,6 +161,67 @@ bot.command("setlineup", async (ctx) => {
   } catch (error) {
     await ctx.reply(`Could not save lineup: ${error instanceof Error ? error.message : "unknown error"}`);
   }
+});
+
+bot.command("development", async (ctx) => {
+  if (!ctx.from) return;
+  if (ctx.chat.type !== "private") return ctx.reply("Use /development in a private chat.");
+  try {
+    const result = await api<{ club: {
+      trainingGroundLevel: number;
+      coach: { name: string; level: number; trainingSkill: number; recoverySkill: number; medicalSkill: number };
+      players: Array<{ id: string; firstName: string; lastName: string; overall: number; potential: number; age: number; fitness: number; morale: number; contractDays: number; status: string; minimumWeeklyWage: string }>;
+    } }>("/v1/club/development", ctx.from.id);
+    const lines = result.club.players.slice(0, 15).map((p) =>
+      \`• \${p.firstName} \${p.lastName} · OVR \${p.overall}/\${p.potential} · Age \${p.age}\\n  Fitness \${p.fitness} · Morale \${p.morale} · Contract \${p.contractDays}d · \${p.status}\\n  Renew from \${cash(p.minimumWeeklyWage)} Cash/week\\n  ID: \${p.id}\`,
+    );
+    await ctx.reply(
+      \`Player development · Training ground Lv.\${result.club.trainingGroundLevel}\\nCoach: \${result.club.coach.name} (Lv.\${result.club.coach.level})\\nTraining \${result.club.coach.trainingSkill} · Recovery \${result.club.coach.recoverySkill} · Medical \${result.club.coach.medicalSkill}\\n\\n\` +
+      (lines.join("\\n\\n") || "No players found.") +
+      "\\n\\n/train PLAYER_ID BALANCED|SHOOTING|... LIGHT|NORMAL|INTENSE\\n/renew PLAYER_ID 90|180|365 WEEKLY_WAGE",
+    );
+  } catch (error) { await ctx.reply(\`Could not load player development: \${error instanceof Error ? error.message : "unknown error"}\`); }
+});
+
+bot.command("train", async (ctx) => {
+  if (!ctx.from) return;
+  if (ctx.chat.type !== "private") return ctx.reply("Use /train in a private chat.");
+  const [playerId, focusRaw, intensityRaw] = String(ctx.match ?? "").trim().split(/\\s+/);
+  const focus = focusRaw?.toUpperCase();
+  const intensity = intensityRaw?.toUpperCase();
+  const focuses = ["BALANCED", "GOALKEEPING", "DEFENDING", "PASSING", "PLAYMAKING", "DRIBBLING", "SHOOTING", "PHYSICAL"];
+  if (!playerId || !focus || !focuses.includes(focus) || !["LIGHT", "NORMAL", "INTENSE"].includes(intensity ?? "")) {
+    return ctx.reply("Usage: /train PLAYER_ID FOCUS INTENSITY\\nFocus: BALANCED, GOALKEEPING, DEFENDING, PASSING, PLAYMAKING, DRIBBLING, SHOOTING, PHYSICAL\\nIntensity: LIGHT, NORMAL, INTENSE");
+  }
+  try {
+    const result = await api<{ training: { overallBefore: number; overallAfter: number; fitnessBefore: number; fitnessAfter: number; injuryOccurred: boolean; injuryUntil: string | null; cashCost: string; replayed: boolean } }>(
+      \`/v1/club/players/\${encodeURIComponent(playerId)}/train\`, ctx.from.id, "POST",
+      { focus, intensity, idempotencyKey: \`tg-train-\${ctx.from.id}-\${ctx.update.update_id}\` },
+    );
+    const t = result.training;
+    await ctx.reply(
+      \`Training complete. OVR \${t.overallBefore} → \${t.overallAfter}; fitness \${t.fitnessBefore} → \${t.fitnessAfter}. Cost: \${cash(t.cashCost)} Cash.\` +
+      (t.injuryOccurred ? \`\\nInjury: player unavailable until \${t.injuryUntil}.\` : "") +
+      (t.replayed ? "\\nThis was a repeated request." : ""),
+    );
+  } catch (error) { await ctx.reply(\`Training failed: \${error instanceof Error ? error.message : "unknown error"}\`); }
+});
+
+bot.command("renew", async (ctx) => {
+  if (!ctx.from) return;
+  if (ctx.chat.type !== "private") return ctx.reply("Use /renew in a private chat.");
+  const [playerId, daysRaw, wageRaw] = String(ctx.match ?? "").trim().split(/\\s+/);
+  const days = Number(daysRaw);
+  if (!playerId || ![90, 180, 365].includes(days) || !wageRaw || !/^[1-9][0-9]{0,8}$/.test(wageRaw)) {
+    return ctx.reply("Usage: /renew PLAYER_ID 90|180|365 WEEKLY_WAGE\\nUse /development to see the minimum acceptable weekly wage.");
+  }
+  try {
+    const result = await api<{ contract: { contractDays: number; weeklyWage: string; replayed: boolean } }>(
+      \`/v1/club/players/\${encodeURIComponent(playerId)}/contract/renew\`, ctx.from.id, "POST",
+      { extensionDays: days, weeklyWage: wageRaw, idempotencyKey: \`tg-renew-\${ctx.from.id}-\${ctx.update.update_id}\` },
+    );
+    await ctx.reply(\`Contract renewed: \${result.contract.contractDays} days remaining · \${cash(result.contract.weeklyWage)} Cash/week.\${result.contract.replayed ? " This was a repeated request." : ""}\`);
+  } catch (error) { await ctx.reply(\`Contract renewal failed: \${error instanceof Error ? error.message : "unknown error"}\`); }
 });
 
 bot.command("market", async (ctx) => {
