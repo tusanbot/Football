@@ -45,7 +45,7 @@ export async function settleClubDailyState(userId: string, now = new Date()) {
     return await prisma.$transaction(async (tx) => {
     const club = await tx.club.findUnique({
       where: { ownerId: userId },
-      include: { coach: { select: { recoverySkill: true } } },
+      include: { coach: { select: { recoverySkill: true, weeklySalary: true } } },
     });
     if (!club) throw new PlayerDevelopmentError("CLUB_NOT_FOUND");
     const lastDay = utcDay(club.lastDailyTickAt);
@@ -57,7 +57,7 @@ export async function settleClubDailyState(userId: string, now = new Date()) {
       select: {
         id: true, age: true, ageDays: true, contractDays: true, fitness: true,
         morale: true, status: true, injuryUntil: true, lineupSlot: true,
-        position: true, overall: true, potential: true, attributes: true,
+        position: true, overall: true, potential: true, attributes: true, wage: true,
       },
     });
     let recovered = 0;
@@ -99,10 +99,78 @@ export async function settleClubDailyState(userId: string, now = new Date()) {
       });
     }
 
+    const lastPayrollDay = utcDay(club.lastPayrollAt);
+    const payrollElapsedDays = Math.max(0, Math.floor((today.getTime() - lastPayrollDay.getTime()) / DAY_MS));
+    const weeksCovered = Math.floor(payrollElapsedDays / 7);
+    let payrollSummary: { weeksCovered: number; playerWages: string; coachWages: string; totalDue: string; cashPaid: string; arrearsAfter: string } | null = null;
+    let nextPayrollAt = club.lastPayrollAt;
+    let nextWageArrears = club.wageArrears;
+    if (weeksCovered > 0) {
+      let playerWages = 0n;
+      let playersCount = 0;
+      for (const player of players) {
+        if (player.status === "RETIRED" || player.contractDays <= 0) continue;
+        const billableDays = Math.min(payrollElapsedDays, player.contractDays);
+        if (billableDays <= 0) continue;
+        playerWages += (player.wage * BigInt(billableDays) + 6n) / 7n;
+        playersCount++;
+      }
+      const coachWages = (club.coach?.weeklySalary ?? 0n) * BigInt(weeksCovered);
+      const totalDue = playerWages + coachWages + club.wageArrears;
+      const wallet = await tx.wallet.findUnique({
+        where: { userId_asset: { userId, asset: "CASH" } },
+        select: { id: true, balance: true, version: true },
+      });
+      const cashPaid = wallet && wallet.balance < totalDue ? wallet.balance : (wallet ? totalDue : 0n);
+      if (cashPaid > 0n && wallet) {
+        const paid = await tx.wallet.updateMany({
+          where: { id: wallet.id, balance: wallet.balance, version: wallet.version },
+          data: { balance: { decrement: cashPaid }, version: { increment: 1 } },
+        });
+        if (paid.count !== 1) throw new PlayerDevelopmentError("DAILY_SETTLEMENT_CONFLICT");
+        const payrollDate = new Date(lastPayrollDay.getTime() + weeksCovered * 7 * DAY_MS);
+        await tx.ledgerTransaction.create({
+          data: {
+            idempotencyKey: `weekly-payroll:${club.id}:${payrollDate.toISOString().slice(0, 10)}`,
+            userId, asset: "CASH", direction: "DEBIT", amount: cashPaid,
+            reason: "WEEKLY_PLAYER_AND_COACH_PAYROLL",
+            referenceType: "CLUB_PAYROLL", referenceId: club.id,
+          },
+        });
+      }
+      const payrollDate = new Date(lastPayrollDay.getTime() + weeksCovered * 7 * DAY_MS);
+      const arrearsAfter = totalDue - cashPaid;
+      await tx.clubPayroll.create({
+        data: {
+          clubId: club.id, payrollDate, weeksCovered, playerWages, coachWages,
+          arrearsBefore: club.wageArrears, totalDue, cashPaid, arrearsAfter, playersCount,
+        },
+      });
+      nextPayrollAt = payrollDate;
+      nextWageArrears = arrearsAfter;
+      if (arrearsAfter > 0n && totalDue > 0n) {
+        const moralePenalty = Math.min(12, 2 + Number((arrearsAfter * 10n + totalDue - 1n) / totalDue));
+        const eligible = { clubId: club.id, status: { in: ["ACTIVE", "INJURED", "CONTRACT_EXPIRED", "LISTED"] as const } };
+        await tx.player.updateMany({
+          where: { ...eligible, morale: { gt: moralePenalty } },
+          data: { morale: { decrement: moralePenalty } },
+        });
+        await tx.player.updateMany({
+          where: { ...eligible, morale: { lte: moralePenalty } },
+          data: { morale: 0 },
+        });
+      }
+      payrollSummary = {
+        weeksCovered, playerWages: playerWages.toString(), coachWages: coachWages.toString(),
+        totalDue: totalDue.toString(), cashPaid: cashPaid.toString(), arrearsAfter: arrearsAfter.toString(),
+      };
+    }
+
     const advanced = await tx.club.updateMany({
       where: { id: club.id, lastDailyTickAt: club.lastDailyTickAt },
       data: {
         lastDailyTickAt: today,
+        ...(weeksCovered > 0 ? { lastPayrollAt: nextPayrollAt, wageArrears: nextWageArrears } : {}),
         ...(lineupChanged ? { lineupVersion: { increment: 1 } } : {}),
       },
     });
@@ -110,7 +178,7 @@ export async function settleClubDailyState(userId: string, now = new Date()) {
     await tx.clubDailyTick.create({
       data: { clubId: club.id, gameDate: today, elapsedDays },
     });
-    return { elapsedDays, gameDate: today.toISOString().slice(0, 10), recovered, expiredContracts };
+    return { elapsedDays, gameDate: today.toISOString().slice(0, 10), recovered, expiredContracts, payroll: payrollSummary };
     }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && ["P2002", "P2034"].includes(error.code)) {
