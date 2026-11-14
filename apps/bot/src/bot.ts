@@ -70,7 +70,7 @@ bot.command("start", async (ctx) => {
 });
 
 bot.command("help", async (ctx) => ctx.reply(
-  "Football Empire commands:\n/club — club profile\n/wallet — Cash and Gold balances\n/rename NEW NAME — rename your club\n/players — your active squad\n/lineup — view starting XI and tactics\n/setlineup FORMATION ID1 ... ID11 — set your XI\n/development — player development overview\n/train PLAYER_ID FOCUS INTENSITY — train a player\n/renew PLAYER_ID DAYS WEEKLY_WAGE — renew a contract\n/operations — facilities, academy, sponsors and finance\n/finance [DAYS] — income and expense statement\n/upgrade stadium|training|academy — upgrade a facility\n/ticket-price PRICE — set stadium ticket price\n/scout — find academy prospects\n/recruit PROSPECT_ID — sign an academy prospect\n/sponsor OFFER_ID — sign a sponsor\n/coach-upgrade — develop your coach\n/hire-coach balanced|youth|performance — hire a coach\n/opponents — clubs available for friendlies\n/friendly CLUB_ID — schedule a friendly\n/matches — your fixtures and results\n/play MATCH_ID — simulate a due match\n/league NAME [4-10] — create a league\n/leagues — open leagues\n/joinleague ID — join a league\n/startleague ID — start your league\n/table ID — league standings\n/market — open transfer listings\n/sell PLAYER_ID PRICE — list a generated player\n/buy LISTING_ID — buy a listed player\n/special — view special players and pack prices\n/pack epic|legendary|icon — acquire a special player\n\nSpecial players are not tradeable in the regular market.",
+  "Football Empire commands:\n/club — club profile\n/wallet — Cash and Gold balances\n/rename NEW NAME — rename your club\n/players — your active squad\n/lineup — view starting XI and tactics\n/setlineup FORMATION ID1 ... ID11 — set your XI\n/development — player development overview\n/train PLAYER_ID FOCUS INTENSITY — train a player\n/renew PLAYER_ID DAYS WEEKLY_WAGE — renew a contract\n/operations — facilities, academy, sponsors and finance\n/finance [DAYS] — income and expense statement\n/upgrade stadium|training|academy — upgrade a facility\n/ticket-price PRICE — set stadium ticket price\n/scout — find academy prospects\n/recruit PROSPECT_ID — sign an academy prospect\n/sponsor OFFER_ID — sign a sponsor\n/coach-upgrade — develop your coach\n/hire-coach balanced|youth|performance — hire a coach\n/opponents — clubs available for friendlies\n/friendly CLUB_ID — schedule a friendly\n/matches — your fixtures and results\n/play MATCH_ID — simulate a due match\n/league NAME [4-10] — create a league\n/cup NAME [4|8] — create a knockout cup\n/leagues — open leagues\n/joinleague ID — join a league\n/startleague ID — start your league\n/startcup ID — start your cup\n/table ID — league standings\n/market — open transfer listings\n/sell PLAYER_ID PRICE — list a generated player\n/buy LISTING_ID — buy a listed player\n/special — view special players and pack prices\n/pack epic|legendary|icon — acquire a special player\n\nSpecial players are not tradeable in the regular market.",
 ));
 
 bot.command("club", async (ctx) => {
@@ -514,12 +514,26 @@ bot.command("league", async (ctx) => {
   } catch (error) { await ctx.reply(`Could not create league: ${error instanceof Error ? error.message : "unknown error"}`); }
 });
 
+bot.command("cup", async (ctx) => {
+  if (!ctx.from || ctx.chat.type !== "private") return;
+  const parts = String(ctx.match ?? "").trim().split(/\s+/).filter(Boolean);
+  const last = parts.at(-1);
+  const maxTeams = last && /^\d+$/.test(last) ? Number(parts.pop()) : 4;
+  const name = parts.join(" ");
+  if (name.length < 3 || name.length > 40 || ![4, 8].includes(maxTeams)) return ctx.reply("Usage: /cup CUP NAME [4|8]");
+  try {
+    const result = await api<{ competition: { id: string; name: string; maxTeams: number }; replayed: boolean }>("/v1/competitions", ctx.from.id, "POST", {
+      name, maxTeams, format: "CUP", idempotencyKey: "bot-cup-" + ctx.from.id + "-" + ctx.update.update_id,
+    });
+    await ctx.reply("Knockout cup created: " + result.competition.name + "\nID: " + result.competition.id + "\nBracket: " + result.competition.maxTeams + " clubs. Fill all places before starting.");
+  } catch (error) { await ctx.reply("Could not create cup: " + (error instanceof Error ? error.message : "unknown error")); }
+});
 bot.command("leagues", async (ctx) => {
   if (!ctx.from || ctx.chat.type !== "private") return;
   try {
-    const result = await api<{ competitions: Array<{ id: string; name: string; season: number; teams: number; maxTeams: number; joined: boolean; isCreator: boolean }> }>("/v1/competitions", ctx.from.id);
+    const result = await api<{ competitions: Array<{ id: string; name: string; season: number; format: string; teams: number; maxTeams: number; joined: boolean; isCreator: boolean }> }>("/v1/competitions", ctx.from.id);
     const lines = result.competitions.map((item) =>
-      `• ${item.name} · ${item.teams}/${item.maxTeams} clubs · Season ${item.season}${item.joined ? " · joined" : ""}\n  ID: ${item.id}`,
+      `• ${item.name} · ${item.format === "CUP" ? "Knockout cup" : "League"} · ${item.teams}/${item.maxTeams} clubs · Season ${item.season}${item.joined ? " · joined" : ""}\n  ID: ${item.id}`,
     );
     await ctx.reply("Open leagues:\n" + (lines.join("\n\n") || "No open leagues.") + "\n\n/joinleague ID");
   } catch (error) { await ctx.reply(`Could not load leagues: ${error instanceof Error ? error.message : "unknown error"}`); }
