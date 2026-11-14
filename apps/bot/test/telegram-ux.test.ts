@@ -45,21 +45,21 @@ test("unknown private text is not converted into a command", () => {
   assert.equal(resolvePrivateMenuCommand("/club"), undefined);
 });
 
-test("all group commands have an explicit transient or persistent classification", () => {
-  const expected = [
-    "group-register", "group-join", "group", "group-activity", "group-shop",
-    "group-buy", "group-challenges", "group-challenge", "group-challenge-join",
-    "group-challenge-complete", "group-check", "group-league", "group-league-join",
-    "group-league-start", "group-league-table", "group-rewards", "group-treasury",
-    "group-give", "group-challenge-cancel", "group-leagues", "alliance",
-    "alliance-create", "alliance-invite", "alliance-accept", "alliance-decline",
-    "alliance-championship", "alliance-championship-join", "alliance-championship-start",
-    "alliance-season-start", "alliance-season-close", "alliance-season-review", "alliance-contribute",
-  ];
+test("every registered group command has an explicit transient or persistent classification", () => {
+  const staticGroupCommands = [...botSource.matchAll(/bot\.command\(\s*["']([^"']+)["']/g)]
+    .map((match) => match[1])
+    .filter((command) => command === "group" || command.startsWith("group-") || command.startsWith("alliance"));
+  // These two aliases are registered from the alliance response loop rather than bot.command literals.
+  const dynamicGroupCommands = ["alliance-accept", "alliance-decline"];
+  for (const command of dynamicGroupCommands) {
+    assert.ok(botSource.includes('"' + command + '"'), "Missing dynamic group command registration: " + command);
+  }
+  const registeredGroupCommands = new Set([...staticGroupCommands, ...dynamicGroupCommands]);
   const classified = new Set([...PERSISTENT_GROUP_COMMANDS, ...TRANSIENT_GROUP_COMMANDS]);
+
   assert.equal(PERSISTENT_GROUP_COMMANDS.size + TRANSIENT_GROUP_COMMANDS.size, classified.size,
     "a group command cannot be both transient and persistent");
-  assert.deepEqual([...classified].sort(), [...expected].sort());
+  assert.deepEqual([...classified].sort(), [...registeredGroupCommands].sort());
 });
 
 test("administrative and ranking replies remain persistent", () => {
