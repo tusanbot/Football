@@ -139,3 +139,57 @@ test("league registration, round-robin fixtures and final standings are transact
     }
   }
 });
+
+test("knockout cup fills its bracket, advances winners and crowns a champion", async (t) => {
+  if (!process.env.DATABASE_URL) {
+    t.skip("DATABASE_URL is only configured in the ephemeral PostgreSQL CI job.");
+    return;
+  }
+  const suffix = randomUUID().replaceAll("-", "");
+  const clubs: Array<{ userId: string; clubId: string }> = [];
+  let competitionId: string | undefined;
+  try {
+    for (let i = 0; i < 4; i++) clubs.push(await makeClub(suffix, i + 10));
+    const created = await createLeague(
+      clubs[0]!.userId, `Test Cup ${suffix.slice(0, 6)}`, 4, `cup-create-${suffix}`, "CUP",
+    );
+    competitionId = created.competition.id;
+    assert.equal(created.competition.format, "CUP");
+    for (const member of clubs.slice(1)) await joinLeague(member.userId, competitionId);
+    const started = await startLeague(clubs[0]!.userId, competitionId, new Date());
+    assert.equal(started.fixturesCreated, 2);
+    assert.equal(started.rounds, 2);
+    const firstRound = await prisma.footballMatch.findMany({
+      where: { competitionId, round: 1 }, orderBy: { scheduledAt: "asc" },
+    });
+    assert.equal(firstRound.length, 2);
+    for (const fixture of firstRound) {
+      const owner = clubs.find((club) => club.clubId === fixture.homeClubId || club.clubId === fixture.awayClubId)!;
+      await simulateScheduledMatch(owner.userId, fixture.id, new Date(fixture.scheduledAt.getTime() + 60_000));
+    }
+    const finalFixture = await prisma.footballMatch.findFirstOrThrow({ where: { competitionId, round: 2 } });
+    const finalOwner = clubs.find((club) => club.clubId === finalFixture.homeClubId || club.clubId === finalFixture.awayClubId)!;
+    const finalResult = await simulateScheduledMatch(finalOwner.userId, finalFixture.id, new Date(finalFixture.scheduledAt.getTime() + 60_000));
+    assert.ok(finalResult.winnerClubId);
+    const details = await getLeague(clubs[0]!.userId, competitionId);
+    assert.equal(details.competition.format, "CUP");
+    assert.equal(details.competition.status, "COMPLETED");
+    assert.equal(details.matches.length, 3);
+    assert.equal(details.matches.every((match) => match.status === "COMPLETED"), true);
+    assert.equal(details.matches.every((match) => match.winnerClubId), true);
+  } finally {
+    const clubIds = clubs.map((club) => club.clubId);
+    if (clubIds.length) {
+      await prisma.footballMatch.deleteMany({ where: { OR: [{ homeClubId: { in: clubIds } }, { awayClubId: { in: clubIds } }] } });
+      if (competitionId) await prisma.competition.deleteMany({ where: { id: competitionId } });
+      await prisma.player.deleteMany({ where: { clubId: { in: clubIds } } });
+      await prisma.club.deleteMany({ where: { id: { in: clubIds } } });
+    }
+    const userIds = clubs.map((club) => club.userId);
+    if (userIds.length) {
+      await prisma.ledgerTransaction.deleteMany({ where: { userId: { in: userIds } } });
+      await prisma.wallet.deleteMany({ where: { userId: { in: userIds } } });
+      await prisma.user.deleteMany({ where: { id: { in: userIds } } });
+    }
+  }
+});
