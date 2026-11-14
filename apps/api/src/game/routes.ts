@@ -4,7 +4,7 @@ import { prisma } from "../db.js";
 import { requireTelegramUser } from "../auth/require-telegram-user.js";
 
 const clubUpdateSchema = z.object({
-  name: z.string().trim().min(2).max(32).regex(/^[\\p{L}\\p{N} .'-]+$/u),
+  name: z.string().trim().min(2).max(32).regex(/^[\p{L}\p{N} .'-]+$/u),
 });
 
 export function registerGameRoutes(app: FastifyInstance) {
