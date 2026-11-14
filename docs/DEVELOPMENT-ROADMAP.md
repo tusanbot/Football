@@ -100,7 +100,7 @@ Non-negotiable product rules:
 - Added lazy, idempotent UTC club-economy settlement. Sponsor income is credited once; stadium/training/academy maintenance is accrued; available cash is paid without overdraft; unpaid costs carry as operating arrears.
 - Added finance statements with categorized income and expense entries for player training, transfer purchases/sales, sponsor receipts, facility maintenance, coach signing/development, academy costs, facility upgrades and paid player/coach payroll.
 - Added authenticated API routes for operations overview, finance statements, facility upgrades, ticket pricing, academy scouting/recruitment, coach hiring/progression and sponsor signing.
-- Added Mini App operations dashboard and Bot commands /operations, /upgrade, /ticket-price, /scout, /recruit, /sponsor, /coach-upgrade, and /hire-coach.
+- Added Mini App operations dashboard and Bot commands /operations, /finance, /upgrade, /ticket-price, /scout, /recruit, /sponsor, /coach-upgrade, and /hire-coach.
 - Added domain tests for facility costs/capacity, maintenance, academy costs, sponsor unlocks, coach upgrades and matchday ticket calculations, plus an ephemeral-PostgreSQL service test for the operations lifecycle.
 
 **Remaining dependency:** ticket receipts require real fixtures, attendance and completed match results; these are deliberately part of the match-engine phase. Daily operations are currently lazily settled on authenticated reads/actions; Cloudflare Cron/Queues are deferred until the planned runtime phase.
