@@ -8,7 +8,7 @@ const apiUrl = process.env.FOOTBALL_API_URL;
 const botApiSecret = process.env.BOT_API_SECRET;
 const bot = new Bot(token);
 
-type ApiPlayer = { id: string; firstName: string; lastName: string; position: string; overall: number; potential: number; status?: string };
+type ApiPlayer = { id: string; firstName: string; lastName: string; position: string; overall: number; potential: number; status?: string; lineupSlot?: number | null };
 type ApiListing = { id: string; askingPrice: string; player: ApiPlayer; sellerClub?: { name: string } };
 
 async function api<T>(path: string, telegramId: number, method = "GET", body?: unknown): Promise<T> {
@@ -119,6 +119,47 @@ bot.command("players", async (ctx) => {
     const lines = result.players.map((p) => `• ${playerName(p)} | ${p.position} | OVR ${p.overall} | POT ${p.potential}\n  ID: ${p.id}`);
     await ctx.reply("Your active squad:\n\n" + lines.join("\n"));
   } catch (error) { await ctx.reply(`Could not load squad: ${error instanceof Error ? error.message : "unknown error"}`); }
+});
+
+bot.command("lineup", async (ctx) => {
+  if (!ctx.from) return;
+  if (ctx.chat.type !== "private") return ctx.reply("Use /lineup in a private chat to view your starting XI.");
+  try {
+    const result = await api<{ club: {
+      formation: string;
+      tactics: { mentality: string; pressing: string; tempo: string; passingStyle: string };
+      lineupVersion: number;
+      players: Array<{ id: string; firstName: string; lastName: string; position: string; overall: number; lineupSlot: number }>;
+    } }>("/v1/club/lineup", ctx.from.id);
+    const players = result.club.players.map((player) => `${player.lineupSlot}. ${player.firstName} ${player.lastName} — ${player.position} · OVR ${player.overall}`);
+    await ctx.reply(
+      `Formation: ${result.club.formation} · Version: ${result.club.lineupVersion}\n` +
+      `Tactics: ${result.club.tactics.mentality}, ${result.club.tactics.pressing}, ${result.club.tactics.tempo}, ${result.club.tactics.passingStyle}\n\n` +
+      (players.join("\n") || "No starting XI configured.") +
+      "\n\nUse /players to find IDs, then /setlineup FORMATION ID1 ... ID11.\nFormations: 4-3-3, 4-4-2, 3-5-2, 4-2-3-1",
+    );
+  } catch (error) {
+    await ctx.reply(`Could not load lineup: ${error instanceof Error ? error.message : "unknown error"}`);
+  }
+});
+
+bot.command("setlineup", async (ctx) => {
+  if (!ctx.from) return;
+  if (ctx.chat.type !== "private") return ctx.reply("Use /setlineup in a private chat to change your starting XI.");
+  const parts = String(ctx.match ?? "").trim().split(/\\s+/);
+  const [formation, ...playerIds] = parts;
+  if (!formation || playerIds.length !== 11) {
+    return ctx.reply("Usage: /setlineup 4-3-3 PLAYER_ID_1 ... PLAYER_ID_11\nSupported: 4-3-3, 4-4-2, 3-5-2, 4-2-3-1");
+  }
+  try {
+    const current = await api<{ club: { lineupVersion: number } }>("/v1/club/lineup", ctx.from.id);
+    await api("/v1/club/lineup", ctx.from.id, "PUT", {
+      formation, playerIds, expectedVersion: current.club.lineupVersion,
+    });
+    await ctx.reply("Starting XI and formation saved. Use /lineup to review your setup.");
+  } catch (error) {
+    await ctx.reply(`Could not save lineup: ${error instanceof Error ? error.message : "unknown error"}`);
+  }
 });
 
 bot.command("market", async (ctx) => {
