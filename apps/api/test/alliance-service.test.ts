@@ -10,9 +10,9 @@ test("alliance season close enforces its end date, calculates seasonal net point
     return;
   }
   const suffix = randomUUID().replaceAll("-", "");
-  const reviewerTelegramId = "reviewer-" + suffix;
-  const memberTelegramId = "member-" + suffix;
-  const groupTelegramId = "-100" + suffix.slice(0, 12);
+  const reviewerTelegramId = (BigInt("0x" + suffix.slice(0, 12)) + 10000000000n).toString();
+  const memberTelegramId = (BigInt("0x" + suffix.slice(12, 24)) + 20000000000n).toString();
+  const groupTelegramId = "-100" + (BigInt("0x" + suffix.slice(24, 36)) + 30000000000n).toString();
   const now = new Date();
   const startsAt = new Date(now.getTime() - 3 * 86400000);
   const endsAt = new Date(now.getTime() - 86400000);
