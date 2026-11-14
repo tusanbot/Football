@@ -84,6 +84,32 @@ enum AcademyProspectStatus {
   RELEASED
 }
 
+enum MatchStatus {
+  SCHEDULED
+  COMPLETED
+  CANCELLED
+}
+
+enum MatchType {
+  FRIENDLY
+  LEAGUE
+}
+
+enum MatchEventType {
+  GOAL
+  YELLOW_CARD
+  RED_CARD
+  INJURY
+}
+
+enum CompetitionStatus {
+  DRAFT
+  REGISTRATION
+  ACTIVE
+  COMPLETED
+  CANCELLED
+}
+
 model User {
   id                 String              @id @default(cuid())
   telegramId         String              @unique
@@ -138,6 +164,10 @@ model Club {
   academyProspects AcademyProspect[]
   financeEntries ClubFinanceEntry[]
   economyTicks ClubEconomyTick[]
+  homeMatches FootballMatch[] @relation("MatchHomeClub")
+  awayMatches FootballMatch[] @relation("MatchAwayClub")
+  competitionEntries CompetitionEntry[]
+  matchPerformances PlayerMatchPerformance[]
 }
 
 model Player {
@@ -171,6 +201,7 @@ model Player {
   marketListings  PlayerMarketListing[]
   trainingLogs    PlayerTrainingLog[]
   contractRenewals PlayerContractRenewal[]
+  matchPerformances PlayerMatchPerformance[]
 
   @@index([clubId, status])
   @@index([clubId, position])
@@ -334,6 +365,111 @@ model ClubEconomyTick {
   club        Club     @relation(fields: [clubId], references: [id], onDelete: Cascade)
   @@unique([clubId, gameDate])
   @@index([gameDate])
+}
+
+model Competition {
+  id          String @id @default(cuid())
+  name        String
+  season      Int
+  status      CompetitionStatus @default(REGISTRATION)
+  maxTeams    Int @default(8)
+  createdByClubId String
+  startsAt    DateTime?
+  completedAt DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  entries     CompetitionEntry[]
+  matches     FootballMatch[]
+  @@index([status, createdAt])
+}
+
+model CompetitionEntry {
+  id            String @id @default(cuid())
+  competitionId String
+  clubId        String
+  played        Int @default(0)
+  won           Int @default(0)
+  drawn         Int @default(0)
+  lost          Int @default(0)
+  goalsFor      Int @default(0)
+  goalsAgainst  Int @default(0)
+  points        Int @default(0)
+  joinedAt      DateTime @default(now())
+  competition   Competition @relation(fields: [competitionId], references: [id], onDelete: Cascade)
+  club          Club @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  @@unique([competitionId, clubId])
+  @@index([competitionId, points, goalsFor])
+}
+
+model FootballMatch {
+  id             String @id @default(cuid())
+  idempotencyKey String @unique
+  type           MatchType @default(FRIENDLY)
+  status         MatchStatus @default(SCHEDULED)
+  homeClubId     String
+  awayClubId     String
+  competitionId  String?
+  round          Int?
+  scheduledAt    DateTime
+  startedAt      DateTime?
+  completedAt    DateTime?
+  seed           String
+  homeScore      Int?
+  awayScore      Int?
+  attendance     Int @default(0)
+  ticketRevenue  BigInt @default(0)
+  homeExpectedGoals Float?
+  awayExpectedGoals Float?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  homeClub       Club @relation("MatchHomeClub", fields: [homeClubId], references: [id], onDelete: Restrict)
+  awayClub       Club @relation("MatchAwayClub", fields: [awayClubId], references: [id], onDelete: Restrict)
+  competition    Competition? @relation(fields: [competitionId], references: [id], onDelete: SetNull)
+  events         MatchEvent[]
+  performances  PlayerMatchPerformance[]
+  @@index([homeClubId, scheduledAt, status])
+  @@index([awayClubId, scheduledAt, status])
+  @@index([competitionId, round])
+  @@index([status, scheduledAt])
+}
+
+model MatchEvent {
+  id               String @id @default(cuid())
+  matchId          String
+  sequence         Int
+  minute           Int
+  type             MatchEventType
+  teamId           String
+  playerId         String
+  relatedPlayerId  String?
+  detail           String
+  createdAt        DateTime @default(now())
+  match            FootballMatch @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  @@unique([matchId, sequence])
+  @@index([matchId, minute])
+}
+
+model PlayerMatchPerformance {
+  id           String @id @default(cuid())
+  matchId      String
+  playerId     String
+  clubId       String
+  minutesPlayed Int @default(90)
+  goals        Int @default(0)
+  assists      Int @default(0)
+  shots        Int @default(0)
+  passes       Int @default(0)
+  tackles      Int @default(0)
+  yellowCards  Int @default(0)
+  redCards     Int @default(0)
+  rating       Float
+  fitnessLoss  Int
+  match        FootballMatch @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  player       Player @relation(fields: [playerId], references: [id], onDelete: Restrict)
+  club         Club @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  @@unique([matchId, playerId])
+  @@index([clubId, matchId])
+  @@index([playerId, matchId])
 }
 
 model SpecialPlayer {
