@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   advancePlayerDailyState,
+  applyAnnualAgeing,
   calculateInjuryChanceBasisPoints,
   calculatePlayerOverall,
   calculateTrainingResult,
@@ -88,4 +89,11 @@ test("contract demand stays within a deterministic wage range", () => {
   });
   assert.ok(demand.minimumWeeklyWage >= 150n);
   assert.equal(demand.maximumWeeklyWage, demand.minimumWeeklyWage * 2n);
+});
+
+test("annual ageing gradually reduces pace and physical attributes", () => {
+  const result = applyAnnualAgeing("ST", attributes, 33, 2);
+  assert.equal(result.attributes.pace, attributes.pace - 3);
+  assert.equal(result.attributes.physical, attributes.physical - 3);
+  assert.ok(result.overall <= calculatePlayerOverall("ST", attributes));
 });
