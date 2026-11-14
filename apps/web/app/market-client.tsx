@@ -698,7 +698,7 @@ export default function MarketPage() {
             <small>{new Date(season.startsAt).toLocaleDateString("fa-IR")} تا {new Date(season.endsAt).toLocaleDateString("fa-IR")}</small>
             {season.standings?.map(row=><small key={row.rank}>{row.rank}. {row.group} · {money(row.points)} امتیاز</small>)}
             {season.securityFlags?.map((flag,index)=><small key={flag.code+flag.groupId+index}>هشدار امنیتی: {flag.group} · تمرکز {flag.sharePercent}% امتیاز نزد یک عضو</small>)}
-            {allianceWorkspace.alliance.canReview && season.reviewStatus==="FLAGGED" && <div className="operation-row">
+            {allianceWorkspace.alliance?.canReview && season.reviewStatus==="FLAGGED" && <div className="operation-row">
               <button disabled={!!busy} onClick={()=>void action("alliance-review-approve-"+season.id,"/v1/alliances/"+encodeURIComponent(selectedGroupTelegramId)+"/seasons/"+season.id+"/review","POST",{decision:"APPROVE"})}>تأیید پس از بررسی</button>
               <button className="secondary" disabled={!!busy} onClick={()=>void action("alliance-review-reject-"+season.id,"/v1/alliances/"+encodeURIComponent(selectedGroupTelegramId)+"/seasons/"+season.id+"/review","POST",{decision:"REJECT"})}>رد جایزه</button>
             </div>}
