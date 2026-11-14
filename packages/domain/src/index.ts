@@ -12,3 +12,5 @@ export interface GameCommandContext { principal: GamePrincipal; idempotencyKey: 
 
 export * from "./economy.js";
 export * from "./players.js";
+
+export * from "./lineup.js";
