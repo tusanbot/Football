@@ -292,6 +292,8 @@ export async function scoutAcademy(userId: string, idempotencyKey: string, now =
     if (!club) throw new ClubOperationsError("CLUB_NOT_FOUND");
     if (await replayCheck(tx, userId, club.id, idempotencyKey, reason)) return { prospects: [], replayed: true };
     if (club.academyLevel < 1) throw new ClubOperationsError("ACADEMY_NOT_BUILT");
+    const activeProspects = await tx.academyProspect.count({ where: { clubId: club.id, status: "AVAILABLE" } });
+    if (activeProspects + 3 > 12) throw new ClubOperationsError("ACADEMY_CAPACITY_REACHED");
     const cost = calculateAcademyScoutCost(club.academyLevel);
     await debitCash(tx, userId, club.id, cost, idempotencyKey, reason, "ACADEMY_SCOUTING", "Academy scouting network", now);
     const prospects = Array.from({ length: 3 }, () => {
