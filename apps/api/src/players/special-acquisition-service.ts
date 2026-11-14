@@ -47,6 +47,7 @@ export async function acquireSpecialPlayer(userId: string, method: SpecialPackMe
       });
       return {
         acquisitionId: previous.id,
+        method: previous.method,
         playerId: previous.playerId,
         specialPlayer: {
           id: previous.specialPlayer.id,
@@ -140,6 +141,7 @@ export async function acquireSpecialPlayer(userId: string, method: SpecialPackMe
 
     return {
       acquisitionId: acquisition.id,
+      method,
       playerId: player.id,
       specialPlayer: {
         id: selected.id,
