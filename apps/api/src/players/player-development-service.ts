@@ -146,6 +146,16 @@ export async function settleClubDailyState(userId: string, now = new Date()) {
           arrearsBefore: club.wageArrears, totalDue, cashPaid, arrearsAfter, playersCount,
         },
       });
+      if (cashPaid > 0n) {
+        await tx.clubFinanceEntry.create({
+          data: {
+            idempotencyKey: `club-finance-payroll:${club.id}:${payrollDate.toISOString().slice(0, 10)}`,
+            clubId: club.id, category: "PLAYER_AND_COACH_PAYROLL", direction: "DEBIT",
+            amount: cashPaid, description: `Weekly payroll cash paid; total due ${totalDue}`,
+            occurredAt: payrollDate,
+          },
+        });
+      }
       nextPayrollAt = payrollDate;
       nextWageArrears = arrearsAfter;
       if (arrearsAfter > 0n && totalDue > 0n) {
