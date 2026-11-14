@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { simulateFootballMatch, type MatchSide } from "./match-engine.js";
+import { simulateFootballMatch, simulatePenaltyShootout, type MatchSide } from "./match-engine.js";
 
 function side(clubId: string, overall: number): MatchSide {
   const positions = ["GK","RB","CB","CB","LB","CDM","CM","CAM","RW","ST","LW"] as const;
@@ -43,4 +43,14 @@ test("match simulation rejects invalid sides", () => {
   assert.throws(() => simulateFootballMatch({
     seed: "short", home: incomplete, away: side("away", 60),
   }), /MATCH_REQUIRES_ELEVEN_PLAYERS/);
+});
+
+test("penalty shootout is deterministic and always resolves a winner", () => {
+  const input = { seed: "cup-final-001", home: side("home", 72), away: side("away", 65) };
+  const first = simulatePenaltyShootout(input);
+  const replay = simulatePenaltyShootout(input);
+  assert.deepEqual(first, replay);
+  assert.notEqual(first.homePenalties, first.awayPenalties);
+  assert.ok(first.homePenalties >= 0 && first.awayPenalties >= 0);
+  assert.equal(first.winner, first.homePenalties > first.awayPenalties ? "HOME" : "AWAY");
 });
