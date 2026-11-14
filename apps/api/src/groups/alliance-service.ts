@@ -6,14 +6,15 @@ export class AllianceServiceError extends Error {
   constructor(readonly code: string) { super(code); this.name = "AllianceServiceError"; }
 }
 
-async function manager(tx: Prisma.TransactionClient, telegramId: string, telegramGroupId: string) {
+async function manager(tx: Prisma.TransactionClient, telegramId: string, telegramGroupId: string, requireManager = true) {
   const user = await tx.user.findUnique({ where: { telegramId }, select: { id: true, club: { select: { id: true, name: true } } } });
   if (!user) throw new AllianceServiceError("ACCOUNT_NOT_FOUND");
   if (!user.club) throw new AllianceServiceError("CLUB_NOT_FOUND");
   const group = await tx.telegramGroup.findUnique({ where: { telegramId: telegramGroupId }, select: { id: true, telegramId: true, title: true, isActive: true, memberships: { where: { userId: user.id }, select: { role: true } } } });
   if (!group) throw new AllianceServiceError("GROUP_NOT_REGISTERED");
   if (!group.isActive) throw new AllianceServiceError("GROUP_INACTIVE");
-  if (!group.memberships.length || group.memberships[0]!.role === "MEMBER") throw new AllianceServiceError("GROUP_MANAGER_REQUIRED");
+  if (!group.memberships.length) throw new AllianceServiceError("NOT_GROUP_MEMBER");
+  if (requireManager && group.memberships[0]!.role === "MEMBER") throw new AllianceServiceError("GROUP_MANAGER_REQUIRED");
   return { user, group };
 }
 
@@ -68,7 +69,7 @@ export async function respondAllianceInvitation(i: { telegramUserId: string; tel
 }
 
 export async function getAllianceWorkspace(telegramUserId: string, telegramGroupId: string) {
-  const { group } = await prisma.$transaction(tx => manager(tx, telegramUserId, telegramGroupId));
+  const { group } = await prisma.$transaction(tx => manager(tx, telegramUserId, telegramGroupId, false));
   const membership = await prisma.allianceGroup.findUnique({ where: { groupId: group.id }, include: { alliance: { include: { groups: { include: { group: { select: { telegramId: true, title: true, memberCount: true, points: true } } }, invitations: { where: { groupId: group.id, status: "PENDING" } }, seasons: { orderBy: { number: "desc" }, take: 5 }, competitions: { where: { status: { in: ["REGISTRATION", "ACTIVE", "COMPLETED"] } }, include: { _count: { select: { entries: true } }, entries: { include: { club: { select: { name: true } } }, orderBy: [{ points: "desc" }, { goalsFor: "desc" }, { goalsAgainst: "asc" }] } }, orderBy: { createdAt: "desc" }, take: 20 } } } } });
   if (!membership) {
     const invitations = await prisma.allianceInvitation.findMany({ where: { groupId: group.id, status: "PENDING" }, include: { alliance: { select: { name: true, description: true } } }, orderBy: { createdAt: "desc" } });
