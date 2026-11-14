@@ -24,14 +24,14 @@ A Telegram-first football management MMO. Telegram Bot, Telegram Mini App and Te
 ## Implemented foundation
 
 - Fastify API, Telegram Mini App `initData` HMAC validation and Telegram bot-to-API shared-secret authentication.
-- User onboarding, primary club, Cash/Gold wallets and ledger foundation.
+- Shared Telegram account provisioning service used by both Mini App `initData` and authenticated Bot onboarding (`/start`); creates the primary club, Cash/Gold wallets, starter ledger grants and 18-player squad atomically.
 - Generated starter squad and authenticated squad/wallet/profile APIs.
 - Special-player catalog (curated real-world footballers) with rarity, gameplay ratings and acquisition-method metadata.
 - Gold-priced Epic, Legendary and Icon packs with server-side random selection, per-club ownership limits, atomic wallet debit, acquisition history and immutable ledger entries.
 - Idempotent special-player catalog seed command.
 - Transfer market for generated players: create/cancel listings, expiry handling, atomic purchase, player ownership transfer and buyer/seller ledger entries.
 - Persian RTL Mini App market interface: browse listings, sell owned players, manage own listings, view special-player catalog and Cash balance.
-- Telegram bot commands: `/players`, `/market`, `/sell PLAYER_ID PRICE`, `/buy LISTING_ID`.
+- Telegram bot commands: `/start` (Bot-only account/club creation), `/players`, `/market`, `/sell PLAYER_ID PRICE`, `/buy LISTING_ID`, `/special`, and `/pack`.
 - Both clients use the same authenticated API; the bot does not implement game/economy rules.
 
 The project is still an early development foundation, not a production-ready game. Group competitions, match simulation, special-player acquisition/reward execution, and comprehensive economy/security/load testing remain in development.
@@ -50,7 +50,7 @@ Set these values for the web app:
 - `NEXT_PUBLIC_API_URL` — public HTTPS API base URL used by the Mini App.
 - `CORS_ORIGIN` — comma-separated allowed web origins for the API.
 
-The Mini App authenticates with Telegram's signed `initData`. Bot requests use the shared `BOT_API_SECRET` plus the Telegram sender ID; keep the secret server-side and use HTTPS between services in production.
+The Mini App authenticates with Telegram's signed `initData`. Bot requests use the shared `BOT_API_SECRET` plus the Telegram sender ID; keep the secret server-side and use HTTPS between services in production. The Bot's private `/start` command provisions the same account/club through `/v1/auth/bot`; it does not require the user to open the Mini App.
 
 ## Database setup
 
