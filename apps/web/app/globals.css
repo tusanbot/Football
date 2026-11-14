@@ -121,3 +121,9 @@ button:disabled { opacity: .55; cursor: not-allowed; }
 @media (max-width: 760px) {
   .operations-grid { grid-template-columns: 1fr; }
 }
+
+.ticket-price-setting { border-top: 1px solid #263b52; padding: 10px 0 14px; }
+.ticket-price-setting label { display: block; color: #c3cfdd; font-size: 13px; }
+.ticket-price-setting input { display: block; width: 100%; margin-top: 7px; padding: 11px 12px; color: #f4f7fb; background: #0b1727; border: 1px solid #30465e; border-radius: 9px; }
+.ticket-price-setting button { width: 100%; margin-top: 9px; }
+.ticket-price-setting p { margin-bottom: 0; }
