@@ -28,7 +28,14 @@ export default function MarketPage() {
   const [cash, setCash] = useState("0");
   const [gold, setGold] = useState("0");
   const [packOffers, setPackOffers] = useState<PackOffer[]>([]);
-  const [lineup, setLineup] = useState<Lineup | null>(null);\n  const [coach, setCoach] = useState<{ name: string; level: number; trainingSkill: number; recoverySkill: number; medicalSkill: number } | null>(null);\n  const [trainingGroundLevel, setTrainingGroundLevel] = useState(1);\n  const [developmentPlayerId, setDevelopmentPlayerId] = useState("");\n  const [trainingFocus, setTrainingFocus] = useState("BALANCED");\n  const [trainingIntensity, setTrainingIntensity] = useState("NORMAL");\n  const [contractLength, setContractLength] = useState("180");\n  const [contractWage, setContractWage] = useState("");
+  const [lineup, setLineup] = useState<Lineup | null>(null);
+  const [coach, setCoach] = useState<{ name: string; level: number; trainingSkill: number; recoverySkill: number; medicalSkill: number } | null>(null);
+  const [trainingGroundLevel, setTrainingGroundLevel] = useState(1);
+  const [developmentPlayerId, setDevelopmentPlayerId] = useState("");
+  const [trainingFocus, setTrainingFocus] = useState("BALANCED");
+  const [trainingIntensity, setTrainingIntensity] = useState("NORMAL");
+  const [contractLength, setContractLength] = useState("180");
+  const [contractWage, setContractWage] = useState("");
   const [formation, setFormation] = useState("4-3-3");
   const [selectedLineupIds, setSelectedLineupIds] = useState<string[]>([]);
   const [tactics, setTactics] = useState({ mentality: "BALANCED", pressing: "MID_BLOCK", tempo: "NORMAL", passingStyle: "MIXED" });
@@ -63,7 +70,16 @@ export default function MarketPage() {
       fetch(API + "/v1/club/development", { headers }),
     ]);
     const [p, w, m, own, s, l, d] = requests;
-    if (p.ok) setPlayers((await p.json()).players);\n    if (d.ok) {\n      const development = (await d.json()).club;\n      setPlayers(development.players);\n      setCoach(development.coach);\n      setTrainingGroundLevel(development.trainingGroundLevel);\n      setDevelopmentPlayerId((current) => development.players.some((player: Player) => player.id === current) ? current : (development.players.find((player: Player) => player.status === "ACTIVE")?.id ?? development.players[0]?.id ?? ""));\n      const chosen = development.players.find((player: Player) => player.id === developmentPlayerId) ?? development.players.find((player: Player) => player.status === "ACTIVE") ?? development.players[0];\n      if (chosen?.minimumWeeklyWage) setContractWage((current) => current || chosen.minimumWeeklyWage);\n    }
+    if (p.ok) setPlayers((await p.json()).players);
+    if (d.ok) {
+      const development = (await d.json()).club;
+      setPlayers(development.players);
+      setCoach(development.coach);
+      setTrainingGroundLevel(development.trainingGroundLevel);
+      setDevelopmentPlayerId((current) => development.players.some((player: Player) => player.id === current) ? current : (development.players.find((player: Player) => player.status === "ACTIVE")?.id ?? development.players[0]?.id ?? ""));
+      const chosen = development.players.find((player: Player) => player.id === developmentPlayerId) ?? development.players.find((player: Player) => player.status === "ACTIVE") ?? development.players[0];
+      if (chosen?.minimumWeeklyWage) setContractWage((current) => current || chosen.minimumWeeklyWage);
+    }
     if (w.ok) { const data = await w.json(); setCash(data.wallets.find((x: { asset: string }) => x.asset === "CASH")?.balance ?? "0"); setGold(data.wallets.find((x: { asset: string }) => x.asset === "GOLD")?.balance ?? "0"); }
     if (m.ok) setListings((await m.json()).listings);
     if (own.ok) setMine((await own.json()).listings);
