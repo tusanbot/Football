@@ -369,6 +369,7 @@ model ClubEconomyTick {
 
 model Competition {
   id          String @id @default(cuid())
+  idempotencyKey String @unique
   name        String
   season      Int
   status      CompetitionStatus @default(REGISTRATION)
