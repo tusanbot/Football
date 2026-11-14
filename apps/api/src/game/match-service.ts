@@ -174,7 +174,7 @@ export async function startLeague(userId: string, competitionId: string, now = n
             club: {
               select: {
                 id: true,
-                players: { where: { lineupSlot: { not: null }, status: "ACTIVE" }, select: { id: true } },
+                players: { where: { status: "ACTIVE" }, select: { id: true, position: true } },
               },
             },
           },
