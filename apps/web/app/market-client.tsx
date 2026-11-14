@@ -59,8 +59,9 @@ export default function MarketPage() {
       fetch(API + "/v1/market/listings", { headers }),
       fetch(API + "/v1/market/my-listings", { headers }),
       fetch(API + "/v1/players/special", { headers }),
+      fetch(API + "/v1/club/lineup", { headers }),
     ]);
-    const [p, w, m, own, s] = requests;
+    const [p, w, m, own, s, l] = requests;
     if (p.ok) setPlayers((await p.json()).players);
     if (w.ok) { const data = await w.json(); setCash(data.wallets.find((x: { asset: string }) => x.asset === "CASH")?.balance ?? "0"); setGold(data.wallets.find((x: { asset: string }) => x.asset === "GOLD")?.balance ?? "0"); }
     if (m.ok) setListings((await m.json()).listings);
