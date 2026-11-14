@@ -19,6 +19,19 @@ type ClubOperations = {
   prospects: Array<{ id: string; firstName: string; lastName: string; age: number; position: string; overall: number; potential: number; recruitmentCost: string }>;
   financeEntries: Array<{ id: string; category: string; direction: string; amount: string; description: string; occurredAt: string }>;
 };
+type MatchRecord = {
+  id: string; type: string; status: string; scheduledAt: string;
+  homeClub: { id: string; name: string }; awayClub: { id: string; name: string };
+  homeScore: number | null; awayScore: number | null; attendance: number; ticketRevenue: string;
+  events: Array<{ minute: number; type: string; detail: string; playerId: string }>;
+};
+type OpenLeague = { id: string; name: string; season: number; status: string; maxTeams: number; teams: number; joined: boolean; isCreator: boolean; creator: string };
+type ClubCompetition = { id: string; name: string; season: number; status: string };
+type LeagueDetails = {
+  competition: { id: string; name: string; season: number; status: string; startsAt: string | null };
+  standings: Array<{ position: number; clubId: string; clubName: string; played: number; won: number; drawn: number; lost: number; goalsFor: number; goalsAgainst: number; goalDifference: number; points: number }>;
+  matches: Array<{ id: string; round: number | null; scheduledAt: string; status: string; homeClub: { id: string; name: string }; awayClub: { id: string; name: string }; homeScore: number | null; awayScore: number | null }>;
+};
 type Lineup = {
   formation: string;
   tactics: { mentality: string; pressing: string; tempo: string; passingStyle: string };
@@ -55,7 +68,7 @@ export default function MarketPage() {
   const [cash, setCash] = useState("0");
   const [gold, setGold] = useState("0");
   const [packOffers, setPackOffers] = useState<PackOffer[]>([]);
-  const [lineup, setLineup] = useState<Lineup | null>(null);
+  const [lineup, setLineup] = useState<Lineup | null>(null);\n  const [matches, setMatches] = useState<MatchRecord[]>([]);\n  const [opponents, setOpponents] = useState<Array<{ id: string; name: string; level: number; reputation: number }>>([]);\n  const [openLeagues, setOpenLeagues] = useState<OpenLeague[]>([]);\n  const [clubCompetitions, setClubCompetitions] = useState<ClubCompetition[]>([]);\n  const [leagueDetail, setLeagueDetail] = useState<LeagueDetails | null>(null);\n  const [leagueName, setLeagueName] = useState("");\n  const [leagueCapacity, setLeagueCapacity] = useState("8");
   const [coach, setCoach] = useState<{ name: string; level: number; trainingSkill: number; recoverySkill: number; medicalSkill: number; weeklySalary: string } | null>(null);
   const [trainingGroundLevel, setTrainingGroundLevel] = useState(1);
   const [weeklyWageBill, setWeeklyWageBill] = useState("0");
@@ -79,7 +92,7 @@ export default function MarketPage() {
   const [busy, setBusy] = useState("");
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
-  const [tab, setTab] = useState<"market" | "club" | "operations" | "lineup" | "development" | "special">("market");
+  const [tab, setTab] = useState<"market" | "club" | "operations" | "lineup" | "development" | "matches" | "special">("market");
 
   const headers = useMemo(() => ({ "content-type": "application/json", "x-telegram-init-data": initData }), [initData]);
 
@@ -103,10 +116,16 @@ export default function MarketPage() {
       fetch(API + "/v1/club/lineup", { headers }),
       fetch(API + "/v1/club/development", { headers }),
       fetch(API + "/v1/club/operations", { headers }),
+      fetch(API + "/v1/matches", { headers }),
+      fetch(API + "/v1/matches/opponents", { headers }),
+      fetch(API + "/v1/competitions", { headers }),
     ]);
-    const [p, w, m, own, s, l, d, o] = requests;
+    const [p, w, m, own, s, l, d, o, matchResponse, opponentResponse, leagueResponse] = requests;
     if (p.ok) setPlayers((await p.json()).players);
     if (o.ok) { const clubOperations = (await o.json()).club as ClubOperations; setOperations(clubOperations); setTicketPriceInput(clubOperations.ticketPrice); }
+    if (matchResponse.ok) { const data = await matchResponse.json(); setMatches(data.matches ?? []); setClubCompetitions(data.competitions ?? []); }
+    if (opponentResponse.ok) setOpponents((await opponentResponse.json()).opponents ?? []);
+    if (leagueResponse.ok) setOpenLeagues((await leagueResponse.json()).competitions ?? []);
     const financeResponse = await fetch(API + "/v1/club/finance?days=30", { headers });
     if (financeResponse.ok) setFinanceSummary(await financeResponse.json());
     if (d.ok) {
@@ -166,7 +185,7 @@ export default function MarketPage() {
       <button className={tab === "club" ? "active" : ""} onClick={() => setTab("club")}>بازار باشگاه</button>
       <button className={tab === "operations" ? "active" : ""} onClick={() => setTab("operations")}>امکانات و اقتصاد</button>
       <button className={tab === "lineup" ? "active" : ""} onClick={() => setTab("lineup")}>ترکیب</button>
-      <button className={tab === "development" ? "active" : ""} onClick={() => setTab("development")}>توسعه بازیکن</button>
+      <button className={tab === "development" ? "active" : ""} onClick={() => setTab("development")}>توسعه بازیکن</button>\n      <button className={tab === "matches" ? "active" : ""} onClick={() => setTab("matches")}>مسابقات و لیگ</button>
       <button className={tab === "special" ? "active" : ""} onClick={() => setTab("special")}>ستاره‌های ویژه</button>
     </nav>
     {message && <div className="notice success">{message}</div>}{error && <div className="notice error">{error}</div>}
