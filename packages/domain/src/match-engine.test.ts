@@ -7,7 +7,7 @@ function side(clubId: string, overall: number): MatchSide {
   return {
     clubId, clubName: clubId, formation: "4-3-3",
     tactics: { mentality: "BALANCED", pressing: "MID_BLOCK", tempo: "NORMAL", passingStyle: "MIXED" },
-    stadiumCapacity: 12000, ticketPrice: 50n, reputation: 20,
+    stadiumCapacity: 12000, ticketPrice: 50n, reputation: 20, coachMedicalSkill: 35,
     players: positions.map((position, index) => ({
       id: clubId + "-p" + index, name: "Player " + index, position, overall,
       morale: 75, fitness: 95,
