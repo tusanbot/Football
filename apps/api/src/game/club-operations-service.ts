@@ -169,11 +169,13 @@ export async function settleClubEconomy(userId: string, now = new Date()) {
             reason: "CLUB_FACILITY_MAINTENANCE", referenceType: "CLUB", referenceId: club.id,
           },
         });
+      }
+      if (operatingCost > 0n) {
         await tx.clubFinanceEntry.create({
           data: {
             idempotencyKey: `club-finance-daily:${club.id}:${today.toISOString().slice(0, 10)}:maintenance`,
             clubId: club.id, category: "FACILITY_MAINTENANCE", direction: "DEBIT",
-            amount: paid, description: `Facility maintenance paid; due ${operatingCost}`, occurredAt: now,
+            amount: operatingCost, description: `Facility maintenance accrued; paid ${paid}`, occurredAt: now,
           },
         });
       }
