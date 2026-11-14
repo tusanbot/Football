@@ -90,7 +90,7 @@ export async function acquireSpecialPlayer(userId: string, method: SpecialPackMe
     });
     if (updated.count !== 1) throw new SpecialAcquisitionError("CONCURRENT_MODIFICATION");
 
-    const [firstName, ...lastParts] = selected.fullName.split(/\\s+/);
+    const [firstName, ...lastParts] = selected.fullName.split(/\s+/);
     const player = await tx.player.create({
       data: {
         clubId: club.id,
