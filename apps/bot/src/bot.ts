@@ -16,7 +16,7 @@ const botApiSecret = process.env.BOT_API_SECRET;
 const bot = new Bot(token);
 
 bot.use(async (ctx, next) => {
-  if (ctx.chat.type === "private" && ctx.message && "text" in ctx.message) {
+  if (ctx.chat?.type === "private" && ctx.message && "text" in ctx.message) {
     const command = resolvePrivateMenuCommand(ctx.message.text);
     if (command) {
       ctx.message.text = `/${command}`;
