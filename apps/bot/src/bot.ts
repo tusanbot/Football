@@ -573,12 +573,12 @@ bot.command("table", async (ctx) => {
   const id = String(ctx.match ?? "").trim().split(/\s+/)[0];
   if (!id) return ctx.reply("Usage: /table COMPETITION_ID");
   try {
-    const result = await api<{ competition: { name: string; status: string }; standings: Array<{ position: number; clubName: string; played: number; won: number; drawn: number; lost: number; goalDifference: number; points: number }> }>(`/v1/competitions/${encodeURIComponent(id)}`, ctx.from.id);
-    const rows = result.standings.map((row) =>
-      `${row.position}. ${row.clubName} · Pts ${row.points} · P ${row.played} · W ${row.won} D ${row.drawn} L ${row.lost} · GD ${row.goalDifference}`,
-    );
-    await ctx.reply(`${result.competition.name} · ${result.competition.status}\n\n${rows.join("\n")}`);
-  } catch (error) { await ctx.reply(`Could not load standings: ${error instanceof Error ? error.message : "unknown error"}`); }
+    const result = await api<{ competition: { name: string; status: string; format: string }; standings: Array<{ position: number; clubName: string; played: number; won: number; drawn: number; lost: number; goalDifference: number; points: number }>; matches: Array<{ round: number | null; homeClub: { name: string }; awayClub: { name: string }; homeScore: number | null; awayScore: number | null; homePenalties: number | null; awayPenalties: number | null }> }>(`/v1/competitions/${encodeURIComponent(id)}`, ctx.from.id);
+    const rows = result.competition.format === "CUP"
+      ? result.matches.map((match) => "Round " + match.round + ": " + match.homeClub.name + " " + (match.homeScore ?? "–") + "–" + (match.awayScore ?? "–") + " " + match.awayClub.name + (match.homePenalties !== null ? " (pens " + match.homePenalties + "–" + match.awayPenalties + ")" : ""))
+      : result.standings.map((row) => row.position + ". " + row.clubName + " · Pts " + row.points + " · P " + row.played + " · W " + row.won + " D " + row.drawn + " L " + row.lost + " · GD " + row.goalDifference);
+    await ctx.reply(result.competition.name + " · " + result.competition.status + "\n\n" + rows.join("\n"));
+  } catch (error) { await ctx.reply("Could not load standings: " + (error instanceof Error ? error.message : "unknown error")); }
 });
 
 bot.catch((error) => console.error("Telegram bot error:", error));
