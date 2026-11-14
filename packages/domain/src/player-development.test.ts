@@ -133,3 +133,12 @@ test("weekly payroll carries unpaid balances forward without overdrawing cash", 
   assert.equal(payroll.cashPaid, 200n);
   assert.equal(payroll.arrearsAfter, 250n);
 });
+
+test("listed players continue losing contract days and listings expire at contract end", () => {
+  const result = advancePlayerDailyState({
+    contractDays: 2, fitness: 40, morale: 60, status: "LISTED", injuryUntil: null,
+  }, 3, new Date("2026-11-14T00:00:00.000Z"), 60);
+  assert.equal(result.contractDays, 0);
+  assert.equal(result.status, "CONTRACT_EXPIRED");
+  assert.ok(result.fitness > 40);
+});
