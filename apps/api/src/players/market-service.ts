@@ -94,6 +94,18 @@ export async function buyMarketListing(userId: string, listingId: string) {
       { idempotencyKey: `market:${listing.id}:buyer`, userId, asset: "CASH", direction: "DEBIT", amount: listing.askingPrice, reason: "PLAYER_MARKET_PURCHASE", referenceType: "PLAYER_MARKET_LISTING", referenceId: listing.id },
       { idempotencyKey: `market:${listing.id}:seller`, userId: listing.sellerClub.ownerId, asset: "CASH", direction: "CREDIT", amount: listing.askingPrice, reason: "PLAYER_MARKET_SALE", referenceType: "PLAYER_MARKET_LISTING", referenceId: listing.id },
     ] });
+    await tx.clubFinanceEntry.createMany({ data: [
+      {
+        idempotencyKey: `club-finance-market:${listing.id}:buyer`, clubId: buyerClub.id,
+        category: "PLAYER_MARKET_PURCHASE", direction: "DEBIT", amount: listing.askingPrice,
+        description: `Transfer purchase: ${listing.player.firstName} ${listing.player.lastName}`,
+      },
+      {
+        idempotencyKey: `club-finance-market:${listing.id}:seller`, clubId: listing.sellerClubId,
+        category: "PLAYER_MARKET_SALE", direction: "CREDIT", amount: listing.askingPrice,
+        description: `Transfer sale: ${listing.player.firstName} ${listing.player.lastName}`,
+      },
+    ] });
 
     return { listingId, playerId: listing.playerId, price: listing.askingPrice.toString(), replayed: false };
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
