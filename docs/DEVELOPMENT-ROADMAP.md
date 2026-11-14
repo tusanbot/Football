@@ -2,7 +2,7 @@
 
 Last reviewed: 2026-11-14
 Branch reviewed: `feat/foundation`
-Reviewed baseline commit: `daa2b124a03c6d61169f897c7bcee54fa705343a`
+Reviewed baseline commit: `3fa0f576d0880caf3c18d56d10eea7bfdc1e9a76` (implementation continues on this branch)
 
 ## Product and architecture principles
 
@@ -26,12 +26,13 @@ Non-negotiable product rules:
 - Bot-to-API shared-secret authentication.
 - User/club onboarding through the Mini App authentication endpoint.
 - Starter wallets and ledger grants.
-- Generated starter squad and authenticated profile, wallet, and squad endpoints.
+- Generated starter squad, strongest-available default XI, and authenticated profile, wallet, squad, lineup and tactics endpoints.
+- Bot-only onboarding through authenticated `/v1/auth/bot` with the same provisioning service as Mini App authentication.
 - Special-player catalog and idempotent seed script.
 - Special-player pack acquisition service with Gold debit, per-club duplicate protection, acquisition history, and ledger entry.
 - Generated-player transfer market with listing, cancellation, purchase, expiry handling, and ledger transfers.
-- A basic Persian RTL Mini App market screen.
-- Basic Bot commands for squad, market, selling, buying, special catalog, and special packs.
+- Persian RTL Mini App market, lineup/tactics and player-development screens.
+- Bot commands for onboarding, club/wallet, squad, lineup, player development, training, contract renewal, market, and special-player acquisition.
 - PostgreSQL Prisma schema includes preliminary Telegram group, membership, and group-challenge models.
 
 ### Important gaps and risks
@@ -43,8 +44,8 @@ Non-negotiable product rules:
 5. **Mini App coverage is narrow.** The current web client is essentially a market screen, not the full club-management game.
 6. **Group gameplay is only a data-model starting point.** There are no complete group registration, challenge lifecycle, invitation/acceptance, scheduling, match resolution, standings, or reward flows.
 7. **The match engine and competition lifecycle are absent.** No fixtures, match simulation, league tables, cups, seasons, or match-event history are implemented.
-8. **Club operations are incomplete.** Stadium, facilities, academy, training, coaches, staff, morale/fitness recovery, contracts, wages, sponsorship, and recurring operating costs do not yet form a complete playable loop.
-9. **Economy operations need a full domain design.** Daily settlement, sponsorship, ticketing, wages, maintenance, training costs, transfer fees, rewards, and administrative tuning need explicit ledger-backed services and idempotent schedules.
+8. **Club operations are incomplete.** Player training, fatigue/recovery, injuries, morale, ageing/retirement, contract renewal/expiry, coach effects, and basic weekly payroll are now implemented. Stadium, training-ground upgrades, academy, coach hiring/progression, sponsorship, ticketing, and broader recurring operating costs remain open.
+9. **Economy operations need further development.** Training costs and weekly payroll are ledger-backed; payroll arrears and morale penalties are tracked. Sponsorship, ticketing, maintenance, facility costs, match rewards, full financial statements, and administrative tuning remain open.
 10. **Security and reliability coverage is early.** Add authorization boundary tests, concurrency/idempotency tests, rate limiting, audit events, input validation, abuse controls, and operational observability.
 11. **The web client needs production-grade state handling.** API errors, loading/empty states, retry behavior, duplicate submissions, and Telegram-unavailable behavior need consistent treatment.
 
@@ -69,7 +70,22 @@ Non-negotiable product rules:
 - Added Bot commands `/lineup` and `/setlineup`, plus starting-XI visibility in `/players`.
 - Added a Mini App lineup/tactics editor using the same API and domain rules.
 
-**Not yet complete:** These are foundation slices, not a complete playable game. Player development, contracts, injuries, club facilities, finance settlement, match simulation, competitions, full group lifecycle, complete Bot/Mini App parity, admin controls, and operational hardening remain open. No Cloudflare Worker, live webhook, production deployment, or real database provisioning has been performed.
+**Not yet complete:** The new player-development lifecycle is a complete foundation slice, not a complete club economy. Coach progression/hiring, facility upgrades, academy, sponsorship/revenue, match simulation, competitions, full group lifecycle, complete Bot/Mini App parity, admin controls, and operational hardening remain open. No Cloudflare Worker, live webhook, production deployment, or real database provisioning has been performed.
+
+### Completed on 2026-11-14 — Player development and lifecycle foundation
+
+- Added shared domain rules for focus-based training, training intensity, positional overall calculation, age/potential/coach/facility effects, fatigue cost, injury probability, annual ageing and retirement.
+- Added server-side training service with one session per player per UTC game day, idempotency protection, atomic Cash debit, immutable ledger entry and training history.
+- Added training eligibility rules; only active players can train, and goalkeeper-only focus cannot be assigned to outfield players.
+- Added coach records provisioned for new and existing clubs. Training, recovery and medical skills affect player growth, recovery and injury risk.
+- Added daily catch-up settlement for contract countdown, fitness recovery, injury recovery, morale, age progression, retirement, and expired market listings. Settlement is lazy/idempotent until scheduled Cloudflare jobs are implemented.
+- Added contract renewals for 90/180/365 days, server-derived wage demand ranges, weekly salary storage, expiry suspension, renewal history and reactivation rules.
+- Added weekly payroll for players and coach, prorated for contract days, applied atomically through the Cash wallet and ledger. Unpaid amounts carry as club wage arrears and reduce player morale.
+- Added Bot commands /development, /train, /renew; expanded /players with status/fitness/morale/contract/wage details.
+- Added Mini App player-development dashboard with attributes, training focus/intensity, training history, injury/fitness/morale status, contract renewal, wage ranges and payroll history.
+- Added domain tests for training, age effects, injury risk, recovery, contract demand and payroll proration/arrears, plus API authentication tests for development endpoints.
+
+**Remaining within this broader phase:** coach hiring and progression, facility upgrades, academy development, sponsorship and revenue streams, and a full financial statement remain part of the next club-operations phase.
 
 ## Recommended development sequence
 
@@ -88,7 +104,7 @@ Non-negotiable product rules:
 
 - Complete onboarding from Bot `/start` without requiring Mini App launch.
 - Add club profile, squad detail, player detail, formation, lineup, and tactics.
-- Add player development, training plans, morale, fitness, injury, and contract lifecycle.
+- Player training, morale, fitness, injuries, ageing, contracts, coach effects and weekly payroll foundation are implemented; extend with training plans, coach progression and player lifecycle balancing.
 - Add manager/coach profile and club progression.
 - Ensure every action is available from both Bot and Mini App (with suitable UX for each).
 
@@ -100,7 +116,7 @@ Non-negotiable product rules:
 - Training ground and academy progression.
 - Coaches, staff, facilities, and upgrade costs.
 - Sponsorship contracts and recurring income.
-- Wages, maintenance, training expenses, contract renewals, and financial statements.
+- Wages, weekly payroll, training costs and contract renewals have a foundation; complete maintenance, sponsor income, ticketing, recurring costs and financial statements.
 - A deterministic, idempotent daily settlement service.
 
 **Exit criteria:** the club has a complete operating and progression loop with a traceable ledger.
