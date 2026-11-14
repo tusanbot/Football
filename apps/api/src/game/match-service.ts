@@ -199,7 +199,30 @@ export async function startLeague(userId: string, competitionId: string, now = n
     }
     if (competition.entries.length < 4) throw new MatchServiceError("LEAGUE_NEEDS_FOUR_TEAMS");
     if (competition.entries.some((entry) => entry.club.players.length < 11 || !entry.club.players.some((player) => player.position === "GK"))) throw new MatchServiceError("ALL_TEAMS_NEED_VALID_LINEUPS");
+    competition.entries.sort((a, b) => a.joinedAt.getTime() - b.joinedAt.getTime());
     const teams = competition.entries.map((entry) => entry.clubId);
+    if (competition.format === "CUP") {
+      if (![4, 8].includes(competition.maxTeams) || teams.length !== competition.maxTeams) {
+        throw new MatchServiceError("CUP_REQUIRES_FULL_FOUR_OR_EIGHT_TEAM_BRACKET");
+      }
+      const firstRoundFixtures = Array.from({ length: teams.length / 2 }, (_, index) => {
+        const homeClubId = teams[index]!;
+        const awayClubId = teams[teams.length - 1 - index]!;
+        const idempotencyKey = `cup:${competition.id}:r1:${homeClubId}:${awayClubId}`;
+        return {
+          homeClubId, awayClubId, round: 1, type: "CUP" as const,
+          competitionId, scheduledAt: new Date(now.getTime() + 3 * DAY_MS),
+          seed: idempotencyKey, idempotencyKey,
+        };
+      });
+      await tx.footballMatch.createMany({ data: firstRoundFixtures });
+      const updated = await tx.competition.updateMany({
+        where: { id: competitionId, status: "REGISTRATION" },
+        data: { status: "ACTIVE", startsAt: firstRoundFixtures[0]!.scheduledAt },
+      });
+      if (updated.count !== 1) throw new MatchServiceError("COMPETITION_NOT_OPEN");
+      return { fixturesCreated: firstRoundFixtures.length, rounds: Math.log2(teams.length), teams: teams.length, replayed: false };
+    }
     const slots: Array<string | null> = [...teams];
     if (slots.length % 2) slots.push(null);
     const rounds = slots.length - 1;
