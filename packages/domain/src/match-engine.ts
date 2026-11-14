@@ -12,7 +12,7 @@ export type MatchPlayer = {
 };
 export type MatchSide = {
   clubId: string; clubName: string; formation: string; tactics: MatchTactics;
-  players: MatchPlayer[]; stadiumCapacity: number; ticketPrice: bigint; reputation: number;
+  players: MatchPlayer[]; stadiumCapacity: number; ticketPrice: bigint; reputation: number; coachMedicalSkill: number;
 };
 export type MatchEventType = "GOAL" | "YELLOW_CARD" | "RED_CARD" | "INJURY";
 export type MatchEvent = {
@@ -144,7 +144,7 @@ export function simulateFootballMatch(input: {
         if (red) { line.redCards++; line.rating -= 1.25; } else { line.yellowCards++; line.rating -= 0.35; }
       }
     }
-    if (rng() < 0.12) {
+    const injuryChance = clamp(0.13 + (side.tactics.pressing === "HIGH_PRESS" ? 0.04 : side.tactics.pressing === "LOW_BLOCK" ? -0.02 : 0) - side.coachMedicalSkill * 0.0007, 0.03, 0.2);\n    if (rng() < injuryChance) {
       const player = choose(side.players.filter((p) => p.position !== "GK"), rng);
       const minute = 8 + Math.floor(rng() * 80);
       addEvent({ minute, type: "INJURY", teamId: side.clubId, playerId: player.id, detail: "Player suffered an in-match injury." });
