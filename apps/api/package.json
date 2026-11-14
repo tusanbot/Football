@@ -10,7 +10,8 @@
     "test": "tsx --test test/*.test.ts",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
-    "db:seed:special": "tsx prisma/seed-special-players.ts"
+    "db:seed:special": "tsx prisma/seed-special-players.ts",
+    "db:migrate:deploy": "prisma migrate deploy"
   },
   "dependencies": {
     "@fastify/cors": "^10.0.2",
