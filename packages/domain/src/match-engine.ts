@@ -196,7 +196,9 @@ export function simulateFootballMatch(input: {
       return true;
     };
 
-    if (injuredPlayer) performSubstitution(injuredPlayer, Math.min(89, Math.max(8, injuryMinute)));
+    if (injuredPlayer && !sentOff.has(injuredPlayer.id)) {
+      performSubstitution(injuredPlayer, Math.min(89, Math.max(8, injuryMinute)));
+    }
     const availableOutfield = side.players.filter((player) =>
       player.position !== "GK" && !sentOff.has(player.id) && !substitutedOut.has(player.id)
       && player.id !== injuredPlayer?.id,
