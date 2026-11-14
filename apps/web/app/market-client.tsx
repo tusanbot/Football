@@ -92,7 +92,7 @@ export default function MarketPage() {
       setTactics(currentLineup.tactics);
       setSelectedLineupIds([...currentLineup.players].sort((a, b) => a.lineupSlot - b.lineupSlot).map((player) => player.id));
     }
-  }, [headers, initData]);
+  }, [headers, initData, developmentPlayerId]);
 
   useEffect(() => {
     const data = window.Telegram?.WebApp?.initData ?? "";
@@ -107,7 +107,7 @@ export default function MarketPage() {
     try {
       const response = await fetch(API + path, { method, headers, ...(body ? { body: JSON.stringify(body) } : {}) });
       const data = await response.json();
-      if (!response.ok) throw new Error(data.error ?? "درخواست ناموفق بود");
+      if (!response.ok) { const detail = data.details?.minimumWeeklyWage ? ` (حداقل ${money(data.details.minimumWeeklyWage)} و حداکثر ${money(data.details.maximumWeeklyWage)} Cash در هفته)` : ""; throw new Error((data.error ?? "درخواست ناموفق بود") + detail); }
       setMessage(data.training ? `تمرین انجام شد: OVR ${data.training.overallBefore} ← ${data.training.overallAfter}، آمادگی ${data.training.fitnessBefore} ← ${data.training.fitnessAfter}، هزینه ${money(data.training.cashCost)} Cash.${data.training.injuryOccurred ? " بازیکن مصدوم شد و نیاز به استراحت دارد." : ""}` : data.contract ? `قرارداد تمدید شد؛ ${data.contract.contractDays} روز باقی‌مانده و دستمزد هفتگی ${money(data.contract.weeklyWage)} Cash.` : data.acquisition?.specialPlayer?.fullName ? `بازیکن ویژه ${data.acquisition.specialPlayer.fullName} به باشگاه شما اضافه شد.` : "عملیات با موفقیت انجام شد.");
       await load();
       if (data.acquisition?.specialPlayer?.fullName) setPackKeys((current) => { const next = { ...current }; delete next[data.acquisition.method ?? ""]; return next; });
@@ -122,6 +122,7 @@ export default function MarketPage() {
     <nav className="market-tabs">
       <button className={tab === "market" ? "active" : ""} onClick={() => setTab("market")}>بازار بازیکنان</button>
       <button className={tab === "club" ? "active" : ""} onClick={() => setTab("club")}>باشگاه من</button>
+      <button className={tab === "lineup" ? "active" : ""} onClick={() => setTab("lineup")}>ترکیب</button>
       <button className={tab === "development" ? "active" : ""} onClick={() => setTab("development")}>توسعه بازیکن</button>
       <button className={tab === "special" ? "active" : ""} onClick={() => setTab("special")}>ستاره‌های ویژه</button>
     </nav>
@@ -242,7 +243,7 @@ export default function MarketPage() {
               </label>
               <label>شدت تمرین
                 <select value={trainingIntensity} onChange={(e) => setTrainingIntensity(e.target.value)}>
-                  <option value="LIGHT">سبک · ۲۰ Cash</option><option value="NORMAL">عادی · ۴۰ Cash</option><option value="INTENSE">سنگین · ۷۰ Cash</option>
+                  <option value="LIGHT">سبک · {Math.round(20 * (1 + (trainingGroundLevel - 1) * 0.1))} Cash</option><option value="NORMAL">عادی · {Math.round(40 * (1 + (trainingGroundLevel - 1) * 0.1))} Cash</option><option value="INTENSE">سنگین · {Math.round(70 * (1 + (trainingGroundLevel - 1) * 0.1))} Cash</option>
                 </select>
               </label>
             </div>
