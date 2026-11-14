@@ -711,7 +711,11 @@ bot.command("alliance-season-start",async ctx=>{
 });
 bot.command("alliance-season-close",async ctx=>{
   if(!ctx.from||!["group","supergroup"].includes(ctx.chat.type))return;
-  try { const d=await api<{standings:Array<{rank:number;group:string;points:string}>}>("/v1/alliances/"+encodeURIComponent(String(ctx.chat.id))+"/seasons/close",ctx.from.id,"POST"); await ctx.reply("جدول نهایی فصل:\n"+d.standings.map(x=>x.rank+". "+x.group+" · "+x.points+" امتیاز").join("\n")); }
+  try {
+    const d=await api<{standings:Array<{rank:number;group:string;points:string}>;reviewStatus:string;securityFlags?:Array<{group:string;sharePercent:number}>;winner?:string|null;prize?:string}>("/v1/alliances/"+encodeURIComponent(String(ctx.chat.id))+"/seasons/close",ctx.from.id,"POST");
+    const status=d.reviewStatus==="FLAGGED"?"\nجایزه تا بررسی امنیتی مسدود شد. هشدارها: "+(d.securityFlags??[]).map(x=>x.group+" ("+x.sharePercent+"%)").join("، "):"\nوضعیت بررسی: تأیید خودکار";
+    await ctx.reply("جدول نهایی فصل:\n"+d.standings.map(x=>x.rank+". "+x.group+" · "+x.points+" امتیاز").join("\n")+status+(d.prize&&d.prize!=="0"?"\nجایزه: "+cash(d.prize):""));
+  }
   catch(e){await ctx.reply("بستن فصل ناموفق بود: "+(e instanceof Error?e.message:"unknown"));}
 });
 
