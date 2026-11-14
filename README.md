@@ -27,6 +27,7 @@ A Telegram-first football management MMO. Telegram Bot, Telegram Mini App and Te
 - User onboarding, primary club, Cash/Gold wallets and ledger foundation.
 - Generated starter squad and authenticated squad/wallet/profile APIs.
 - Special-player catalog (curated real-world footballers) with rarity, gameplay ratings and acquisition-method metadata.
+- Gold-priced Epic, Legendary and Icon packs with server-side random selection, per-club ownership limits, atomic wallet debit, acquisition history and immutable ledger entries.
 - Idempotent special-player catalog seed command.
 - Transfer market for generated players: create/cancel listings, expiry handling, atomic purchase, player ownership transfer and buyer/seller ledger entries.
 - Persian RTL Mini App market interface: browse listings, sell owned players, manage own listings, view special-player catalog and Cash balance.
