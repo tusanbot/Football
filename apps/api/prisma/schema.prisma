@@ -93,6 +93,7 @@ enum MatchStatus {
 enum MatchType {
   FRIENDLY
   LEAGUE
+  CUP
 }
 
 enum MatchEventType {
