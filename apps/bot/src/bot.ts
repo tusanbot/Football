@@ -27,7 +27,7 @@ async function api<T>(path: string, telegramId: number, method = "GET", body?: u
   return data;
 }
 
-function cash(value: string) { return Number(value).toLocaleString("en-US"); }
+function cash(value: string) { return BigInt(value).toLocaleString("en-US"); }
 function playerName(player: ApiPlayer) { return `${player.firstName} ${player.lastName}`; }
 
 bot.command("start", async (ctx) => {
@@ -57,7 +57,7 @@ bot.command("start", async (ctx) => {
       `Club: ${account.club?.name ?? "Not created"} (Level ${account.club?.level ?? 1})\n` +
       `Starter balance: ${cash(cashBalance)} Cash · ${cash(goldBalance)} Gold\n\n` +
       `You can manage your club directly here or continue in the Mini App.\n\n` +
-      `Commands: /players /market /special /pack /sell /buy`,
+      `Commands: /club /wallet /rename /players /market /special /pack /sell /buy`,
       { reply_markup: keyboard },
     );
   } catch (error) {
@@ -66,8 +66,50 @@ bot.command("start", async (ctx) => {
 });
 
 bot.command("help", async (ctx) => ctx.reply(
-  "Football Empire commands:\n/players — your active squad\n/market — open transfer listings\n/sell PLAYER_ID PRICE — list a generated player\n/buy LISTING_ID — buy a listed player\n/special — view special players and pack prices\n/pack epic|legendary|icon — acquire a special player\n\nSpecial players are not tradeable in the regular market.",
+  "Football Empire commands:\n/club — club profile\n/wallet — Cash and Gold balances\n/rename NEW NAME — rename your club\n/players — your active squad\n/market — open transfer listings\n/sell PLAYER_ID PRICE — list a generated player\n/buy LISTING_ID — buy a listed player\n/special — view special players and pack prices\n/pack epic|legendary|icon — acquire a special player\n\nSpecial players are not tradeable in the regular market.",
 ));
+
+bot.command("club", async (ctx) => {
+  if (!ctx.from) return;
+  if (ctx.chat.type !== "private") return ctx.reply("Use /club in a private chat to view your club.");
+  try {
+    const result = await api<{
+      club: { name: string; level: number; reputation: number; createdAt: string } | null;
+      user: { displayName: string };
+    }>("/v1/me", ctx.from.id);
+    if (!result.club) return ctx.reply("You do not have a club yet. Send /start to create one.");
+    await ctx.reply(
+      `Club: ${result.club.name}\nManager: ${result.user.displayName}\nLevel: ${result.club.level}\nReputation: ${result.club.reputation}\nFounded: ${new Date(result.club.createdAt).toLocaleDateString("en-US")}`,
+    );
+  } catch (error) {
+    await ctx.reply(`Could not load club: ${error instanceof Error ? error.message : "unknown error"}`);
+  }
+});
+
+bot.command("wallet", async (ctx) => {
+  if (!ctx.from) return;
+  if (ctx.chat.type !== "private") return ctx.reply("Use /wallet in a private chat to view your balances.");
+  try {
+    const result = await api<{ wallets: Array<{ asset: "CASH" | "GOLD"; balance: string }> }>("/v1/wallet", ctx.from.id);
+    const balances = result.wallets.map((wallet) => `${wallet.asset}: ${cash(wallet.balance)}`).join("\\n");
+    await ctx.reply(`Your club wallet:\\n${balances || "No wallet balances found."}`);
+  } catch (error) {
+    await ctx.reply(`Could not load wallet: ${error instanceof Error ? error.message : "unknown error"}`);
+  }
+});
+
+bot.command("rename", async (ctx) => {
+  if (!ctx.from) return;
+  if (ctx.chat.type !== "private") return ctx.reply("Use /rename in a private chat to rename your club.");
+  const name = String(ctx.match ?? "").trim();
+  if (name.length < 2 || name.length > 32) return ctx.reply("Usage: /rename NEW CLUB NAME (2–32 characters)");
+  try {
+    const result = await api<{ club: { name: string } }>("/v1/club", ctx.from.id, "PATCH", { name });
+    await ctx.reply(`Your club is now called ${result.club.name}.`);
+  } catch (error) {
+    await ctx.reply(`Could not rename club: ${error instanceof Error ? error.message : "unknown error"}`);
+  }
+});
 
 bot.command("players", async (ctx) => {
   if (!ctx.from) return;
