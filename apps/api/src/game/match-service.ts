@@ -301,7 +301,7 @@ export async function listClubMatches(userId: string) {
   const playerNames = new Map(eventPlayers.map((player) => [player.id, player.firstName + " " + player.lastName]));
   return {
     matches: matches.map((match) => ({
-      id: match.id, type: match.type, status: match.status, scheduledAt: match.scheduledAt.toISOString(),
+      id: match.id, type: match.type, status: match.status, simulationVersion: match.simulationVersion, scheduledAt: match.scheduledAt.toISOString(),
       homeClub: match.homeClub, awayClub: match.awayClub, homeScore: match.homeScore, awayScore: match.awayScore,
       attendance: match.attendance, ticketRevenue: match.ticketRevenue.toString(), round: match.round,
       events: match.events.map((event) => ({
@@ -349,6 +349,7 @@ export async function simulateScheduledMatch(userId: string, matchId: string, no
       };
     }
     if (match.status !== "SCHEDULED") throw new MatchServiceError("MATCH_NOT_SCHEDULED");
+    if (match.simulationVersion !== 1) throw new MatchServiceError("UNSUPPORTED_SIMULATION_VERSION");
     if (match.scheduledAt > now) throw new MatchServiceError("MATCH_NOT_DUE", { scheduledAt: match.scheduledAt.toISOString() });
     const result = simulateFootballMatch({ seed: match.seed, home: toSide(home), away: toSide(away) });
     const claimed = await tx.footballMatch.updateMany({
