@@ -160,9 +160,11 @@ export function simulateFootballMatch(input: {
   const priceFactor = clamp(1.18 - Number(input.home.ticketPrice) / 650, 0.28, 1.08);
   const attendance = Math.min(capacity, Math.max(0, Math.round(capacity * clamp(demand * priceFactor, 0.08, 0.98))));
   const ticketRevenue = BigInt(attendance) * input.home.ticketPrice;
+  const chronologicalEvents = events.sort((a, b) => a.minute - b.minute || a.sequence - b.sequence)
+    .map((event, index) => ({ ...event, sequence: index + 1 }));
   const performanceRows = [...performances.values()].map((line) => ({
     ...line,
     rating: round(clamp(line.rating + (line.goals ? 0.2 : 0) + (line.redCards ? 0 : 0.15), 3, 10)),
   }));
-  return { homeScore, awayScore, attendance, ticketRevenue, events, performances: performanceRows, homeExpectedGoals: round(homeXg), awayExpectedGoals: round(awayXg) };
+  return { homeScore, awayScore, attendance, ticketRevenue, events: chronologicalEvents, performances: performanceRows, homeExpectedGoals: round(homeXg), awayExpectedGoals: round(awayXg) };
 }
