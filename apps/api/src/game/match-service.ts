@@ -120,11 +120,16 @@ export async function createFriendlyMatch(userId: string, opponentClubId: string
 export async function createLeague(userId: string, name: string, maxTeams: number, idempotencyKey: string) {
   keyValid(idempotencyKey);
   const club = await getOwnedClub(userId);
-  const existing = await prisma.competition.findFirst({ where: { name, createdByClubId: club.id, status: "REGISTRATION" } });
-  if (existing) return { competition: existing, replayed: true };
+  const existing = await prisma.competition.findUnique({ where: { idempotencyKey } });
+  if (existing) {
+    if (existing.createdByClubId !== club.id || existing.name !== name || existing.maxTeams !== maxTeams) {
+      throw new MatchServiceError("IDEMPOTENCY_CONFLICT");
+    }
+    return { competition: existing, replayed: true };
+  }
   const competition = await prisma.competition.create({
     data: {
-      name, season: new Date().getUTCFullYear(), maxTeams, createdByClubId: club.id,
+      idempotencyKey, name, season: new Date().getUTCFullYear(), maxTeams, createdByClubId: club.id,
       entries: { create: { clubId: club.id } },
     },
   });
