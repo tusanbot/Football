@@ -821,7 +821,10 @@ model AllianceAuditLog {
   @@index([actorTelegramId, createdAt])
 }
 
-enum GiftCodeRewardType { WALLET GROUP_POINTS }
+enum GiftCodeRewardType {
+  WALLET
+  GROUP_POINTS
+}
 model GiftCode {
  id String @id @default(cuid())
  code String @unique
