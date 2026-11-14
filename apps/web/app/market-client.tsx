@@ -224,6 +224,7 @@ export default function MarketPage() {
             setDevelopmentPlayerId(id);
             const player = players.find((item) => item.id === id);
             if (player?.minimumWeeklyWage) setContractWage(player.minimumWeeklyWage);
+            if (player?.position !== "GK" && trainingFocus === "GOALKEEPING") setTrainingFocus("BALANCED");
           }}>
             <option value="">انتخاب بازیکن</option>
             {players.map((player) => <option key={player.id} value={player.id}>{player.firstName} {player.lastName} · {player.position} · OVR {player.overall} · {player.status}</option>)}
@@ -245,7 +246,7 @@ export default function MarketPage() {
             <div className="lineup-grid">
               <label>تمرکز تمرین
                 <select value={trainingFocus} onChange={(e) => setTrainingFocus(e.target.value)}>
-                  <option value="BALANCED">متعادل</option><option value="GOALKEEPING">دروازه‌بانی</option><option value="DEFENDING">دفاع</option><option value="PASSING">پاس</option><option value="PLAYMAKING">بازی‌سازی</option><option value="DRIBBLING">دریبل</option><option value="SHOOTING">شوت</option><option value="PHYSICAL">قدرت و سرعت</option>
+                  <option value="BALANCED">متعادل</option>{player.position === "GK" && <option value="GOALKEEPING">دروازه‌بانی</option>}<option value="DEFENDING">دفاع</option><option value="PASSING">پاس</option><option value="PLAYMAKING">بازی‌سازی</option><option value="DRIBBLING">دریبل</option><option value="SHOOTING">شوت</option><option value="PHYSICAL">قدرت و سرعت</option>
                 </select>
               </label>
               <label>شدت تمرین
@@ -287,7 +288,7 @@ export default function MarketPage() {
         </div>}
         {players.map((player) => <div className="development-player-row" key={player.id}>
           <div><strong>{player.firstName} {player.lastName}</strong><small>{player.position} · OVR {player.overall} · POT {player.potential}</small></div>
-          <div><strong>{player.fitness ?? 0}%</strong><small>{player.status === "ACTIVE" ? "آماده" : player.status === "INJURED" ? "مصدوم" : "قرارداد تمام‌شده"}</small></div>
+          <div><strong>{player.fitness ?? 0}%</strong><small>{player.status === "ACTIVE" ? "آماده" : player.status === "INJURED" ? "مصدوم" : player.status === "LISTED" ? "در بازار" : "قرارداد تمام‌شده"}</small></div>
         </div>)}
       </div>
     </section>}
