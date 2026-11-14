@@ -56,7 +56,9 @@ test("friendly match simulation settles score, events, fitness, gate revenue and
     assert.equal(match.status, "COMPLETED");
     assert.equal(match.simulationVersion, 1);
     assert.equal(await prisma.matchEvent.count({ where: { matchId: match.id } }), result.events?.length ?? 0);
-    assert.equal(await prisma.playerMatchPerformance.count({ where: { matchId: match.id } }), 22);
+    assert.equal(await prisma.playerMatchPerformance.count({ where: { matchId: match.id } }), 36);
+    assert.ok(await prisma.matchEvent.count({ where: { matchId: match.id, type: "SUBSTITUTION" } }) > 0);
+    assert.ok(await prisma.playerMatchPerformance.count({ where: { matchId: match.id, minutesPlayed: { gt: 0, lt: 90 } } }) > 0);
     const after = await prisma.wallet.findUniqueOrThrow({
       where: { userId_asset: { userId: clubs[0]!.userId, asset: "CASH" } },
     });
