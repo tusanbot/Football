@@ -48,6 +48,7 @@ enum PlayerStatus {
   LISTED
   INJURED
   RETIRED
+  CONTRACT_EXPIRED
 }
 enum SpecialRarity {
   RARE
@@ -60,6 +61,21 @@ enum MarketListingStatus {
   SOLD
   CANCELLED
   EXPIRED
+}
+enum TrainingFocus {
+  BALANCED
+  GOALKEEPING
+  DEFENDING
+  PASSING
+  PLAYMAKING
+  DRIBBLING
+  SHOOTING
+  PHYSICAL
+}
+enum TrainingIntensity {
+  LIGHT
+  NORMAL
+  INTENSE
 }
 
 model User {
@@ -129,6 +145,78 @@ model Player {
   @@unique([clubId, lineupSlot])
   @@index([nationality])
   @@unique([clubId, specialPlayerId])
+}
+
+
+model Coach {
+  id             String   @id @default(cuid())
+  clubId         String   @unique
+  name           String
+  level          Int      @default(1)
+  trainingSkill  Int      @default(35)
+  recoverySkill  Int      @default(30)
+  medicalSkill   Int      @default(25)
+  weeklySalary   BigInt   @default(100)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  club           Club     @relation(fields: [clubId], references: [id], onDelete: Cascade)
+}
+
+model ClubDailyTick {
+  id          String   @id @default(cuid())
+  clubId      String
+  gameDate    DateTime @db.Date
+  elapsedDays Int
+  createdAt   DateTime @default(now())
+  club        Club     @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  @@unique([clubId, gameDate])
+  @@index([gameDate])
+}
+
+model PlayerTrainingLog {
+  id              String           @id @default(cuid())
+  idempotencyKey  String           @unique
+  userId          String
+  clubId          String
+  playerId        String
+  trainingDate    DateTime         @db.Date
+  focus           TrainingFocus
+  intensity       TrainingIntensity
+  cashCost        BigInt
+  overallBefore   Int
+  overallAfter    Int
+  fitnessBefore   Int
+  fitnessAfter    Int
+  attributesBefore Json
+  attributesAfter  Json
+  injuryOccurred  Boolean          @default(false)
+  injuryUntil     DateTime?
+  createdAt       DateTime         @default(now())
+  user            User             @relation(fields: [userId], references: [id], onDelete: Restrict)
+  club            Club             @relation(fields: [clubId], references: [id], onDelete: Restrict)
+  player          Player           @relation(fields: [playerId], references: [id], onDelete: Restrict)
+  @@unique([playerId, trainingDate])
+  @@index([clubId, trainingDate])
+  @@index([userId, createdAt])
+}
+
+model PlayerContractRenewal {
+  id              String   @id @default(cuid())
+  idempotencyKey  String   @unique
+  userId          String
+  clubId          String
+  playerId        String
+  extensionDays   Int
+  oldContractDays Int
+  newContractDays Int
+  oldWage         BigInt
+  newWage         BigInt
+  createdAt       DateTime @default(now())
+  user            User     @relation(fields: [userId], references: [id], onDelete: Restrict)
+  club            Club     @relation(fields: [clubId], references: [id], onDelete: Restrict)
+  player          Player   @relation(fields: [playerId], references: [id], onDelete: Restrict)
+  @@index([clubId, createdAt])
+  @@index([playerId, createdAt])
 }
 
 model SpecialPlayer {
