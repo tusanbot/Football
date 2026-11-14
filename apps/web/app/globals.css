@@ -103,3 +103,21 @@ button:disabled { opacity: .55; cursor: not-allowed; }
 @media (max-width: 680px) {
   .attribute-grid { grid-template-columns: repeat(3,minmax(0,1fr)); }
 }
+
+.operations-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 14px; align-items: start; }
+.operation-stat { display: grid; grid-template-columns: 1fr auto; gap: 6px 12px; align-items: center; border-top: 1px solid #263b52; padding: 13px 0; }
+.operation-stat > span { color: #dce6f2; font-weight: 700; }
+.operation-stat > strong { color: #9ce8c5; font-size: 13px; }
+.operation-stat > button { grid-column: 1 / -1; width: 100%; border: 0; border-radius: 9px; padding: 10px 12px; background: #63d3a5; color: #092018; font-weight: 800; }
+.operation-skills { display: flex; flex-wrap: wrap; gap: 7px; margin: 12px 0; }
+.operation-skills span { border: 1px solid #30465e; border-radius: 8px; padding: 7px 9px; color: #9ce8c5; font-size: 12px; }
+.operation-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; border-top: 1px solid #263b52; padding: 12px 0; }
+.operation-row > div { min-width: 0; }
+.operation-row strong, .operation-row small { display: block; }
+.operation-row small { color: #9fb0c5; font-size: 12px; margin-top: 4px; }
+.operation-row .secondary { flex: 0 0 auto; }
+.finance-credit { color: #8ce0b9; white-space: nowrap; }
+.finance-debit { color: #ffb6c0; white-space: nowrap; }
+@media (max-width: 760px) {
+  .operations-grid { grid-template-columns: 1fr; }
+}
