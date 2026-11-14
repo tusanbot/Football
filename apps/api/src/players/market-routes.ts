@@ -22,7 +22,13 @@ function sendMarketError(reply: FastifyReply, error: unknown) {
   throw error;
 }
 
-export function registerPlayerMarketRoutes(app: FastifyInstance) {\n  app.get("/v1/players/special", async (request, reply) => {\n    const user = await requireTelegramUser(request);\n    if (!user) return reply.code(401).send({ error: "UNAUTHENTICATED" });\n    const players = await prisma.specialPlayer.findMany({ where: { active: true }, orderBy: [{ rarity: "desc" }, { overall: "desc" }], select: { id: true, slug: true, fullName: true, nationality: true, birthDate: true, positions: true, rarity: true, overall: true, potential: true, attributes: true, acquisitionMethods: true } });\n    return { players };\n  });
+export function registerPlayerMarketRoutes(app: FastifyInstance) {
+  app.get("/v1/players/special", async (request, reply) => {
+    const user = await requireTelegramUser(request);
+    if (!user) return reply.code(401).send({ error: "UNAUTHENTICATED" });
+    const players = await prisma.specialPlayer.findMany({ where: { active: true }, orderBy: [{ rarity: "desc" }, { overall: "desc" }], select: { id: true, slug: true, fullName: true, nationality: true, birthDate: true, positions: true, rarity: true, overall: true, potential: true, attributes: true, acquisitionMethods: true } });
+    return { players };
+  });
   app.get("/v1/market/listings", async (request, reply) => {
     const user = await requireTelegramUser(request);
     if (!user) return reply.code(401).send({ error: "UNAUTHENTICATED" });
