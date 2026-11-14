@@ -92,3 +92,14 @@ button:disabled { opacity: .55; cursor: not-allowed; }
   .development-layout { grid-template-columns: 1fr; }
   .development-stats { grid-template-columns: repeat(2,minmax(0,1fr)); }
 }
+
+.attribute-grid { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 7px; margin: 14px 0 18px; }
+.attribute-grid div { padding: 9px 7px; background: #0b1727; border: 1px solid #263b52; border-radius: 9px; text-align: center; }
+.attribute-grid span, .attribute-grid strong { display: block; }
+.attribute-grid span { color: #9fb0c5; font-size: 11px; }
+.attribute-grid strong { margin-top: 4px; color: #9ce8c5; font-size: 16px; }
+.payroll-history { margin-top: 18px; }
+.payroll-history h3 { margin: 0 0 8px; }
+@media (max-width: 680px) {
+  .attribute-grid { grid-template-columns: repeat(3,minmax(0,1fr)); }
+}
