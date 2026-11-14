@@ -535,7 +535,7 @@ bot.command("leagues", async (ctx) => {
     const lines = result.competitions.map((item) =>
       `• ${item.name} · ${item.format === "CUP" ? "Knockout cup" : "League"} · ${item.teams}/${item.maxTeams} clubs · Season ${item.season}${item.joined ? " · joined" : ""}\n  ID: ${item.id}`,
     );
-    await ctx.reply("Open leagues:\n" + (lines.join("\n\n") || "No open leagues.") + "\n\n/joinleague ID");
+    await ctx.reply("Open competitions:\n" + (lines.join("\n\n") || "No open leagues.") + "\n\n/joinleague ID");
   } catch (error) { await ctx.reply(`Could not load leagues: ${error instanceof Error ? error.message : "unknown error"}`); }
 });
 
