@@ -486,7 +486,7 @@ export default function MarketPage() {
         {openLeagues.length === 0 ? <p className="muted">لیگ بازی برای ثبت‌نام باز نیست.</p> : openLeagues.map((league) => <div className="operation-row" key={league.id}>
           <div><strong>{league.name}</strong><small>فصل {league.season} · {league.teams}/{league.maxTeams} باشگاه · سازنده: {league.creator}</small></div>
           {!league.joined ? <button className="secondary" disabled={!!busy || league.teams >= league.maxTeams} onClick={() => void action("join-" + league.id, "/v1/competitions/" + league.id + "/join", "POST", {})}>عضویت</button>
-            : league.isCreator ? <button className="secondary" disabled={!!busy || league.teams < 4} onClick={() => void action("start-" + league.id, "/v1/competitions/" + league.id + "/start", "POST", {})}>شروع لیگ</button>
+            : league.isCreator ? <button className="secondary" disabled={!!busy || (league.format === "CUP" ? league.teams !== league.maxTeams : league.teams < 4)} onClick={() => void action("start-" + league.id, "/v1/competitions/" + league.id + "/start", "POST", {})}>شروع لیگ</button>
               : <span className="muted">عضو هستید</span>}
           <button className="secondary" onClick={() => void viewLeague(league.id)}>جدول</button>
         </div>)}
