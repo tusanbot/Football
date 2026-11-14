@@ -27,10 +27,10 @@ test("every private keyboard button resolves to a registered no-argument command
   assert.equal(new Set(actual).size, expected.length);
 
   const registered = new Set(
-    [...botSource.matchAll(/bot\\.command\\(\\s*["']([^"']+)["']/g)].map((match) => match[1]),
+    [...botSource.matchAll(/bot\.command\(\s*["']([^"']+)["']/g)].map((match) => match[1]),
   );
   for (const command of expected) {
-    assert.ok(registered.has(command), `Reply Keyboard command / ${command} has no bot.command handler`);
+    assert.ok(registered.has(command), "Reply Keyboard command /" + command + " has no bot.command handler");
   }
 });
 
@@ -53,9 +53,8 @@ test("all group commands have an explicit transient or persistent classification
     "group-league-start", "group-league-table", "group-rewards", "group-treasury",
     "group-give", "group-challenge-cancel", "group-leagues", "alliance",
     "alliance-create", "alliance-invite", "alliance-accept", "alliance-decline",
-    "alliance-championship", "alliance-championship-join",
-    "alliance-championship-start", "alliance-season-start", "alliance-season-close",
-    "alliance-season-review", "alliance-contribute",
+    "alliance-championship", "alliance-championship-join", "alliance-championship-start",
+    "alliance-season-start", "alliance-season-close", "alliance-season-review", "alliance-contribute",
   ];
   const classified = new Set([...PERSISTENT_GROUP_COMMANDS, ...TRANSIENT_GROUP_COMMANDS]);
   assert.equal(PERSISTENT_GROUP_COMMANDS.size + TRANSIENT_GROUP_COMMANDS.size, classified.size,
@@ -92,6 +91,6 @@ test("group reply retention middleware is installed before command handlers", ()
 
 test("bot source does not bypass the group reply retention wrapper with direct sends", () => {
   const directSendPattern =
-    /(?:ctx|bot)\\.api\\.(?:sendMessage|sendPhoto|sendDocument|sendVideo|sendAudio|sendAnimation|sendMediaGroup|sendLocation|sendVenue|sendPoll|sendSticker|sendVoice|sendVideoNote)|ctx\\.replyWith(?:Photo|Document|Video|Audio|Animation|MediaGroup|Location|Venue|Poll|Sticker|Voice|VideoNote)/g;
+    /(?:ctx|bot)\.api\.(?:sendMessage|sendPhoto|sendDocument|sendVideo|sendAudio|sendAnimation|sendMediaGroup|sendLocation|sendVenue|sendPoll|sendSticker|sendVoice|sendVideoNote)|ctx\.replyWith(?:Photo|Document|Video|Audio|Animation|MediaGroup|Location|Venue|Poll|Sticker|Voice|VideoNote)/g;
   assert.deepEqual([...botSource.matchAll(directSendPattern)].map((match) => match[0]), []);
 });
