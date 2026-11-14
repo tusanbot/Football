@@ -23,7 +23,7 @@ const sponsorBody = keyBody.extend({ offerId: z.enum(["local-partner", "regional
 function sendOperationsError(reply: FastifyReply, error: unknown) {
   if (!(error instanceof ClubOperationsError)) throw error;
   const status = error.code === "CLUB_NOT_FOUND" || error.code === "PROSPECT_NOT_AVAILABLE" || error.code === "COACH_NOT_FOUND" ? 404
-    : ["INSUFFICIENT_CASH", "CONCURRENT_MODIFICATION", "ACTIVE_SPONSOR_EXISTS", "SPONSOR_OFFER_LOCKED", "ACADEMY_NOT_BUILT", "IDEMPOTENCY_CONFLICT"].includes(error.code) ? 409
+    : ["INSUFFICIENT_CASH", "CONCURRENT_MODIFICATION", "ACTIVE_SPONSOR_EXISTS", "SPONSOR_OFFER_LOCKED", "ACADEMY_NOT_BUILT", "IDEMPOTENCY_CONFLICT", "FACILITY_MAX_LEVEL", "COACH_MAX_LEVEL"].includes(error.code) ? 409
     : 400;
   return reply.code(status).send({ error: error.code, ...(error.details ? { details: error.details } : {}) });
 }
