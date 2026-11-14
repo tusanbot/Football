@@ -50,6 +50,7 @@ CREATE TABLE "FootballMatch" (
   "startedAt" TIMESTAMP(3),
   "completedAt" TIMESTAMP(3),
   "seed" TEXT NOT NULL,
+  "simulationVersion" INTEGER NOT NULL DEFAULT 1,
   "homeScore" INTEGER,
   "awayScore" INTEGER,
   "attendance" INTEGER NOT NULL DEFAULT 0,
