@@ -7,7 +7,7 @@ export class AllianceServiceError extends Error {
   constructor(readonly code: string) { super(code); this.name = "AllianceServiceError"; }
 }
 
-async function manager(tx: Prisma.TransactionClient, telegramId: string, telegramGroupId: string, requireManager = true) {
+async function manager(tx: Prisma.TransactionClient, telegramId: string, telegramGroupId: string, _requireManager = true) {
   const user = await tx.user.findUnique({ where: { telegramId }, select: { id: true, club: { select: { id: true, name: true } } } });
   if (!user) throw new AllianceServiceError("ACCOUNT_NOT_FOUND");
   if (!user.club) throw new AllianceServiceError("CLUB_NOT_FOUND");
@@ -15,7 +15,6 @@ async function manager(tx: Prisma.TransactionClient, telegramId: string, telegra
   if (!group) throw new AllianceServiceError("GROUP_NOT_REGISTERED");
   if (!group.isActive) throw new AllianceServiceError("GROUP_INACTIVE");
   if (!group.memberships.length) throw new AllianceServiceError("NOT_GROUP_MEMBER");
-  if (requireManager && group.memberships[0]!.role === "MEMBER") throw new AllianceServiceError("GROUP_MANAGER_REQUIRED");
   return { user, group };
 }
 
@@ -241,7 +240,7 @@ export async function startAllianceSeason(i: { telegramUserId: string; telegramG
 }
 
 export async function closeAllianceSeason(i: { telegramUserId: string; telegramGroupId: string }) {
-  return prisma.$transaction(async tx => {
+  const result = await prisma.$transaction(async tx => {
     const { group } = await manager(tx, i.telegramUserId, i.telegramGroupId);
     const membership = await tx.allianceGroup.findUnique({ where: { groupId: group.id } });
     if (!membership || membership.role !== "FOUNDER") throw new AllianceServiceError("ALLIANCE_FOUNDER_REQUIRED");
@@ -282,6 +281,21 @@ export async function closeAllianceSeason(i: { telegramUserId: string; telegramG
     const updated = await tx.allianceSeason.findUniqueOrThrow({ where: { id: season.id } });
     return { season: updated, standings: result.standings, replayed: false, reviewStatus, securityFlags: result.securityFlags, ...payout };
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+  if (!result.replayed && result.reviewStatus === "FLAGGED" && process.env.TELEGRAM_BOT_TOKEN) {
+    const alert = "هشدار امنیتی Football Empire\nجایزه فصل به دلیل الگوی مشکوک مسدود شد.\n" +
+      (result.securityFlags ?? []).map((flag: { code: string; group?: string; sharePercent?: number; groups?: Array<{ group: string }> }) =>
+        flag.code === "SINGLE_MEMBER_CONCENTRATION" ? "تمرکز امتیاز در " + flag.group + ": " + flag.sharePercent + "%" :
+        "هم‌پوشانی امتیاز بین گروه‌ها: " + (flag.groups ?? []).map(group => group.group).join("، ")
+      ).join("\n") + "\nبرای بررسی از /alliance-season-review SEASON_ID approve|reject استفاده کنید.";
+    try {
+      const response = await fetch("https://api.telegram.org/bot" + process.env.TELEGRAM_BOT_TOKEN + "/sendMessage", {
+        method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ chat_id: i.telegramGroupId, text: alert }), signal: AbortSignal.timeout(5000),
+      });
+      if (!response.ok) console.warn("Alliance security alert delivery failed:", response.status);
+    } catch (error) { console.warn("Alliance security alert delivery failed:", error); }
+  }
+  return result;
 }
 
 export async function reviewAllianceSeason(i: { telegramUserId: string; telegramGroupId: string; seasonId: string; decision: "APPROVE" | "REJECT" }) {
