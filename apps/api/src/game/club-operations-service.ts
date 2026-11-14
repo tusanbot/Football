@@ -111,7 +111,7 @@ export async function settleClubEconomy(userId: string, now = new Date()) {
       const club = await tx.club.findUnique({
         where: { ownerId: userId },
         select: {
-          id: true, stadiumLevel: true, trainingGroundLevel: true, academyLevel: true,
+          id: true, stadiumLevel: true, ticketPrice: true, trainingGroundLevel: true, academyLevel: true,
           lastEconomyTickAt: true, operatingArrears: true,
           owner: { select: { id: true } },
           sponsors: { where: { status: "ACTIVE" }, select: { id: true, dailyIncome: true, startedAt: true, endsAt: true } },
@@ -226,7 +226,7 @@ export async function getClubOperations(userId: string, now = new Date()) {
   return {
     club: {
       id: club.id, name: club.name, level: club.level, reputation: club.reputation,
-      stadiumLevel: club.stadiumLevel, stadiumCapacity: calculateStadiumCapacity(club.stadiumLevel),
+      stadiumLevel: club.stadiumLevel, stadiumCapacity: calculateStadiumCapacity(club.stadiumLevel), ticketPrice: club.ticketPrice.toString(),
       trainingGroundLevel: club.trainingGroundLevel, academyLevel: club.academyLevel,
       dailyMaintenance: calculateDailyOperatingCost(club).toString(),
       operatingArrears: club.operatingArrears.toString(),
@@ -418,4 +418,18 @@ export async function signClubSponsor(userId: string, offerId: string, idempoten
     });
     return { sponsor: { ...sponsor, dailyIncome: sponsor.dailyIncome.toString(), endsAt: sponsor.endsAt.toISOString() }, replayed: false };
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+}
+
+export async function updateStadiumTicketPrice(
+  userId: string, ticketPrice: bigint, expectedTicketPrice: bigint,
+) {
+  if (ticketPrice < 10n || ticketPrice > 500n) throw new ClubOperationsError("INVALID_TICKET_PRICE");
+  const club = await prisma.club.findUnique({ where: { ownerId: userId }, select: { id: true, ticketPrice: true } });
+  if (!club) throw new ClubOperationsError("CLUB_NOT_FOUND");
+  const updated = await prisma.club.updateMany({
+    where: { id: club.id, ownerId: userId, ticketPrice: expectedTicketPrice },
+    data: { ticketPrice },
+  });
+  if (updated.count !== 1) throw new ClubOperationsError("TICKET_PRICE_CONFLICT");
+  return { ticketPrice: ticketPrice.toString(), previousTicketPrice: club.ticketPrice.toString() };
 }
