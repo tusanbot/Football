@@ -66,7 +66,7 @@ bot.command("start", async (ctx) => {
 });
 
 bot.command("help", async (ctx) => ctx.reply(
-  "Football Empire commands:\n/club — club profile\n/wallet — Cash and Gold balances\n/rename NEW NAME — rename your club\n/players — your active squad\n/market — open transfer listings\n/sell PLAYER_ID PRICE — list a generated player\n/buy LISTING_ID — buy a listed player\n/special — view special players and pack prices\n/pack epic|legendary|icon — acquire a special player\n\nSpecial players are not tradeable in the regular market.",
+  "Football Empire commands:\n/club — club profile\n/wallet — Cash and Gold balances\n/rename NEW NAME — rename your club\n/players — your active squad\n/lineup — view starting XI and tactics\n/setlineup FORMATION ID1 ... ID11 — set your XI\n/market — open transfer listings\n/sell PLAYER_ID PRICE — list a generated player\n/buy LISTING_ID — buy a listed player\n/special — view special players and pack prices\n/pack epic|legendary|icon — acquire a special player\n\nSpecial players are not tradeable in the regular market.",
 ));
 
 bot.command("club", async (ctx) => {
@@ -116,7 +116,7 @@ bot.command("players", async (ctx) => {
   try {
     const result = await api<{ players: ApiPlayer[] }>("/v1/club/players", ctx.from.id);
     if (!result.players.length) return ctx.reply("Your squad is empty. Open the Mini App to complete club setup.");
-    const lines = result.players.map((p) => `• ${playerName(p)} | ${p.position} | OVR ${p.overall} | POT ${p.potential}\n  ID: ${p.id}`);
+    const lines = result.players.map((p) => `• ${playerName(p)} | ${p.position} | OVR ${p.overall} | POT ${p.potential}${p.lineupSlot ? ` | XI #${p.lineupSlot}` : ""}\n  ID: ${p.id}`);
     await ctx.reply("Your active squad:\n\n" + lines.join("\n"));
   } catch (error) { await ctx.reply(`Could not load squad: ${error instanceof Error ? error.message : "unknown error"}`); }
 });
@@ -146,7 +146,7 @@ bot.command("lineup", async (ctx) => {
 bot.command("setlineup", async (ctx) => {
   if (!ctx.from) return;
   if (ctx.chat.type !== "private") return ctx.reply("Use /setlineup in a private chat to change your starting XI.");
-  const parts = String(ctx.match ?? "").trim().split(/\\s+/);
+  const parts = String(ctx.match ?? "").trim().split(/\s+/);
   const [formation, ...playerIds] = parts;
   if (!formation || playerIds.length !== 11) {
     return ctx.reply("Usage: /setlineup 4-3-3 PLAYER_ID_1 ... PLAYER_ID_11\nSupported: 4-3-3, 4-4-2, 3-5-2, 4-2-3-1");
