@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { Prisma } from "@prisma/client";
-import { simulateFootballMatch, type MatchSide, type MatchTactics } from "@football/domain";
+import { calculateStadiumCapacity, simulateFootballMatch, type MatchSide, type MatchTactics } from "@football/domain";
 import { prisma } from "../db.js";
 
 const DAY_MS = 86_400_000;
@@ -50,7 +50,7 @@ function toSide(club: LoadedClub): MatchSide {
   if (selected.length < 11) throw new MatchServiceError("BOTH_CLUBS_NEED_VALID_LINEUPS");
   return {
     clubId: club.id, clubName: club.name, formation: club.formation, tactics: asTactics(club),
-    stadiumCapacity: Math.max(1000, Math.round(1000 * Math.pow(1.35, club.stadiumLevel - 1))),
+    stadiumCapacity: calculateStadiumCapacity(club.stadiumLevel),
     ticketPrice: club.ticketPrice, reputation: club.reputation,
     coachMedicalSkill: club.coach?.medicalSkill ?? 0,
     players: selected.slice(0, 11).map((player) => ({
