@@ -3,6 +3,7 @@ import { z } from "zod";
 import { validateLineup, type Formation, type LineupCandidate } from "@football/domain";
 import { prisma } from "../db.js";
 import { requireTelegramUser } from "../auth/require-telegram-user.js";
+import { settleClubDailyState } from "../players/player-development-service.js";
 
 const clubUpdateSchema = z.object({
   name: z.string().trim().min(2).max(32).regex(/^[\p{L}\p{N} .'-]+$/u),
@@ -56,6 +57,7 @@ export function registerGameRoutes(app: FastifyInstance) {
   app.get("/v1/club/lineup", async (request, reply) => {
     const user = await requireTelegramUser(request);
     if (!user) return reply.code(401).send({ error: "UNAUTHENTICATED" });
+    await settleClubDailyState(user.id);
     const club = await prisma.club.findUnique({
       where: { ownerId: user.id },
       select: {
@@ -79,6 +81,7 @@ export function registerGameRoutes(app: FastifyInstance) {
   app.put("/v1/club/lineup", async (request, reply) => {
     const user = await requireTelegramUser(request);
     if (!user) return reply.code(401).send({ error: "UNAUTHENTICATED" });
+    await settleClubDailyState(user.id);
     const parsed = lineupUpdateSchema.safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ error: "INVALID_LINEUP_REQUEST", details: parsed.error.flatten() });
 
@@ -162,11 +165,12 @@ export function registerGameRoutes(app: FastifyInstance) {
   app.get("/v1/club/players", async (request, reply) => {
     const user = await requireTelegramUser(request);
     if (!user) return reply.code(401).send({ error: "UNAUTHENTICATED" });
+    await settleClubDailyState(user.id);
     const club = await prisma.club.findUnique({ where: { ownerId: user.id }, select: { id: true } });
     if (!club) return reply.code(404).send({ error: "CLUB_NOT_FOUND" });
     const players = await prisma.player.findMany({
-      where: { clubId: club.id, status: "ACTIVE" },
-      orderBy: [{ position: "asc" }, { overall: "desc" }],
+      where: { clubId: club.id, status: { in: ["ACTIVE", "INJURED", "CONTRACT_EXPIRED"] } },
+      orderBy: [{ status: "asc" }, { position: "asc" }, { overall: "desc" }],
       select: { id: true, firstName: true, lastName: true, nationality: true, age: true, position: true, overall: true, potential: true, attributes: true, wage: true, contractDays: true, morale: true, fitness: true, origin: true, status: true, lineupSlot: true },
     });
     return { players: players.map((player) => ({ ...player, wage: player.wage.toString() })), count: players.length };
