@@ -246,7 +246,7 @@ export async function closeAllianceSeason(i: { telegramUserId: string; telegramG
     if (!membership || membership.role !== "FOUNDER") throw new AllianceServiceError("ALLIANCE_FOUNDER_REQUIRED");
     const season = await tx.allianceSeason.findFirst({ where: { allianceId: membership.allianceId }, orderBy: { number: "desc" } });
     if (!season) throw new AllianceServiceError("NO_ACTIVE_SEASON");
-    if (season.status === "COMPLETED") return { season, standings: season.standings, replayed: true, reviewStatus: season.reviewStatus };
+    if (season.status === "COMPLETED") return { season, standings: season.standings, replayed: true, reviewStatus: season.reviewStatus, securityFlags: (season.securityFlags ?? []) as unknown as Array<{ code: string; group?: string; sharePercent?: number; groups?: Array<{ group: string }> }> };
     if (season.status !== "ACTIVE") throw new AllianceServiceError("NO_ACTIVE_SEASON");
     const now = new Date();
     if (season.endsAt > now) throw new AllianceServiceError("SEASON_NOT_ENDED");
