@@ -32,7 +32,7 @@ async function api<T>(path: string, telegramId: number, method = "GET", body?: u
 }
 
 
-async function awardGroupActivity(ctx: { chat: { type: string; id: number }; from?: { id: number } }, activityType: "CHALLENGE_JOIN"|"CHALLENGE_CREATE"|"LEAGUE_JOIN"|"LEAGUE_CREATE"|"MATCH_PLAYED", referenceId: string) {
+async function awardGroupActivity(ctx: { chat: { type: string; id: number }; from: { id: number } | undefined }, activityType: "CHALLENGE_JOIN"|"CHALLENGE_CREATE"|"LEAGUE_JOIN"|"LEAGUE_CREATE"|"MATCH_PLAYED", referenceId: string) {
  if(!ctx.from||!(ctx.chat.type==="group"||ctx.chat.type==="supergroup"))return;
  try{await api(`/v1/groups/${encodeURIComponent(String(ctx.chat.id))}/activity/award`,ctx.from.id,"POST",{activityType,referenceId});}
  catch(error){console.warn("Group activity reward skipped:",error instanceof Error?error.message:error);}
