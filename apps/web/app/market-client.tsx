@@ -31,6 +31,20 @@ declare global { interface Window { Telegram?: { WebApp?: { initData?: string; r
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
 const money = (value: string | number) => new Intl.NumberFormat("en-US").format(Number(value));
 const rarityLabel: Record<string, string> = { ICON: "Icon", LEGENDARY: "Legendary", EPIC: "Epic", RARE: "Rare" };
+const financeCategoryLabel: Record<string, string> = {
+  PLAYER_TRAINING: "تمرین بازیکن",
+  PLAYER_MARKET_PURCHASE: "خرید بازیکن",
+  PLAYER_MARKET_SALE: "فروش بازیکن",
+  SPONSOR_SIGNING_BONUS: "پاداش امضای اسپانسر",
+  SPONSOR_INCOME: "درآمد اسپانسر",
+  FACILITY_MAINTENANCE: "نگهداری امکانات",
+  FACILITY_UPGRADE: "ارتقای امکانات",
+  ACADEMY_SCOUTING: "استعدادیابی",
+  ACADEMY_RECRUITMENT: "جذب استعداد",
+  COACH_SIGNING: "استخدام مربی",
+  COACH_DEVELOPMENT: "ارتقای مربی",
+  PLAYER_AND_COACH_PAYROLL: "پرداخت حقوق",
+};
 
 export default function MarketPage() {
   const [initData, setInitData] = useState("");
@@ -234,7 +248,7 @@ export default function MarketPage() {
         <h2>صورت‌حساب مالی · ۳۰ روز اخیر</h2>
         {financeSummary && <div className="finance-summary"><div><span>درآمد</span><strong>{money(financeSummary.income)} Cash</strong></div><div><span>هزینه پرداخت‌شده</span><strong>{money(financeSummary.expenses)} Cash</strong></div><div><span>خالص</span><strong className={Number(financeSummary.net) >= 0 ? "finance-credit" : "finance-debit"}>{money(financeSummary.net)} Cash</strong></div></div>}
         {!(financeSummary?.entries.length ?? operations.financeEntries.length) ? <p className="muted">هنوز گردش مالی عملیاتی ثبت نشده است.</p> : (financeSummary?.entries ?? operations.financeEntries).map((entry) => <div className="operation-row" key={entry.id}>
-          <div><strong>{entry.description}</strong><small>{new Date(entry.occurredAt).toLocaleDateString("fa-IR")} · {entry.category}</small></div>
+          <div><strong>{entry.description}</strong><small>{new Date(entry.occurredAt).toLocaleDateString("fa-IR")} · {financeCategoryLabel[entry.category] ?? entry.category}</small></div>
           <strong className={entry.direction === "CREDIT" ? "finance-credit" : "finance-debit"}>{entry.direction === "CREDIT" ? "+" : "−"}{money(entry.amount)} Cash</strong>
         </div>)}
       </div>
