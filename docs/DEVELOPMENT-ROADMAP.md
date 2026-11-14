@@ -2,7 +2,7 @@
 
 Last reviewed: 2026-11-14
 Branch reviewed: `feat/foundation`
-Reviewed baseline commit: `3fa0f576d0880caf3c18d56d10eea7bfdc1e9a76` (implementation continues on this branch)
+Reviewed baseline commit: `e5215aca38a875029512c59b05b3e172e40a6fbb`
 
 ## Product and architecture principles
 
@@ -206,7 +206,14 @@ Defer full environment setup, persistent staging database provisioning, end-to-e
 
 ## Current CI note
 
-At commit `daa2b124a03c6d61169f897c7bcee54fa705343a`, the PostgreSQL 16 ephemeral CI run applied all three migrations and the seed command upserted 15 special players. The job then failed because the verification command invoked `prisma db execute` without `--schema` or `--url`. This is a CI verification-command defect, not a migration or seed failure. Keep the correction for the later integration-validation phase.
+The current CI workflow uses an ephemeral PostgreSQL 16 service and now verifies:
+
+- Prisma schema validation and all committed migrations.
+- Special-player catalog seed and exact catalog count.
+- Shared domain build, monorepo TypeScript checks, unit tests, API tests, and production builds.
+- Player lifecycle integration against the ephemeral database, including daily training, idempotent replay, contract renewal, contract expiry, fitness recovery, weekly payroll, ledger debit, and arrears behavior.
+
+The earlier seed-verification command defect at commit `daa2b124a03c6d61169f897c7bcee54fa705343a` was corrected. CI does not connect to a persistent staging or production database; no live Telegram webhook or Cloudflare runtime is exercised yet.
 
 ## Scope and release guardrails
 
