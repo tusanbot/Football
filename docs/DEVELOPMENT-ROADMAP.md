@@ -70,7 +70,7 @@ Non-negotiable product rules:
 - Added Bot commands `/lineup` and `/setlineup`, plus starting-XI visibility in `/players`.
 - Added a Mini App lineup/tactics editor using the same API and domain rules.
 
-**Not yet complete:** The new player-development lifecycle is a complete foundation slice, not a complete club economy. Coach progression/hiring, facility upgrades, academy, sponsorship/revenue, match simulation, competitions, full group lifecycle, complete Bot/Mini App parity, admin controls, and operational hardening remain open. No Cloudflare Worker, live webhook, production deployment, or real database provisioning has been performed.
+**Not yet complete at this point:** Player development was implemented as a foundation slice. Club operations, facilities, academy, sponsorship, match simulation, competitions, full group lifecycle, complete Bot/Mini App parity, admin controls, and operational hardening were still open. No Cloudflare Worker, live webhook, production deployment, or real database provisioning has been performed.
 
 ### Completed on 2026-11-14 — Player development and lifecycle foundation
 
@@ -87,6 +87,23 @@ Non-negotiable product rules:
 
 **Remaining within this broader phase:** coach hiring and progression, facility upgrades, academy development, sponsorship and revenue streams, and a full financial statement remain part of the next club-operations phase.
 
+### Completed on 2026-11-14 — Club facilities, academy, coaches and operating economy
+
+- Added stadium, training-ground and academy levels with server-calculated upgrade costs, maximum-level checks, atomic Cash debits, immutable ledger entries and finance history.
+- Added stadium capacity progression and configurable ticket pricing (10–500 Cash) with optimistic concurrency checks.
+- Added a shared matchday ticket-revenue formula based on stadium capacity, ticket price and server-simulated attendance; actual gate receipts wait for the fixture/match engine so users cannot mint revenue by calling an endpoint.
+- Added academy scouting: each paid scouting operation generates three youth prospects aged 16–18 with positions, attributes, current overall, potential and recruitment cost.
+- Added prospect recruitment into the senior squad with ownership checks, conditional status transition, atomic Cash debit, ledger entry and finance record.
+- Added coach hiring from balanced, youth-development and performance profiles. Hiring fee is debited and the new coach salary/skills feed into the existing training and payroll systems.
+- Added coach progression with bounded skill increases, level caps, upgrade costs and salary changes.
+- Added sponsor offers gated by club level and reputation, signing bonuses, recurring daily income and contract expiry.
+- Added lazy, idempotent UTC club-economy settlement. Sponsor income is credited once; stadium/training/academy maintenance is accrued; available cash is paid without overdraft; unpaid costs carry as operating arrears.
+- Added finance statements with categorized income and expense entries, sponsor receipts, facility maintenance, coach signing/development, academy costs, facility upgrades and paid player/coach payroll.
+- Added authenticated API routes for operations overview, finance statements, facility upgrades, ticket pricing, academy scouting/recruitment, coach hiring/progression and sponsor signing.
+- Added Mini App operations dashboard and Bot commands /operations, /upgrade, /ticket-price, /scout, /recruit, /sponsor, /coach-upgrade, and /hire-coach.
+- Added domain tests for facility costs/capacity, maintenance, academy costs, sponsor unlocks, coach upgrades and matchday ticket calculations, plus an ephemeral-PostgreSQL service test for the operations lifecycle.
+
+**Remaining dependency:** ticket receipts require real fixtures, attendance and completed match results; these are deliberately part of the match-engine phase. Daily operations are currently lazily settled on authenticated reads/actions; Cloudflare Cron/Queues are deferred until the planned runtime phase.
 ## Recommended development sequence
 
 ### Phase 0 — Architecture and contracts
@@ -104,7 +121,7 @@ Non-negotiable product rules:
 
 - Complete onboarding from Bot `/start` without requiring Mini App launch.
 - Add club profile, squad detail, player detail, formation, lineup, and tactics.
-- Player training, morale, fitness, injuries, ageing, contracts, coach effects and weekly payroll foundation are implemented; extend with training plans, coach progression and player lifecycle balancing.
+- Player training, morale, fitness, injuries, ageing, contracts, coach effects and weekly payroll are implemented. Club coach hiring/progression is also implemented; future balancing remains.
 - Add manager/coach profile and club progression.
 - Ensure every action is available from both Bot and Mini App (with suitable UX for each).
 
@@ -112,14 +129,15 @@ Non-negotiable product rules:
 
 ### Phase 2 — Club facilities and operations
 
-- Stadium capacity, upgrades, ticket pricing, attendance, and match-day revenue.
-- Training ground and academy progression.
-- Coaches, staff, facilities, and upgrade costs.
-- Sponsorship contracts and recurring income.
-- Wages, weekly payroll, training costs and contract renewals have a foundation; complete maintenance, sponsor income, ticketing, recurring costs and financial statements.
-- A deterministic, idempotent daily settlement service.
+- Stadium, training-ground and academy upgrades, capacity progression, and ticket-price settings are implemented.
+- Academy scouting, youth prospect generation, recruitment and senior-squad promotion are implemented.
+- Coach hiring and progression are implemented; salary changes feed weekly payroll.
+- Sponsor contracts, signing bonuses, recurring income and contract expiry are implemented.
+- Daily facility maintenance, operating arrears, weekly payroll and categorized financial statements are implemented with ledger-backed cash movements.
+- Daily settlement is deterministic/idempotent but currently lazy; scheduled Cloudflare settlement remains deferred.
+- Match attendance and ticket receipts are dependent on fixtures and the match engine (Phase 3).
 
-**Exit criteria:** the club has a complete operating and progression loop with a traceable ledger.
+**Exit criteria:** core club facilities and recurring operating economy are playable and traceable; matchday income is enabled when the match engine exists.
 
 ### Phase 3 — Match engine and competitions
 
@@ -212,6 +230,7 @@ The current CI workflow uses an ephemeral PostgreSQL 16 service and now verifies
 - Special-player catalog seed and exact catalog count.
 - Shared domain build, monorepo TypeScript checks, unit tests, API tests, and production builds.
 - Player lifecycle integration against the ephemeral database, including daily training, idempotent replay, contract renewal, contract expiry, fitness recovery, weekly payroll, ledger debit, and arrears behavior.
+- Club operations integration against ephemeral PostgreSQL, including facility upgrades, academy scouting/recruitment, coach hiring/progression, sponsor signing, daily income/maintenance settlement and finance entries.
 
 The earlier seed-verification command defect at commit `daa2b124a03c6d61169f897c7bcee54fa705343a` was corrected. CI does not connect to a persistent staging or production database; no live Telegram webhook or Cloudflare runtime is exercised yet.
 
