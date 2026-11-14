@@ -397,9 +397,6 @@ model Competition {
   createdByClubId String
   groupId String?
   group TelegramGroup? @relation(fields: [groupId], references: [id], onDelete: SetNull)
-  allianceId String?
-  alliance Alliance? @relation(fields: [allianceId], references: [id], onDelete: SetNull)
-  allianceSeasonId String?
   startsAt    DateTime?
   completedAt DateTime?
   createdAt   DateTime @default(now())
@@ -408,6 +405,7 @@ model Competition {
   matches     FootballMatch[]
   @@index([status, createdAt])
   @@index([groupId, status])
+  @@index([allianceId])
 }
 
 model CompetitionEntry {
@@ -601,9 +599,6 @@ model TelegramGroup {
   rewardBalances GroupMemberRewardBalance[]
   pointEntries GroupPointLedger[]
   localCompetitions Competition[]
-  createdAlliances Alliance[] @relation("AllianceCreatorGroup")
-  allianceMembership AllianceGroup?
-  allianceInvitations AllianceInvitation[]
   rewardGrants GroupRewardGrant[]
   memberCount Int @default(0)
   isActive Boolean @default(false)
@@ -699,83 +694,4 @@ model GroupRewardGrant {
   item GroupRewardItem @relation(fields: [itemId], references: [id], onDelete: Restrict)
   @@index([groupId, createdAt])
   @@index([recipientUserId, createdAt])
-}
-
-
-enum AllianceStatus {
-  ACTIVE
-  SUSPENDED
-  DISSOLVED
-}
-
-model Alliance {
-  id String @id @default(cuid())
-  slug String @unique
-  name String
-  description String @default("")
-  status AllianceStatus @default(ACTIVE)
-  treasuryPoints BigInt @default(0)
-  createdByGroupId String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  createdByGroup TelegramGroup @relation("AllianceCreatorGroup", fields: [createdByGroupId], references: [id], onDelete: Restrict)
-  groups AllianceGroup[]
-  invitations AllianceInvitation[]
-  seasons AllianceSeason[]
-  competitions Competition[]
-  ledger AllianceLedger[]
-  @@index([status, createdAt])
-}
-
-model AllianceGroup {
-  id String @id @default(cuid())
-  allianceId String
-  groupId String @unique
-  role String @default("MEMBER")
-  joinedAt DateTime @default(now())
-  alliance Alliance @relation(fields: [allianceId], references: [id], onDelete: Cascade)
-  group TelegramGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
-  @@unique([allianceId, groupId])
-  @@index([allianceId, joinedAt])
-}
-
-model AllianceInvitation {
-  id String @id @default(cuid())
-  allianceId String
-  groupId String
-  invitedByGroupId String
-  status String @default("PENDING")
-  createdAt DateTime @default(now())
-  respondedAt DateTime?
-  alliance Alliance @relation(fields: [allianceId], references: [id], onDelete: Cascade)
-  group TelegramGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
-  @@unique([allianceId, groupId])
-  @@index([groupId, status])
-}
-
-model AllianceSeason {
-  id String @id @default(cuid())
-  allianceId String
-  number Int
-  status String @default("ACTIVE")
-  startsAt DateTime @default(now())
-  endsAt DateTime
-  closedAt DateTime?
-  standings Json?
-  createdAt DateTime @default(now())
-  alliance Alliance @relation(fields: [allianceId], references: [id], onDelete: Cascade)
-  @@unique([allianceId, number])
-  @@index([allianceId, status, endsAt])
-}
-
-model AllianceLedger {
-  id String @id @default(cuid())
-  allianceId String
-  idempotencyKey String @unique
-  amount BigInt
-  source String
-  description String
-  createdAt DateTime @default(now())
-  alliance Alliance @relation(fields: [allianceId], references: [id], onDelete: Cascade)
-  @@index([allianceId, createdAt])
 }

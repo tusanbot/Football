@@ -1,8 +1,5 @@
 CREATE TYPE "AllianceStatus" AS ENUM ('ACTIVE', 'SUSPENDED', 'DISSOLVED');
 
-ALTER TABLE "TelegramGroup"
-  ADD COLUMN "createdAlliances_placeholder" BOOLEAN NOT NULL DEFAULT FALSE;
-
 ALTER TABLE "Competition"
   ADD COLUMN "allianceId" TEXT,
   ADD COLUMN "allianceSeasonId" TEXT;
