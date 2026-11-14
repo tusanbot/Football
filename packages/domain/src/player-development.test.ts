@@ -5,6 +5,8 @@ import {
   calculateInjuryChanceBasisPoints,
   calculatePlayerOverall,
   calculateTrainingResult,
+  calculateContractDemand,
+  isTrainingFocusCompatible,
 } from "./player-development.js";
 import type { PlayerAttributes } from "./players.js";
 
@@ -72,4 +74,18 @@ test("expired contracts suspend players until renewed", () => {
   }, 3, new Date("2026-11-14T00:00:00.000Z"), 30);
   assert.equal(result.contractDays, 0);
   assert.equal(result.status, "CONTRACT_EXPIRED");
+});
+
+test("goalkeeping focus is reserved for goalkeepers", () => {
+  assert.equal(isTrainingFocusCompatible("GK", "GOALKEEPING"), true);
+  assert.equal(isTrainingFocusCompatible("ST", "GOALKEEPING"), false);
+  assert.equal(isTrainingFocusCompatible("ST", "SHOOTING"), true);
+});
+
+test("contract demand stays within a deterministic wage range", () => {
+  const demand = calculateContractDemand({
+    age: 21, overall: 60, potential: 80, morale: 90, currentWeeklyWage: 150n,
+  });
+  assert.ok(demand.minimumWeeklyWage >= 150n);
+  assert.equal(demand.maximumWeeklyWage, demand.minimumWeeklyWage * 2n);
 });
