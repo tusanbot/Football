@@ -11,6 +11,7 @@ import {
   signClubSponsor,
   upgradeClubCoach,
   upgradeClubFacility,
+  updateStadiumTicketPrice,
 } from "./club-operations-service.js";
 
 const keySchema = z.string().regex(/^[A-Za-z0-9:_-]{12,128}$/);
@@ -23,7 +24,7 @@ const sponsorBody = keyBody.extend({ offerId: z.enum(["local-partner", "regional
 function sendOperationsError(reply: FastifyReply, error: unknown) {
   if (!(error instanceof ClubOperationsError)) throw error;
   const status = error.code === "CLUB_NOT_FOUND" || error.code === "PROSPECT_NOT_AVAILABLE" || error.code === "COACH_NOT_FOUND" ? 404
-    : ["INSUFFICIENT_CASH", "CONCURRENT_MODIFICATION", "ACTIVE_SPONSOR_EXISTS", "SPONSOR_OFFER_LOCKED", "ACADEMY_NOT_BUILT", "IDEMPOTENCY_CONFLICT", "FACILITY_MAX_LEVEL", "COACH_MAX_LEVEL"].includes(error.code) ? 409
+    : ["INSUFFICIENT_CASH", "CONCURRENT_MODIFICATION", "ACTIVE_SPONSOR_EXISTS", "SPONSOR_OFFER_LOCKED", "ACADEMY_NOT_BUILT", "IDEMPOTENCY_CONFLICT", "FACILITY_MAX_LEVEL", "COACH_MAX_LEVEL", "TICKET_PRICE_CONFLICT"].includes(error.code) ? 409
     : 400;
   return reply.code(status).send({ error: error.code, ...(error.details ? { details: error.details } : {}) });
 }
@@ -64,6 +65,19 @@ export function registerClubOperationsRoutes(app: FastifyInstance) {
         operatingArrears: operations.club.operatingArrears,
         entries: entries.map((entry) => ({ ...entry, amount: entry.amount.toString(), occurredAt: entry.occurredAt.toISOString() })),
       };
+    } catch (error) { return sendOperationsError(reply, error); }
+  });
+
+  app.patch("/v1/club/stadium/ticket-price", async (request, reply) => {
+    const user = await requireTelegramUser(request);
+    if (!user) return reply.code(401).send({ error: "UNAUTHENTICATED" });
+    const body = z.object({
+      ticketPrice: z.string().regex(/^[0-9]{1,3}$/),
+      expectedTicketPrice: z.string().regex(/^[0-9]{1,3}$/),
+    }).safeParse(request.body);
+    if (!body.success) return reply.code(400).send({ error: "INVALID_TICKET_PRICE" });
+    try {
+      return { ticketing: await updateStadiumTicketPrice(user.id, BigInt(body.data.ticketPrice), BigInt(body.data.expectedTicketPrice)) };
     } catch (error) { return sendOperationsError(reply, error); }
   });
 
