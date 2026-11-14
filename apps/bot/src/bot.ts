@@ -113,6 +113,7 @@ bot.command("rename", async (ctx) => {
 
 bot.command("players", async (ctx) => {
   if (!ctx.from) return;
+  if (ctx.chat.type !== "private") return ctx.reply("Use /players in a private chat to view your squad.");
   try {
     const result = await api<{ players: ApiPlayer[] }>("/v1/club/players", ctx.from.id);
     if (!result.players.length) return ctx.reply("Your squad is empty. Open the Mini App to complete club setup.");
@@ -186,6 +187,7 @@ bot.command("special", async (ctx) => {
 
 bot.command("pack", async (ctx) => {
   if (!ctx.from) return;
+  if (ctx.chat.type !== "private") return ctx.reply("Use /pack in a private chat to acquire a special player.");
   const requested = String(ctx.match ?? "").trim().toLowerCase();
   const method = ({ epic: "epic_pack", legendary: "legendary_pack", icon: "icon_pack" } as const)[requested as "epic" | "legendary" | "icon"];
   if (!method) return ctx.reply("Usage: /pack epic|legendary|icon");
@@ -198,6 +200,7 @@ bot.command("pack", async (ctx) => {
 
 bot.command("sell", async (ctx) => {
   if (!ctx.from) return;
+  if (ctx.chat.type !== "private") return ctx.reply("Use /sell in a private chat to list a player.");
   const parts = String(ctx.match ?? "").trim().split(/\s+/);
   const [playerId, price] = parts;
   if (!playerId || !price || !/^[1-9][0-9]{0,14}$/.test(price)) {
@@ -213,6 +216,7 @@ bot.command("sell", async (ctx) => {
 
 bot.command("buy", async (ctx) => {
   if (!ctx.from) return;
+  if (ctx.chat.type !== "private") return ctx.reply("Use /buy in a private chat to buy a player.");
   const listingId = String(ctx.match ?? "").trim().split(/\s+/)[0];
   if (!listingId) return ctx.reply("Usage: /buy LISTING_ID\nUse /market to see available listings.");
   try {
