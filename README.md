@@ -34,7 +34,7 @@ A Telegram-first football management MMO. Telegram Bot, Telegram Mini App and Te
 - Youth academy: paid scouting generates three age-16–18 prospects; prospects have attributes, potential and recruitment costs, and can be recruited into the first team through an atomic wallet/ledger transaction.
 - Coach operations: hire from specialist candidate profiles or invest in coach progression; skills affect training, recovery and injury prevention, and salary changes feed into payroll.
 - Sponsor contracts with reputation/level-gated offers, signing bonuses, daily income, expiry and idempotent accrual.
-- Club finance statements with categorized income/expense entries, daily facility costs, paid weekly payroll, operating arrears and immutable Cash ledger movements.
+- Club finance statements with categorized income/expense entries for training, academy, facilities, coaches, sponsorship, transfer purchases/sales and paid weekly payroll; daily operating arrears and immutable Cash ledger movements.
 - Shared matchday ticket-revenue calculation based on stadium capacity, ticket price and server-simulated attendance; actual gate receipts are intentionally activated with the fixture/match engine.
 - Lazy, idempotent UTC daily settlement for fitness recovery, injury return, morale, contract countdown, annual ageing, listing expiry and weekly payroll.
 - Special-player catalog (curated real-world footballers) with rarity, gameplay ratings and acquisition-method metadata.
