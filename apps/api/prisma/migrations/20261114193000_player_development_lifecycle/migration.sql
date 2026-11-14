@@ -100,3 +100,13 @@ ALTER TABLE "PlayerContractRenewal" ADD CONSTRAINT "PlayerContractRenewal_clubId
   FOREIGN KEY ("clubId") REFERENCES "Club"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 ALTER TABLE "PlayerContractRenewal" ADD CONSTRAINT "PlayerContractRenewal_playerId_fkey"
   FOREIGN KEY ("playerId") REFERENCES "Player"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- Player wages are weekly Cash amounts. Rebase legacy generated salaries so
+-- starter clubs can afford renewals and future wage settlement.
+UPDATE "Player"
+SET "wage" = GREATEST(50, "overall" * 2 + ("potential" - "overall") * 3 + CASE WHEN "age" < 21 THEN 20 ELSE 0 END)
+WHERE "origin" = 'GENERATED';
+
+UPDATE "Player"
+SET "wage" = "overall" * 3
+WHERE "origin" = 'SPECIAL';
