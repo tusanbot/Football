@@ -143,7 +143,7 @@ Non-negotiable product rules:
 
 **Implemented foundation on `feat/foundation`:**
 - Deterministic 90-minute simulation with persisted engine version and seed, team/tactical/coach strength, expected goals and reproducible results.
-- Chronological goal, yellow-card, red-card and injury events; per-player goals, assists, shots, passes, tackles, ratings and fitness loss.
+- Chronological goal, yellow-card, red-card, injury and substitution events; up to seven bench players, automatic role-compatible substitutions, realistic minutes played, and per-player goals, assists, shots, passes, tackles, ratings and fitness loss.
 - Friendly opponent discovery, scheduled fixtures, participant authorization, match history and post-match reports.
 - Matchday attendance and gate revenue based on stadium capacity, ticket price, club reputation and team strength.
 - Atomic match settlement: player fitness/injury updates, lineup version changes, reputation, appearance/win/draw rewards, Cash ledger and club finance entries.
@@ -153,7 +153,7 @@ Non-negotiable product rules:
 
 **Still outstanding:**
 - Two-leg cups, promotion/relegation and multi-division season administration.
-- Substitutions, tactical in-match changes, richer commentary and more detailed match reports.
+- Manager-configured substitution plans, tactical in-match changes, richer commentary and more detailed match reports.
 - Season reset/rollover, scheduled match workers and group-hosted competitions (Phase 5).
 - Balance simulations across large player populations and load/security testing.
 
