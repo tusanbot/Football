@@ -203,3 +203,43 @@ export function calculateContractDemand(player: ContractDemandInput) {
   const maximumWeeklyWage = minimumWeeklyWage * 2n;
   return { minimumWeeklyWage, maximumWeeklyWage };
 }
+
+export interface PayrollPlayerInput {
+  weeklyWage: bigint;
+  contractDays: number;
+  status: "ACTIVE" | "INJURED" | "CONTRACT_EXPIRED" | "LISTED" | "RETIRED";
+}
+
+export function calculatePayrollSettlement(input: {
+  players: readonly PayrollPlayerInput[];
+  coachWeeklyWage: bigint;
+  elapsedDays: number;
+  weeksCovered: number;
+  arrearsBefore: bigint;
+  cashAvailable: bigint;
+}) {
+  if (!Number.isInteger(input.elapsedDays) || input.elapsedDays < 0
+    || !Number.isInteger(input.weeksCovered) || input.weeksCovered < 0) {
+    throw new Error("Payroll periods must be non-negative integers.");
+  }
+  if (input.arrearsBefore < 0n || input.cashAvailable < 0n
+    || input.coachWeeklyWage < 0n || input.players.some((player) => player.weeklyWage < 0n)) {
+    throw new Error("Payroll amounts cannot be negative.");
+  }
+  let playerWages = 0n;
+  let playersCount = 0;
+  for (const player of input.players) {
+    if (player.status === "RETIRED" || player.contractDays <= 0) continue;
+    const billableDays = Math.min(input.elapsedDays, player.contractDays);
+    if (billableDays <= 0) continue;
+    playerWages += (player.weeklyWage * BigInt(billableDays) + 6n) / 7n;
+    playersCount++;
+  }
+  const coachWages = input.coachWeeklyWage * BigInt(input.weeksCovered);
+  const totalDue = playerWages + coachWages + input.arrearsBefore;
+  const cashPaid = input.cashAvailable < totalDue ? input.cashAvailable : totalDue;
+  return {
+    playerWages, coachWages, totalDue, cashPaid,
+    arrearsAfter: totalDue - cashPaid, playersCount,
+  };
+}
