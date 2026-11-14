@@ -4,6 +4,7 @@ import {
   advancePlayerDailyState,
   applyAnnualAgeing,
   calculateContractDemand,
+  calculatePayrollSettlement,
   calculateInjuryChanceBasisPoints,
   calculateTrainingResult,
   isTrainingFocusCompatible,
@@ -106,29 +107,40 @@ export async function settleClubDailyState(userId: string, now = new Date()) {
     let nextPayrollAt = club.lastPayrollAt;
     let nextWageArrears = club.wageArrears;
     if (weeksCovered > 0) {
-      let playerWages = 0n;
-      let playersCount = 0;
-      for (const player of players) {
-        if (player.status === "RETIRED" || player.contractDays <= 0) continue;
-        const billableDays = Math.min(payrollElapsedDays, player.contractDays);
-        if (billableDays <= 0) continue;
-        playerWages += (player.wage * BigInt(billableDays) + 6n) / 7n;
-        playersCount++;
-      }
-      const coachWages = (club.coach?.weeklySalary ?? 0n) * BigInt(weeksCovered);
-      const totalDue = playerWages + coachWages + club.wageArrears;
       const wallet = await tx.wallet.findUnique({
         where: { userId_asset: { userId, asset: "CASH" } },
         select: { id: true, balance: true, version: true },
       });
-      const cashPaid = wallet && wallet.balance < totalDue ? wallet.balance : (wallet ? totalDue : 0n);
+      const payroll = calculatePayrollSettlement({
+        players: players.map((player) => ({
+          weeklyWage: player.wage,
+          contractDays: player.contractDays,
+          status: player.status as "ACTIVE" | "INJURED" | "CONTRACT_EXPIRED" | "LISTED" | "RETIRED",
+        })),
+        coachWeeklyWage: club.coach?.weeklySalary ?? 0n,
+        elapsedDays: payrollElapsedDays,
+        weeksCovered,
+        arrearsBefore: club.wageArrears,
+        cashAvailable: wallet?.balance ?? 0n,
+      });
+      const { playerWages, coachWages, totalDue, cashPaid, arrearsAfter, playersCount } = payroll;
       if (cashPaid > 0n && wallet) {
         const paid = await tx.wallet.updateMany({
           where: { id: wallet.id, balance: wallet.balance, version: wallet.version },
           data: { balance: { decrement: cashPaid }, version: { increment: 1 } },
         });
         if (paid.count !== 1) throw new PlayerDevelopmentError("DAILY_SETTLEMENT_CONFLICT");
-        const payrollDate = new Date(lastPayrollDay.getTime() + weeksCovered * 7 * DAY_MS);
+        const ledgerDate = new Date(lastPayrollDay.getTime() + weeksCovered * 7 * DAY_MS);
+        await tx.ledgerTransaction.create({
+          data: {
+            idempotencyKey: `weekly-payroll:${club.id}:${ledgerDate.toISOString().slice(0, 10)}`,
+            userId, asset: "CASH", direction: "DEBIT", amount: cashPaid,
+            reason: "WEEKLY_PLAYER_AND_COACH_PAYROLL",
+            referenceType: "CLUB_PAYROLL", referenceId: club.id,
+          },
+        });
+      }
+      const payrollDate = new Date(lastPayrollDay.getTime() + weeksCovered * 7 * DAY_MS);
         await tx.ledgerTransaction.create({
           data: {
             idempotencyKey: `weekly-payroll:${club.id}:${payrollDate.toISOString().slice(0, 10)}`,
