@@ -16,7 +16,7 @@ async function authenticateBot(request: FastifyRequest, reply: FastifyReply): Pr
     reply.code(401).send({ error: "UNAUTHENTICATED_BOT_REQUEST" }); return null;
   }
   const account = await prisma.user.findUnique({ where: { telegramId }, select: { isSuspended: true } });
-  if (!account || account.isSuspended) { reply.code(403).send({ error: "PLAYER_ACCOUNT_SUSPENDED" }); return null; }
+  if (account?.isSuspended) { reply.code(403).send({ error: "PLAYER_ACCOUNT_SUSPENDED" }); return null; }
   const rawGroupId = (request.params as { telegramGroupId?: string }).telegramGroupId
     ?? (request.body as { telegramGroupId?: string } | null)?.telegramGroupId;
   if (rawGroupId) {
@@ -28,7 +28,7 @@ async function authenticateBot(request: FastifyRequest, reply: FastifyReply): Pr
 
 async function authenticateGroupActor(request:FastifyRequest,reply:FastifyReply):Promise<string|null>{
  const expected=process.env.BOT_API_SECRET,received=request.headers["x-football-bot-secret"],telegramId=request.headers["x-telegram-user-id"];
- if(expected&&typeof received==="string"){const a=Buffer.from(received),b=Buffer.from(expected);if(a.length===b.length&&timingSafeEqual(a,b)&&typeof telegramId==="string"&&/^\d{1,20}$/.test(telegramId)){const user=await requireTelegramUser(request);if(!user){reply.code(403).send({error:"PLAYER_ACCOUNT_SUSPENDED"});return null;}const gid=(request.params as {telegramGroupId?:string}).telegramGroupId??(request.body as {telegramGroupId?:string}|null)?.telegramGroupId;if(gid){const group=await prisma.telegramGroup.findUnique({where:{telegramId:gid},select:{isSuspended:true}});if(group?.isSuspended){reply.code(403).send({error:"TELEGRAM_GROUP_SUSPENDED"});return null;}}return telegramId;}}
+ if(expected&&typeof received==="string"){const a=Buffer.from(received),b=Buffer.from(expected);if(a.length===b.length&&timingSafeEqual(a,b)&&typeof telegramId==="string"&&/^\d{1,20}$/.test(telegramId)){const user=await prisma.user.findUnique({where:{telegramId},select:{isSuspended:true}});if(user?.isSuspended){reply.code(403).send({error:"PLAYER_ACCOUNT_SUSPENDED"});return null;}const gid=(request.params as {telegramGroupId?:string}).telegramGroupId??(request.body as {telegramGroupId?:string}|null)?.telegramGroupId;if(gid){const group=await prisma.telegramGroup.findUnique({where:{telegramId:gid},select:{isSuspended:true}});if(group?.isSuspended){reply.code(403).send({error:"TELEGRAM_GROUP_SUSPENDED"});return null;}}return telegramId;}}
  const user=await requireTelegramUser(request);if(!user){reply.code(401).send({error:"UNAUTHENTICATED"});return null;}return user.telegramId;
 }
 function authenticateSystemBot(request:FastifyRequest,reply:FastifyReply):boolean{
