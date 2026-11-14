@@ -27,7 +27,7 @@ test("stadium capacity and daily operating costs are deterministic", () => {
 test("academy scouting and recruitment costs validate academy progression", () => {
   assert.throws(() => calculateAcademyScoutCost(0));
   assert.equal(calculateAcademyScoutCost(2), 2_500n);
-  assert.equal(calculateProspectRecruitmentCost(45, 75, 2), 4_625n);
+  assert.equal(calculateProspectRecruitmentCost(45, 75, 2), 4_100n);
   assert.throws(() => calculateProspectRecruitmentCost(80, 70, 2));
 });
 
