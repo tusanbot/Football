@@ -6,6 +6,18 @@ type Player = { id: string; firstName: string; lastName: string; nationality: st
 type Listing = { id: string; askingPrice: string; status?: string; expiresAt: string; createdAt: string; player: Player; sellerClub?: { name: string } };
 type SpecialPlayer = { id: string; fullName: string; nationality: string; positions: string[]; rarity: string; overall: number; potential: number; acquisitionMethods: string[] };
 type PackOffer = { method: "epic_pack" | "legendary_pack" | "icon_pack"; rarity: string; priceGold: string };
+type ClubOperations = {
+  stadiumLevel: number; stadiumCapacity: number; trainingGroundLevel: number; academyLevel: number;
+  dailyMaintenance: string; operatingArrears: string; cashBalance: string;
+  nextUpgradeCosts: { stadium: string | null; trainingGround: string | null; academy: string | null };
+  scoutingCost: string | null; coachUpgradeCost: string | null;
+  coach: { name: string; level: number; trainingSkill: number; recoverySkill: number; medicalSkill: number; weeklySalary: string } | null;
+  activeSponsor: { partnerName: string; tier: string; dailyIncome: string; endsAt: string } | null;
+  sponsorOffers: Array<{ id: string; partnerName: string; tier: string; dailyIncome: string; signingBonus: string; durationDays: number }>;
+  coachOffers: Array<{ id: string; name: string; signingFee: string; weeklySalary: string; trainingSkill: number; recoverySkill: number; medicalSkill: number }>;
+  prospects: Array<{ id: string; firstName: string; lastName: string; age: number; position: string; overall: number; potential: number; recruitmentCost: string }>;
+  financeEntries: Array<{ id: string; category: string; direction: string; amount: string; description: string; occurredAt: string }>;
+};
 type Lineup = {
   formation: string;
   tactics: { mentality: string; pressing: string; tempo: string; passingStyle: string };
@@ -33,6 +45,7 @@ export default function MarketPage() {
   const [trainingGroundLevel, setTrainingGroundLevel] = useState(1);
   const [weeklyWageBill, setWeeklyWageBill] = useState("0");
   const [wageArrears, setWageArrears] = useState("0");
+  const [operations, setOperations] = useState<ClubOperations | null>(null);
   const [recentPayrolls, setRecentPayrolls] = useState<Array<{ payrollDate: string; totalDue: string; cashPaid: string; arrearsAfter: string }>>([]);
   const [recentTraining, setRecentTraining] = useState<Array<{ id: string; playerId: string; focus: string; intensity: string; overallBefore: number; overallAfter: number; injuryOccurred: boolean; createdAt: string }>>([]);
   const [developmentPlayerId, setDevelopmentPlayerId] = useState("");
@@ -49,7 +62,7 @@ export default function MarketPage() {
   const [busy, setBusy] = useState("");
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
-  const [tab, setTab] = useState<"market" | "club" | "lineup" | "development" | "special">("market");
+  const [tab, setTab] = useState<"market" | "club" | "operations" | "lineup" | "development" | "special">("market");
 
   const headers = useMemo(() => ({ "content-type": "application/json", "x-telegram-init-data": initData }), [initData]);
 
@@ -72,9 +85,11 @@ export default function MarketPage() {
       fetch(API + "/v1/players/special", { headers }),
       fetch(API + "/v1/club/lineup", { headers }),
       fetch(API + "/v1/club/development", { headers }),
+      fetch(API + "/v1/club/operations", { headers }),
     ]);
-    const [p, w, m, own, s, l, d] = requests;
+    const [p, w, m, own, s, l, d, o] = requests;
     if (p.ok) setPlayers((await p.json()).players);
+    if (o.ok) setOperations((await o.json()).club);
     if (d.ok) {
       const development = (await d.json()).club;
       setPlayers(development.players);
@@ -129,7 +144,8 @@ export default function MarketPage() {
     <header className="market-header"><div><p className="market-kicker">FOOTBALL EMPIRE</p><h1>بازار نقل‌وانتقالات</h1><p>خریدوفروش بازیکنان و بررسی ستاره‌های ویژه</p></div><div className="cash-box"><span>موجودی نقدی</span><strong>{money(cash)} <small>Cash</small></strong><span>طلای شما</span><strong>{money(gold)} <small>Gold</small></strong></div></header>
     <nav className="market-tabs">
       <button className={tab === "market" ? "active" : ""} onClick={() => setTab("market")}>بازار بازیکنان</button>
-      <button className={tab === "club" ? "active" : ""} onClick={() => setTab("club")}>باشگاه من</button>
+      <button className={tab === "club" ? "active" : ""} onClick={() => setTab("club")}>بازار باشگاه</button>
+      <button className={tab === "operations" ? "active" : ""} onClick={() => setTab("operations")}>امکانات و اقتصاد</button>
       <button className={tab === "lineup" ? "active" : ""} onClick={() => setTab("lineup")}>ترکیب</button>
       <button className={tab === "development" ? "active" : ""} onClick={() => setTab("development")}>توسعه بازیکن</button>
       <button className={tab === "special" ? "active" : ""} onClick={() => setTab("special")}>ستاره‌های ویژه</button>
@@ -154,6 +170,62 @@ export default function MarketPage() {
       <div className="market-card"><h2>آگهی‌های من</h2>{mine.length === 0 ? <p className="muted">هنوز آگهی ثبت نکرده‌اید.</p> : mine.map((item) => <div className="my-listing" key={item.id}><div><strong>{item.player.firstName} {item.player.lastName}</strong><p>{money(item.askingPrice)} Cash · {item.status}</p></div>{item.status === "OPEN" && <button className="secondary" disabled={busy === item.id} onClick={() => void action(item.id, "/v1/market/listings/" + item.id, "DELETE")}>لغو آگهی</button>}</div>)}</div>
     </section>}
 
+    {tab === "operations" && operations && <section className="operations-grid">
+      <div className="market-card">
+        <h2>امکانات باشگاه</h2>
+        <p>ارتقای امکانات ظرفیت و توان توسعه باشگاه را افزایش می‌دهد؛ هزینه نگهداری روزانه نیز با هر ارتقا بیشتر می‌شود.</p>
+        <div className="operation-stat"><span>ورزشگاه · سطح {operations.stadiumLevel}</span><strong>{money(operations.stadiumCapacity)} صندلی</strong>
+          <button disabled={!operations.nextUpgradeCosts.stadium || !!busy} onClick={() => void action("upgrade-stadium", "/v1/club/facilities/STADIUM/upgrade", "POST", { idempotencyKey: `mini-stadium-${crypto.randomUUID()}` })}>{operations.nextUpgradeCosts.stadium ? `ارتقا · ${money(operations.nextUpgradeCosts.stadium)} Cash` : "حداکثر سطح"}</button>
+        </div>
+        <div className="operation-stat"><span>زمین تمرین · سطح {operations.trainingGroundLevel}</span><strong>تأثیر بر رشد بازیکنان</strong>
+          <button disabled={!operations.nextUpgradeCosts.trainingGround || !!busy} onClick={() => void action("upgrade-training-ground", "/v1/club/facilities/TRAINING_GROUND/upgrade", "POST", { idempotencyKey: `mini-training-${crypto.randomUUID()}` })}>{operations.nextUpgradeCosts.trainingGround ? `ارتقا · ${money(operations.nextUpgradeCosts.trainingGround)} Cash` : "حداکثر سطح"}</button>
+        </div>
+        <div className="operation-stat"><span>آکادمی · سطح {operations.academyLevel}</span><strong>کشف و پرورش استعداد</strong>
+          <button disabled={!operations.nextUpgradeCosts.academy || !!busy} onClick={() => void action("upgrade-academy", "/v1/club/facilities/ACADEMY/upgrade", "POST", { idempotencyKey: `mini-academy-${crypto.randomUUID()}` })}>{operations.nextUpgradeCosts.academy ? `ارتقا · ${money(operations.nextUpgradeCosts.academy)} Cash` : "حداکثر سطح"}</button>
+        </div>
+        <p className="muted">هزینه نگهداری روزانه: {money(operations.dailyMaintenance)} Cash · معوقات عملیاتی: {money(operations.operatingArrears)} Cash</p>
+      </div>
+      <div className="market-card">
+        <h2>مربی و کادر فنی</h2>
+        {operations.coach ? <><p><strong>{operations.coach.name}</strong> · سطح {operations.coach.level}</p>
+          <div className="operation-skills"><span>تمرین {operations.coach.trainingSkill}</span><span>بازیابی {operations.coach.recoverySkill}</span><span>پزشکی {operations.coach.medicalSkill}</span></div>
+          <p className="muted">حقوق هفتگی {money(operations.coach.weeklySalary)} Cash</p>
+          <button disabled={!operations.coachUpgradeCost || !!busy} onClick={() => void action("upgrade-coach", "/v1/club/coach/upgrade", "POST", { idempotencyKey: `mini-coach-upgrade-${crypto.randomUUID()}` })}>{operations.coachUpgradeCost ? `ارتقای مربی · ${money(operations.coachUpgradeCost)} Cash` : "حداکثر سطح مربی"}</button>
+        </> : <p>مربی برای باشگاه ثبت نشده است.</p>}
+        <h3>گزینه‌های استخدام</h3>
+        {operations.coachOffers.map((candidate) => <div className="operation-row" key={candidate.id}>
+          <div><strong>{candidate.name}</strong><small>تمرین {candidate.trainingSkill} · بازیابی {candidate.recoverySkill} · پزشکی {candidate.medicalSkill}</small><small>هزینه استخدام {money(candidate.signingFee)} · حقوق هفتگی {money(candidate.weeklySalary)} Cash</small></div>
+          <button className="secondary" disabled={!!busy} onClick={() => void action("hire-coach", "/v1/club/coach/hire", "POST", { candidateId: candidate.id, idempotencyKey: `mini-coach-hire-${crypto.randomUUID()}` })}>استخدام</button>
+        </div>)}
+      </div>
+      <div className="market-card">
+        <h2>آکادمی جوانان</h2>
+        <p>استعدادهای ۱۶ تا ۱۸ ساله را کشف کنید. سطح بالاتر آکادمی امکان جذب استعدادهای قوی‌تر را فراهم می‌کند.</p>
+        <button disabled={!operations.scoutingCost || !!busy} onClick={() => void action("scout-academy", "/v1/club/academy/scout", "POST", { idempotencyKey: `mini-scout-${crypto.randomUUID()}` })}>{operations.scoutingCost ? `استعدادیابی سه بازیکن · ${money(operations.scoutingCost)} Cash` : "ابتدا آکادمی را ارتقا دهید"}</button>
+        {operations.prospects.map((prospect) => <div className="operation-row" key={prospect.id}>
+          <div><strong>{prospect.firstName} {prospect.lastName}</strong><small>{prospect.age} سال · {prospect.position} · OVR {prospect.overall} · POT {prospect.potential}</small><small>هزینه جذب {money(prospect.recruitmentCost)} Cash</small></div>
+          <button className="secondary" disabled={!!busy} onClick={() => void action("recruit-" + prospect.id, `/v1/club/academy/${prospect.id}/recruit`, "POST", { idempotencyKey: `mini-recruit-${prospect.id}-${crypto.randomUUID()}` })}>جذب</button>
+        </div>)}
+        {operations.academyLevel > 0 && operations.prospects.length === 0 && <p className="muted">استعداد فعالی در فهرست آکادمی نیست؛ استعدادیابی جدید انجام دهید.</p>}
+      </div>
+      <div className="market-card">
+        <h2>قرارداد اسپانسرینگ</h2>
+        {operations.activeSponsor ? <><p><strong>{operations.activeSponsor.partnerName}</strong> · {operations.activeSponsor.tier}</p><p>درآمد روزانه {money(operations.activeSponsor.dailyIncome)} Cash · پایان قرارداد {new Date(operations.activeSponsor.endsAt).toLocaleDateString("fa-IR")}</p></>
+          : <><p>یک حامی مالی انتخاب کنید تا درآمد روزانه و پاداش امضای قرارداد دریافت کنید.</p>
+            {operations.sponsorOffers.map((offer) => <div className="operation-row" key={offer.id}>
+              <div><strong>{offer.partnerName} · {offer.tier}</strong><small>{money(offer.dailyIncome)} Cash روزانه · پاداش {money(offer.signingBonus)} Cash · {offer.durationDays} روز</small></div>
+              <button className="secondary" disabled={!!busy} onClick={() => void action("sponsor-" + offer.id, "/v1/club/sponsors/sign", "POST", { offerId: offer.id, idempotencyKey: `mini-sponsor-${offer.id}-${crypto.randomUUID()}` })}>امضای قرارداد</button>
+            </div>)}
+          </>}
+      </div>
+      <div className="market-card">
+        <h2>گزارش مالی اخیر</h2>
+        {operations.financeEntries.length === 0 ? <p className="muted">هنوز گردش مالی عملیاتی ثبت نشده است.</p> : operations.financeEntries.map((entry) => <div className="operation-row" key={entry.id}>
+          <div><strong>{entry.description}</strong><small>{new Date(entry.occurredAt).toLocaleDateString("fa-IR")} · {entry.category}</small></div>
+          <strong className={entry.direction === "CREDIT" ? "finance-credit" : "finance-debit"}>{entry.direction === "CREDIT" ? "+" : "−"}{money(entry.amount)} Cash</strong>
+        </div>)}
+      </div>
+    </section>}
     {tab === "lineup" && <section className="club-market">
       <div className="market-card">
         <h2>ترکیب اصلی و تاکتیک‌ها</h2>
