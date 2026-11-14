@@ -195,7 +195,7 @@ export async function getClubDevelopment(userId: string, now = new Date()) {
     include: {
       coach: true,
       players: {
-        where: { status: { in: ["ACTIVE", "INJURED", "CONTRACT_EXPIRED"] } },
+        where: { status: { in: ["ACTIVE", "INJURED", "CONTRACT_EXPIRED", "LISTED"] } },
         orderBy: [{ status: "asc" }, { overall: "desc" }],
         select: {
           id: true, firstName: true, lastName: true, nationality: true, age: true, ageDays: true,
