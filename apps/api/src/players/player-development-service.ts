@@ -124,23 +124,13 @@ export async function settleClubDailyState(userId: string, now = new Date()) {
         cashAvailable: wallet?.balance ?? 0n,
       });
       const { playerWages, coachWages, totalDue, cashPaid, arrearsAfter, playersCount } = payroll;
+      const payrollDate = new Date(lastPayrollDay.getTime() + weeksCovered * 7 * DAY_MS);
       if (cashPaid > 0n && wallet) {
         const paid = await tx.wallet.updateMany({
           where: { id: wallet.id, balance: wallet.balance, version: wallet.version },
           data: { balance: { decrement: cashPaid }, version: { increment: 1 } },
         });
         if (paid.count !== 1) throw new PlayerDevelopmentError("DAILY_SETTLEMENT_CONFLICT");
-        const ledgerDate = new Date(lastPayrollDay.getTime() + weeksCovered * 7 * DAY_MS);
-        await tx.ledgerTransaction.create({
-          data: {
-            idempotencyKey: `weekly-payroll:${club.id}:${ledgerDate.toISOString().slice(0, 10)}`,
-            userId, asset: "CASH", direction: "DEBIT", amount: cashPaid,
-            reason: "WEEKLY_PLAYER_AND_COACH_PAYROLL",
-            referenceType: "CLUB_PAYROLL", referenceId: club.id,
-          },
-        });
-      }
-      const payrollDate = new Date(lastPayrollDay.getTime() + weeksCovered * 7 * DAY_MS);
         await tx.ledgerTransaction.create({
           data: {
             idempotencyKey: `weekly-payroll:${club.id}:${payrollDate.toISOString().slice(0, 10)}`,
@@ -150,8 +140,6 @@ export async function settleClubDailyState(userId: string, now = new Date()) {
           },
         });
       }
-      const payrollDate = new Date(lastPayrollDay.getTime() + weeksCovered * 7 * DAY_MS);
-      const arrearsAfter = totalDue - cashPaid;
       await tx.clubPayroll.create({
         data: {
           clubId: club.id, payrollDate, weeksCovered, playerWages, coachWages,
