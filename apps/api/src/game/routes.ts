@@ -108,6 +108,21 @@ export function registerGameRoutes(app: FastifyInstance) {
 
     try {
       const saved = await prisma.$transaction(async (tx) => {
+        // Re-check ownership and availability inside the same transaction that
+        // writes lineup slots; the earlier read is only for fast validation.
+        const currentPlayers = await tx.player.findMany({
+          where: { id: { in: parsed.data.playerIds }, clubId: club.id, status: "ACTIVE" },
+          select: { id: true, position: true, overall: true },
+        });
+        if (currentPlayers.length !== 11) return "PLAYERS_CHANGED";
+        const currentById = new Map(currentPlayers.map((player) => [player.id, player]));
+        const currentOrdered = parsed.data.playerIds.map((id) => currentById.get(id)!).map((player) => ({
+          id: player.id,
+          position: player.position as LineupCandidate["position"],
+          overall: player.overall,
+        }));
+        if (!validateLineup(parsed.data.formation as Formation, currentOrdered).valid) return "LINEUP_CHANGED";
+
         const updated = await tx.club.updateMany({
           where: { id: club.id, ownerId: user.id, lineupVersion: parsed.data.expectedVersion },
           data: {
@@ -119,17 +134,24 @@ export function registerGameRoutes(app: FastifyInstance) {
             lineupVersion: { increment: 1 },
           },
         });
-        if (updated.count !== 1) return false;
+        if (updated.count !== 1) return "VERSION_CONFLICT";
         await tx.player.updateMany({ where: { clubId: club.id, lineupSlot: { not: null } }, data: { lineupSlot: null } });
-        await Promise.all(parsed.data.playerIds.map((id, index) =>
-          tx.player.update({ where: { id }, data: { lineupSlot: index + 1 } }),
-        ));
-        return true;
+        for (const [index, id] of parsed.data.playerIds.entries()) {
+          const assigned = await tx.player.updateMany({
+            where: { id, clubId: club.id, status: "ACTIVE" },
+            data: { lineupSlot: index + 1 },
+          });
+          if (assigned.count !== 1) throw new Error("LINEUP_PLAYERS_CHANGED");
+        }
+        return "SAVED";
       }, { isolationLevel: "Serializable" });
-      if (!saved) return reply.code(409).send({ error: "LINEUP_VERSION_CONFLICT" });
+      if (saved !== "SAVED") {
+        return reply.code(409).send({ error: saved === "VERSION_CONFLICT" ? "LINEUP_VERSION_CONFLICT" : "LINEUP_PLAYERS_CHANGED" });
+      }
       return { ok: true, lineupVersion: parsed.data.expectedVersion + 1 };
     } catch (error) {
-      if (typeof error === "object" && error !== null && "code" in error && error.code === "P2034") {
+      if ((typeof error === "object" && error !== null && "code" in error && error.code === "P2034")
+        || (error instanceof Error && error.message === "LINEUP_PLAYERS_CHANGED")) {
         return reply.code(409).send({ error: "LINEUP_UPDATE_CONFLICT" });
       }
       request.log.error({ error }, "Lineup update failed");
