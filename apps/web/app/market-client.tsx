@@ -27,7 +27,11 @@ export default function MarketPage() {
   const [special, setSpecial] = useState<SpecialPlayer[]>([]);
   const [cash, setCash] = useState("0");
   const [gold, setGold] = useState("0");
-  const [packOffers, setPackOffers] = useState<PackOffer[]>([]);\n  const [lineup, setLineup] = useState<Lineup | null>(null);\n  const [formation, setFormation] = useState("4-3-3");\n  const [selectedLineupIds, setSelectedLineupIds] = useState<string[]>([]);\n  const [tactics, setTactics] = useState({ mentality: "BALANCED", pressing: "MID_BLOCK", tempo: "NORMAL", passingStyle: "MIXED" });
+  const [packOffers, setPackOffers] = useState<PackOffer[]>([]);
+  const [lineup, setLineup] = useState<Lineup | null>(null);
+  const [formation, setFormation] = useState("4-3-3");
+  const [selectedLineupIds, setSelectedLineupIds] = useState<string[]>([]);
+  const [tactics, setTactics] = useState({ mentality: "BALANCED", pressing: "MID_BLOCK", tempo: "NORMAL", passingStyle: "MIXED" });
   const [packKeys, setPackKeys] = useState<Record<string, string>>({});
   const [selectedPlayer, setSelectedPlayer] = useState("");
   const [price, setPrice] = useState("1000");
