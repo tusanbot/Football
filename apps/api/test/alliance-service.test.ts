@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { prisma } from "../src/db.js";
-import { AllianceServiceError, closeAllianceSeason, reviewAllianceSeason } from "../src/groups/alliance-service.js";
+import { AllianceServiceError, closeAllianceSeason, reviewAllianceSeason, startAllianceSeason } from "../src/groups/alliance-service.js";
 
 test("alliance season close enforces its end date, calculates seasonal net points and holds suspicious payouts for authorized review", async t => {
   if (!process.env.DATABASE_URL) {
@@ -67,6 +67,16 @@ test("alliance season close enforces its end date, calculates seasonal net point
     assert.equal((closed.standings as Array<{ points: string }>)[0]?.points, "120");
     assert.equal((await prisma.alliance.findUniqueOrThrow({ where: { id: allianceId } })).treasuryPoints, 500n);
     assert.equal((await prisma.telegramGroup.findUniqueOrThrow({ where: { id: groupId } })).points, 0n);
+    delete process.env.ALLIANCE_REVIEWER_TELEGRAM_IDS;
+    await assert.rejects(
+      reviewAllianceSeason({ telegramUserId: reviewerTelegramId, telegramGroupId: groupTelegramId, seasonId: season.id, decision: "APPROVE" }),
+      (error: unknown) => error instanceof AllianceServiceError && error.code === "ALLIANCE_REVIEWER_REQUIRED",
+    );
+    await assert.rejects(
+      startAllianceSeason({ telegramUserId: reviewerTelegramId, telegramGroupId: groupTelegramId, durationDays: 30 }),
+      (error: unknown) => error instanceof AllianceServiceError && error.code === "SEASON_REVIEW_REQUIRED",
+    );
+    process.env.ALLIANCE_REVIEWER_TELEGRAM_IDS = reviewerTelegramId;
     const reviewed = await reviewAllianceSeason({ telegramUserId: reviewerTelegramId, telegramGroupId: groupTelegramId, seasonId: season.id, decision: "APPROVE" });
     assert.equal(reviewed.reviewStatus, "APPROVED");
     assert.equal(reviewed.prize, "500");
@@ -74,7 +84,9 @@ test("alliance season close enforces its end date, calculates seasonal net point
     assert.equal((await prisma.telegramGroup.findUniqueOrThrow({ where: { id: groupId } })).points, 500n);
     const replay = await reviewAllianceSeason({ telegramUserId: reviewerTelegramId, telegramGroupId: groupTelegramId, seasonId: season.id, decision: "APPROVE" });
     assert.equal(replay.replayed, true);
-    assert.equal(await prisma.allianceAuditLog.count({ where: { allianceId } }) >= 2, true);
+    const nextSeason = await startAllianceSeason({ telegramUserId: reviewerTelegramId, telegramGroupId: groupTelegramId, durationDays: 30 });
+    assert.equal(nextSeason.season.number, 2);
+    assert.equal(await prisma.allianceAuditLog.count({ where: { allianceId } }) >= 3, true);
   } finally {
     if (previousReviewers === undefined) delete process.env.ALLIANCE_REVIEWER_TELEGRAM_IDS;
     else process.env.ALLIANCE_REVIEWER_TELEGRAM_IDS = previousReviewers;
