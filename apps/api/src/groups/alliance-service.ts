@@ -21,10 +21,13 @@ async function manager(tx: Prisma.TransactionClient, telegramId: string, telegra
 export async function createAlliance(i: { telegramUserId: string; telegramGroupId: string; name: string; description?: string; idempotencyKey: string }) {
   return prisma.$transaction(async tx => {
     const { group } = await manager(tx, i.telegramUserId, i.telegramGroupId);
+    const old = await tx.alliance.findUnique({ where: { slug: i.idempotencyKey } });
+    if (old) {
+      if (old.createdByGroupId !== group.id) throw new AllianceServiceError("IDEMPOTENCY_CONFLICT");
+      return { alliance: old, replayed: true };
+    }
     const existing = await tx.allianceGroup.findUnique({ where: { groupId: group.id }, include: { alliance: true } });
     if (existing) throw new AllianceServiceError("GROUP_ALREADY_IN_ALLIANCE");
-    const old = await tx.alliance.findUnique({ where: { slug: i.idempotencyKey } });
-    if (old) return { alliance: old, replayed: true };
     const slug = i.idempotencyKey;
     const alliance = await tx.alliance.create({ data: { slug, name: i.name, description: i.description ?? "", createdByGroupId: group.id, groups: { create: { groupId: group.id, role: "FOUNDER" } } } });
     await tx.allianceSeason.create({ data: { allianceId: alliance.id, number: 1, endsAt: new Date(Date.now() + 30 * 86400000) } });
@@ -59,7 +62,10 @@ export async function contributeAllianceTreasury(i: { telegramUserId: string; te
     const membership = await tx.allianceGroup.findUnique({ where: { groupId: group.id } });
     if (!membership) throw new AllianceServiceError("ALLIANCE_NOT_FOUND");
     const old = await tx.allianceLedger.findUnique({ where: { idempotencyKey: i.idempotencyKey } });
-    if (old) return { contributed: true, replayed: true, treasuryPoints: (await tx.alliance.findUniqueOrThrow({where:{id:membership.allianceId},select:{treasuryPoints:true}})).treasuryPoints.toString() };
+    if (old) {
+      if (old.allianceId !== membership.allianceId) throw new AllianceServiceError("IDEMPOTENCY_CONFLICT");
+      return { contributed: true, replayed: true, treasuryPoints: (await tx.alliance.findUniqueOrThrow({where:{id:membership.allianceId},select:{treasuryPoints:true}})).treasuryPoints.toString() };
+    }
     const debited = await tx.telegramGroup.updateMany({ where: { id: group.id, points: { gte: i.amount } }, data: { points: { decrement: i.amount } } });
     if (!debited.count) throw new AllianceServiceError("INSUFFICIENT_GROUP_POINTS");
     const alliance = await tx.alliance.update({ where: { id: membership.allianceId }, data: { treasuryPoints: { increment: i.amount } }, select: { treasuryPoints: true } });
@@ -142,7 +148,10 @@ export async function createAllianceChampionship(i: { telegramUserId: string; te
     if (!membership || membership.alliance.status !== "ACTIVE") throw new AllianceServiceError("ALLIANCE_NOT_FOUND");
     const clubId = user.club!.id;
     const existing = await tx.competition.findUnique({ where: { idempotencyKey: i.idempotencyKey } });
-    if (existing) return { competition: existing, replayed: true };
+    if (existing) {
+      if (existing.allianceId !== membership.allianceId || existing.createdByClubId !== clubId) throw new AllianceServiceError("IDEMPOTENCY_CONFLICT");
+      return { competition: existing, replayed: true };
+    }
     const season = await tx.allianceSeason.findFirst({ where: { allianceId: membership.allianceId, status: "ACTIVE" }, orderBy: { number: "desc" } });
     const competition = await tx.competition.create({ data: { idempotencyKey: i.idempotencyKey, name: i.name, season: season?.number ?? 1, format: "LEAGUE", maxTeams: i.maxTeams, createdByClubId: clubId, allianceId: membership.allianceId, ...(season ? { allianceSeasonId: season.id } : {}), entries: { create: { clubId } } } });
     return { competition, replayed: false };
