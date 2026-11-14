@@ -133,6 +133,9 @@ model User {
   displayName        String?
   createdAt          DateTime            @default(now())
   updatedAt          DateTime            @updatedAt
+  isSuspended         Boolean             @default(false)
+  suspendedAt         DateTime?
+  suspensionReason    String?
   club               Club?
   wallets            Wallet[]
   ledgerTransactions LedgerTransaction[]
@@ -143,6 +146,7 @@ model User {
   specialAcquisitions SpecialPlayerAcquisition[]
   trainingLogs PlayerTrainingLog[]
   contractRenewals PlayerContractRenewal[]
+  giftCodeRedemptions GiftCodeRedemption[]
 }
 
 model Club {
@@ -610,6 +614,9 @@ model TelegramGroup {
   isActive Boolean @default(false)
   points BigInt @default(0)
   lastMemberCountCheckAt DateTime?
+  isSuspended Boolean @default(false)
+  suspendedAt DateTime?
+  suspensionReason String?
 }
 
 model GroupMembership {
@@ -812,4 +819,51 @@ model AllianceAuditLog {
   alliance Alliance @relation(fields: [allianceId], references: [id], onDelete: Cascade)
   @@index([allianceId, createdAt])
   @@index([actorTelegramId, createdAt])
+}
+
+enum GiftCodeRewardType { WALLET GROUP_POINTS }
+model GiftCode {
+ id String @id @default(cuid())
+ code String @unique
+ rewardType GiftCodeRewardType @default(WALLET)
+ cashAmount BigInt @default(0)
+ goldAmount BigInt @default(0)
+ groupPoints BigInt @default(0)
+ maxRedemptions Int @default(1)
+ redeemedCount Int @default(0)
+ perUserLimit Int @default(1)
+ active Boolean @default(true)
+ startsAt DateTime @default(now())
+ expiresAt DateTime?
+ createdByTelegramId String
+ createdAt DateTime @default(now())
+ redemptions GiftCodeRedemption[]
+ @@index([active, startsAt, expiresAt])
+}
+model GiftCodeRedemption {
+ id String @id @default(cuid())
+ giftCodeId String
+ userId String
+ idempotencyKey String @unique
+ cashAmount BigInt @default(0)
+ goldAmount BigInt @default(0)
+ groupPoints BigInt @default(0)
+ redeemedAt DateTime @default(now())
+ giftCode GiftCode @relation(fields:[giftCodeId], references:[id], onDelete:Restrict)
+ user User @relation(fields:[userId], references:[id], onDelete:Restrict)
+ @@unique([giftCodeId,userId])
+ @@index([userId,redeemedAt])
+}
+model AdminAuditLog {
+ id String @id @default(cuid())
+ actorTelegramId String
+ action String
+ targetType String
+ targetId String
+ reason String?
+ metadata Json?
+ idempotencyKey String @unique
+ createdAt DateTime @default(now())
+ @@index([actorTelegramId,createdAt])
+ @@index([targetType,targetId,createdAt])
 }
