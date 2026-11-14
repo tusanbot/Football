@@ -14,6 +14,6 @@ export async function verifyTelegramGroupActor(input:{telegramGroupId:string;tel
  const botId=token.split(":")[0]??"";if(!/^\d{1,20}$/.test(botId))throw new TelegramGroupAuthorizationError("TELEGRAM_GROUP_CHECK_FAILED");
  const botMember=await checkMember(botId);if(!botMember.isMember||!(botMember.status==="creator"||botMember.status==="administrator"))throw new TelegramGroupAuthorizationError("TELEGRAM_BOT_NOT_GROUP_ADMIN");
  const actor=await checkMember(input.telegramUserId);const status=actor.status;
- const isMember=status==="creator"||status==="administrator"||status==="member"||(status==="restricted"&&payload.result.is_member===true);if(!isMember)throw new TelegramGroupAuthorizationError("TELEGRAM_GROUP_ACCESS_REVOKED");
+ if(!actor.isMember)throw new TelegramGroupAuthorizationError("TELEGRAM_GROUP_ACCESS_REVOKED");
  const isManager=status==="creator"||status==="administrator";if(input.requireManager&&!isManager)throw new TelegramGroupAuthorizationError("TELEGRAM_GROUP_MANAGER_REQUIRED");return{isMember:true,isManager,status};
 }
