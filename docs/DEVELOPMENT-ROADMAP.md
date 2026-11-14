@@ -147,7 +147,8 @@ Non-negotiable product rules:
 - Friendly opponent discovery, scheduled fixtures, participant authorization, match history and post-match reports.
 - Matchday attendance and gate revenue based on stadium capacity, ticket price, club reputation and team strength.
 - Atomic match settlement: player fitness/injury updates, lineup version changes, reputation, appearance/win/draw rewards, Cash ledger and club finance entries.
-- Round-robin league registration for 4–10 clubs, creator-controlled start, automatic single round-robin schedule, 3/1/0 standings, goal difference and completion state.\n- Single-elimination cups for four/eight clubs, automatic bracket advancement, deterministic penalty shootouts for tied knockout matches and champion completion state.
+- Round-robin league registration for 4–10 clubs, creator-controlled start, automatic single round-robin schedule, 3/1/0 standings, goal difference and completion state.
+- Single-elimination cups for four/eight clubs, automatic bracket advancement, deterministic penalty shootouts for tied knockout matches and champion completion state.
 - Bot commands and Mini App match center for friendlies, match simulation, league registration/join/start and standings.
 
 **Still outstanding:**
