@@ -7,13 +7,48 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-enum WalletAsset { CASH GOLD }
-enum LedgerDirection { CREDIT DEBIT }
-enum GroupRole { OWNER ADMIN MEMBER }
-enum ChallengeStatus { DRAFT OPEN RUNNING COMPLETED CANCELLED }
-enum PlayerOrigin { GENERATED SPECIAL }
-enum PlayerPosition { GK RB LB CB CDM CM CAM RW LW ST }
-enum PlayerStatus { ACTIVE LISTED INJURED RETIRED }
+enum WalletAsset {
+  CASH
+  GOLD
+}
+enum LedgerDirection {
+  CREDIT
+  DEBIT
+}
+enum GroupRole {
+  OWNER
+  ADMIN
+  MEMBER
+}
+enum ChallengeStatus {
+  DRAFT
+  OPEN
+  RUNNING
+  COMPLETED
+  CANCELLED
+}
+enum PlayerOrigin {
+  GENERATED
+  SPECIAL
+}
+enum PlayerPosition {
+  GK
+  RB
+  LB
+  CB
+  CDM
+  CM
+  CAM
+  RW
+  LW
+  ST
+}
+enum PlayerStatus {
+  ACTIVE
+  LISTED
+  INJURED
+  RETIRED
+}
 
 model User {
   id                 String              @id @default(cuid())
