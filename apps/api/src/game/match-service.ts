@@ -374,13 +374,25 @@ export async function simulateScheduledMatch(userId: string, matchId: string, no
     }
     if (match.status !== "SCHEDULED") throw new MatchServiceError("MATCH_NOT_SCHEDULED");
     if (match.simulationVersion !== 1) throw new MatchServiceError("UNSUPPORTED_SIMULATION_VERSION");
+    const competition = match.competitionId
+      ? await tx.competition.findUnique({ where: { id: match.competitionId }, select: { format: true } })
+      : null;
     if (match.scheduledAt > now) throw new MatchServiceError("MATCH_NOT_DUE", { scheduledAt: match.scheduledAt.toISOString() });
-    const result = simulateFootballMatch({ seed: match.seed, home: toSide(home), away: toSide(away) });
+    const homeSide = toSide(home);
+    const awaySide = toSide(away);
+    const result = simulateFootballMatch({ seed: match.seed, home: homeSide, away: awaySide });
+    const penalties = competition?.format === "CUP" && result.homeScore === result.awayScore
+      ? simulatePenaltyShootout({ seed: match.seed, home: homeSide, away: awaySide })
+      : null;
+    const winnerClubId = result.homeScore > result.awayScore ? home.id
+      : result.awayScore > result.homeScore ? away.id
+        : penalties ? (penalties.winner === "HOME" ? home.id : away.id) : null;
     const claimed = await tx.footballMatch.updateMany({
       where: { id: match.id, status: "SCHEDULED" },
       data: {
         status: "COMPLETED", startedAt: now, completedAt: now,
-        homeScore: result.homeScore, awayScore: result.awayScore, attendance: result.attendance,
+        homeScore: result.homeScore, awayScore: result.awayScore, homePenalties: penalties?.homePenalties ?? null,
+        awayPenalties: penalties?.awayPenalties ?? null, winnerClubId, attendance: result.attendance,
         ticketRevenue: result.ticketRevenue, homeExpectedGoals: result.homeExpectedGoals,
         awayExpectedGoals: result.awayExpectedGoals,
       },
