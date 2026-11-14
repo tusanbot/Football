@@ -44,7 +44,7 @@ A Telegram-first football management MMO. Telegram Bot, Telegram Mini App and Te
 - Gold-priced Epic, Legendary and Icon packs with server-side random selection, per-club ownership limits, atomic wallet debit, acquisition history and immutable ledger entries.
 - Idempotent special-player catalog seed command.
 - Transfer market for generated players: create/cancel listings, expiry handling, atomic purchase, player ownership transfer and buyer/seller ledger entries.
-- Persian RTL Mini App: browse listings, sell owned players, manage own listings, view the special-player catalog, configure starting XI/formation/tactics, and manage player training, fitness, morale, injuries, contracts and payroll.
+- Persian RTL Mini App: browse listings, sell owned players, manage own listings, view the special-player catalog, configure starting XI/formation/tactics, and manage player training, fitness, morale, injuries, contracts and payroll, schedule friendlies, simulate due matches, create/join leagues and inspect standings and match reports.
 - Telegram bot commands: `/start` (Bot-only account/club creation), `/club`, `/wallet`, `/rename`, `/players`, `/lineup`, `/setlineup`, `/development`, `/train PLAYER_ID FOCUS INTENSITY`, `/renew PLAYER_ID DAYS WEEKLY_WAGE`, `/operations`, `/finance`, `/upgrade`, `/ticket-price`, `/scout`, `/recruit`, `/sponsor`, `/coach-upgrade`, `/hire-coach`, `/opponents`, `/friendly`, `/matches`, `/play`, `/league`, `/leagues`, `/joinleague`, `/startleague`, `/table`, `/market`, `/sell PLAYER_ID PRICE`, `/buy LISTING_ID`, `/special`, and `/pack`.
 - Both clients use the same authenticated API; the bot does not implement game/economy rules.
 
