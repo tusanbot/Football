@@ -67,12 +67,12 @@ test("alliance season close enforces its end date, calculates seasonal net point
     assert.equal((closed.standings as Array<{ points: string }>)[0]?.points, "120");
     assert.equal((await prisma.alliance.findUniqueOrThrow({ where: { id: allianceId } })).treasuryPoints, 500n);
     assert.equal((await prisma.telegramGroup.findUniqueOrThrow({ where: { id: groupId } })).points, 0n);
-    const reviewed = await reviewAllianceSeason({ telegramUserId: reviewerTelegramId, telegramGroupId, seasonId: season.id, decision: "APPROVE" });
+    const reviewed = await reviewAllianceSeason({ telegramUserId: reviewerTelegramId, telegramGroupId: groupTelegramId, seasonId: season.id, decision: "APPROVE" });
     assert.equal(reviewed.reviewStatus, "APPROVED");
     assert.equal(reviewed.prize, "500");
     assert.equal((await prisma.alliance.findUniqueOrThrow({ where: { id: allianceId } })).treasuryPoints, 0n);
     assert.equal((await prisma.telegramGroup.findUniqueOrThrow({ where: { id: groupId } })).points, 500n);
-    const replay = await reviewAllianceSeason({ telegramUserId: reviewerTelegramId, telegramGroupId, seasonId: season.id, decision: "APPROVE" });
+    const replay = await reviewAllianceSeason({ telegramUserId: reviewerTelegramId, telegramGroupId: groupTelegramId, seasonId: season.id, decision: "APPROVE" });
     assert.equal(replay.replayed, true);
     assert.equal(await prisma.allianceAuditLog.count({ where: { allianceId } }) >= 2, true);
   } finally {
