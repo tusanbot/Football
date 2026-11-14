@@ -183,7 +183,18 @@ export async function startLeague(userId: string, competitionId: string, now = n
     });
     if (!competition) throw new MatchServiceError("COMPETITION_NOT_FOUND");
     if (competition.createdByClubId !== club.id) throw new MatchServiceError("ONLY_CREATOR_CAN_START");
-    if (competition.status !== "REGISTRATION") throw new MatchServiceError("COMPETITION_NOT_OPEN");
+    if (competition.status !== "REGISTRATION") {
+      if (competition.status === "ACTIVE" || competition.status === "COMPLETED") {
+        const existingFixtures = await tx.footballMatch.findMany({ where: { competitionId }, select: { round: true } });
+        return {
+          fixturesCreated: existingFixtures.length,
+          rounds: Math.max(0, ...existingFixtures.map((fixture) => fixture.round ?? 0)),
+          teams: competition.entries.length,
+          replayed: true,
+        };
+      }
+      throw new MatchServiceError("COMPETITION_NOT_OPEN");
+    }
     if (competition.entries.length < 4) throw new MatchServiceError("LEAGUE_NEEDS_FOUR_TEAMS");
     if (competition.entries.some((entry) => entry.club.players.length < 11 || !entry.club.players.some((player) => player.position === "GK"))) throw new MatchServiceError("ALL_TEAMS_NEED_VALID_LINEUPS");
     const teams = competition.entries.map((entry) => entry.clubId);
@@ -219,7 +230,7 @@ export async function startLeague(userId: string, competitionId: string, now = n
       data: { status: "ACTIVE", startsAt: fixtures[0]?.scheduledAt ?? now },
     });
     if (updated.count !== 1) throw new MatchServiceError("COMPETITION_NOT_OPEN");
-    return { fixturesCreated: fixtures.length, rounds, teams: teams.length };
+    return { fixturesCreated: fixtures.length, rounds, teams: teams.length, replayed: false };
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 }
 export async function listOpenLeagues(userId: string) {
