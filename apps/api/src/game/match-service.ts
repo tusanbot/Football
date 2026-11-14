@@ -351,7 +351,15 @@ export async function simulateScheduledMatch(userId: string, matchId: string, no
     return {
       replayed: false, matchId: final.id, homeClub: final.homeClub.name, awayClub: final.awayClub.name,
       homeScore: final.homeScore, awayScore: final.awayScore, attendance: final.attendance,
-      ticketRevenue: final.ticketRevenue.toString(), events: final.events,
+      ticketRevenue: final.ticketRevenue.toString(), events: final.events.map((event) => ({
+        ...event,
+        playerName: [...home.players, ...away.players].find((player) => player.id === event.playerId)?.firstName
+          + " " + ([...home.players, ...away.players].find((player) => player.id === event.playerId)?.lastName ?? ""),
+        relatedPlayerName: event.relatedPlayerId
+          ? [...home.players, ...away.players].find((player) => player.id === event.relatedPlayerId)?.firstName
+            + " " + ([...home.players, ...away.players].find((player) => player.id === event.relatedPlayerId)?.lastName ?? "")
+          : null,
+      })),
     };
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 }
