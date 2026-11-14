@@ -201,10 +201,6 @@ export function simulateFootballMatch(input: {
       player.position !== "GK" && !sentOff.has(player.id) && !substitutedOut.has(player.id)
       && player.id !== injuredPlayer?.id,
     );
-    for (const event of events.filter((item) => item.teamId === side.clubId && (item.type === "RED_CARD" || item.type === "INJURY"))) {
-      const line = performances.get(event.playerId);
-      if (line) line.minutesPlayed = Math.min(line.minutesPlayed, event.minute);
-    }
     const desiredSubstitutions = Math.min(5, 2 + Math.floor(rng() * 2));
     let additional = Math.max(0, desiredSubstitutions - (injuredPlayer && usedBench.size ? 1 : 0));
     while (additional > 0 && availableOutfield.length > 0) {
@@ -212,6 +208,21 @@ export function simulateFootballMatch(input: {
       const outgoing = availableOutfield.splice(index, 1)[0]!;
       const minute = 60 + Math.floor(rng() * 26);
       if (performSubstitution(outgoing, minute)) additional--;
+    }
+    const forcedExitMinutes = new Map<string, number>();
+    for (const event of events.filter((item) => item.teamId === side.clubId && (item.type === "RED_CARD" || item.type === "INJURY"))) {
+      forcedExitMinutes.set(event.playerId, Math.min(forcedExitMinutes.get(event.playerId) ?? 90, event.minute));
+    }
+    for (const [playerId, minute] of forcedExitMinutes) {
+      if (substitutedOut.has(playerId)) continue;
+      const line = performances.get(playerId);
+      if (!line) continue;
+      const fraction = clamp(minute / 90, 0.05, 1);
+      line.minutesPlayed = minute;
+      line.shots = Math.round(line.shots * fraction);
+      line.passes = Math.round(line.passes * fraction);
+      line.tackles = Math.round(line.tackles * fraction);
+      line.fitnessLoss = Math.round(line.fitnessLoss * fraction);
     }
   };
   simulateSide(input.home, input.away, homeXg, homeShots, true);
