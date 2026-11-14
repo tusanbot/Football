@@ -201,6 +201,10 @@ export function simulateFootballMatch(input: {
       player.position !== "GK" && !sentOff.has(player.id) && !substitutedOut.has(player.id)
       && player.id !== injuredPlayer?.id,
     );
+    for (const event of events.filter((item) => item.teamId === side.clubId && (item.type === "RED_CARD" || item.type === "INJURY"))) {
+      const line = performances.get(event.playerId);
+      if (line) line.minutesPlayed = Math.min(line.minutesPlayed, event.minute);
+    }
     const desiredSubstitutions = Math.min(5, 2 + Math.floor(rng() * 2));
     let additional = Math.max(0, desiredSubstitutions - (injuredPlayer && usedBench.size ? 1 : 0));
     while (additional > 0 && availableOutfield.length > 0) {
