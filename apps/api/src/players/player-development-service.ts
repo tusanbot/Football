@@ -233,7 +233,7 @@ export async function trainPlayer(
       const nextMorale = injuryOccurred ? Math.max(0, result.morale - 5) : result.morale;
 
       const debit = await tx.wallet.updateMany({
-        where: { id: wallet.id, balance: wallet.balance, version: wallet.version, balance: { gte: cashCost } },
+        where: { id: wallet.id, balance: { equals: wallet.balance, gte: cashCost }, version: wallet.version },
         data: { balance: { decrement: cashCost }, version: { increment: 1 } },
       });
       if (debit.count !== 1) throw new PlayerDevelopmentError("CONCURRENT_MODIFICATION");
@@ -244,9 +244,13 @@ export async function trainPlayer(
           reason: "PLAYER_TRAINING", referenceType: "PLAYER", referenceId: playerId,
         },
       });
+      if (injuryOccurred && player.lineupSlot !== null) {
+        await tx.club.update({ where: { id: club.id }, data: { lineupVersion: { increment: 1 } } });
+      }
       await tx.player.update({
         where: { id: player.id },
         data: {
+          ...(injuryOccurred ? { lineupSlot: null } : {}),
           attributes: result.attributes as unknown as Prisma.InputJsonValue,
           overall: result.overall,
           fitness: nextFitness,
