@@ -85,7 +85,7 @@ export default function MarketPage() {
       setRecentPayrolls(development.recentPayrolls ?? []);
       setRecentTraining(development.recentTraining ?? []);
       setDevelopmentPlayerId((current) => development.players.some((player: Player) => player.id === current) ? current : (development.players.find((player: Player) => player.status === "ACTIVE")?.id ?? development.players[0]?.id ?? ""));
-      const chosen = development.players.find((player: Player) => player.id === developmentPlayerId) ?? development.players.find((player: Player) => player.status === "ACTIVE") ?? development.players[0];
+      const chosen = development.players.find((player: Player) => player.status === "ACTIVE") ?? development.players[0];
       if (chosen?.minimumWeeklyWage) setContractWage((current) => current || chosen.minimumWeeklyWage);
     }
     if (w.ok) { const data = await w.json(); setCash(data.wallets.find((x: { asset: string }) => x.asset === "CASH")?.balance ?? "0"); setGold(data.wallets.find((x: { asset: string }) => x.asset === "GOLD")?.balance ?? "0"); }
@@ -100,7 +100,7 @@ export default function MarketPage() {
       setTactics(currentLineup.tactics);
       setSelectedLineupIds([...currentLineup.players].sort((a, b) => a.lineupSlot - b.lineupSlot).map((player) => player.id));
     }
-  }, [headers, initData, developmentPlayerId]);
+  }, [headers, initData]);
 
   useEffect(() => {
     const data = window.Telegram?.WebApp?.initData ?? "";
