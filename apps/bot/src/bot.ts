@@ -70,9 +70,38 @@ bot.command("start", async (ctx) => {
 });
 
 bot.command("help", async (ctx) => ctx.reply(
-  "Football Empire commands:\n/club — club profile\n/wallet — Cash and Gold balances\n/rename NEW NAME — rename your club\n/players — your active squad\n/lineup — view starting XI and tactics\n/setlineup FORMATION ID1 ... ID11 — set your XI\n/development — player development overview\n/train PLAYER_ID FOCUS INTENSITY — train a player\n/renew PLAYER_ID DAYS WEEKLY_WAGE — renew a contract\n/operations — facilities, academy, sponsors and finance\n/finance [DAYS] — income and expense statement\n/upgrade stadium|training|academy — upgrade a facility\n/ticket-price PRICE — set stadium ticket price\n/scout — find academy prospects\n/recruit PROSPECT_ID — sign an academy prospect\n/sponsor OFFER_ID — sign a sponsor\n/coach-upgrade — develop your coach\n/hire-coach balanced|youth|performance — hire a coach\n/opponents — clubs available for friendlies\n/friendly CLUB_ID — schedule a friendly\n/matches — your fixtures and results\n/play MATCH_ID — simulate a due match\n/league NAME [4-10] — create a league\n/cup NAME [4|8] — create a knockout cup\n/leagues — open leagues\n/joinleague ID — join a league\n/startleague ID — start your league\n/startcup ID — start your cup\n/table ID — league table or cup bracket\n/market — open transfer listings\n/sell PLAYER_ID PRICE — list a generated player\n/buy LISTING_ID — buy a listed player\n/special — view special players and pack prices\n/pack epic|legendary|icon — acquire a special player\n\nSpecial players are not tradeable in the regular market.",
+  "Football Empire commands:\n/club — club profile\n/wallet — Cash and Gold balances\n/rename NEW NAME — rename your club\n/players — your active squad\n/lineup — view starting XI and tactics\n/setlineup FORMATION ID1 ... ID11 — set your XI\n/development — player development overview\n/train PLAYER_ID FOCUS INTENSITY — train a player\n/renew PLAYER_ID DAYS WEEKLY_WAGE — renew a contract\n/operations — facilities, academy, sponsors and finance\n/finance [DAYS] — income and expense statement\n/upgrade stadium|training|academy — upgrade a facility\n/ticket-price PRICE — set stadium ticket price\n/scout — find academy prospects\n/recruit PROSPECT_ID — sign an academy prospect\n/sponsor OFFER_ID — sign a sponsor\n/coach-upgrade — develop your coach\n/hire-coach balanced|youth|performance — hire a coach\n/opponents — clubs available for friendlies\n/friendly CLUB_ID — schedule a friendly\n/matches — your fixtures and results\n/play MATCH_ID — simulate a due match\n/league NAME [4-10] — create a league\n/cup NAME [4|8] — create a knockout cup\n/leagues — open leagues\n/joinleague ID — join a league\n/startleague ID — start your league\n/startcup ID — start your cup\n/table ID — league table or cup bracket\n/group-register — register this Telegram group (admins only)\n/group-join — join this group with your club\n/group — show your group membership\n/market — open transfer listings\n/sell PLAYER_ID PRICE — list a generated player\n/buy LISTING_ID — buy a listed player\n/special — view special players and pack prices\n/pack epic|legendary|icon — acquire a special player\n\nSpecial players are not tradeable in the regular market.",
 ));
 
+bot.command("group-register", async (ctx) => {
+  if (!ctx.from) return;
+  if (ctx.chat.type !== "group" && ctx.chat.type !== "supergroup") return ctx.reply("Run /group-register inside the Telegram group you want to register.");
+  try {
+    const member = await ctx.api.getChatMember(ctx.chat.id, ctx.from.id);
+    const role = member.status === "creator" ? "OWNER" : member.status === "administrator" ? "ADMIN" : null;
+    if (!role) return ctx.reply("Only a group owner or administrator can register this group.");
+    const result = await api<{ registration: { group: { title: string }; role: string; memberCount: number } }>("/v1/groups/register", ctx.from.id, "POST", { telegramGroupId: String(ctx.chat.id), title: ctx.chat.title, role });
+    await ctx.reply("Football Empire group connected: " + result.registration.group.title + "\nRegistered role: " + result.registration.role + "\nRegistered club managers: " + result.registration.memberCount + "\n\nMembers can join with /group-join after starting the Bot privately.");
+  } catch (error) { await ctx.reply("Could not register this group: " + (error instanceof Error ? error.message : "unknown error")); }
+});
+
+bot.command("group-join", async (ctx) => {
+  if (!ctx.from) return;
+  if (ctx.chat.type !== "group" && ctx.chat.type !== "supergroup") return ctx.reply("Run /group-join inside a registered Telegram group.");
+  try {
+    const result = await api<{ membership: { group: { title: string }; role: string; memberCount: number; alreadyJoined: boolean } }>("/v1/groups/join", ctx.from.id, "POST", { telegramGroupId: String(ctx.chat.id) });
+    await ctx.reply(result.membership.alreadyJoined ? "Your club is already registered in " + result.membership.group.title + ". Role: " + result.membership.role + "." : "Your club joined " + result.membership.group.title + ". Registered club managers: " + result.membership.memberCount + ".");
+  } catch (error) { await ctx.reply("Could not join this group: " + (error instanceof Error ? error.message : "unknown error")); }
+});
+
+bot.command("group", async (ctx) => {
+  if (!ctx.from) return;
+  if (ctx.chat.type !== "group" && ctx.chat.type !== "supergroup") return ctx.reply("Use /group inside a registered Telegram group.");
+  try {
+    const result = await api<{ group: { title: string }; role: string; memberCount: number }>("/v1/groups/" + encodeURIComponent(String(ctx.chat.id)), ctx.from.id);
+    await ctx.reply("Football Empire · " + result.group.title + "\nYour role: " + result.role + "\nRegistered club managers: " + result.memberCount);
+  } catch (error) { await ctx.reply("Group status unavailable: " + (error instanceof Error ? error.message : "unknown error") + "\nUse /group-register (admins) or /group-join (members)."); }
+});
 bot.command("club", async (ctx) => {
   if (!ctx.from) return;
   if (ctx.chat.type !== "private") return ctx.reply("Use /club in a private chat to view your club.");
