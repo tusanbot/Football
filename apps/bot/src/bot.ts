@@ -335,7 +335,13 @@ bot.command("sponsor", async (ctx) => {
   if (!ctx.from) return;
   if (ctx.chat.type !== "private") return ctx.reply("Use /sponsor in a private chat.");
   const offerId = String(ctx.match ?? "").trim().toLowerCase();
-  if (!["local-partner", "regional-brand", "national-network"].includes(offerId)) return ctx.reply("Usage: /sponsor local-partner|regional-brand|national-network");
+  if (!["local-partner", "regional-brand", "national-network"].includes(offerId)) {
+    try {
+      const overview = await api<{ club: { sponsorOffers: Array<{ id: string; partnerName: string; tier: string; dailyIncome: string; signingBonus: string; durationDays: number }> } }>("/v1/club/operations", ctx.from.id);
+      const offers = overview.club.sponsorOffers.map((offer) => "• " + offer.id + " · " + offer.partnerName + " (" + offer.tier + ") · " + cash(offer.dailyIncome) + " Cash/day · Bonus " + cash(offer.signingBonus) + " · " + offer.durationDays + " days");
+      return ctx.reply("Available sponsor offers:\n" + (offers.join("\n") || "No offers unlocked") + "\n\n/sponsor OFFER_ID");
+    } catch (error) { return ctx.reply("Could not load sponsor offers: " + (error instanceof Error ? error.message : "unknown error")); }
+  }
   try {
     const result = await api<{ contract: { sponsor?: { partnerName: string; tier: string; dailyIncome: string }; replayed: boolean } }>(
       "/v1/club/sponsors/sign", ctx.from.id, "POST",
@@ -361,7 +367,13 @@ bot.command("hire-coach", async (ctx) => {
   if (!ctx.from) return;
   if (ctx.chat.type !== "private") return ctx.reply("Use /hire-coach in a private chat.");
   const candidateId = String(ctx.match ?? "").trim().toLowerCase();
-  if (!["balanced", "youth", "performance"].includes(candidateId)) return ctx.reply("Usage: /hire-coach balanced|youth|performance");
+  if (!["balanced", "youth", "performance"].includes(candidateId)) {
+    try {
+      const overview = await api<{ club: { coachOffers: Array<{ id: string; name: string; signingFee: string; weeklySalary: string; trainingSkill: number; recoverySkill: number; medicalSkill: number }> } }>("/v1/club/operations", ctx.from.id);
+      const offers = overview.club.coachOffers.map((candidate) => "• " + candidate.id + " · " + candidate.name + " · Fee " + cash(candidate.signingFee) + " · Salary " + cash(candidate.weeklySalary) + "/week · Skills " + candidate.trainingSkill + "/" + candidate.recoverySkill + "/" + candidate.medicalSkill);
+      return ctx.reply("Available coaches:\n" + offers.join("\n") + "\n\n/hire-coach balanced|youth|performance");
+    } catch (error) { return ctx.reply("Could not load coach candidates: " + (error instanceof Error ? error.message : "unknown error")); }
+  }
   try {
     const result = await api<{ hiring: { coach?: { name: string; weeklySalary: string }; signingFee?: string; replayed: boolean } }>(
       "/v1/club/coach/hire", ctx.from.id, "POST",
