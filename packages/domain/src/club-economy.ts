@@ -63,9 +63,9 @@ export interface SponsorOffer {
 
 export function getSponsorOffers(level: number, reputation: number): SponsorOffer[] {
   const offers: SponsorOffer[] = [
-    { id: "local-partner", partnerName: "Local Sports Partner", tier: "BRONZE", minimumLevel: 1, minimumReputation: 0, dailyIncome: 180n, signingBonus: 500n, durationDays: 30 },
-    { id: "regional-brand", partnerName: "Regional Sports Brand", tier: "SILVER", minimumLevel: 2, minimumReputation: 50, dailyIncome: 320n, signingBonus: 1_500n, durationDays: 45 },
-    { id: "national-network", partnerName: "National Sports Network", tier: "GOLD", minimumLevel: 3, minimumReputation: 150, dailyIncome: 550n, signingBonus: 3_500n, durationDays: 60 },
+    { id: "local-partner", partnerName: "Local Sports Partner", tier: "BRONZE", minimumLevel: 1, minimumReputation: 0, dailyIncome: 250n, signingBonus: 500n, durationDays: 30 },
+    { id: "regional-brand", partnerName: "Regional Sports Brand", tier: "SILVER", minimumLevel: 2, minimumReputation: 50, dailyIncome: 400n, signingBonus: 1_500n, durationDays: 45 },
+    { id: "national-network", partnerName: "National Sports Network", tier: "GOLD", minimumLevel: 3, minimumReputation: 150, dailyIncome: 650n, signingBonus: 3_500n, durationDays: 60 },
   ];
   return offers.filter((offer) => level >= offer.minimumLevel && reputation >= offer.minimumReputation);
 }
