@@ -27,6 +27,13 @@ enum ChallengeStatus {
   COMPLETED
   CANCELLED
 }
+
+enum GroupPointSource {
+  DAILY_ACTIVITY
+  CHALLENGE_REWARD
+  LEAGUE_REWARD
+  ADMIN_ADJUSTMENT
+}
 enum PlayerOrigin {
   GENERATED
   SPECIAL
@@ -128,6 +135,7 @@ model User {
   wallets            Wallet[]
   ledgerTransactions LedgerTransaction[]
   groupMemberships   GroupMembership[]
+  groupPointEntries   GroupPointLedger[]
   specialAcquisitions SpecialPlayerAcquisition[]
   trainingLogs PlayerTrainingLog[]
   contractRenewals PlayerContractRenewal[]
@@ -383,6 +391,8 @@ model Competition {
   status      CompetitionStatus @default(REGISTRATION)
   maxTeams    Int @default(8)
   createdByClubId String
+  groupId String?
+  group TelegramGroup? @relation(fields: [groupId], references: [id], onDelete: SetNull)
   startsAt    DateTime?
   completedAt DateTime?
   createdAt   DateTime @default(now())
@@ -390,6 +400,7 @@ model Competition {
   entries     CompetitionEntry[]
   matches     FootballMatch[]
   @@index([status, createdAt])
+  @@index([groupId, status])
 }
 
 model CompetitionEntry {
@@ -580,6 +591,13 @@ model TelegramGroup {
   createdAt   DateTime         @default(now())
   memberships GroupMembership[]
   challenges  GroupChallenge[]
+  pointEntries GroupPointLedger[]
+  localCompetitions Competition[]
+  rewardGrants GroupRewardGrant[]
+  memberCount Int @default(0)
+  isActive Boolean @default(false)
+  points BigInt @default(0)
+  lastMemberCountCheckAt DateTime?
 }
 
 model GroupMembership {
@@ -603,4 +621,45 @@ model GroupChallenge {
   createdAt DateTime         @default(now())
   group     TelegramGroup    @relation(fields: [groupId], references: [id], onDelete: Cascade)
   @@index([groupId, status])
+}
+
+model GroupPointLedger {
+  id String @id @default(cuid())
+  idempotencyKey String @unique
+  groupId String
+  userId String?
+  amount BigInt
+  source GroupPointSource
+  description String
+  createdAt DateTime @default(now())
+  group TelegramGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+  @@index([groupId, createdAt])
+  @@index([userId, createdAt])
+}
+
+model GroupRewardItem {
+  id String @id @default(cuid())
+  slug String @unique
+  name String
+  description String
+  cost BigInt
+  scope String
+  active Boolean @default(true)
+  createdAt DateTime @default(now())
+  grants GroupRewardGrant[]
+}
+
+model GroupRewardGrant {
+  id String @id @default(cuid())
+  idempotencyKey String @unique
+  groupId String
+  itemId String
+  grantedByUserId String
+  recipientUserId String?
+  createdAt DateTime @default(now())
+  group TelegramGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  item GroupRewardItem @relation(fields: [itemId], references: [id], onDelete: Restrict)
+  @@index([groupId, createdAt])
+  @@index([recipientUserId, createdAt])
 }
