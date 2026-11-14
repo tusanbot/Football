@@ -91,13 +91,13 @@ test("club facilities, academy, coach, sponsor income and finance ledger are tra
     assert.equal(upgradedCoach.coach!.trainingSkill, 70);
 
     const sponsor = await signClubSponsor(userId, "local-partner", `sponsor-sign-${suffix}`, now);
-    assert.equal(sponsor.sponsor!.dailyIncome, "180");
+    assert.equal(sponsor.sponsor!.dailyIncome, "250");
     assert.equal(sponsor.replayed, false);
 
     const nextDay = new Date(now.getTime() + DAY_MS);
     const settlement = await settleClubEconomy(userId, nextDay);
     assert.equal(settlement.elapsedDays, 1);
-    assert.equal(settlement.sponsorIncome, "180");
+    assert.equal(settlement.sponsorIncome, "250");
     assert.equal(settlement.operatingCost, "45");
     assert.equal(settlement.paid, "45");
     assert.equal(settlement.arrears, "0");
