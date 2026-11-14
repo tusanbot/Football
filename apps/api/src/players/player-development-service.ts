@@ -350,6 +350,14 @@ export async function trainPlayer(
           reason: "PLAYER_TRAINING", referenceType: "PLAYER", referenceId: playerId,
         },
       });
+      await tx.clubFinanceEntry.create({
+        data: {
+          idempotencyKey: `club-finance-training:${idempotencyKey}`,
+          clubId: club.id, category: "PLAYER_TRAINING", direction: "DEBIT",
+          amount: cashCost, description: `Training session for ${player.firstName} ${player.lastName}`,
+          occurredAt: now,
+        },
+      });
       if (injuryOccurred && player.lineupSlot !== null) {
         await tx.club.update({ where: { id: club.id }, data: { lineupVersion: { increment: 1 } } });
       }
