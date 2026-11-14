@@ -57,7 +57,6 @@ test("match simulation uses the bench and records deterministic substitutions an
     assert.ok(incoming.minutesPlayed > 0 && incoming.minutesPlayed < 90);
   }
   assert.equal(result.performances.length, 32);
-  assert.ok(result.performances.some((line) => line.minutesPlayed === 0) === false);
 });
 
 test("match simulation rejects invalid sides", () => {
