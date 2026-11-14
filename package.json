@@ -10,7 +10,7 @@
     "dev:web": "pnpm --filter @football/web dev",
     "build": "pnpm -r build",
     "typecheck": "pnpm --filter @football/domain build && pnpm -r typecheck",
-    "test": "pnpm --filter @football/domain test && pnpm --filter @football/api test",
+    "test": "pnpm --filter @football/domain test && pnpm --filter @football/api test && pnpm --filter @football/bot test",
     "db:generate": "pnpm --filter @football/api db:generate",
     "db:migrate": "pnpm --filter @football/api db:migrate",
     "db:migrate:deploy": "pnpm --filter @football/api db:migrate:deploy"

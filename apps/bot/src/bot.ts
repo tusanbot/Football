@@ -39,7 +39,7 @@ bot.use(async (ctx, next) => {
             void ctx.api.deleteMessage(chatId, sent.message_id).catch((error: unknown) => {
               console.debug("Transient group reply could not be deleted:", error instanceof Error ? error.message : error);
             });
-          }, 60_000);
+          }, GROUP_REPLY_DELETE_DELAY_MS);
           timer.unref();
         }
         return sent;
