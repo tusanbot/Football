@@ -51,6 +51,24 @@ export async function inviteAllianceGroup(i: { telegramUserId: string; telegramG
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 }
 
+
+export async function contributeAllianceTreasury(i: { telegramUserId: string; telegramGroupId: string; amount: bigint; idempotencyKey: string }) {
+  if (i.amount <= 0n || i.amount > 1000000000n) throw new AllianceServiceError("INVALID_CONTRIBUTION_AMOUNT");
+  return prisma.$transaction(async tx => {
+    const { group } = await manager(tx, i.telegramUserId, i.telegramGroupId);
+    const membership = await tx.allianceGroup.findUnique({ where: { groupId: group.id } });
+    if (!membership) throw new AllianceServiceError("ALLIANCE_NOT_FOUND");
+    const old = await tx.allianceLedger.findUnique({ where: { idempotencyKey: i.idempotencyKey } });
+    if (old) return { contributed: true, replayed: true, treasuryPoints: (await tx.alliance.findUniqueOrThrow({where:{id:membership.allianceId},select:{treasuryPoints:true}})).treasuryPoints.toString() };
+    const debited = await tx.telegramGroup.updateMany({ where: { id: group.id, points: { gte: i.amount } }, data: { points: { decrement: i.amount } } });
+    if (!debited.count) throw new AllianceServiceError("INSUFFICIENT_GROUP_POINTS");
+    const alliance = await tx.alliance.update({ where: { id: membership.allianceId }, data: { treasuryPoints: { increment: i.amount } }, select: { treasuryPoints: true } });
+    await tx.allianceLedger.create({ data: { allianceId: membership.allianceId, idempotencyKey: i.idempotencyKey, amount: i.amount, source: "GROUP_CONTRIBUTION", description: "Contribution from Telegram group " + group.title } });
+    await tx.groupPointLedger.create({ data: { idempotencyKey: "alliance-contribution:" + i.idempotencyKey, groupId: group.id, amount: -i.amount, source: "ADMIN_ADJUSTMENT", description: "Contribution to alliance treasury" } });
+    return { contributed: true, replayed: false, treasuryPoints: alliance.treasuryPoints.toString(), groupPoints: (group.id ? (await tx.telegramGroup.findUniqueOrThrow({where:{id:group.id},select:{points:true}})).points.toString() : "0") };
+  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+}
+
 export async function respondAllianceInvitation(i: { telegramUserId: string; telegramGroupId: string; invitationId: string; accept: boolean }) {
   return prisma.$transaction(async tx => {
     const { group } = await manager(tx, i.telegramUserId, i.telegramGroupId);
@@ -95,7 +113,7 @@ export async function createAllianceChampionship(i: { telegramUserId: string; te
 
 export async function joinAllianceChampionship(i: { telegramUserId: string; telegramGroupId: string; competitionId: string }) {
   return prisma.$transaction(async tx => {
-    const { user, group } = await manager(tx, i.telegramUserId, i.telegramGroupId);
+    const { user, group } = await manager(tx, i.telegramUserId, i.telegramGroupId, false);
     const membership = await tx.allianceGroup.findUnique({ where: { groupId: group.id } });
     if (!membership) throw new AllianceServiceError("ALLIANCE_NOT_FOUND");
     const c = await tx.competition.findFirst({ where: { id: i.competitionId, allianceId: membership.allianceId }, include: { entries: true } });
