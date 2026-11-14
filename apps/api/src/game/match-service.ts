@@ -366,6 +366,7 @@ export async function simulateScheduledMatch(userId: string, matchId: string, no
         replayed: true, matchId: completed.id, competitionId: match.competitionId, homeClub: completed.homeClub.name,
         awayClub: completed.awayClub.name, homeScore: completed.homeScore, awayScore: completed.awayScore,
         attendance: completed.attendance, ticketRevenue: completed.ticketRevenue.toString(),
+        homePenalties: completed.homePenalties, awayPenalties: completed.awayPenalties, winnerClubId: completed.winnerClubId,
         events: completed.events.map((event) => ({
           ...event, playerName: names.get(event.playerId) ?? "Player",
           relatedPlayerName: event.relatedPlayerId ? names.get(event.relatedPlayerId) ?? null : null,
@@ -433,20 +434,20 @@ export async function simulateScheduledMatch(userId: string, matchId: string, no
     if (injuredClubIds.size > 0) {
       await tx.club.updateMany({ where: { id: { in: [...injuredClubIds] } }, data: { lineupVersion: { increment: 1 } } });
     }
-    const homeReward = result.homeScore > result.awayScore ? 250n : result.homeScore === result.awayScore ? 150n : 100n;
-    const awayReward = result.awayScore > result.homeScore ? 250n : result.homeScore === result.awayScore ? 150n : 100n;
+    const homeReward = winnerClubId ? (winnerClubId === home.id ? 250n : 100n) : 150n;
+    const awayReward = winnerClubId ? (winnerClubId === away.id ? 250n : 100n) : 150n;
     await creditMatchCash(tx, home, result.ticketRevenue, `match:${match.id}:home-gate`,
       "MATCH_GATE_REVENUE", "MATCH_GATE_REVENUE", `Match gate receipts for attendance ${result.attendance}`, now);
     await creditMatchCash(tx, home, homeReward, `match:${match.id}:home-reward`,
       "MATCH_APPEARANCE_REWARD", "MATCH_REWARD", `Home match reward ${homeReward}`, now);
     await creditMatchCash(tx, away, awayReward, `match:${match.id}:away-reward`,
       "MATCH_APPEARANCE_REWARD", "MATCH_REWARD", `Away match reward ${awayReward}`, now);
-    if (result.homeScore !== result.awayScore) {
-      await tx.club.update({ where: { id: result.homeScore > result.awayScore ? home.id : away.id }, data: { reputation: { increment: 2 } } });
+    if (winnerClubId) {
+      await tx.club.update({ where: { id: winnerClubId }, data: { reputation: { increment: 2 } } });
     } else {
       await tx.club.updateMany({ where: { id: { in: [home.id, away.id] } }, data: { reputation: { increment: 1 } } });
     }
-    if (match.competitionId) {
+    if (match.competitionId && competition?.format === "LEAGUE") {
       const homePoints = result.homeScore > result.awayScore ? 3 : result.homeScore === result.awayScore ? 1 : 0;
       const awayPoints = result.awayScore > result.homeScore ? 3 : result.homeScore === result.awayScore ? 1 : 0;
       await tx.competitionEntry.update({
