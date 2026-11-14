@@ -69,10 +69,10 @@ export function registerMatchRoutes(app: FastifyInstance) {
     if (!user) return reply.code(401).send({ error: "UNAUTHENTICATED" });
     const body = z.object({
       name: z.string().trim().min(3).max(40), maxTeams: z.number().int().min(4).max(10),
-      idempotencyKey: keySchema,
+      format: z.enum(["LEAGUE", "CUP"]).default("LEAGUE"), idempotencyKey: keySchema,
     }).safeParse(request.body);
     if (!body.success) return reply.code(400).send({ error: "INVALID_COMPETITION" });
-    try { return await createLeague(user.id, body.data.name, body.data.maxTeams, body.data.idempotencyKey); }
+    try { return await createLeague(user.id, body.data.name, body.data.maxTeams, body.data.idempotencyKey, body.data.format); }
     catch (error) { return sendMatchError(reply, error); }
   });
   app.post("/v1/competitions/:id/join", async (request, reply) => {
