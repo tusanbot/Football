@@ -20,7 +20,8 @@ test("season standings count only net eligible points earned during membership a
     { groupId: "g1", userId: "u1", amount: 900n, source: "GAME_ACTIVITY", createdAt: new Date("2025-12-31T23:59:59Z") },
     { groupId: "g1", userId: "u1", amount: 900n, source: "GAME_ACTIVITY", createdAt: new Date("2026-02-01T00:00:00Z") },
     { groupId: "g1", userId: "u1", amount: 900n, source: "GAME_ACTIVITY", createdAt: new Date("2026-01-01T12:00:00Z") },
-    { groupId: "g2", userId: "u3", amount: 45n, source: "LEAGUE_REWARD", createdAt: new Date("2026-01-20T00:00:00Z") },
+    { groupId: "g2", userId: "u3", amount: 30n, source: "LEAGUE_REWARD", createdAt: new Date("2026-01-20T00:00:00Z") },
+    { groupId: "g2", userId: "u4", amount: 15n, source: "GAME_ACTIVITY", createdAt: new Date("2026-01-21T00:00:00Z") },
   ];
   const result = buildAllianceSeasonStandings(groups, entries, startsAt, endsAt);
   assert.deepEqual(result.standings.map(x => [x.group, x.points]), [["Alpha", "120"], ["Beta", "45"]]);

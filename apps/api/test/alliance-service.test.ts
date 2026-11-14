@@ -57,12 +57,12 @@ test("alliance season close enforces its end date, calculates seasonal net point
       { idempotencyKey: "security-score-admin-" + suffix, groupId, userId: reviewer.id, amount: 5000n, source: "ADMIN_ADJUSTMENT", description: "must not count", createdAt: new Date(now.getTime() - 2 * 86400000) },
     ] });
     await assert.rejects(
-      closeAllianceSeason({ telegramUserId: reviewerTelegramId, telegramGroupId }),
+      closeAllianceSeason({ telegramUserId: reviewerTelegramId, telegramGroupId: groupTelegramId }),
       (error: unknown) => error instanceof AllianceServiceError && error.code === "SEASON_NOT_ENDED",
     );
     await prisma.allianceSeason.update({ where: { id: season.id }, data: { endsAt: new Date(now.getTime() - 1000) } });
     process.env.ALLIANCE_REVIEWER_TELEGRAM_IDS = reviewerTelegramId;
-    const closed = await closeAllianceSeason({ telegramUserId: reviewerTelegramId, telegramGroupId });
+    const closed = await closeAllianceSeason({ telegramUserId: reviewerTelegramId, telegramGroupId: groupTelegramId });
     assert.equal(closed.reviewStatus, "FLAGGED");
     assert.equal((closed.standings as Array<{ points: string }>)[0]?.points, "120");
     assert.equal((await prisma.alliance.findUniqueOrThrow({ where: { id: allianceId } })).treasuryPoints, 500n);
