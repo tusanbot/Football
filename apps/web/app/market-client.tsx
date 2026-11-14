@@ -36,6 +36,8 @@ type LeagueDetails = {
 type GroupWorkspace = {
  group:{telegramGroupId:string;title:string;role:"OWNER"|"ADMIN"|"MEMBER";memberCount:number;isActive:boolean;points:string;lastMemberCountCheckAt:string|null};
  personal:{points:string;rewards:Array<{id:string;item:string;description:string;scope:string;grantedAt:string}>;history:Array<{id:string;amount:string;source:string;description:string;createdAt:string}>};
+ sharedRewards:Array<{id:string;item:string;description:string;grantedAt:string}>;
+ treasuryHistory:Array<{id:string;amount:string;source:string;description:string;actor:string;createdAt:string}>;
  shop:Array<{slug:string;name:string;description:string;cost:string;scope:string}>;
  challenges:Array<{id:string;title:string;status:string;startsAt:string|null;endsAt:string|null;rewardPoints:string;participants:number;joined:boolean;createdByMe:boolean}>;
  leagues:Array<{id:string;name:string;status:string;maxTeams:number;teams:number;joined:boolean;createdByMe:boolean}>;
@@ -584,8 +586,12 @@ export default function MarketPage() {
             <div><strong>{item.name}</strong><small>{item.description} · {item.scope === "GROUP" ? "جایزه مشترک گروه" : "جایزه انفرادی"} · {money(item.cost)} امتیاز</small></div>
             <button className="secondary" disabled={!!busy || groupWorkspace.group.role === "MEMBER" || (item.scope === "PERSONAL" && !groupRecipientTelegramId)} onClick={() => void action("group-buy-" + item.slug, "/v1/groups/" + encodeURIComponent(selectedGroupTelegramId) + "/shop/purchase", "POST", { itemSlug:item.slug, ...(item.scope === "PERSONAL" ? {recipientTelegramId:groupRecipientTelegramId} : {}), idempotencyKey:"mini-group-buy-"+crypto.randomUUID() })}>خرید / اعطا</button>
           </div>)}
+          <h3>جوایز مشترک گروه</h3>
+          {groupWorkspace.sharedRewards.length === 0 ? <p className="muted">هنوز جایزه مشترکی خریداری نشده است.</p> : groupWorkspace.sharedRewards.map((reward) => <div className="operation-row" key={reward.id}><div><strong>{reward.item}</strong><small>{reward.description} · {new Date(reward.grantedAt).toLocaleDateString("fa-IR")}</small></div><span>مشترک</span></div>)}
           <h3>جوایز دریافت‌شده من</h3>
           {groupWorkspace.personal.rewards.length === 0 ? <p className="muted">هنوز جایزه‌ای دریافت نکرده‌اید.</p> : groupWorkspace.personal.rewards.map((reward) => <div className="operation-row" key={reward.id}><div><strong>{reward.item}</strong><small>{reward.description} · {new Date(reward.grantedAt).toLocaleDateString("fa-IR")}</small></div><span>{reward.scope === "GROUP" ? "گروهی" : "انفرادی"}</span></div>)}
+          <h3>تاریخچه خزانه گروه</h3>
+          {groupWorkspace.treasuryHistory.slice(0,10).map((entry) => <div className="operation-row" key={entry.id}><div><strong>{entry.description}</strong><small>{entry.actor} · {entry.source} · {new Date(entry.createdAt).toLocaleString("fa-IR")}</small></div><strong>{BigInt(entry.amount) > BigInt(0) ? "+" : ""}{money(entry.amount)}</strong></div>)}
           <h3>تاریخچه امتیاز شخصی</h3>
           {groupWorkspace.personal.history.slice(0,10).map((entry) => <div className="operation-row" key={entry.id}><div><strong>{entry.description}</strong><small>{entry.source} · {new Date(entry.createdAt).toLocaleString("fa-IR")}</small></div><strong>{BigInt(entry.amount) > BigInt(0) ? "+" : ""}{money(entry.amount)}</strong></div>)}
         </div>
