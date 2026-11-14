@@ -559,6 +559,15 @@ bot.command("startleague", async (ctx) => {
   } catch (error) { await ctx.reply(`Could not start league: ${error instanceof Error ? error.message : "unknown error"}`); }
 });
 
+bot.command("startcup", async (ctx) => {
+  if (!ctx.from || ctx.chat.type !== "private") return;
+  const id = String(ctx.match ?? "").trim().split(/\s+/)[0];
+  if (!id) return ctx.reply("Usage: /startcup CUP_ID");
+  try {
+    const result = await api<{ fixturesCreated: number; rounds: number; teams: number; replayed?: boolean }>(`/v1/competitions/${encodeURIComponent(id)}/start`, ctx.from.id, "POST", {});
+    await ctx.reply("Cup started with " + result.teams + " clubs. " + result.fixturesCreated + " first-round fixtures; " + result.rounds + " knockout rounds.");
+  } catch (error) { await ctx.reply("Could not start cup: " + (error instanceof Error ? error.message : "unknown error")); }
+});
 bot.command("table", async (ctx) => {
   if (!ctx.from || ctx.chat.type !== "private") return;
   const id = String(ctx.match ?? "").trim().split(/\s+/)[0];
