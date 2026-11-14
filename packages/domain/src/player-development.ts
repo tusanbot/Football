@@ -83,14 +83,14 @@ export function calculateTrainingResult(
   const gain = Math.max(0, Math.min(3, Math.floor(rawGain)));
   const attributes = { ...player.attributes };
   const targets = focus === "BALANCED"
-    ? (["pace", "shooting", "passing", "dribbling", "defending", "physical"] as const)
+    ? (["pace", "passing", "physical"] as const)
     : focusAttributes[focus];
-  const perAttribute = focus === "BALANCED" ? Math.max(0, Math.floor(gain / 3)) : gain;
+  const perAttribute = focus === "BALANCED" ? (gain > 0 ? 1 : 0) : gain;
   for (const attribute of targets) {
     attributes[attribute] = clamp(attributes[attribute] + perAttribute, 20, 99);
   }
   let overall = calculatePlayerOverall(player.position, attributes);
-  overall = Math.min(player.potential, overall);
+  overall = Math.min(player.potential, Math.max(player.overall, overall));
 
   const fitnessCost = intensity === "LIGHT" ? 2 : intensity === "NORMAL" ? 5 : 10;
   const fitness = clamp(player.fitness - fitnessCost, 0, 100);
