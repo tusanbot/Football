@@ -21,7 +21,10 @@ const persistentGroupCommands = new Set([
 ]);
 function isPersistentGroupReply(command: string | undefined, messageText: string): boolean {
   if (command && persistentGroupCommands.has(command)) return true;
-  return /(?:ranking|leaderboard|standings|rank|رنbot.use(async (ctx, next) => {
+  return /(?:ranking|leaderboard|standings|rank|رنک|رتبه|جدول)/i.test(messageText);
+}
+
+bot.use(async (ctx, next) => {
   const chat = ctx.chat;
   if (chat && (chat.type === "group" || chat.type === "supergroup")) {
     const chatId = chat.id;
@@ -41,10 +44,6 @@ function isPersistentGroupReply(command: string | undefined, messageText: string
         }
         return sent;
       },
-    });
-  }
-  await next();
-});   },
     });
   }
   await next();
