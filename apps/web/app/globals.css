@@ -75,3 +75,20 @@ button:disabled { opacity: .55; cursor: not-allowed; }
 @media (max-width: 680px) {
   .lineup-grid { grid-template-columns: 1fr; }
 }
+
+.development-layout { display: grid; grid-template-columns: minmax(0,1.1fr) minmax(0,.9fr); gap: 14px; align-items: start; }
+.coach-panel { display: grid; gap: 5px; margin: 14px 0 18px; padding: 13px; border: 1px solid #31516a; border-radius: 12px; background: #142a3a; }
+.coach-panel span, .coach-panel small { color: #9fb0c5; font-size: 12px; }
+.development-stats { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 8px; margin: 14px 0; }
+.development-stats div { padding: 10px 8px; border-radius: 10px; background: #0b1727; border: 1px solid #263b52; }
+.development-stats span, .development-stats strong { display: block; }
+.development-stats span { color: #9fb0c5; font-size: 11px; }
+.development-stats strong { margin-top: 5px; font-size: 16px; }
+.development-player-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 11px 0; border-top: 1px solid #263b52; }
+.development-player-row div:last-child { text-align: right; }
+.development-player-row strong, .development-player-row small { display: block; }
+.development-player-row small { color: #9fb0c5; font-size: 11px; margin-top: 4px; }
+@media (max-width: 680px) {
+  .development-layout { grid-template-columns: 1fr; }
+  .development-stats { grid-template-columns: repeat(2,minmax(0,1fr)); }
+}
