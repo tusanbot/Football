@@ -5,6 +5,7 @@ CREATE TYPE "CompetitionStatus" AS ENUM ('DRAFT', 'REGISTRATION', 'ACTIVE', 'COM
 
 CREATE TABLE "Competition" (
   "id" TEXT NOT NULL,
+  "idempotencyKey" TEXT NOT NULL,
   "name" TEXT NOT NULL,
   "season" INTEGER NOT NULL,
   "status" "CompetitionStatus" NOT NULL DEFAULT 'REGISTRATION',
@@ -16,6 +17,7 @@ CREATE TABLE "Competition" (
   "updatedAt" TIMESTAMP(3) NOT NULL,
   CONSTRAINT "Competition_pkey" PRIMARY KEY ("id")
 );
+CREATE UNIQUE INDEX "Competition_idempotencyKey_key" ON "Competition"("idempotencyKey");
 CREATE INDEX "Competition_status_createdAt_idx" ON "Competition"("status", "createdAt");
 
 CREATE TABLE "CompetitionEntry" (
