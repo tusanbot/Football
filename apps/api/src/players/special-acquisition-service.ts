@@ -101,7 +101,7 @@ export async function acquireSpecialPlayer(userId: string, method: SpecialPackMe
         position: (selected.positions[0] || "ST") as PlayerPosition,
         overall: selected.overall,
         potential: selected.potential,
-        attributes: selected.attributes,
+        attributes: selected.attributes === null ? Prisma.JsonNull : selected.attributes as Prisma.InputJsonValue,
         wage: BigInt(selected.overall * selected.overall * 3),
         contractDays: 365,
         origin: "SPECIAL",
