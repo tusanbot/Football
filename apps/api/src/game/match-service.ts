@@ -59,6 +59,12 @@ function toSide(club: LoadedClub): MatchSide {
       fitness: player.fitness,
       attributes: player.attributes as unknown as MatchSide["players"][number]["attributes"],
     })),
+    bench: bench.filter((player) => !selected.some((starter) => starter.id === player.id)).slice(0, 7).map((player) => ({
+      id: player.id, name: player.firstName + " " + player.lastName,
+      position: player.position, overall: player.overall, morale: player.morale,
+      fitness: player.fitness,
+      attributes: player.attributes as unknown as MatchSide["players"][number]["attributes"],
+    })),
   };
 }
 async function getOwnedClub(userId: string) {
@@ -445,11 +451,14 @@ export async function simulateScheduledMatch(userId: string, matchId: string, no
       redCards: line.redCards, rating: line.rating, fitnessLoss: line.fitnessLoss,
     })) });
     const injuredIds = new Set(result.events.filter((event) => event.type === "INJURY").map((event) => event.playerId));
-    const playerById = new Map([...home.players, ...away.players].map((player) => [player.id, player]));
+    const playerById = new Map(
+      [...home.players, ...home.bench, ...away.players, ...away.bench]
+        .map((player) => [player.id, player] as const),
+    );
     const injuredClubIds = new Set<string>();
     for (const line of result.performances) {
       const player = playerById.get(line.playerId);
-      if (!player) continue;
+      if (!player || line.minutesPlayed <= 0) continue;
       if (injuredIds.has(line.playerId)) {
         injuredClubIds.add(line.clubId);
         await tx.player.updateMany({
