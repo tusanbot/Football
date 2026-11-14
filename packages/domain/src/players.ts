@@ -47,7 +47,7 @@ export function generatePlayer(position: PlayerPosition, randomInt: RandomInt): 
     physical: bias(overall + (["CB","CDM","ST"].includes(position) ? 7 : 0)),
     goalkeeping: goalkeeper ? bias(overall + 10) : randomInt(20, 36),
   };
-  const wage = BigInt(overall * overall * 2 + (potential - overall) * 35 + (age < 21 ? 80 : 0));
+  // Wage is a weekly Cash amount; keep the starter economy affordable.\n  const wage = BigInt(Math.max(50, overall * 2 + (potential - overall) * 3 + (age < 21 ? 20 : 0)));
   return { firstName, lastName, nationality: country.code, age, position, overall, potential, attributes, wage, contractDays: randomInt(180, 1096) };
 }
 
