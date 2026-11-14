@@ -44,7 +44,7 @@ type GroupWorkspace = {
 };
 type GroupLeagueTable = {competition:{id:string;name:string;status:string;teams:Array<{rank:number;club:string;played:number;won:number;drawn:number;lost:number;goalsFor:number;goalsAgainst:number;points:number}>}};
 type AllianceWorkspace = {
- alliance: null | { id:string; name:string; description:string; treasuryPoints:string; groups:Array<{title:string;telegramGroupId:string;memberCount:number;points:string;role:string}>; seasons:Array<{id:string;number:number;status:string;startsAt:string;endsAt:string;standings:Array<{rank:number;group:string;points:string}>|null}>; competitions:Array<{id:string;name:string;status:string;teams:number;standings:Array<{rank:number;club:string;played:number;points:number;goalsFor:number;goalsAgainst:number}>}> };
+ alliance: null | { id:string; name:string; description:string; treasuryPoints:string; canReview:boolean; groups:Array<{title:string;telegramGroupId:string;memberCount:number;points:string;role:string}>; seasons:Array<{id:string;number:number;status:string;reviewStatus:string;securityFlags:Array<{code:string;groupId:string;group:string;memberPoints:string;totalPoints:string;sharePercent:number}>|null;startsAt:string;endsAt:string;standings:Array<{rank:number;groupId:string;group:string;points:string}>|null}>; auditLogs:Array<{id:string;actorTelegramId:string;groupTelegramId:string;action:string;metadata:unknown;createdAt:string}>; competitions:Array<{id:string;name:string;status:string;teams:number;standings:Array<{rank:number;club:string;played:number;points:number;goalsFor:number;goalsAgainst:number}>}> };
  invitations:Array<{id:string;alliance:{name:string;description:string}}>;
 };
 
@@ -693,7 +693,18 @@ export default function MarketPage() {
             {comp.standings.map(row=><small key={row.rank}>{row.rank}. {row.club} · {row.points} امتیاز</small>)}
           </div>)}
           <h3>فصل‌ها و رتبه‌بندی گروه‌ها</h3>
-          {allianceWorkspace.alliance.seasons.map(season=><div className="operation-row" key={season.id}><strong>فصل {season.number} · {season.status}</strong><small>{new Date(season.startsAt).toLocaleDateString("fa-IR")} تا {new Date(season.endsAt).toLocaleDateString("fa-IR")}</small>{season.standings?.map(row=><small key={row.rank}>{row.rank}. {row.group} · {money(row.points)} امتیاز</small>)}</div>)}
+          {allianceWorkspace.alliance.seasons.map(season=><div className="operation-row" key={season.id}>
+            <strong>فصل {season.number} · {season.status} · {season.reviewStatus}</strong>
+            <small>{new Date(season.startsAt).toLocaleDateString("fa-IR")} تا {new Date(season.endsAt).toLocaleDateString("fa-IR")}</small>
+            {season.standings?.map(row=><small key={row.rank}>{row.rank}. {row.group} · {money(row.points)} امتیاز</small>)}
+            {season.securityFlags?.map((flag,index)=><small key={flag.code+flag.groupId+index}>هشدار امنیتی: {flag.group} · تمرکز {flag.sharePercent}% امتیاز نزد یک عضو</small>)}
+            {allianceWorkspace.alliance.canReview && season.reviewStatus==="FLAGGED" && <div className="operation-row">
+              <button disabled={!!busy} onClick={()=>void action("alliance-review-approve-"+season.id,"/v1/alliances/"+encodeURIComponent(selectedGroupTelegramId)+"/seasons/"+season.id+"/review","POST",{decision:"APPROVE"})}>تأیید پس از بررسی</button>
+              <button className="secondary" disabled={!!busy} onClick={()=>void action("alliance-review-reject-"+season.id,"/v1/alliances/"+encodeURIComponent(selectedGroupTelegramId)+"/seasons/"+season.id+"/review","POST",{decision:"REJECT"})}>رد جایزه</button>
+            </div>}
+          </div>)}
+          <h3>گزارش رویدادهای مدیریتی</h3>
+          {allianceWorkspace.alliance.auditLogs.slice(0,12).map(log=><div className="operation-row" key={log.id}><strong>{log.action}</strong><small>{log.actorTelegramId} · {new Date(log.createdAt).toLocaleString("fa-IR")}</small></div>)}
         </>}
       </div>
     </section>}

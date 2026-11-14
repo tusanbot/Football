@@ -664,9 +664,9 @@ bot.command("table", async (ctx) => {
 bot.command("alliance", async ctx => {
   if (!ctx.from || !["group","supergroup"].includes(ctx.chat.type)) return;
   try {
-    const d = await api<{alliance:{name:string;treasuryPoints:string;groups:Array<{title:string;memberCount:number}>;seasons:Array<{number:number;status:string}>;competitions:Array<{id:string;name:string;status:string;teams:number}>}|null;invitations:Array<{id:string;alliance:{name:string}}>}>("/v1/alliances/"+encodeURIComponent(String(ctx.chat.id)),ctx.from.id);
+    const d = await api<{alliance:{name:string;treasuryPoints:string;groups:Array<{title:string;memberCount:number}>;seasons:Array<{number:number;status:string;reviewStatus:string}>;competitions:Array<{id:string;name:string;status:string;teams:number}>}|null;invitations:Array<{id:string;alliance:{name:string}}>}>("/v1/alliances/"+encodeURIComponent(String(ctx.chat.id)),ctx.from.id);
     if (!d.alliance) return ctx.reply("گروه عضو اتحادی نیست. دعوت‌ها:\n"+(d.invitations.length?d.invitations.map(x=>x.id+" · "+x.alliance.name).join("\n"):"دعوتی ندارید."));
-    return ctx.reply("اتحاد: "+d.alliance.name+"\nخزانه: "+d.alliance.treasuryPoints+"\nگروه‌ها:\n"+d.alliance.groups.map(x=>x.title+" · "+x.memberCount+" عضو").join("\n")+"\nفصل‌ها: "+d.alliance.seasons.map(x=>"#"+x.number+" "+x.status).join("، ")+"\nقهرمانی‌ها:\n"+d.alliance.competitions.map(x=>x.id+" · "+x.name+" · "+x.status+" · "+x.teams+" تیم").join("\n"));
+    return ctx.reply("اتحاد: "+d.alliance.name+"\nخزانه: "+d.alliance.treasuryPoints+"\nگروه‌ها:\n"+d.alliance.groups.map(x=>x.title+" · "+x.memberCount+" عضو").join("\n")+"\nفصل‌ها: "+d.alliance.seasons.map(x=>"#"+x.number+" "+x.status+" · "+x.reviewStatus).join("، ")+"\nقهرمانی‌ها:\n"+d.alliance.competitions.map(x=>x.id+" · "+x.name+" · "+x.status+" · "+x.teams+" تیم").join("\n"));
   } catch(e) { await ctx.reply("اتحاد در دسترس نیست: "+(e instanceof Error?e.message:"unknown")); }
 });
 bot.command("alliance-create", async ctx => {
@@ -713,6 +713,17 @@ bot.command("alliance-season-close",async ctx=>{
   if(!ctx.from||!["group","supergroup"].includes(ctx.chat.type))return;
   try { const d=await api<{standings:Array<{rank:number;group:string;points:string}>}>("/v1/alliances/"+encodeURIComponent(String(ctx.chat.id))+"/seasons/close",ctx.from.id,"POST"); await ctx.reply("جدول نهایی فصل:\n"+d.standings.map(x=>x.rank+". "+x.group+" · "+x.points+" امتیاز").join("\n")); }
   catch(e){await ctx.reply("بستن فصل ناموفق بود: "+(e instanceof Error?e.message:"unknown"));}
+});
+
+bot.command("alliance-season-review",async ctx=>{
+  if(!ctx.from||!["group","supergroup"].includes(ctx.chat.type))return;
+  const parts=String(ctx.match??"").trim().split(/\s+/);
+  const seasonId=parts[0]??"", decision=parts[1]?.toLowerCase();
+  if(!seasonId||!["approve","reject"].includes(decision??""))return ctx.reply("استفاده: /alliance-season-review SEASON_ID approve|reject\nفقط بازبین مجاز اتحاد می‌تواند جایزه مشکوک را تأیید یا رد کند.");
+  try {
+    const d=await api<{reviewStatus:string;winner?:string|null;prize?:string}>("/v1/alliances/"+encodeURIComponent(String(ctx.chat.id))+"/seasons/"+encodeURIComponent(seasonId)+"/review",ctx.from.id,"POST",{decision:decision==="approve"?"APPROVE":"REJECT"});
+    await ctx.reply("بررسی امنیتی فصل ثبت شد: "+d.reviewStatus+(d.winner?"\nقهرمان: "+d.winner:"")+(d.prize&&d.prize!=="0"?"\nجایزه پرداخت‌شده: "+cash(d.prize):""));
+  } catch(e){await ctx.reply("بررسی فصل ناموفق بود: "+(e instanceof Error?e.message:"unknown"));}
 });
 
 bot.command("alliance-contribute",async ctx=>{
