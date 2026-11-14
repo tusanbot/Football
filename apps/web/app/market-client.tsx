@@ -44,6 +44,9 @@ declare global { interface Window { Telegram?: { WebApp?: { initData?: string; r
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
 const money = (value: string | number) => new Intl.NumberFormat("en-US").format(Number(value));
 const rarityLabel: Record<string, string> = { ICON: "Icon", LEGENDARY: "Legendary", EPIC: "Epic", RARE: "Rare" };
+const matchEventLabel: Record<string, string> = {
+  GOAL: "گل", YELLOW_CARD: "کارت زرد", RED_CARD: "کارت قرمز", INJURY: "مصدومیت",
+};
 const financeCategoryLabel: Record<string, string> = {
   PLAYER_TRAINING: "تمرین بازیکن",
   PLAYER_MARKET_PURCHASE: "خرید بازیکن",
@@ -464,7 +467,7 @@ export default function MarketPage() {
             <strong>{match.homeClub.name} {match.homeScore ?? "–"} : {match.awayScore ?? "–"} {match.awayClub.name}</strong>
             <small>{match.type === "LEAGUE" ? "لیگ" : "دوستانه"} · {match.status === "COMPLETED" ? "پایان‌یافته" : match.status === "SCHEDULED" ? "برنامه‌ریزی‌شده" : "لغوشده"} · {new Date(match.scheduledAt).toLocaleString("fa-IR")}</small>
             {match.status === "COMPLETED" && <small>تماشاگر: {money(match.attendance)} · درآمد بلیت: {money(match.ticketRevenue)} Cash</small>}
-            {match.events.filter((event) => event.type === "GOAL").slice(0, 4).map((event, index) => <small key={match.id + "-goal-" + index}>{event.minute}' · {event.playerName}{event.relatedPlayerName ? " (پاس گل: " + event.relatedPlayerName + ")" : ""}</small>)}
+            {match.events.slice(0, 8).map((event, index) => <small key={match.id + "-event-" + index}>{event.minute} دقیقه · {matchEventLabel[event.type] ?? event.type} · {event.playerName}{event.relatedPlayerName ? " (پاس گل: " + event.relatedPlayerName + ")" : ""}</small>)}
           </div>
           {match.status === "SCHEDULED" && new Date(match.scheduledAt).getTime() <= Date.now() && <button disabled={!!busy} onClick={() => void action("play-" + match.id, "/v1/matches/" + match.id + "/simulate", "POST", {})}>شبیه‌سازی مسابقه</button>}
         </div>)}
