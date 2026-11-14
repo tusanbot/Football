@@ -91,8 +91,8 @@ bot.command("wallet", async (ctx) => {
   if (ctx.chat.type !== "private") return ctx.reply("Use /wallet in a private chat to view your balances.");
   try {
     const result = await api<{ wallets: Array<{ asset: "CASH" | "GOLD"; balance: string }> }>("/v1/wallet", ctx.from.id);
-    const balances = result.wallets.map((wallet) => `${wallet.asset}: ${cash(wallet.balance)}`).join("\\n");
-    await ctx.reply(`Your club wallet:\\n${balances || "No wallet balances found."}`);
+    const balances = result.wallets.map((wallet) => `${wallet.asset}: ${cash(wallet.balance)}`).join("\n");
+    await ctx.reply(`Your club wallet:\n${balances || "No wallet balances found."}`);
   } catch (error) {
     await ctx.reply(`Could not load wallet: ${error instanceof Error ? error.message : "unknown error"}`);
   }
