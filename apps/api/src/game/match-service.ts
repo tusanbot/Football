@@ -92,7 +92,7 @@ export async function listMatchOpponents(userId: string) {
     include: { players: { where: { status: "ACTIVE" }, select: { id: true, position: true } } },
     orderBy: [{ reputation: "desc" }, { level: "desc" }], take: 50,
   });
-  return clubs.filter((club) => club.players.length === 11).map((club) => ({
+  return clubs.filter((club) => club.players.length >= 11 && club.players.some((player) => player.position === "GK")).map((club) => ({
     id: club.id, name: club.name, level: club.level, reputation: club.reputation,
   }));
 }
@@ -120,7 +120,7 @@ export async function createFriendlyMatch(userId: string, opponentClubId: string
   const overlap = await prisma.footballMatch.findFirst({
     where: {
       status: "SCHEDULED", scheduledAt: { gte: new Date(scheduledAt.getTime() - 2 * 60 * 60_000), lte: new Date(scheduledAt.getTime() + 2 * 60 * 60_000) },
-      OR: [{ homeClubId: own.id }, { awayClubId: own.id }],
+      OR: [{ homeClubId: { in: [own.id, opponentClubId] } }, { awayClubId: { in: [own.id, opponentClubId] } }],
     },
   });
   if (overlap) throw new MatchServiceError("CLUB_ALREADY_HAS_MATCH_IN_WINDOW");
