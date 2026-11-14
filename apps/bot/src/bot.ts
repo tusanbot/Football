@@ -81,7 +81,7 @@ bot.command("start", async (ctx) => {
 });
 
 bot.command("help", async (ctx) => ctx.reply(
-  "Football Empire commands:\n/club — club profile\n/wallet — Cash and Gold balances\n/rename NEW NAME — rename your club\n/players — your active squad\n/lineup — view starting XI and tactics\n/setlineup FORMATION ID1 ... ID11 — set your XI\n/development — player development overview\n/train PLAYER_ID FOCUS INTENSITY — train a player\n/renew PLAYER_ID DAYS WEEKLY_WAGE — renew a contract\n/operations — facilities, academy, sponsors and finance\n/finance [DAYS] — income and expense statement\n/upgrade stadium|training|academy — upgrade a facility\n/ticket-price PRICE — set stadium ticket price\n/scout — find academy prospects\n/recruit PROSPECT_ID — sign an academy prospect\n/sponsor OFFER_ID — sign a sponsor\n/coach-upgrade — develop your coach\n/hire-coach balanced|youth|performance — hire a coach\n/opponents — clubs available for friendlies\n/friendly CLUB_ID — schedule a friendly\n/matches — your fixtures and results\n/play MATCH_ID — simulate a due match\n/league NAME [4-10] — create a league\n/cup NAME [4|8] — create a knockout cup\n/leagues — open leagues\n/joinleague ID — join a league\n/startleague ID — start your league\n/startcup ID — start your cup\n/table ID — league table or cup bracket\n/group-register — register this Telegram group (admins only)\n/group-join — join this group with your club\n/group — show group status and treasury\n/group-activity — earn one daily group point\n/group-shop — reward shop\n/group-buy ITEM [USER_ID] — purchase reward\n/group-challenges — list challenges\n/group-challenge TITLE|START_ISO|END_ISO|POINTS — create challenge\n/group-challenge-join ID — join challenge\n/group-challenge-complete ID USER_ID — settle challenge\n/group-check — refresh member threshold\n/group-league NAME [4-10] — create local league\n/group-league-join ID — join local league\n/group-league-start ID — start local league\n/group-league-table ID — standings\n/market — open transfer listings\n/sell PLAYER_ID PRICE — list a generated player\n/buy LISTING_ID — buy a listed player\n/special — view special players and pack prices\n/pack epic|legendary|icon — acquire a special player\n\nSpecial players are not tradeable in the regular market.",
+  "Football Empire commands:\n/club — club profile\n/wallet — Cash and Gold balances\n/rename NEW NAME — rename your club\n/players — your active squad\n/lineup — view starting XI and tactics\n/setlineup FORMATION ID1 ... ID11 — set your XI\n/development — player development overview\n/train PLAYER_ID FOCUS INTENSITY — train a player\n/renew PLAYER_ID DAYS WEEKLY_WAGE — renew a contract\n/operations — facilities, academy, sponsors and finance\n/finance [DAYS] — income and expense statement\n/upgrade stadium|training|academy — upgrade a facility\n/ticket-price PRICE — set stadium ticket price\n/scout — find academy prospects\n/recruit PROSPECT_ID — sign an academy prospect\n/sponsor OFFER_ID — sign a sponsor\n/coach-upgrade — develop your coach\n/hire-coach balanced|youth|performance — hire a coach\n/opponents — clubs available for friendlies\n/friendly CLUB_ID — schedule a friendly\n/matches — your fixtures and results\n/play MATCH_ID — simulate a due match\n/league NAME [4-10] — create a league\n/cup NAME [4|8] — create a knockout cup\n/leagues — open leagues\n/joinleague ID — join a league\n/startleague ID — start your league\n/startcup ID — start your cup\n/table ID — league table or cup bracket\n/group-register — register this Telegram group (admins only)\n/group-join — join this group with your club\n/group — show group status and treasury\n/group-activity — earn one daily group point\n/group-shop — reward shop\n/group-buy ITEM [USER_ID] — purchase reward\n/group-challenges — list challenges\n/group-challenge TITLE|START_ISO|END_ISO|POINTS — create challenge\n/group-challenge-join ID — join challenge\n/group-challenge-complete ID USER_ID — settle challenge\n/group-check — refresh member threshold\n/group-league NAME [4-10] — create local league\n/group-league-join ID — join local league\n/group-league-start ID — start local league\n/group-league-table ID — standings\n/alliance — alliance status and invitations\n/alliance-create NAME — create an alliance\n/alliance-invite GROUP_ID — invite a group\n/alliance-accept ID / /alliance-decline ID — respond to invite\n/alliance-championship NAME|TEAMS — cross-group tournament\n/alliance-championship-join ID / alliance-championship-start ID\n/alliance-season-start [DAYS] / alliance-season-close\n/market — open transfer listings\n/sell PLAYER_ID PRICE — list a generated player\n/buy LISTING_ID — buy a listed player\n/special — view special players and pack prices\n/pack epic|legendary|icon — acquire a special player\n\nSpecial players are not tradeable in the regular market.",
 ));
 
 bot.command("group-register", async (ctx) => {
@@ -660,6 +660,60 @@ bot.command("table", async (ctx) => {
   } catch (error) { await ctx.reply("Could not load standings: " + (error instanceof Error ? error.message : "unknown error")); }
 });
 
+
+bot.command("alliance", async ctx => {
+  if (!ctx.from || !["group","supergroup"].includes(ctx.chat.type)) return;
+  try {
+    const d = await api<{alliance:{name:string;treasuryPoints:string;groups:Array<{title:string;memberCount:number}>;seasons:Array<{number:number;status:string}>;competitions:Array<{id:string;name:string;status:string;teams:number}>}|null;invitations:Array<{id:string;alliance:{name:string}}>}>("/v1/alliances/"+encodeURIComponent(String(ctx.chat.id)),ctx.from.id);
+    if (!d.alliance) return ctx.reply("گروه عضو اتحادی نیست. دعوت‌ها:\n"+(d.invitations.length?d.invitations.map(x=>x.id+" · "+x.alliance.name).join("\n"):"دعوتی ندارید."));
+    return ctx.reply("اتحاد: "+d.alliance.name+"\nخزانه: "+d.alliance.treasuryPoints+"\nگروه‌ها:\n"+d.alliance.groups.map(x=>x.title+" · "+x.memberCount+" عضو").join("\n")+"\nفصل‌ها: "+d.alliance.seasons.map(x=>"#"+x.number+" "+x.status).join("، ")+"\nقهرمانی‌ها:\n"+d.alliance.competitions.map(x=>x.id+" · "+x.name+" · "+x.status+" · "+x.teams+" تیم").join("\n"));
+  } catch(e) { await ctx.reply("اتحاد در دسترس نیست: "+(e instanceof Error?e.message:"unknown")); }
+});
+bot.command("alliance-create", async ctx => {
+  if (!ctx.from || !["group","supergroup"].includes(ctx.chat.type)) return;
+  const name=String(ctx.match??"").trim(); if(name.length<3||name.length>60)return ctx.reply("استفاده: /alliance-create نام اتحاد");
+  try { const d=await api<{alliance:{name:string}}>("/v1/alliances/"+encodeURIComponent(String(ctx.chat.id)),ctx.from.id,"POST",{name,idempotencyKey:"alliance_"+randomUUID().replace(/-/g,"")}); await ctx.reply("اتحاد «"+d.alliance.name+"» ایجاد شد."); }
+  catch(e){await ctx.reply("ایجاد اتحاد ناموفق بود: "+(e instanceof Error?e.message:"unknown"));}
+});
+bot.command("alliance-invite", async ctx => {
+  if (!ctx.from || !["group","supergroup"].includes(ctx.chat.type)) return;
+  const target=String(ctx.match??"").trim(); if(!/^-?\d{1,20}$/.test(target))return ctx.reply("استفاده: /alliance-invite TELEGRAM_GROUP_ID");
+  try { const d=await api<{alliance:{name:string};invitation:{id:string}}>("/v1/alliances/"+encodeURIComponent(String(ctx.chat.id))+"/invitations",ctx.from.id,"POST",{targetTelegramGroupId:target}); await ctx.reply("دعوت ارسال شد؛ شناسه: "+d.invitation.id+" · "+d.alliance.name); }
+  catch(e){await ctx.reply("ارسال دعوت ناموفق بود: "+(e instanceof Error?e.message:"unknown"));}
+});
+for (const [command,accept] of [["alliance-accept",true],["alliance-decline",false]] as const) bot.command(command,async ctx=>{
+  if(!ctx.from||!["group","supergroup"].includes(ctx.chat.type))return;
+  const id=String(ctx.match??"").trim(); if(!id)return ctx.reply("شناسه دعوت را وارد کنید.");
+  try { const d=await api<{accepted:boolean}>("/v1/alliances/"+encodeURIComponent(String(ctx.chat.id))+"/invitations/"+encodeURIComponent(id)+"/respond",ctx.from.id,"POST",{accept}); await ctx.reply(d.accepted?"دعوت اتحاد پذیرفته شد.":"دعوت اتحاد رد شد."); }
+  catch(e){await ctx.reply("پاسخ به دعوت ناموفق بود: "+(e instanceof Error?e.message:"unknown"));}
+});
+bot.command("alliance-championship",async ctx=>{
+  if(!ctx.from||!["group","supergroup"].includes(ctx.chat.type))return;
+  const parts=String(ctx.match??"").trim().split("|"); const name=parts[0]??""; const maxTeams=Number(parts[1]??8);
+  if(name.trim().length<3||!Number.isInteger(maxTeams)||maxTeams<4||maxTeams>20)return ctx.reply("استفاده: /alliance-championship نام مسابقات|ظرفیت (۴ تا ۲۰)");
+  try { const d=await api<{competition:{id:string;name:string}}>("/v1/alliances/"+encodeURIComponent(String(ctx.chat.id))+"/championships",ctx.from.id,"POST",{name:name.trim(),maxTeams,idempotencyKey:"alliance_comp_"+randomUUID().replace(/-/g,"")}); await ctx.reply("قهرمانی ساخته شد: "+d.competition.name+"\nشناسه: "+d.competition.id); }
+  catch(e){await ctx.reply("ساخت قهرمانی ناموفق بود: "+(e instanceof Error?e.message:"unknown"));}
+});
+bot.command("alliance-championship-join",async ctx=>{
+  if(!ctx.from||!["group","supergroup"].includes(ctx.chat.type))return; const id=String(ctx.match??"").trim(); if(!id)return ctx.reply("شناسه قهرمانی را وارد کنید.");
+  try { const d=await api<{teams:number}>("/v1/alliances/"+encodeURIComponent(String(ctx.chat.id))+"/championships/"+encodeURIComponent(id)+"/join",ctx.from.id,"POST"); await ctx.reply("ثبت‌نام انجام شد. تعداد تیم‌ها: "+d.teams); }
+  catch(e){await ctx.reply("ثبت‌نام ناموفق بود: "+(e instanceof Error?e.message:"unknown"));}
+});
+bot.command("alliance-championship-start",async ctx=>{
+  if(!ctx.from||!["group","supergroup"].includes(ctx.chat.type))return; const id=String(ctx.match??"").trim(); if(!id)return ctx.reply("شناسه قهرمانی را وارد کنید.");
+  try { await api("/v1/alliances/"+encodeURIComponent(String(ctx.chat.id))+"/championships/"+encodeURIComponent(id)+"/start",ctx.from.id,"POST"); await ctx.reply("قهرمانی آغاز شد."); }
+  catch(e){await ctx.reply("شروع قهرمانی ناموفق بود: "+(e instanceof Error?e.message:"unknown"));}
+});
+bot.command("alliance-season-start",async ctx=>{
+  if(!ctx.from||!["group","supergroup"].includes(ctx.chat.type))return; const durationDays=Number(String(ctx.match??"30").trim()); if(!Number.isInteger(durationDays)||durationDays<7||durationDays>90)return ctx.reply("مدت فصل باید بین ۷ تا ۹۰ روز باشد.");
+  try { const d=await api<{season:{number:number;endsAt:string}}>("/v1/alliances/"+encodeURIComponent(String(ctx.chat.id))+"/seasons",ctx.from.id,"POST",{durationDays}); await ctx.reply("فصل "+d.season.number+" آغاز شد؛ پایان: "+new Date(d.season.endsAt).toLocaleDateString("fa-IR")); }
+  catch(e){await ctx.reply("شروع فصل ناموفق بود: "+(e instanceof Error?e.message:"unknown"));}
+});
+bot.command("alliance-season-close",async ctx=>{
+  if(!ctx.from||!["group","supergroup"].includes(ctx.chat.type))return;
+  try { const d=await api<{standings:Array<{rank:number;group:string;points:string}>}>("/v1/alliances/"+encodeURIComponent(String(ctx.chat.id))+"/seasons/close",ctx.from.id,"POST"); await ctx.reply("جدول نهایی فصل:\n"+d.standings.map(x=>x.rank+". "+x.group+" · "+x.points+" امتیاز").join("\n")); }
+  catch(e){await ctx.reply("بستن فصل ناموفق بود: "+(e instanceof Error?e.message:"unknown"));}
+});
 
 bot.on(["chat_member","my_chat_member"],async ctx=>{
  if(ctx.chat.type!=="group"&&ctx.chat.type!=="supergroup")return;
