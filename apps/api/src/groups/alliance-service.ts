@@ -87,13 +87,14 @@ export async function contributeAllianceTreasury(i: { telegramUserId: string; te
     const membership = await tx.allianceGroup.findUnique({ where: { groupId: group.id } });
     if (!membership) throw new AllianceServiceError("ALLIANCE_NOT_FOUND");
     const userIdForLedger = user.id;
-    const activeSeason = await tx.allianceSeason.findFirst({ where: { allianceId: membership.allianceId, status: "ACTIVE" } });
-    if (!activeSeason) throw new AllianceServiceError("SEASON_REVIEW_REQUIRED");
     const old = await tx.allianceLedger.findUnique({ where: { idempotencyKey: i.idempotencyKey } });
     if (old) {
-      if (old.allianceId !== membership.allianceId) throw new AllianceServiceError("IDEMPOTENCY_CONFLICT");
+      const priorGroupEntry = await tx.groupPointLedger.findUnique({ where: { idempotencyKey: "alliance-contribution:" + i.idempotencyKey }, select: { groupId: true } });
+      if (old.allianceId !== membership.allianceId || priorGroupEntry?.groupId !== group.id) throw new AllianceServiceError("IDEMPOTENCY_CONFLICT");
       return { contributed: true, replayed: true, treasuryPoints: (await tx.alliance.findUniqueOrThrow({where:{id:membership.allianceId},select:{treasuryPoints:true}})).treasuryPoints.toString() };
     }
+    const activeSeason = await tx.allianceSeason.findFirst({ where: { allianceId: membership.allianceId, status: "ACTIVE" } });
+    if (!activeSeason) throw new AllianceServiceError("SEASON_REVIEW_REQUIRED");
     const debited = await tx.telegramGroup.updateMany({ where: { id: group.id, points: { gte: i.amount } }, data: { points: { decrement: i.amount } } });
     if (!debited.count) throw new AllianceServiceError("INSUFFICIENT_GROUP_POINTS");
     const alliance = await tx.alliance.update({ where: { id: membership.allianceId }, data: { treasuryPoints: { increment: i.amount } }, select: { treasuryPoints: true } });

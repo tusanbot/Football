@@ -15,7 +15,7 @@ test("alliance season close enforces its end date, calculates seasonal net point
   const groupTelegramId = "-100" + (BigInt("0x" + suffix.slice(24, 36)) + 30000000000n).toString();
   const now = new Date();
   const startsAt = new Date(now.getTime() - 3 * 86400000);
-  const endsAt = new Date(now.getTime() - 86400000);
+  const endsAt = new Date(now.getTime() + 86400000);
   let groupId: string | undefined;
   let allianceId: string | undefined;
   let reviewerId: string | undefined;
@@ -44,7 +44,7 @@ test("alliance season close enforces its end date, calculates seasonal net point
         name: "Security Test Alliance",
         createdByGroupId: groupId,
         treasuryPoints: 500n,
-        groups: { create: { groupId, role: "FOUNDER" } },
+        groups: { create: { groupId, role: "FOUNDER", joinedAt: startsAt } },
       },
     });
     allianceId = alliance.id;
