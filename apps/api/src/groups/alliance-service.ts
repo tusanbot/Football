@@ -1,6 +1,6 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "../db.js";
-import { startLeague } from "../game/match-service.js";
+import { MatchServiceError, startLeague } from "../game/match-service.js";
 
 export class AllianceServiceError extends Error {
   constructor(readonly code: string) { super(code); this.name = "AllianceServiceError"; }
@@ -180,7 +180,8 @@ export async function startAllianceChampionship(i: { telegramUserId: string; tel
   const competition = await prisma.competition.findFirst({ where: { id: i.competitionId, allianceId: membership.allianceId }, select: { id: true, createdByClubId: true } });
   if (!competition) throw new AllianceServiceError("COMPETITION_NOT_FOUND");
   if (competition.createdByClubId !== user.club!.id) throw new AllianceServiceError("ONLY_CREATOR_CAN_START");
-  return startLeague(user.id, competition.id);
+  try { return await startLeague(user.id, competition.id); }
+  catch (error) { if (error instanceof MatchServiceError) throw new AllianceServiceError(error.code); throw error; }
 }
 
 export async function startAllianceSeason(i: { telegramUserId: string; telegramGroupId: string; durationDays: number }) {
