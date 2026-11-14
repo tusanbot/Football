@@ -98,7 +98,7 @@ Non-negotiable product rules:
 - Added coach progression with bounded skill increases, level caps, upgrade costs and salary changes.
 - Added sponsor offers gated by club level and reputation, signing bonuses, recurring daily income and contract expiry.
 - Added lazy, idempotent UTC club-economy settlement. Sponsor income is credited once; stadium/training/academy maintenance is accrued; available cash is paid without overdraft; unpaid costs carry as operating arrears.
-- Added finance statements with categorized income and expense entries, sponsor receipts, facility maintenance, coach signing/development, academy costs, facility upgrades and paid player/coach payroll.
+- Added finance statements with categorized income and expense entries for player training, transfer purchases/sales, sponsor receipts, facility maintenance, coach signing/development, academy costs, facility upgrades and paid player/coach payroll.
 - Added authenticated API routes for operations overview, finance statements, facility upgrades, ticket pricing, academy scouting/recruitment, coach hiring/progression and sponsor signing.
 - Added Mini App operations dashboard and Bot commands /operations, /upgrade, /ticket-price, /scout, /recruit, /sponsor, /coach-upgrade, and /hire-coach.
 - Added domain tests for facility costs/capacity, maintenance, academy costs, sponsor unlocks, coach upgrades and matchday ticket calculations, plus an ephemeral-PostgreSQL service test for the operations lifecycle.
@@ -230,7 +230,7 @@ The current CI workflow uses an ephemeral PostgreSQL 16 service and now verifies
 - Special-player catalog seed and exact catalog count.
 - Shared domain build, monorepo TypeScript checks, unit tests, API tests, and production builds.
 - Player lifecycle integration against the ephemeral database, including daily training, idempotent replay, contract renewal, contract expiry, fitness recovery, weekly payroll, ledger debit, and arrears behavior.
-- Club operations integration against ephemeral PostgreSQL, including facility upgrades, academy scouting/recruitment, coach hiring/progression, sponsor signing, daily income/maintenance settlement and finance entries.
+- Club operations integration against ephemeral PostgreSQL, including facility upgrades, ticket-price concurrency, academy scouting/recruitment, coach hiring/progression, sponsor signing, daily income/maintenance settlement, operating arrears and finance entries.
 
 The earlier seed-verification command defect at commit `daa2b124a03c6d61169f897c7bcee54fa705343a` was corrected. CI does not connect to a persistent staging or production database; no live Telegram webhook or Cloudflare runtime is exercised yet.
 
