@@ -142,7 +142,7 @@ Non-negotiable product rules:
 ### Phase 3 — Match engine and competitions
 
 **Implemented foundation on `feat/foundation`:**
-- Deterministic 90-minute simulation with persisted seed, team/tactical strength, expected goals and reproducible results.
+- Deterministic 90-minute simulation with persisted engine version and seed, team/tactical/coach strength, expected goals and reproducible results.
 - Chronological goal, yellow-card, red-card and injury events; per-player goals, assists, shots, passes, tackles, ratings and fitness loss.
 - Friendly opponent discovery, scheduled fixtures, participant authorization, match history and post-match reports.
 - Matchday attendance and gate revenue based on stadium capacity, ticket price, club reputation and team strength.
