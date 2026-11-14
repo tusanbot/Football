@@ -479,18 +479,18 @@ export default function MarketPage() {
         <label>نام لیگ<input value={leagueName} maxLength={40} onChange={(event) => setLeagueName(event.target.value)} placeholder="مثلاً لیگ دوستان توسن"/></label>
         <label>نوع رقابت<select value={competitionFormat} onChange={(event) => { setCompetitionFormat(event.target.value); setLeagueCapacity(event.target.value === "CUP" ? "4" : "8"); }}><option value="LEAGUE">لیگ دوره‌ای</option><option value="CUP">جام حذفی</option></select></label>
         <label>تعداد باشگاه‌ها<select value={leagueCapacity} onChange={(event) => setLeagueCapacity(event.target.value)}>{(competitionFormat === "CUP" ? ["4", "8"] : ["4", "6", "8", "10"]).map((size) => <option key={size} value={size}>{size} باشگاه</option>)}</select></label>
-        <button disabled={!!busy || leagueName.trim().length < 3} onClick={() => void action("create-league", "/v1/competitions", "POST", { name: leagueName.trim(), maxTeams: Number(leagueCapacity), format: competitionFormat, idempotencyKey: "mini-league-" + crypto.randomUUID() })}>ایجاد لیگ</button>
+        <button disabled={!!busy || leagueName.trim().length < 3} onClick={() => void action("create-league", "/v1/competitions", "POST", { name: leagueName.trim(), maxTeams: Number(leagueCapacity), format: competitionFormat, idempotencyKey: "mini-league-" + crypto.randomUUID() })}>ایجاد رقابت</button>
       </div>
       <div className="market-card">
-        <h2>لیگ‌های در حال ثبت‌نام</h2>
+        <h2>رقابت‌های در حال ثبت‌نام</h2>
         {openLeagues.length === 0 ? <p className="muted">لیگ بازی برای ثبت‌نام باز نیست.</p> : openLeagues.map((league) => <div className="operation-row" key={league.id}>
           <div><strong>{league.name}</strong><small>فصل {league.season} · {league.teams}/{league.maxTeams} باشگاه · سازنده: {league.creator}</small></div>
           {!league.joined ? <button className="secondary" disabled={!!busy || league.teams >= league.maxTeams} onClick={() => void action("join-" + league.id, "/v1/competitions/" + league.id + "/join", "POST", {})}>عضویت</button>
-            : league.isCreator ? <button className="secondary" disabled={!!busy || (league.format === "CUP" ? league.teams !== league.maxTeams : league.teams < 4)} onClick={() => void action("start-" + league.id, "/v1/competitions/" + league.id + "/start", "POST", {})}>شروع لیگ</button>
+            : league.isCreator ? <button className="secondary" disabled={!!busy || (league.format === "CUP" ? league.teams !== league.maxTeams : league.teams < 4)} onClick={() => void action("start-" + league.id, "/v1/competitions/" + league.id + "/start", "POST", {})}>{league.format === "CUP" ? "شروع جام" : "شروع لیگ"}</button>
               : <span className="muted">عضو هستید</span>}
           <button className="secondary" onClick={() => void viewLeague(league.id)}>جدول</button>
         </div>)}
-        <h3>لیگ‌های باشگاه من</h3>
+        <h3>رقابت‌های باشگاه من</h3>
         {clubCompetitions.map((league) => <div className="operation-row" key={league.id}>
           <div><strong>{league.name}</strong><small>{league.format === "CUP" ? "جام حذفی" : "لیگ"} · فصل {league.season} · {league.status}</small></div>
           <button className="secondary" disabled={busy === "league-view"} onClick={() => void viewLeague(league.id)}>مشاهده جدول</button>
@@ -504,7 +504,7 @@ export default function MarketPage() {
         </div>}
         <h3>برنامه مسابقات</h3>
         {leagueDetail.matches.map((match) => <div className="operation-row" key={match.id}>
-          <div><strong>{match.homeClub.name} {match.homeScore ?? "–"} : {match.awayScore ?? "–"} {match.awayClub.name}</strong><small>{leagueDetail.competition.format === "CUP" ? "مرحله " : "هفته "}{match.round ?? "—"} · {match.status} · {new Date(match.scheduledAt).toLocaleDateString("fa-IR")}{match.homePenalties !== null && match.homePenalties !== undefined ? ` · پنالتی ${match.homePenalties}-${match.awayPenalties}` : ""}</small></div>
+          <div><strong>{match.homeClub.name} {match.homeScore ?? "–"} : {match.awayScore ?? "–"} {match.awayClub.name}</strong><small>{leagueDetail.competition.format === "CUP" ? "مرحله " : "هفته "}{match.round ?? "—"} · {match.status} · {new Date(match.scheduledAt).toLocaleDateString("fa-IR")}{match.homePenalties !== null && match.homePenalties !== undefined ? ` · پنالتی ${match.homePenalties}-${match.awayPenalties}` : ""}{match.winnerClubId ? " · برنده: " + (match.winnerClubId === match.homeClub.id ? match.homeClub.name : match.awayClub.name) : ""}</small></div>
           {match.status === "SCHEDULED" && new Date(match.scheduledAt).getTime() <= Date.now() && <button disabled={!!busy} onClick={() => void action("play-" + match.id, "/v1/matches/" + match.id + "/simulate", "POST", {})}>شبیه‌سازی</button>}
         </div>)}
       </div>}
