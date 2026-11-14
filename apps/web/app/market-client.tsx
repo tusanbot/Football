@@ -225,6 +225,7 @@ export default function MarketPage() {
             const id = e.target.value;
             setDevelopmentPlayerId(id);
             const player = players.find((item) => item.id === id);
+            if (player?.trainingFocus) setTrainingFocus(player.trainingFocus);
             if (player?.minimumWeeklyWage) setContractWage(player.minimumWeeklyWage);
             if (player?.position !== "GK" && trainingFocus === "GOALKEEPING") setTrainingFocus("BALANCED");
             if (player?.trainingFocus) setTrainingFocus(player.trainingFocus);
