@@ -64,7 +64,7 @@ export async function inviteAllianceGroup(i: { telegramUserId: string; telegramG
     const { group } = await manager(tx, i.telegramUserId, i.telegramGroupId);
     const membership = await tx.allianceGroup.findUnique({ where: { groupId: group.id }, include: { alliance: true } });
     if (!membership || membership.alliance.status !== "ACTIVE") throw new AllianceServiceError("ALLIANCE_NOT_FOUND");
-    const target = await tx.telegramGroup.findUnique({ where: { telegramId: i.targetTelegramGroupId }, select: { id: true, isActive: true } });
+    const target = await tx.telegramGroup.findUnique({ where: { telegramId: i.targetTelegramGroupId }, select: { id: true, telegramId: true, isActive: true } });
     if (!target) throw new AllianceServiceError("TARGET_GROUP_NOT_FOUND");
     if (!target.isActive) throw new AllianceServiceError("TARGET_GROUP_INACTIVE");
     if (target.id === group.id) throw new AllianceServiceError("CANNOT_INVITE_SELF");
@@ -269,7 +269,7 @@ export async function closeAllianceSeason(i: { telegramUserId: string; telegramG
     const reviewStatus = result.securityFlags.length ? "FLAGGED" : "APPROVED";
     const changed = await tx.allianceSeason.updateMany({
       where: { id: season.id, status: "ACTIVE" },
-      data: { status: "COMPLETED", closedAt: now, standings: result.standings, securityFlags: result.securityFlags, reviewStatus },
+      data: { status: "COMPLETED", closedAt: now, standings: result.standings, securityFlags: result.securityFlags as unknown as Prisma.InputJsonValue, reviewStatus },
     });
     if (!changed.count) throw new AllianceServiceError("SEASON_ALREADY_SETTLED");
     await audit(tx, { allianceId: membership.allianceId, actorTelegramId: i.telegramUserId, groupTelegramId: group.telegramId, action: "SEASON_CLOSED", metadata: { seasonId: season.id, reviewStatus, securityFlags: result.securityFlags.length } });
