@@ -22,6 +22,10 @@ const hireBody = keyBody.extend({ candidateId: z.enum(["balanced", "youth", "per
 const sponsorBody = keyBody.extend({ offerId: z.enum(["local-partner", "regional-brand", "national-network"]) });
 
 function sendOperationsError(reply: FastifyReply, error: unknown) {
+  if (typeof error === "object" && error !== null && "code" in error
+    && (error.code === "P2034" || error.code === "P2002")) {
+    return reply.code(409).send({ error: "CONCURRENT_MODIFICATION" });
+  }
   if (!(error instanceof ClubOperationsError)) throw error;
   const status = error.code === "CLUB_NOT_FOUND" || error.code === "PROSPECT_NOT_AVAILABLE" || error.code === "COACH_NOT_FOUND" ? 404
     : ["INSUFFICIENT_CASH", "CONCURRENT_MODIFICATION", "ACTIVE_SPONSOR_EXISTS", "SPONSOR_OFFER_LOCKED", "ACADEMY_NOT_BUILT", "ACADEMY_CAPACITY_REACHED", "IDEMPOTENCY_CONFLICT", "FACILITY_MAX_LEVEL", "COACH_MAX_LEVEL", "TICKET_PRICE_CONFLICT"].includes(error.code) ? 409
