@@ -472,10 +472,11 @@ bot.command("friendly", async (ctx) => {
 bot.command("matches", async (ctx) => {
   if (!ctx.from || ctx.chat.type !== "private") return;
   try {
-    const result = await api<{ matches: Array<{ id: string; type: string; status: string; scheduledAt: string; homeClub: { name: string }; awayClub: { name: string }; homeScore: number | null; awayScore: number | null; attendance: number }> }>("/v1/matches", ctx.from.id);
-    const lines = result.matches.map((match) =>
-      `• ${match.homeClub.name} ${match.homeScore ?? "–"} : ${match.awayScore ?? "–"} ${match.awayClub.name}\n  ${match.type} · ${match.status} · ${new Date(match.scheduledAt).toLocaleString("en-US")}\n  ID: ${match.id}`,
-    );
+    const result = await api<{ matches: Array<{ id: string; type: string; status: string; scheduledAt: string; homeClub: { name: string }; awayClub: { name: string }; homeScore: number | null; awayScore: number | null; attendance: number; events: Array<{ minute: number; type: string; playerName: string; relatedPlayerName: string | null }> }> }>("/v1/matches", ctx.from.id);
+    const lines = result.matches.map((match) => {
+      const goals = match.events.filter((event) => event.type === "GOAL").map((event) => String(event.minute) + "′ " + event.playerName + (event.relatedPlayerName ? " (assist: " + event.relatedPlayerName + ")" : ""));
+      return `• ${match.homeClub.name} ${match.homeScore ?? "–"} : ${match.awayScore ?? "–"} ${match.awayClub.name}\n  ${match.type} · ${match.status} · ${new Date(match.scheduledAt).toLocaleString("en-US")}\n  ${goals.join(" · ")}\n  ID: ${match.id}`;
+    });
     await ctx.reply("Your matches:\n" + (lines.join("\n\n") || "No matches scheduled yet."));
   } catch (error) { await ctx.reply(`Could not load matches: ${error instanceof Error ? error.message : "unknown error"}`); }
 });
