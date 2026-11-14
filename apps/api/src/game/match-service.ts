@@ -311,7 +311,30 @@ export async function simulateScheduledMatch(userId: string, matchId: string, no
     ]);
     if (!home || !away) throw new MatchServiceError("CLUB_NOT_FOUND");
     if (home.ownerId !== userId && away.ownerId !== userId) throw new MatchServiceError("NOT_MATCH_PARTICIPANT");
-    if (match.status === "COMPLETED") return { replayed: true, matchId, homeScore: match.homeScore, awayScore: match.awayScore };
+    if (match.status === "COMPLETED") {
+      const completed = await tx.footballMatch.findUniqueOrThrow({
+        where: { id: match.id },
+        include: {
+          homeClub: { select: { name: true } }, awayClub: { select: { name: true } },
+          events: { orderBy: { sequence: "asc" } },
+        },
+      });
+      const eventPlayerIds = [...new Set(completed.events.flatMap((event) =>
+        [event.playerId, ...(event.relatedPlayerId ? [event.relatedPlayerId] : [])]))];
+      const eventPlayers = await tx.player.findMany({
+        where: { id: { in: eventPlayerIds } }, select: { id: true, firstName: true, lastName: true },
+      });
+      const names = new Map(eventPlayers.map((player) => [player.id, player.firstName + " " + player.lastName]));
+      return {
+        replayed: true, matchId: completed.id, homeClub: completed.homeClub.name,
+        awayClub: completed.awayClub.name, homeScore: completed.homeScore, awayScore: completed.awayScore,
+        attendance: completed.attendance, ticketRevenue: completed.ticketRevenue.toString(),
+        events: completed.events.map((event) => ({
+          ...event, playerName: names.get(event.playerId) ?? "Player",
+          relatedPlayerName: event.relatedPlayerId ? names.get(event.relatedPlayerId) ?? null : null,
+        })),
+      };
+    }
     if (match.status !== "SCHEDULED") throw new MatchServiceError("MATCH_NOT_SCHEDULED");
     if (match.scheduledAt > now) throw new MatchServiceError("MATCH_NOT_DUE", { scheduledAt: match.scheduledAt.toISOString() });
     const result = simulateFootballMatch({ seed: match.seed, home: toSide(home), away: toSide(away) });
