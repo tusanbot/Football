@@ -709,6 +709,13 @@ enum AllianceStatus {
   DISSOLVED
 }
 
+enum AllianceSeasonReviewStatus {
+  PENDING
+  FLAGGED
+  APPROVED
+  REJECTED
+}
+
 model Alliance {
   id String @id @default(cuid())
   slug String @unique
@@ -725,6 +732,7 @@ model Alliance {
   seasons AllianceSeason[]
   competitions Competition[]
   ledger AllianceLedger[]
+  auditLogs AllianceAuditLog[]
   @@index([status, createdAt])
 }
 
@@ -763,6 +771,10 @@ model AllianceSeason {
   endsAt DateTime
   closedAt DateTime?
   standings Json?
+  reviewStatus AllianceSeasonReviewStatus @default(PENDING)
+  securityFlags Json?
+  reviewedAt DateTime?
+  reviewedByUserId String?
   createdAt DateTime @default(now())
   alliance Alliance @relation(fields: [allianceId], references: [id], onDelete: Cascade)
   @@unique([allianceId, number])
@@ -779,4 +791,17 @@ model AllianceLedger {
   createdAt DateTime @default(now())
   alliance Alliance @relation(fields: [allianceId], references: [id], onDelete: Cascade)
   @@index([allianceId, createdAt])
+}
+
+model AllianceAuditLog {
+  id String @id @default(cuid())
+  allianceId String
+  actorTelegramId String
+  groupTelegramId String
+  action String
+  metadata Json?
+  createdAt DateTime @default(now())
+  alliance Alliance @relation(fields: [allianceId], references: [id], onDelete: Cascade)
+  @@index([allianceId, createdAt])
+  @@index([actorTelegramId, createdAt])
 }
