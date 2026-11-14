@@ -10,6 +10,7 @@ import {
   signClubSponsor,
   upgradeClubCoach,
   upgradeClubFacility,
+  updateStadiumTicketPrice,
 } from "../src/game/club-operations-service.js";
 
 const DAY_MS = 86_400_000;
@@ -52,6 +53,13 @@ test("club facilities, academy, coach, sponsor income and finance ledger are tra
     await prisma.coach.create({
       data: { clubId, name: "Starter Coach", trainingSkill: 35, recoverySkill: 30, medicalSkill: 25, weeklySalary: 100n },
     });
+    const ticketing = await updateStadiumTicketPrice(userId, 75n, 50n);
+    assert.equal(ticketing.ticketPrice, "75");
+    await assert.rejects(
+      updateStadiumTicketPrice(userId, 80n, 50n),
+      (error: unknown) => typeof error === "object" && error !== null && "code" in error
+        && error.code === "TICKET_PRICE_CONFLICT",
+    );
 
     const academyUpgrade = await upgradeClubFacility(userId, "ACADEMY", `academy-upgrade-${suffix}`, now);
     assert.equal(academyUpgrade.level, 1);
