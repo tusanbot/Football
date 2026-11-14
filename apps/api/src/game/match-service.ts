@@ -293,19 +293,30 @@ export async function simulateScheduledMatch(userId: string, matchId: string, no
       passes: line.passes, tackles: line.tackles, yellowCards: line.yellowCards,
       redCards: line.redCards, rating: line.rating, fitnessLoss: line.fitnessLoss,
     })) });
-    const injuredIds = result.events.filter((event) => event.type === "INJURY").map((event) => event.playerId);
-    const injured = await tx.player.updateMany({
-      where: { id: { in: injuredIds }, status: "ACTIVE" },
-      data: { status: "INJURED", injuryUntil: new Date(now.getTime() + 5 * DAY_MS), lineupSlot: null, fitness: { decrement: 15 } },
-    });
+    const injuredIds = new Set(result.events.filter((event) => event.type === "INJURY").map((event) => event.playerId));
+    const playerById = new Map([...home.players, ...away.players].map((player) => [player.id, player]));
+    const injuredClubIds = new Set<string>();
     for (const line of result.performances) {
-      await tx.player.updateMany({
-        where: { id: line.playerId, status: "ACTIVE", ...(injuredIds.includes(line.playerId) ? { id: "__none__" } : {}) },
-        data: { fitness: { decrement: line.fitnessLoss } },
-      });
+      const player = playerById.get(line.playerId);
+      if (!player) continue;
+      if (injuredIds.has(line.playerId)) {
+        injuredClubIds.add(line.clubId);
+        await tx.player.updateMany({
+          where: { id: line.playerId, clubId: line.clubId, status: "ACTIVE" },
+          data: {
+            status: "INJURED", injuryUntil: new Date(now.getTime() + 5 * DAY_MS),
+            lineupSlot: null, fitness: Math.max(0, player.fitness - 15 - line.fitnessLoss),
+          },
+        });
+      } else {
+        await tx.player.updateMany({
+          where: { id: line.playerId, clubId: line.clubId, status: "ACTIVE" },
+          data: { fitness: Math.max(0, player.fitness - line.fitnessLoss) },
+        });
+      }
     }
-    if (injured.count > 0) {
-      await tx.club.updateMany({ where: { id: { in: [home.id, away.id] } }, data: { lineupVersion: { increment: 1 } } });
+    if (injuredClubIds.size > 0) {
+      await tx.club.updateMany({ where: { id: { in: [...injuredClubIds] } }, data: { lineupVersion: { increment: 1 } } });
     }
     const homeReward = result.homeScore > result.awayScore ? 250n : result.homeScore === result.awayScore ? 150n : 100n;
     const awayReward = result.awayScore > result.homeScore ? 250n : result.homeScore === result.awayScore ? 150n : 100n;
