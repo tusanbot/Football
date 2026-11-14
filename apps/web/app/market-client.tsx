@@ -60,8 +60,9 @@ export default function MarketPage() {
       fetch(API + "/v1/market/my-listings", { headers }),
       fetch(API + "/v1/players/special", { headers }),
       fetch(API + "/v1/club/lineup", { headers }),
+      fetch(API + "/v1/club/development", { headers }),
     ]);
-    const [p, w, m, own, s, l] = requests;
+    const [p, w, m, own, s, l, d] = requests;
     if (p.ok) setPlayers((await p.json()).players);\n    if (d.ok) {\n      const development = (await d.json()).club;\n      setPlayers(development.players);\n      setCoach(development.coach);\n      setTrainingGroundLevel(development.trainingGroundLevel);\n      setDevelopmentPlayerId((current) => development.players.some((player: Player) => player.id === current) ? current : (development.players.find((player: Player) => player.status === "ACTIVE")?.id ?? development.players[0]?.id ?? ""));\n      const chosen = development.players.find((player: Player) => player.id === developmentPlayerId) ?? development.players.find((player: Player) => player.status === "ACTIVE") ?? development.players[0];\n      if (chosen?.minimumWeeklyWage) setContractWage((current) => current || chosen.minimumWeeklyWage);\n    }
     if (w.ok) { const data = await w.json(); setCash(data.wallets.find((x: { asset: string }) => x.asset === "CASH")?.balance ?? "0"); setGold(data.wallets.find((x: { asset: string }) => x.asset === "GOLD")?.balance ?? "0"); }
     if (m.ok) setListings((await m.json()).listings);
@@ -105,6 +106,7 @@ export default function MarketPage() {
     <nav className="market-tabs">
       <button className={tab === "market" ? "active" : ""} onClick={() => setTab("market")}>بازار بازیکنان</button>
       <button className={tab === "club" ? "active" : ""} onClick={() => setTab("club")}>باشگاه من</button>
+      <button className={tab === "development" ? "active" : ""} onClick={() => setTab("development")}>توسعه بازیکن</button>
       <button className={tab === "special" ? "active" : ""} onClick={() => setTab("special")}>ستاره‌های ویژه</button>
     </nav>
     {message && <div className="notice success">{message}</div>}{error && <div className="notice error">{error}</div>}
@@ -120,7 +122,7 @@ export default function MarketPage() {
 
     {tab === "club" && <section className="club-market">
       <div className="market-card"><h2>ثبت بازیکن برای فروش</h2><p>فقط بازیکنان معمولی فعال قابل عرضه در بازار هستند.</p>
-        <label>انتخاب بازیکن<select value={selectedPlayer} onChange={(e) => setSelectedPlayer(e.target.value)}><option value="">انتخاب کنید</option>{players.map((p) => <option key={p.id} value={p.id}>{p.firstName} {p.lastName} · {p.position} · OVR {p.overall}</option>)}</select></label>
+        <label>انتخاب بازیکن<select value={selectedPlayer} onChange={(e) => setSelectedPlayer(e.target.value)}><option value="">انتخاب کنید</option>{players.filter((p) => p.status === "ACTIVE").map((p) => <option key={p.id} value={p.id}>{p.firstName} {p.lastName} · {p.position} · OVR {p.overall}</option>)}</select></label>
         <label>قیمت پیشنهادی (Cash)<input inputMode="numeric" value={price} onChange={(e) => setPrice(e.target.value.replace(/[^0-9]/g, ""))}/></label>
         <button disabled={!selectedPlayer || !price || busy === "sell"} onClick={() => void action("sell", "/v1/market/listings", "POST", { playerId: selectedPlayer, askingPrice: price, expiresInHours: 72 })}>{busy === "sell" ? "در حال ثبت…" : "ثبت آگهی فروش"}</button>
       </div>
@@ -147,7 +149,7 @@ export default function MarketPage() {
                 return next;
               })}>
                 <option value="">انتخاب بازیکن</option>
-                {players.filter((player) => !usedElsewhere.has(player.id)).map((player) => (
+                {players.filter((player) => player.status === "ACTIVE" && !usedElsewhere.has(player.id)).map((player) => (
                   <option key={player.id} value={player.id}>{player.firstName} {player.lastName} · {player.position} · OVR {player.overall}</option>
                 ))}
               </select>
