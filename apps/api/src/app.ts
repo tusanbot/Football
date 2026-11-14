@@ -12,6 +12,7 @@ import { registerGroupRoutes } from "./groups/group-routes.js";
 import { registerAllianceRoutes } from "./groups/alliance-routes.js";
 import { prisma } from "./db.js";
 import { registerAdminRoutes } from "./admin-routes.js";
+import { registerGiftCodeRoutes } from "./gift-code-routes.js";
 
 const healthResponse = z.object({
   status: z.literal("ok"),
@@ -56,6 +57,7 @@ export function buildApp() {
   registerGroupRoutes(app);
   registerAllianceRoutes(app);
   registerAdminRoutes(app);
+  registerGiftCodeRoutes(app);
 
   app.get("/v1", async () => ({
     name: "Football Empire API",
