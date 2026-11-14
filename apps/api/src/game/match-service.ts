@@ -207,6 +207,7 @@ export async function listOpenLeagues(userId: string) {
     status: competition.status, maxTeams: competition.maxTeams,
     teams: competition.entries.length,
     joined: competition.entries.some((entry) => entry.clubId === club.id),
+    isCreator: competition.createdByClubId === club.id,
     creator: competition.entries.find((entry) => entry.clubId === competition.createdByClubId)?.club.name ?? "Club",
   }));
 }
