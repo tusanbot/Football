@@ -6,6 +6,7 @@ type Player = { id: string; firstName: string; lastName: string; nationality: st
 type Listing = { id: string; askingPrice: string; status?: string; expiresAt: string; createdAt: string; player: Player; sellerClub?: { name: string } };
 type SpecialPlayer = { id: string; fullName: string; nationality: string; positions: string[]; rarity: string; overall: number; potential: number; acquisitionMethods: string[] };
 type PackOffer = { method: "epic_pack" | "legendary_pack" | "icon_pack"; rarity: string; priceGold: string };
+type FinanceSummary = { periodDays: number; income: string; expenses: string; net: string; operatingArrears: string; entries: Array<{ id: string; category: string; direction: string; amount: string; description: string; occurredAt: string }> };
 type ClubOperations = {
   stadiumLevel: number; stadiumCapacity: number; ticketPrice: string; trainingGroundLevel: number; academyLevel: number;
   dailyMaintenance: string; operatingArrears: string; cashBalance: string;
@@ -46,6 +47,7 @@ export default function MarketPage() {
   const [weeklyWageBill, setWeeklyWageBill] = useState("0");
   const [wageArrears, setWageArrears] = useState("0");
   const [operations, setOperations] = useState<ClubOperations | null>(null);
+  const [financeSummary, setFinanceSummary] = useState<FinanceSummary | null>(null);
   const [ticketPriceInput, setTicketPriceInput] = useState("50");
   const [recentPayrolls, setRecentPayrolls] = useState<Array<{ payrollDate: string; totalDue: string; cashPaid: string; arrearsAfter: string }>>([]);
   const [recentTraining, setRecentTraining] = useState<Array<{ id: string; playerId: string; focus: string; intensity: string; overallBefore: number; overallAfter: number; injuryOccurred: boolean; createdAt: string }>>([]);
@@ -91,6 +93,8 @@ export default function MarketPage() {
     const [p, w, m, own, s, l, d, o] = requests;
     if (p.ok) setPlayers((await p.json()).players);
     if (o.ok) { const clubOperations = (await o.json()).club as ClubOperations; setOperations(clubOperations); setTicketPriceInput(clubOperations.ticketPrice); }
+    const financeResponse = await fetch(API + "/v1/club/finance?days=30", { headers });
+    if (financeResponse.ok) setFinanceSummary(await financeResponse.json());
     if (d.ok) {
       const development = (await d.json()).club;
       setPlayers(development.players);
@@ -227,8 +231,9 @@ export default function MarketPage() {
           </>}
       </div>
       <div className="market-card">
-        <h2>گزارش مالی اخیر</h2>
-        {operations.financeEntries.length === 0 ? <p className="muted">هنوز گردش مالی عملیاتی ثبت نشده است.</p> : operations.financeEntries.map((entry) => <div className="operation-row" key={entry.id}>
+        <h2>صورت‌حساب مالی · ۳۰ روز اخیر</h2>
+        {financeSummary && <div className="finance-summary"><div><span>درآمد</span><strong>{money(financeSummary.income)} Cash</strong></div><div><span>هزینه پرداخت‌شده</span><strong>{money(financeSummary.expenses)} Cash</strong></div><div><span>خالص</span><strong className={Number(financeSummary.net) >= 0 ? "finance-credit" : "finance-debit"}>{money(financeSummary.net)} Cash</strong></div></div>}
+        {!(financeSummary?.entries.length ?? operations.financeEntries.length) ? <p className="muted">هنوز گردش مالی عملیاتی ثبت نشده است.</p> : (financeSummary?.entries ?? operations.financeEntries).map((entry) => <div className="operation-row" key={entry.id}>
           <div><strong>{entry.description}</strong><small>{new Date(entry.occurredAt).toLocaleDateString("fa-IR")} · {entry.category}</small></div>
           <strong className={entry.direction === "CREDIT" ? "finance-credit" : "finance-debit"}>{entry.direction === "CREDIT" ? "+" : "−"}{money(entry.amount)} Cash</strong>
         </div>)}
