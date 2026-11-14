@@ -79,7 +79,6 @@ export function registerGameRoutes(app: FastifyInstance) {
   app.put("/v1/club/lineup", async (request, reply) => {
     const user = await requireTelegramUser(request);
     if (!user) return reply.code(401).send({ error: "UNAUTHENTICATED" });
-    await settleClubDailyState(user.id);
     const parsed = lineupUpdateSchema.safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ error: "INVALID_LINEUP_REQUEST", details: parsed.error.flatten() });
 
@@ -163,7 +162,6 @@ export function registerGameRoutes(app: FastifyInstance) {
   app.get("/v1/club/players", async (request, reply) => {
     const user = await requireTelegramUser(request);
     if (!user) return reply.code(401).send({ error: "UNAUTHENTICATED" });
-    await settleClubDailyState(user.id);
     const club = await prisma.club.findUnique({ where: { ownerId: user.id }, select: { id: true } });
     if (!club) return reply.code(404).send({ error: "CLUB_NOT_FOUND" });
     const players = await prisma.player.findMany({
