@@ -1,6 +1,12 @@
 import "dotenv/config";
 import { randomUUID } from "node:crypto";
 import { Bot, Keyboard } from "grammy";
+import {
+  GROUP_REPLY_DELETE_DELAY_MS,
+  isPersistentGroupReply,
+  PRIVATE_MENU_ROWS,
+  resolvePrivateMenuCommand,
+} from "./telegram-ux.js";
 
 const token = process.env.TELEGRAM_BOT_TOKEN;
 if (!token) throw new Error("TELEGRAM_BOT_TOKEN is required to start the bot.");
@@ -9,20 +15,16 @@ const apiUrl = process.env.FOOTBALL_API_URL;
 const botApiSecret = process.env.BOT_API_SECRET;
 const bot = new Bot(token);
 
-// Group replies are transient by default; preserve administrative and ranking messages.
-const persistentGroupCommands = new Set([
-  "group-register", "group-check", "group-give", "group-challenge",
-  "group-challenge-complete", "group-challenge-cancel",
-  "group-league", "group-league-start", "group-league-table", "group-leagues",
-  "alliance", "alliance-create", "alliance-invite", "alliance-accept",
-  "alliance-decline", "alliance-championship", "alliance-championship-join",
-  "alliance-championship-start", "alliance-season-start", "alliance-season-close",
-  "alliance-season-review", "alliance-contribute",
-]);
-function isPersistentGroupReply(command: string | undefined, messageText: string): boolean {
-  if (command && persistentGroupCommands.has(command)) return true;
-  return /(?:ranking|leaderboard|standings|rank|رنک|رتبه|جدول)/i.test(messageText);
-}
+bot.use(async (ctx, next) => {
+  if (ctx.chat.type === "private" && ctx.message && "text" in ctx.message) {
+    const command = resolvePrivateMenuCommand(ctx.message.text);
+    if (command) {
+      ctx.message.text = `/${command}`;
+      ctx.message.entities = [{ type: "bot_command", offset: 0, length: command.length + 1 }];
+    }
+  }
+  await next();
+});
 
 bot.use(async (ctx, next) => {
   const chat = ctx.chat;
@@ -83,16 +85,12 @@ async function apiSystem(path:string,body:unknown):Promise<void>{
  if(!response.ok)throw new Error("System API failed ("+response.status+")");
 }
 function privateMenuKeyboard() {
-  const keyboard = new Keyboard()
-    .text("/club").text("/wallet").row()
-    .text("/players").text("/lineup").row()
-    .text("/development").text("/operations").row()
-    .text("/finance").text("/scout").row()
-    .text("/opponents").text("/matches").row()
-    .text("/leagues").text("/market").row()
-    .text("/special").text("/help").row()
-    .text("/menu");
-  if (webAppUrl) keyboard.webApp("Open Football Empire", webAppUrl);
+  const keyboard = new Keyboard();
+  for (const row of PRIVATE_MENU_ROWS) {
+    for (const item of row) keyboard.text(item.label);
+    keyboard.row();
+  }
+  if (webAppUrl) keyboard.webApp("ورود به بازی", webAppUrl);
   return keyboard.resized().persistent();
 }
 function cash(value: string) { return BigInt(value).toLocaleString("en-US"); }
