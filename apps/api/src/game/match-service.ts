@@ -23,21 +23,35 @@ function asTactics(club: { mentality: string; pressing: string; tempo: string; p
 const matchClubInclude = {
   owner: { select: { id: true, telegramId: true } },
   players: {
-    where: { lineupSlot: { not: null }, status: "ACTIVE" as const },
-    orderBy: { lineupSlot: "asc" as const },
+    where: { status: "ACTIVE" as const },
+    orderBy: [{ lineupSlot: "asc" as const }, { overall: "desc" as const }],
     select: {
-      id: true, firstName: true, lastName: true, position: true, overall: true,
+      id: true, firstName: true, lastName: true, position: true, overall: true, lineupSlot: true,
       morale: true, fitness: true, attributes: true,
     },
   },
 };
 type LoadedClub = Prisma.ClubGetPayload<{ include: typeof matchClubInclude }>;
 function toSide(club: LoadedClub): MatchSide {
+  const starters = club.players.filter((player) => player.lineupSlot !== null)
+    .sort((a, b) => (a.lineupSlot ?? 99) - (b.lineupSlot ?? 99));
+  const bench = club.players.filter((player) => player.lineupSlot === null)
+    .sort((a, b) => b.overall - a.overall || a.id.localeCompare(b.id));
+  const selected = [...starters];
+  if (!selected.some((player) => player.position === "GK")) {
+    const reserveKeeper = bench.find((player) => player.position === "GK");
+    if (reserveKeeper) selected.push(reserveKeeper);
+  }
+  for (const player of bench) {
+    if (selected.length >= 11) break;
+    if (!selected.some((item) => item.id === player.id)) selected.push(player);
+  }
+  if (selected.length < 11) throw new MatchServiceError("BOTH_CLUBS_NEED_VALID_LINEUPS");
   return {
     clubId: club.id, clubName: club.name, formation: club.formation, tactics: asTactics(club),
     stadiumCapacity: Math.max(1000, Math.round(1000 * Math.pow(1.35, club.stadiumLevel - 1))),
     ticketPrice: club.ticketPrice, reputation: club.reputation,
-    players: club.players.map((player) => ({
+    players: selected.slice(0, 11).map((player) => ({
       id: player.id, name: player.firstName + " " + player.lastName,
       position: player.position, overall: player.overall, morale: player.morale,
       fitness: player.fitness,
@@ -75,7 +89,7 @@ export async function listMatchOpponents(userId: string) {
   const own = await getOwnedClub(userId);
   const clubs = await prisma.club.findMany({
     where: { id: { not: own.id }, players: { some: { lineupSlot: { not: null }, status: "ACTIVE" } } },
-    include: { players: { where: { lineupSlot: { not: null }, status: "ACTIVE" }, select: { id: true } } },
+    include: { players: { where: { status: "ACTIVE" }, select: { id: true, position: true } } },
     orderBy: [{ reputation: "desc" }, { level: "desc" }], take: 50,
   });
   return clubs.filter((club) => club.players.length === 11).map((club) => ({
@@ -91,7 +105,8 @@ export async function createFriendlyMatch(userId: string, opponentClubId: string
     prisma.club.findUnique({ where: { id: opponentClubId }, include: matchClubInclude }),
   ]);
   if (!home || !away) throw new MatchServiceError("OPPONENT_NOT_FOUND");
-  if (home.players.length !== 11 || away.players.length !== 11) throw new MatchServiceError("BOTH_CLUBS_NEED_VALID_LINEUPS");
+  if (home.players.length < 11 || away.players.length < 11) throw new MatchServiceError("BOTH_CLUBS_NEED_VALID_LINEUPS");
+  toSide(home); toSide(away);
   if (scheduledAt.getTime() < Date.now() - 60_000 || scheduledAt.getTime() > Date.now() + 30 * DAY_MS) {
     throw new MatchServiceError("INVALID_MATCH_SCHEDULE");
   }
@@ -170,7 +185,7 @@ export async function startLeague(userId: string, competitionId: string, now = n
     if (competition.createdByClubId !== club.id) throw new MatchServiceError("ONLY_CREATOR_CAN_START");
     if (competition.status !== "REGISTRATION") throw new MatchServiceError("COMPETITION_NOT_OPEN");
     if (competition.entries.length < 4) throw new MatchServiceError("LEAGUE_NEEDS_FOUR_TEAMS");
-    if (competition.entries.some((entry) => entry.club.players.length !== 11)) throw new MatchServiceError("ALL_TEAMS_NEED_VALID_LINEUPS");
+    if (competition.entries.some((entry) => entry.club.players.length < 11 || !entry.club.players.some((player) => player.position === "GK"))) throw new MatchServiceError("ALL_TEAMS_NEED_VALID_LINEUPS");
     const teams = competition.entries.map((entry) => entry.clubId);
     const slots: Array<string | null> = [...teams];
     if (slots.length % 2) slots.push(null);
