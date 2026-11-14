@@ -125,3 +125,62 @@ test("club facilities, academy, coach, sponsor income and finance ledger are tra
     }
   }
 });
+
+
+test("daily facility costs never overdraw cash and unpaid operating expenses carry forward", async (t) => {
+  if (!process.env.DATABASE_URL) {
+    t.skip("DATABASE_URL is only configured in the ephemeral PostgreSQL CI job.");
+    return;
+  }
+  const suffix = randomUUID().replaceAll("-", "");
+  const now = new Date();
+  let userId: string | undefined;
+  let clubId: string | undefined;
+  try {
+    const user = await prisma.user.create({
+      data: {
+        telegramId: `arrears-test-${suffix}`,
+        displayName: "Operating Arrears Test",
+        club: { create: { name: "Arrears Test FC", slug: `arrears-${suffix}`, lastEconomyTickAt: now } },
+        wallets: { create: [
+          { asset: "CASH", balance: 0n },
+          { asset: "GOLD", balance: 0n },
+        ] },
+      },
+      include: { club: true },
+    });
+    userId = user.id;
+    clubId = user.club!.id;
+
+    const firstDay = new Date(now.getTime() + DAY_MS);
+    const first = await settleClubEconomy(userId, firstDay);
+    assert.equal(first.operatingCost, "35");
+    assert.equal(first.paid, "0");
+    assert.equal(first.arrears, "35");
+    assert.equal((await prisma.wallet.findUniqueOrThrow({
+      where: { userId_asset: { userId, asset: "CASH" } },
+    })).balance, 0n);
+
+    await prisma.wallet.update({
+      where: { userId_asset: { userId, asset: "CASH" } },
+      data: { balance: 20n, version: { increment: 1 } },
+    });
+    const second = await settleClubEconomy(userId, new Date(firstDay.getTime() + DAY_MS));
+    assert.equal(second.operatingCost, "70");
+    assert.equal(second.paid, "20");
+    assert.equal(second.arrears, "50");
+    assert.equal((await prisma.wallet.findUniqueOrThrow({
+      where: { userId_asset: { userId, asset: "CASH" } },
+    })).balance, 0n);
+    assert.equal(await prisma.clubFinanceEntry.count({
+      where: { clubId, category: "FACILITY_MAINTENANCE", direction: "DEBIT" },
+    }), 2);
+  } finally {
+    if (clubId) await prisma.club.deleteMany({ where: { id: clubId } });
+    if (userId) {
+      await prisma.ledgerTransaction.deleteMany({ where: { userId } });
+      await prisma.wallet.deleteMany({ where: { userId } });
+      await prisma.user.deleteMany({ where: { id: userId } });
+    }
+  }
+});
