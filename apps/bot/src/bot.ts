@@ -22,8 +22,11 @@ async function api<T>(path: string, telegramId: number, method = "GET", body?: u
     },
     ...(body ? { body: JSON.stringify(body) } : {}),
   });
-  const data = await response.json() as T & { error?: string };
-  if (!response.ok) throw new Error(data.error ?? `API request failed (${response.status})`);
+  const data = await response.json() as T & { error?: string; details?: Record<string, string> };
+  if (!response.ok) {
+    const range = data.details?.minimumWeeklyWage ? ` (acceptable weekly wage: ${cash(data.details.minimumWeeklyWage)}–${cash(data.details.maximumWeeklyWage ?? data.details.minimumWeeklyWage)} Cash)` : "";
+    throw new Error((data.error ?? `API request failed (${response.status})`) + range);
+  }
   return data;
 }
 
@@ -170,7 +173,7 @@ bot.command("development", async (ctx) => {
     const result = await api<{ club: {
       trainingGroundLevel: number;
       coach: { name: string; level: number; trainingSkill: number; recoverySkill: number; medicalSkill: number };
-      players: Array<{ id: string; firstName: string; lastName: string; overall: number; potential: number; age: number; fitness: number; morale: number; contractDays: number; status: string; minimumWeeklyWage: string }>;
+      players: Array<{ id: string; firstName: string; lastName: string; overall: number; potential: number; age: number; fitness: number; morale: number; contractDays: number; status: string; minimumWeeklyWage: string; maximumWeeklyWage: string }>;
     } }>("/v1/club/development", ctx.from.id);
     const lines = result.club.players.slice(0, 15).map((p) =>
       \`• \${p.firstName} \${p.lastName} · OVR \${p.overall}/\${p.potential} · Age \${p.age}\n  Fitness \${p.fitness} · Morale \${p.morale} · Contract \${p.contractDays}d · \${p.status}\n  Renew from \${cash(p.minimumWeeklyWage)} Cash/week\n  ID: \${p.id}\`,
