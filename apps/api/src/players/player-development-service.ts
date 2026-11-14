@@ -57,7 +57,7 @@ export async function settleClubDailyState(userId: string, now = new Date()) {
       select: {
         id: true, age: true, ageDays: true, contractDays: true, fitness: true,
         morale: true, status: true, injuryUntil: true, lineupSlot: true,
-        position: true, overall: true, attributes: true,
+        position: true, overall: true, potential: true, attributes: true,
       },
     });
     let recovered = 0;
