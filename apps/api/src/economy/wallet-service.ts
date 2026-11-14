@@ -85,8 +85,8 @@ export async function applyWalletEntry(input: WalletEntryInput) {
           direction: input.direction,
           amount: input.amount,
           reason: input.reason,
-          referenceType: input.referenceType,
-          referenceId: input.referenceId,
+          ...(input.referenceType ? { referenceType: input.referenceType } : {}),
+          ...(input.referenceId ? { referenceId: input.referenceId } : {}),
         },
         select: { id: true },
       });
