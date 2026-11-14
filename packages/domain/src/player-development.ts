@@ -142,7 +142,7 @@ export function advancePlayerDailyState(
     status = "ACTIVE";
     fitness = Math.max(55, fitness);
   }
-  if (contractDays === 0 && status !== "RETIRED") status = "CONTRACT_EXPIRED";
+  if (contractDays === 0) status = "CONTRACT_EXPIRED";
   else if (status === "CONTRACT_EXPIRED" && contractDays > 0) status = player.injuryUntil && player.injuryUntil > now ? "INJURED" : "ACTIVE";
   const moraleDelta = status === "INJURED" ? -Math.min(10, elapsedDays * 2)
     : status === "CONTRACT_EXPIRED" ? -Math.min(12, elapsedDays)
