@@ -21,29 +21,43 @@ export async function registerTelegramAuthRoutes(app: FastifyInstance) {
     const displayName = [verified.user.first_name, verified.user.last_name].filter(Boolean).join(" ");
 
     try {
-      const user = await prisma.user.upsert({
-        where: { telegramId },
-        update: {
-          username: verified.user.username ?? null,
-          displayName
-        },
-        create: {
-          telegramId,
-          username: verified.user.username ?? null,
-          displayName,
-          club: { create: { name: `${verified.user.first_name} FC`, slug: `club-${telegramId}` } },
-          wallets: { create: [
-            { asset: "CASH", balance: 20_000n },
-            { asset: "GOLD", balance: 50n }
-          ] }
-        },
-        select: {
-          id: true,
-          telegramId: true,
-          displayName: true,
-          club: { select: { id: true, name: true, level: true, reputation: true } },
-          wallets: { select: { asset: true, balance: true } }
+      const user = await prisma.$transaction(async (tx) => {
+        const existing = await tx.user.findUnique({ where: { telegramId } });
+        if (existing) {
+          return tx.user.update({
+            where: { id: existing.id },
+            data: { username: verified.user.username ?? null, displayName },
+            select: {
+              id: true, telegramId: true, displayName: true,
+              club: { select: { id: true, name: true, level: true, reputation: true } },
+              wallets: { select: { asset: true, balance: true } }
+            }
+          });
         }
+
+        const created = await tx.user.create({
+          data: {
+            telegramId,
+            username: verified.user.username ?? null,
+            displayName,
+            club: { create: { name: `${verified.user.first_name} FC`, slug: `club-${telegramId}` } },
+            wallets: { create: [
+              { asset: "CASH", balance: 20_000n },
+              { asset: "GOLD", balance: 50n }
+            ] }
+          },
+          select: {
+            id: true, telegramId: true, displayName: true,
+            club: { select: { id: true, name: true, level: true, reputation: true } },
+            wallets: { select: { asset: true, balance: true } }
+          }
+        });
+
+        await tx.ledgerTransaction.createMany({ data: [
+          { idempotencyKey: `starter:${telegramId}:CASH`, userId: created.id, asset: "CASH", direction: "CREDIT", amount: 20_000n, reason: "STARTER_GRANT", referenceType: "STARTER_GRANT", referenceId: created.id },
+          { idempotencyKey: `starter:${telegramId}:GOLD`, userId: created.id, asset: "GOLD", direction: "CREDIT", amount: 50n, reason: "STARTER_GRANT", referenceType: "STARTER_GRANT", referenceId: created.id }
+        ] });
+        return created;
       });
 
       return reply.code(200).send({
