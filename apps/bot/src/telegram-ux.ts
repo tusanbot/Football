@@ -1,5 +1,6 @@
 export const GROUP_REPLY_DELETE_DELAY_MS = 60_000;
 
+// Every group command is classified explicitly. Unknown/future commands remain transient.
 export const PERSISTENT_GROUP_COMMANDS = new Set([
   "group-register",
   "group-check",
@@ -28,7 +29,17 @@ export const PERSISTENT_GROUP_COMMANDS = new Set([
   "alliance-contribute",
 ]);
 
-const rankingMessagePattern = /(?:\b(?:ranking|leaderboard|standings|rank|league table)\b|رنک|رتبه|جدول)/i;
+export const TRANSIENT_GROUP_COMMANDS = new Set([
+  "group-join",
+  "group",
+  "group-activity",
+  "group-shop",
+  "group-buy",
+  "group-challenge-join",
+  "group-league-join",
+]);
+
+const rankingMessagePattern = /(?:\\b(?:ranking|leaderboard|standings|rank|league table)\\b|رنک|رتبه|جدول)/i;
 
 export function isPersistentGroupReply(command: string | undefined, messageText: string): boolean {
   if (command && PERSISTENT_GROUP_COMMANDS.has(command)) return true;
@@ -72,7 +83,7 @@ const privateMenuCommands = new Map(
 );
 
 function normalizePrivateMenuText(value: string): string {
-  return value.trim().replace(/[يى]/g, "ی").replace(/ك/g, "ک").replace(/\u200c/g, " ");
+  return value.trim().replace(/[يى]/g, "ی").replace(/ك/g, "ک").replace(/\\u200c/g, " ");
 }
 
 export function resolvePrivateMenuCommand(messageText: string): string | undefined {
