@@ -219,7 +219,7 @@ export async function getClubDevelopment(userId: string, now = new Date()) {
     club: {
       id: club.id, name: club.name, trainingGroundLevel: club.trainingGroundLevel,
       wageArrears: club.wageArrears.toString(), lastPayrollAt: club.lastPayrollAt.toISOString(),
-      weeklyWageBill: (club.players.filter((player) => player.contractDays > 0 && player.status !== "RETIRED").reduce((total, player) => total + player.wage, club.coach?.weeklySalary ?? 0n)).toString(),
+      weeklyWageBill: (club.players.filter((player) => player.contractDays > 0 && player.status !== "RETIRED").reduce((total, player) => total + player.wage, coach.weeklySalary)).toString(),
       coach: {
         id: coach.id, name: coach.name, level: coach.level,
         trainingSkill: coach.trainingSkill, recoverySkill: coach.recoverySkill,
