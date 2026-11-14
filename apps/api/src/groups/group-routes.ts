@@ -14,6 +14,14 @@ function authenticateBot(request: FastifyRequest, reply: FastifyReply): string |
   if (a.length !== b.length || !timingSafeEqual(a, b) || typeof telegramId !== "string" || !/^\d{1,20}$/.test(telegramId)) {
     reply.code(401).send({ error: "UNAUTHENTICATED_BOT_REQUEST" }); return null;
   }
+  const account = await prisma.user.findUnique({ where: { telegramId }, select: { isSuspended: true } });
+  if (!account || account.isSuspended) { reply.code(403).send({ error: "PLAYER_ACCOUNT_SUSPENDED" }); return null; }
+  const rawGroupId = (request.params as { telegramGroupId?: string }).telegramGroupId
+    ?? (request.body as { telegramGroupId?: string } | null)?.telegramGroupId;
+  if (rawGroupId) {
+    const group = await prisma.telegramGroup.findUnique({ where: { telegramId: rawGroupId }, select: { isSuspended: true } });
+    if (group?.isSuspended) { reply.code(403).send({ error: "TELEGRAM_GROUP_SUSPENDED" }); return null; }
+  }
   return telegramId;
 }
 

@@ -17,8 +17,8 @@ export async function requireTelegramUser(request: FastifyRequest) {
     && typeof telegramUserId === "string" && /^\d{1,20}$/.test(telegramUserId)) {
     return prisma.user.findUnique({
       where: { telegramId: telegramUserId },
-      select: { id: true, telegramId: true, username: true, displayName: true, createdAt: true },
-    });
+      select: { id: true, telegramId: true, username: true, displayName: true, createdAt: true, isSuspended: true },
+    }).then((account) => account?.isSuspended ? null : account);
   }
 
   const rawInitData = request.headers["x-telegram-init-data"];
