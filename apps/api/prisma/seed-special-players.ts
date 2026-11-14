@@ -9,6 +9,8 @@ async function main() {
       where: { slug: player.slug },
       create: {
         ...player,
+        positions: [...player.positions],
+        acquisitionMethods: [...player.acquisitionMethods],
         birthDate: new Date(player.birthDate),
         sourceNote: "Curated public biographical data; gameplay ratings are Football Empire balancing values.",
       },
