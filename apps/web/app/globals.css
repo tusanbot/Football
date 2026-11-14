@@ -127,3 +127,12 @@ button:disabled { opacity: .55; cursor: not-allowed; }
 .ticket-price-setting input { display: block; width: 100%; margin-top: 7px; padding: 11px 12px; color: #f4f7fb; background: #0b1727; border: 1px solid #30465e; border-radius: 9px; }
 .ticket-price-setting button { width: 100%; margin-top: 9px; }
 .ticket-price-setting p { margin-bottom: 0; }
+
+.finance-summary { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 8px; margin: 12px 0; }
+.finance-summary div { min-width: 0; border: 1px solid #30465e; background: #0b1727; border-radius: 9px; padding: 10px; }
+.finance-summary span, .finance-summary strong { display: block; }
+.finance-summary span { color: #9fb0c5; font-size: 11px; }
+.finance-summary strong { margin-top: 6px; font-size: 14px; overflow-wrap: anywhere; }
+@media (max-width: 420px) {
+  .finance-summary { grid-template-columns: 1fr; }
+}
