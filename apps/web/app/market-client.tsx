@@ -23,7 +23,7 @@ type MatchRecord = {
   id: string; type: string; status: string; scheduledAt: string;
   homeClub: { id: string; name: string }; awayClub: { id: string; name: string };
   homeScore: number | null; awayScore: number | null; attendance: number; ticketRevenue: string;
-  events: Array<{ minute: number; type: string; detail: string; playerId: string }>;
+  events: Array<{ minute: number; type: string; detail: string; playerId: string; playerName: string; relatedPlayerName: string | null }>;
 };
 type OpenLeague = { id: string; name: string; season: number; status: string; maxTeams: number; teams: number; joined: boolean; isCreator: boolean; creator: string };
 type ClubCompetition = { id: string; name: string; season: number; status: string };
@@ -463,7 +463,7 @@ export default function MarketPage() {
             <strong>{match.homeClub.name} {match.homeScore ?? "–"} : {match.awayScore ?? "–"} {match.awayClub.name}</strong>
             <small>{match.type === "LEAGUE" ? "لیگ" : "دوستانه"} · {match.status === "COMPLETED" ? "پایان‌یافته" : match.status === "SCHEDULED" ? "برنامه‌ریزی‌شده" : "لغوشده"} · {new Date(match.scheduledAt).toLocaleString("fa-IR")}</small>
             {match.status === "COMPLETED" && <small>تماشاگر: {money(match.attendance)} · درآمد بلیت: {money(match.ticketRevenue)} Cash</small>}
-            {match.events.filter((event) => event.type === "GOAL").slice(0, 4).map((event, index) => <small key={match.id + "-goal-" + index}>{event.minute}' · گل</small>)}
+            {match.events.filter((event) => event.type === "GOAL").slice(0, 4).map((event, index) => <small key={match.id + "-goal-" + index}>{event.minute}' · {event.playerName}{event.relatedPlayerName ? " (پاس گل: " + event.relatedPlayerName + ")" : ""}</small>)}
           </div>
           {match.status === "SCHEDULED" && new Date(match.scheduledAt).getTime() <= Date.now() && <button disabled={!!busy} onClick={() => void action("play-" + match.id, "/v1/matches/" + match.id + "/simulate", "POST", {})}>شبیه‌سازی مسابقه</button>}
         </div>)}
