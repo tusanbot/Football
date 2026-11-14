@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 
-type Player = { id: string; firstName: string; lastName: string; nationality: string; age: number; position: string; overall: number; potential: number; wage: string; status?: string; fitness?: number; morale?: number; contractDays?: number; injuryUntil?: string | null; minimumWeeklyWage?: string; maximumWeeklyWage?: string; trainingFocus?: string; lineupSlot?: number | null };
+type Player = { id: string; firstName: string; lastName: string; nationality: string; age: number; position: string; overall: number; potential: number; wage: string; attributes?: Record<string, number>; status?: string; fitness?: number; morale?: number; contractDays?: number; injuryUntil?: string | null; minimumWeeklyWage?: string; maximumWeeklyWage?: string; trainingFocus?: string; lineupSlot?: number | null };
 type Listing = { id: string; askingPrice: string; status?: string; expiresAt: string; createdAt: string; player: Player; sellerClub?: { name: string } };
 type SpecialPlayer = { id: string; fullName: string; nationality: string; positions: string[]; rarity: string; overall: number; potential: number; acquisitionMethods: string[] };
 type PackOffer = { method: "epic_pack" | "legendary_pack" | "icon_pack"; rarity: string; priceGold: string };
@@ -34,6 +34,7 @@ export default function MarketPage() {
   const [weeklyWageBill, setWeeklyWageBill] = useState("0");
   const [wageArrears, setWageArrears] = useState("0");
   const [recentPayrolls, setRecentPayrolls] = useState<Array<{ payrollDate: string; totalDue: string; cashPaid: string; arrearsAfter: string }>>([]);
+  const [recentTraining, setRecentTraining] = useState<Array<{ id: string; playerId: string; focus: string; intensity: string; overallBefore: number; overallAfter: number; injuryOccurred: boolean; createdAt: string }>>([]);
   const [developmentPlayerId, setDevelopmentPlayerId] = useState("");
   const [trainingFocus, setTrainingFocus] = useState("BALANCED");
   const [trainingIntensity, setTrainingIntensity] = useState("NORMAL");
@@ -82,6 +83,7 @@ export default function MarketPage() {
       setWeeklyWageBill(development.weeklyWageBill);
       setWageArrears(development.wageArrears);
       setRecentPayrolls(development.recentPayrolls ?? []);
+      setRecentTraining(development.recentTraining ?? []);
       setDevelopmentPlayerId((current) => development.players.some((player: Player) => player.id === current) ? current : (development.players.find((player: Player) => player.status === "ACTIVE")?.id ?? development.players[0]?.id ?? ""));
       const chosen = development.players.find((player: Player) => player.id === developmentPlayerId) ?? development.players.find((player: Player) => player.status === "ACTIVE") ?? development.players[0];
       if (chosen?.minimumWeeklyWage) setContractWage((current) => current || chosen.minimumWeeklyWage);
@@ -225,6 +227,7 @@ export default function MarketPage() {
             const player = players.find((item) => item.id === id);
             if (player?.minimumWeeklyWage) setContractWage(player.minimumWeeklyWage);
             if (player?.position !== "GK" && trainingFocus === "GOALKEEPING") setTrainingFocus("BALANCED");
+            if (player?.trainingFocus) setTrainingFocus(player.trainingFocus);
           }}>
             <option value="">انتخاب بازیکن</option>
             {players.map((player) => <option key={player.id} value={player.id}>{player.firstName} {player.lastName} · {player.position} · OVR {player.overall} · {player.status}</option>)}
@@ -242,6 +245,13 @@ export default function MarketPage() {
             </div>
             {player.status === "INJURED" && <p className="notice error">بازیکن مصدوم است و تا {player.injuryUntil ? new Date(player.injuryUntil).toLocaleDateString("fa-IR") : "پایان دوره درمان"} امکان تمرین ندارد.</p>}
             {player.status === "CONTRACT_EXPIRED" && <p className="notice error">قرارداد بازیکن تمام شده است؛ ابتدا قرارداد را تمدید کنید.</p>}
+            <div className="attribute-grid">
+              {[
+                ["سرعت", "pace"], ["شوت", "shooting"], ["پاس", "passing"],
+                ["دریبل", "dribbling"], ["دفاع", "defending"], ["قدرت بدنی", "physical"],
+                ["دروازه‌بانی", "goalkeeping"],
+              ].map(([label, key]) => <div key={key}><span>{label}</span><strong>{player.attributes?.[key] ?? "—"}</strong></div>)}
+            </div>
             <h3>برنامه تمرینی</h3>
             <div className="lineup-grid">
               <label>تمرکز تمرین
@@ -284,6 +294,13 @@ export default function MarketPage() {
           {recentPayrolls.map((payroll) => <div className="development-player-row" key={payroll.payrollDate}>
             <div><strong>{new Date(payroll.payrollDate).toLocaleDateString("fa-IR")}</strong><small>مطالبات {money(payroll.totalDue)} Cash</small></div>
             <div><strong>{money(payroll.cashPaid)} Cash</strong><small>معوقات {money(payroll.arrearsAfter)}</small></div>
+          </div>)}
+        </div>}
+        {recentTraining.length > 0 && <div className="payroll-history">
+          <h3>آخرین جلسات تمرین</h3>
+          {recentTraining.map((log) => <div className="development-player-row" key={log.id}>
+            <div><strong>{players.find((player) => player.id === log.playerId)?.firstName ?? "بازیکن"} · {log.focus}</strong><small>{new Date(log.createdAt).toLocaleDateString("fa-IR")} · {log.intensity}</small></div>
+            <div><strong>{log.overallBefore} ← {log.overallAfter}</strong><small>{log.injuryOccurred ? "مصدومیت در تمرین" : "بدون مصدومیت"}</small></div>
           </div>)}
         </div>}
         {players.map((player) => <div className="development-player-row" key={player.id}>
