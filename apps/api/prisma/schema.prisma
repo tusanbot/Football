@@ -118,6 +118,7 @@ model Club {
   lastPayrollAt DateTime @default(now())
   wageArrears BigInt @default(0)
   stadiumLevel Int @default(1)
+  ticketPrice BigInt @default(50)
   academyLevel Int @default(0)
   lastEconomyTickAt DateTime @default(now())
   operatingArrears BigInt @default(0)
