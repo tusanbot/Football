@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { Prisma } from "@prisma/client";
-import { calculateStadiumCapacity, simulateFootballMatch, type MatchSide, type MatchTactics } from "@football/domain";
+import { calculateStadiumCapacity, simulateFootballMatch, simulatePenaltyShootout, type MatchSide, type MatchTactics } from "@football/domain";
 import { prisma } from "../db.js";
 
 const DAY_MS = 86_400_000;
@@ -134,19 +134,19 @@ export async function createFriendlyMatch(userId: string, opponentClubId: string
   });
   return { match, replayed: false };
 }
-export async function createLeague(userId: string, name: string, maxTeams: number, idempotencyKey: string) {
+export async function createLeague(userId: string, name: string, maxTeams: number, idempotencyKey: string, format: "LEAGUE" | "CUP" = "LEAGUE") {
   keyValid(idempotencyKey);
   const club = await getOwnedClub(userId);
   const existing = await prisma.competition.findUnique({ where: { idempotencyKey } });
   if (existing) {
-    if (existing.createdByClubId !== club.id || existing.name !== name || existing.maxTeams !== maxTeams) {
+    if (existing.createdByClubId !== club.id || existing.name !== name || existing.maxTeams !== maxTeams || existing.format !== format) {
       throw new MatchServiceError("IDEMPOTENCY_CONFLICT");
     }
     return { competition: existing, replayed: true };
   }
   const competition = await prisma.competition.create({
     data: {
-      idempotencyKey, name, season: new Date().getUTCFullYear(), maxTeams, createdByClubId: club.id,
+      idempotencyKey, name, season: new Date().getUTCFullYear(), format, maxTeams, createdByClubId: club.id,
       entries: { create: { clubId: club.id } },
     },
   });
@@ -243,7 +243,7 @@ export async function listOpenLeagues(userId: string) {
     orderBy: { createdAt: "desc" }, take: 30,
   });
   return competitions.map((competition) => ({
-    id: competition.id, name: competition.name, season: competition.season,
+    id: competition.id, name: competition.name, season: competition.season, format: competition.format,
     status: competition.status, maxTeams: competition.maxTeams,
     teams: competition.entries.length,
     joined: competition.entries.some((entry) => entry.clubId === club.id),
@@ -266,7 +266,7 @@ export async function getLeague(userId: string, competitionId: string) {
     || (b.goalsFor - b.goalsAgainst) - (a.goalsFor - a.goalsAgainst)
     || b.goalsFor - a.goalsFor || a.club.name.localeCompare(b.club.name));
   return {
-    competition: { id: competition.id, name: competition.name, season: competition.season, status: competition.status, startsAt: competition.startsAt?.toISOString() ?? null },
+    competition: { id: competition.id, name: competition.name, season: competition.season, format: competition.format, status: competition.status, startsAt: competition.startsAt?.toISOString() ?? null },
     standings: competition.entries.map((entry, index) => ({
       position: index + 1, clubId: entry.clubId, clubName: entry.club.name, played: entry.played,
       won: entry.won, drawn: entry.drawn, lost: entry.lost, goalsFor: entry.goalsFor,
@@ -274,7 +274,7 @@ export async function getLeague(userId: string, competitionId: string) {
     })),
     matches: competition.matches.map((match) => ({
       id: match.id, round: match.round, scheduledAt: match.scheduledAt.toISOString(), status: match.status,
-      homeClub: match.homeClub, awayClub: match.awayClub, homeScore: match.homeScore, awayScore: match.awayScore,
+      homeClub: match.homeClub, awayClub: match.awayClub, homeScore: match.homeScore, awayScore: match.awayScore, homePenalties: match.homePenalties, awayPenalties: match.awayPenalties, winnerClubId: match.winnerClubId,
     })),
   };
 }
@@ -304,6 +304,7 @@ export async function listClubMatches(userId: string) {
       id: match.id, type: match.type, status: match.status, simulationVersion: match.simulationVersion, scheduledAt: match.scheduledAt.toISOString(),
       homeClub: match.homeClub, awayClub: match.awayClub, homeScore: match.homeScore, awayScore: match.awayScore,
       attendance: match.attendance, ticketRevenue: match.ticketRevenue.toString(), round: match.round,
+      homePenalties: match.homePenalties, awayPenalties: match.awayPenalties, winnerClubId: match.winnerClubId,
       events: match.events.map((event) => ({
         minute: event.minute, type: event.type, teamId: event.teamId, playerId: event.playerId,
         relatedPlayerId: event.relatedPlayerId, detail: event.detail,
