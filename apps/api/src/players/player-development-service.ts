@@ -181,7 +181,8 @@ export async function settleClubDailyState(userId: string, now = new Date()) {
     return { elapsedDays, gameDate: today.toISOString().slice(0, 10), recovered, expiredContracts, payroll: payrollSummary };
     }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
   } catch (error) {
-    if (error instanceof Prisma.PrismaClientKnownRequestError && ["P2002", "P2034"].includes(error.code)) {
+    if ((error instanceof Prisma.PrismaClientKnownRequestError && ["P2002", "P2034"].includes(error.code))
+      || (error instanceof PlayerDevelopmentError && error.code === "DAILY_SETTLEMENT_CONFLICT")) {
       return { elapsedDays: 0, gameDate: today.toISOString().slice(0, 10), recovered: 0, expiredContracts: 0 };
     }
     throw error;
