@@ -106,3 +106,15 @@ test("group game activity validates its action payload",async t=>{
  const response=await app.inject({method:"POST",url:"/v1/groups/-100123/activity/award",headers:{"x-football-bot-secret":"group-test-secret","x-telegram-user-id":"12345"},payload:{activityType:"MESSAGE_SPAM",referenceId:"x"}});
  assert.equal(response.statusCode,400);assert.equal(response.json().error,"INVALID_GROUP_ACTIVITY");
 });
+
+test("alliance security review requires Telegram authentication", async t => {
+  const app = buildApp();
+  await app.ready();
+  t.after(async () => app.close());
+  const response = await app.inject({
+    method: "POST",
+    url: "/v1/alliances/-100123/seasons/season-123/review",
+    payload: { decision: "APPROVE" },
+  });
+  assert.equal(response.statusCode, 401);
+});
