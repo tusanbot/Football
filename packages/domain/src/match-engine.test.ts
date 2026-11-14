@@ -28,6 +28,7 @@ test("match simulation is deterministic, produces valid score/events/performance
   assert.equal(first.performances.length, 22);
   assert.equal(first.performances.reduce((sum, row) => sum + row.goals, 0), first.homeScore + first.awayScore);
   assert.ok(first.events.every((event) => event.minute >= 1 && event.minute <= 90));
+  assert.deepEqual(first.events.map((event) => event.minute), [...first.events.map((event) => event.minute)].sort((a, b) => a - b));
   assert.ok(first.attendance >= 0 && first.attendance <= 12000);
   assert.equal(first.ticketRevenue, BigInt(first.attendance) * 50n);
   assert.ok(first.performances.every((row) => row.rating >= 3 && row.rating <= 10));
