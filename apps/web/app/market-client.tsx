@@ -669,7 +669,7 @@ export default function MarketPage() {
           </div>
           {groupWorkspace && groupWorkspace.group.role !== "MEMBER" && <>
             <label>مشارکت خزانه اتحاد از امتیاز گروه<input inputMode="numeric" value={allianceContributionAmount} onChange={e=>setAllianceContributionAmount(e.target.value.replace(/[^0-9]/g,""))}/></label>
-            <button className="secondary" disabled={!!busy || !allianceContributionAmount || BigInt(allianceContributionAmount||"0")<=0n || BigInt(allianceContributionAmount||"0")>BigInt(groupWorkspace.group.points)} onClick={()=>void action("alliance-contribution","/v1/alliances/"+encodeURIComponent(selectedGroupTelegramId)+"/treasury/contribute","POST",{amount:allianceContributionAmount,idempotencyKey:"mini-alliance-contrib-"+crypto.randomUUID().replace(/-/g,"")})}>واریز به خزانه اتحاد</button>
+            <button className="secondary" disabled={!!busy || !allianceContributionAmount || BigInt(allianceContributionAmount||"0")<=BigInt(0) || BigInt(allianceContributionAmount||"0")>BigInt(groupWorkspace.group.points)} onClick={()=>void action("alliance-contribution","/v1/alliances/"+encodeURIComponent(selectedGroupTelegramId)+"/treasury/contribute","POST",{amount:allianceContributionAmount,idempotencyKey:"mini-alliance-contrib-"+crypto.randomUUID().replace(/-/g,"")})}>واریز به خزانه اتحاد</button>
           </>}
           <h3>گروه‌های عضو</h3>
           {allianceWorkspace.alliance.groups.map(g=><div className="operation-row" key={g.telegramGroupId}><strong>{g.title}</strong><small>{g.memberCount} عضو · {money(g.points)} امتیاز گروه</small></div>)}
