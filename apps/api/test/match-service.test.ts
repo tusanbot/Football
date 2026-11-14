@@ -105,6 +105,9 @@ test("league registration, round-robin fixtures and final standings are transact
     const started = await startLeague(clubs[0]!.userId, competitionId, new Date());
     assert.equal(started.teams, 4);
     assert.equal(started.fixturesCreated, 6);
+    const startReplay = await startLeague(clubs[0]!.userId, competitionId, new Date());
+    assert.equal(startReplay.replayed, true);
+    assert.equal(startReplay.fixturesCreated, 6);
     const fixtures = await prisma.footballMatch.findMany({ where: { competitionId }, orderBy: { scheduledAt: "asc" } });
     assert.equal(fixtures.length, 6);
     for (const fixture of fixtures) {
