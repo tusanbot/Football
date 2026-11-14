@@ -147,3 +147,23 @@ export function advancePlayerDailyState(
     injuryUntil: injuryRecovered ? null : player.injuryUntil,
   };
 }
+
+export interface ContractDemandInput {
+  age: number;
+  overall: number;
+  potential: number;
+  morale: number;
+  currentWeeklyWage: bigint;
+}
+
+export function calculateContractDemand(player: ContractDemandInput) {
+  const baseline = BigInt(Math.max(
+    50,
+    player.overall * 2 + Math.max(0, player.potential - player.overall) * 3 + (player.age < 21 ? 20 : 0),
+  ));
+  const current = player.currentWeeklyWage > baseline ? player.currentWeeklyWage : baseline;
+  const moralePremium = player.morale >= 85 ? 15n : player.morale >= 70 ? 8n : 0n;
+  const minimumWeeklyWage = (current * (100n + moralePremium) + 99n) / 100n;
+  const maximumWeeklyWage = minimumWeeklyWage * 2n;
+  return { minimumWeeklyWage, maximumWeeklyWage };
+}
