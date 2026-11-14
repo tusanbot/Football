@@ -43,6 +43,10 @@ type GroupWorkspace = {
  leagues:Array<{id:string;name:string;status:string;maxTeams:number;teams:number;joined:boolean;createdByMe:boolean}>;
 };
 type GroupLeagueTable = {competition:{id:string;name:string;status:string;teams:Array<{rank:number;club:string;played:number;won:number;drawn:number;lost:number;goalsFor:number;goalsAgainst:number;points:number}>}};
+type AllianceWorkspace = {
+ alliance: null | { id:string; name:string; description:string; treasuryPoints:string; groups:Array<{title:string;telegramGroupId:string;memberCount:number;points:string;role:string}>; seasons:Array<{id:string;number:number;status:string;startsAt:string;endsAt:string;standings:Array<{rank:number;group:string;points:string}>|null}>; competitions:Array<{id:string;name:string;status:string;teams:number;standings:Array<{rank:number;club:string;played:number;points:number;goalsFor:number;goalsAgainst:number}>}> };
+ invitations:Array<{id:string;alliance:{name:string;description:string}}>;
+};
 
 type Lineup = {
   formation: string;
@@ -101,6 +105,11 @@ export default function MarketPage() {
   const [groupLeagueName, setGroupLeagueName] = useState("");
   const [groupLeagueCapacity, setGroupLeagueCapacity] = useState("8");
   const [groupLeagueTable, setGroupLeagueTable] = useState<GroupLeagueTable | null>(null);
+  const [allianceWorkspace, setAllianceWorkspace] = useState<AllianceWorkspace | null>(null);
+  const [allianceName, setAllianceName] = useState("");
+  const [allianceTargetGroupId, setAllianceTargetGroupId] = useState("");
+  const [allianceCompetitionName, setAllianceCompetitionName] = useState("");
+  const [allianceCompetitionCapacity, setAllianceCompetitionCapacity] = useState("8");
   const [leagueName, setLeagueName] = useState("");
   const [leagueCapacity, setLeagueCapacity] = useState("8");
   const [competitionFormat, setCompetitionFormat] = useState("LEAGUE");
@@ -172,9 +181,13 @@ export default function MarketPage() {
         const workspaceResponse = await fetch(API + "/v1/groups/" + encodeURIComponent(selected.telegramGroupId) + "/workspace", { headers });
         if (workspaceResponse.ok) setGroupWorkspace(await workspaceResponse.json());
         else setGroupWorkspace(null);
+        const allianceResponse = await fetch(API + "/v1/alliances/" + encodeURIComponent(selected.telegramGroupId), { headers });
+        if (allianceResponse.ok) setAllianceWorkspace(await allianceResponse.json());
+        else setAllianceWorkspace(null);
       } else {
         setSelectedGroupTelegramId("");
         setGroupWorkspace(null);
+        setAllianceWorkspace(null);
       }
     }
     const financeResponse = await fetch(API + "/v1/club/finance?days=30", { headers });
@@ -632,6 +645,52 @@ export default function MarketPage() {
           {groupLeagueTable && <><h3>{groupLeagueTable.competition.name} · جدول</h3>{groupLeagueTable.competition.teams.map(team=><div className="operation-row" key={team.rank}><strong>{team.rank}. {team.club}</strong><small>{team.points} امتیاز · {team.played} بازی · برد {team.won} · مساوی {team.drawn} · باخت {team.lost}</small></div>)}</>}
         </div>
       </>}
+
+      <div className="market-card">
+        <h2>اتحادها و رقابت‌های بین‌گروهی</h2>
+        {!allianceWorkspace?.alliance ? <>
+          <p className="muted">این گروه هنوز عضو اتحادی نیست. مدیر گروه می‌تواند اتحادی بسازد یا دعوت دریافتی را تأیید کند.</p>
+          {allianceWorkspace?.invitations.map(invite => <div className="operation-row" key={invite.id}>
+            <div><strong>{invite.alliance.name}</strong><small>{invite.alliance.description || "دعوت عضویت در اتحاد"}</small></div>
+            <button disabled={!!busy} onClick={() => void action("alliance-accept-"+invite.id,"/v1/alliances/"+encodeURIComponent(selectedGroupTelegramId)+"/invitations/"+invite.id+"/respond","POST",{accept:true})}>پذیرش</button>
+            <button className="secondary" disabled={!!busy} onClick={() => void action("alliance-decline-"+invite.id,"/v1/alliances/"+encodeURIComponent(selectedGroupTelegramId)+"/invitations/"+invite.id+"/respond","POST",{accept:false})}>رد دعوت</button>
+          </div>)}
+          {groupWorkspace && groupWorkspace.group.role !== "MEMBER" && <>
+            <label>نام اتحاد<input value={allianceName} maxLength={60} onChange={e=>setAllianceName(e.target.value)} placeholder="اتحاد قهرمانان"/></label>
+            <button disabled={!!busy || allianceName.trim().length<3} onClick={()=>void action("alliance-create","/v1/alliances/"+encodeURIComponent(selectedGroupTelegramId),"POST",{name:allianceName.trim(),idempotencyKey:"mini-alliance-"+crypto.randomUUID().replace(/-/g,"")})}>ایجاد اتحاد</button>
+          </>}
+        </> : <>
+          <h3>{allianceWorkspace.alliance.name}</h3>
+          <div className="development-stats">
+            <div><span>تعداد گروه‌ها</span><strong>{allianceWorkspace.alliance.groups.length}</strong></div>
+            <div><span>خزانه اتحاد</span><strong>{money(allianceWorkspace.alliance.treasuryPoints)}</strong></div>
+            <div><span>فصل فعال</span><strong>{allianceWorkspace.alliance.seasons.find(x=>x.status==="ACTIVE")?.number ?? "—"}</strong></div>
+          </div>
+          <h3>گروه‌های عضو</h3>
+          {allianceWorkspace.alliance.groups.map(g=><div className="operation-row" key={g.telegramGroupId}><strong>{g.title}</strong><small>{g.memberCount} عضو · {money(g.points)} امتیاز گروه</small></div>)}
+          {groupWorkspace && groupWorkspace.group.role !== "MEMBER" && <>
+            <label>شناسه عددی گروه برای دعوت<input value={allianceTargetGroupId} onChange={e=>setAllianceTargetGroupId(e.target.value.replace(/[^0-9-]/g,""))} placeholder="-1001234567890"/></label>
+            <button className="secondary" disabled={!!busy || !/^-?\d{1,20}$/.test(allianceTargetGroupId)} onClick={()=>void action("alliance-invite","/v1/alliances/"+encodeURIComponent(selectedGroupTelegramId)+"/invitations","POST",{targetTelegramGroupId:allianceTargetGroupId})}>ارسال دعوت</button>
+            <h3>قهرمانی بین‌گروهی جدید</h3>
+            <label>نام مسابقات<input value={allianceCompetitionName} maxLength={60} onChange={e=>setAllianceCompetitionName(e.target.value)} placeholder="جام اتحادها"/></label>
+            <label>ظرفیت<select value={allianceCompetitionCapacity} onChange={e=>setAllianceCompetitionCapacity(e.target.value)}>{["4","6","8","10","12","16","20"].map(x=><option key={x} value={x}>{x} باشگاه</option>)}</select></label>
+            <button disabled={!!busy || allianceCompetitionName.trim().length<3} onClick={()=>void action("alliance-championship-create","/v1/alliances/"+encodeURIComponent(selectedGroupTelegramId)+"/championships","POST",{name:allianceCompetitionName.trim(),maxTeams:Number(allianceCompetitionCapacity),idempotencyKey:"mini-alliance-cup-"+crypto.randomUUID().replace(/-/g,"")})}>ایجاد قهرمانی</button>
+            <div className="operation-row">
+              <button className="secondary" disabled={!!busy} onClick={()=>void action("alliance-season-start","/v1/alliances/"+encodeURIComponent(selectedGroupTelegramId)+"/seasons","POST",{durationDays:30})}>شروع فصل ۳۰روزه</button>
+              <button className="secondary" disabled={!!busy} onClick={()=>void action("alliance-season-close","/v1/alliances/"+encodeURIComponent(selectedGroupTelegramId)+"/seasons/close","POST",{})}>بستن فصل و ثبت رتبه‌ها</button>
+            </div>
+          </>}
+          <h3>مسابقات اتحاد</h3>
+          {allianceWorkspace.alliance.competitions.map(comp=><div className="operation-row" key={comp.id}>
+            <div><strong>{comp.name}</strong><small>{comp.status} · {comp.teams} تیم</small></div>
+            {comp.status==="REGISTRATION" && <button className="secondary" disabled={!!busy} onClick={()=>void action("alliance-join-"+comp.id,"/v1/alliances/"+encodeURIComponent(selectedGroupTelegramId)+"/championships/"+comp.id+"/join","POST",{})}>ثبت‌نام باشگاه</button>}
+            {comp.status==="REGISTRATION" && <button className="secondary" disabled={!!busy || comp.teams<4} onClick={()=>void action("alliance-start-"+comp.id,"/v1/alliances/"+encodeURIComponent(selectedGroupTelegramId)+"/championships/"+comp.id+"/start","POST",{})}>شروع مسابقات</button>}
+            {comp.standings.map(row=><small key={row.rank}>{row.rank}. {row.club} · {row.points} امتیاز</small>)}
+          </div>)}
+          <h3>فصل‌ها و رتبه‌بندی گروه‌ها</h3>
+          {allianceWorkspace.alliance.seasons.map(season=><div className="operation-row" key={season.id}><strong>فصل {season.number} · {season.status}</strong><small>{new Date(season.startsAt).toLocaleDateString("fa-IR")} تا {new Date(season.endsAt).toLocaleDateString("fa-IR")}</small>{season.standings?.map(row=><small key={row.rank}>{row.rank}. {row.group} · {money(row.points)} امتیاز</small>)}</div>)}
+        </>}
+      </div>
     </section>}
 
     {tab === "special" && <><section className="special-packs"><div className="market-card"><h2>جذب ستاره‌های ویژه</h2><p>هر بسته یک بازیکن تصادفی از رده مشخص‌شده می‌دهد. هر بازیکن ویژه را فقط یک‌بار می‌توانید در باشگاه خود داشته باشید.</p><div className="pack-actions">{packOffers.map((offer) => <button key={offer.method} disabled={!!busy || Number(gold) < Number(offer.priceGold)} onClick={() => { const key = packKeys[offer.method] ?? crypto.randomUUID(); if (!packKeys[offer.method]) setPackKeys((current) => ({ ...current, [offer.method]: key })); void action("pack-" + offer.method, "/v1/players/special/acquire", "POST", { method: offer.method, idempotencyKey: key }); }}>{busy === "pack-" + offer.method ? "در حال جذب…" : `${rarityLabel[offer.rarity] ?? offer.rarity} · ${money(offer.priceGold)} Gold`}</button>)}</div></div></section><section className="special-grid">{special.map((p) => <article className="special-card" key={p.id}><div className="special-top"><span>{rarityLabel[p.rarity] ?? p.rarity}</span><strong>{p.overall}</strong></div><h3>{p.fullName}</h3><p>{p.nationality} · {p.positions.join(" / ")}</p><div className="potential">Potential <strong>{p.potential}</strong></div><small>روش‌های جذب: {p.acquisitionMethods.join("، ")}</small></article>)}</section></>}
