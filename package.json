@@ -1,1 +1,22 @@
-{"name":"football-empire","private":true,"version":"0.1.0","packageManager":"pnpm@10.0.0","scripts":{"dev":"pnpm --parallel --filter @football/api --filter @football/bot --filter @football/web dev","dev:api":"pnpm --filter @football/api dev","dev:bot":"pnpm --filter @football/bot dev","dev:web":"pnpm --filter @football/web dev","build":"pnpm -r build","typecheck":"pnpm -r typecheck","db:generate":"pnpm --filter @football/api db:generate","db:migrate":"pnpm --filter @football/api db:migrate"},"devDependencies":{"typescript":"^5.8.3","tsx":"^4.19.3","@types/node":"^22.13.10"}}
+{
+  "name": "football-empire",
+  "private": true,
+  "version": "0.1.0",
+  "packageManager": "pnpm@10.0.0",
+  "scripts": {
+    "dev": "pnpm --parallel --filter @football/api --filter @football/bot --filter @football/web dev",
+    "dev:api": "pnpm --filter @football/api dev",
+    "dev:bot": "pnpm --filter @football/bot dev",
+    "dev:web": "pnpm --filter @football/web dev",
+    "build": "pnpm -r build",
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm --filter @football/domain test && pnpm --filter @football/api test",
+    "db:generate": "pnpm --filter @football/api db:generate",
+    "db:migrate": "pnpm --filter @football/api db:migrate"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.3",
+    "tsx": "^4.19.3",
+    "@types/node": "^22.13.10"
+  }
+}
