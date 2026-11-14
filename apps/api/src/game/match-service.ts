@@ -22,6 +22,7 @@ function asTactics(club: { mentality: string; pressing: string; tempo: string; p
 }
 const matchClubInclude = {
   owner: { select: { id: true, telegramId: true } },
+  coach: { select: { medicalSkill: true } },
   players: {
     where: { status: "ACTIVE" as const },
     orderBy: [{ lineupSlot: "asc" as const }, { overall: "desc" as const }],
@@ -51,6 +52,7 @@ function toSide(club: LoadedClub): MatchSide {
     clubId: club.id, clubName: club.name, formation: club.formation, tactics: asTactics(club),
     stadiumCapacity: Math.max(1000, Math.round(1000 * Math.pow(1.35, club.stadiumLevel - 1))),
     ticketPrice: club.ticketPrice, reputation: club.reputation,
+    coachMedicalSkill: club.coach?.medicalSkill ?? 0,
     players: selected.slice(0, 11).map((player) => ({
       id: player.id, name: player.firstName + " " + player.lastName,
       position: player.position, overall: player.overall, morale: player.morale,
