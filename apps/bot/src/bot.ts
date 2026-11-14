@@ -31,9 +31,38 @@ function cash(value: string) { return Number(value).toLocaleString("en-US"); }
 function playerName(player: ApiPlayer) { return `${player.firstName} ${player.lastName}`; }
 
 bot.command("start", async (ctx) => {
-  const keyboard = new InlineKeyboard();
-  if (webAppUrl) keyboard.webApp("Open Football Empire", webAppUrl);
-  await ctx.reply("Welcome to Football Empire! Manage your club and use the same transfer market from this bot or the Mini App.\n\nCommands: /players /market /special /pack /sell /buy", { reply_markup: keyboard });
+  if (!ctx.from) return;
+  if (ctx.chat.type !== "private") {
+    return ctx.reply("To create or open your Football Empire club, start a private chat with me.");
+  }
+
+  try {
+    const account = await api<{
+      user: { displayName: string };
+      club: { name: string; level: number } | null;
+      wallets: Array<{ asset: "CASH" | "GOLD"; balance: string }>;
+    }>("/v1/auth/bot", ctx.from.id, "POST", {
+      firstName: ctx.from.first_name,
+      ...(ctx.from.last_name ? { lastName: ctx.from.last_name } : {}),
+      ...(ctx.from.username ? { username: ctx.from.username } : {}),
+    });
+
+    const cashBalance = account.wallets.find((wallet) => wallet.asset === "CASH")?.balance ?? "0";
+    const goldBalance = account.wallets.find((wallet) => wallet.asset === "GOLD")?.balance ?? "0";
+    const keyboard = new InlineKeyboard();
+    if (webAppUrl) keyboard.webApp("Open Football Empire", webAppUrl);
+
+    await ctx.reply(
+      `Welcome, ${account.user.displayName}! Your club is ready.\n\n` +
+      `Club: ${account.club?.name ?? "Not created"} (Level ${account.club?.level ?? 1})\n` +
+      `Starter balance: ${cash(cashBalance)} Cash · ${cash(goldBalance)} Gold\n\n` +
+      `You can manage your club directly here or continue in the Mini App.\n\n` +
+      `Commands: /players /market /special /pack /sell /buy`,
+      { reply_markup: keyboard },
+    );
+  } catch (error) {
+    await ctx.reply(`Could not create or load your club: ${error instanceof Error ? error.message : "unknown error"}`);
+  }
 });
 
 bot.command("help", async (ctx) => ctx.reply(
