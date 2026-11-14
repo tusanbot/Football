@@ -45,7 +45,7 @@ const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
 const money = (value: string | number) => new Intl.NumberFormat("en-US").format(Number(value));
 const rarityLabel: Record<string, string> = { ICON: "Icon", LEGENDARY: "Legendary", EPIC: "Epic", RARE: "Rare" };
 const matchEventLabel: Record<string, string> = {
-  GOAL: "گل", YELLOW_CARD: "کارت زرد", RED_CARD: "کارت قرمز", INJURY: "مصدومیت",
+  GOAL: "گل", YELLOW_CARD: "کارت زرد", RED_CARD: "کارت قرمز", INJURY: "مصدومیت", SUBSTITUTION: "تعویض",
 };
 const financeCategoryLabel: Record<string, string> = {
   PLAYER_TRAINING: "تمرین بازیکن",
