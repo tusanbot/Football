@@ -110,3 +110,28 @@ WHERE "origin" = 'GENERATED';
 UPDATE "Player"
 SET "wage" = "overall" * 3
 WHERE "origin" = 'SPECIAL';
+
+ALTER TABLE "Club"
+  ADD COLUMN "lastPayrollAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  ADD COLUMN "wageArrears" BIGINT NOT NULL DEFAULT 0;
+
+CREATE TABLE "ClubPayroll" (
+  "id" TEXT NOT NULL,
+  "clubId" TEXT NOT NULL,
+  "payrollDate" DATE NOT NULL,
+  "weeksCovered" INTEGER NOT NULL,
+  "playerWages" BIGINT NOT NULL,
+  "coachWages" BIGINT NOT NULL,
+  "arrearsBefore" BIGINT NOT NULL,
+  "totalDue" BIGINT NOT NULL,
+  "cashPaid" BIGINT NOT NULL,
+  "arrearsAfter" BIGINT NOT NULL,
+  "playersCount" INTEGER NOT NULL,
+  "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT "ClubPayroll_pkey" PRIMARY KEY ("id")
+);
+
+CREATE UNIQUE INDEX "ClubPayroll_clubId_payrollDate_key" ON "ClubPayroll"("clubId", "payrollDate");
+CREATE INDEX "ClubPayroll_payrollDate_idx" ON "ClubPayroll"("payrollDate");
+ALTER TABLE "ClubPayroll" ADD CONSTRAINT "ClubPayroll_clubId_fkey"
+  FOREIGN KEY ("clubId") REFERENCES "Club"("id") ON DELETE CASCADE ON UPDATE CASCADE;
