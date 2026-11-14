@@ -8,7 +8,6 @@ import {
 } from "../src/game/match-service.js";
 
 const positions = ["GK","RB","CB","CB","LB","CDM","CM","CAM","RW","ST","LW"] as const;
-const DAY_MS = 86_400_000;
 async function makeClub(suffix: string, index: number) {
   const user = await prisma.user.create({
     data: {
@@ -40,7 +39,7 @@ test("friendly match simulation settles score, events, fitness, gate revenue and
   const clubs: Array<{ userId: string; clubId: string }> = [];
   try {
     clubs.push(await makeClub(suffix, 0), await makeClub(suffix, 1));
-    const scheduledAt = new Date(Date.now() - 60_000);
+    const scheduledAt = new Date(Date.now() - 30_000);
     const key = `friendly-${suffix}`;
     const created = await createFriendlyMatch(clubs[0]!.userId, clubs[1]!.clubId, key, scheduledAt);
     assert.equal(created.replayed, false);
