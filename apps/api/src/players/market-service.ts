@@ -1,4 +1,4 @@
-import { Prisma, type PlayerMarketListing } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 import { prisma } from "../db.js";
 
 export class MarketError extends Error {
