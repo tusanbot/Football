@@ -248,6 +248,18 @@ export function registerMatchRoutes(app: FastifyInstance) {
     try {
       const body = z.object({ groupTelegramId: z.string().regex(/^-?\d{1,20}$/).optional(), idempotencyKey: z.string().regex(/^[A-Za-z0-9:_-]{12,128}$/) }).strict().safeParse(request.body ?? {});
       if (!body.success) return reply.code(400).send({ error: "INVALID_FRIENDLY_CHALLENGE" });
+      if (body.data.groupTelegramId) {
+        try {
+          await verifyTelegramGroupActor({ telegramGroupId: body.data.groupTelegramId, telegramUserId: user.telegramId });
+        } catch (error) {
+          if (error instanceof TelegramGroupAuthorizationError) {
+            const status = error.code === "TELEGRAM_BOT_TOKEN_NOT_CONFIGURED" ? 503
+              : error.code === "TELEGRAM_GROUP_CHECK_FAILED" ? 502 : 403;
+            return reply.code(status).send({ error: error.code });
+          }
+          throw error;
+        }
+      }
       const result = await createFriendlyChallenge(user.id, 100n, new Date(), body.data.groupTelegramId, body.data.idempotencyKey);
       const botUsername = process.env.TELEGRAM_BOT_USERNAME?.replace(/^@/, "");
       return { ...result, shareUrl: botUsername ? `https://t.me/${botUsername}?start=challenge_${result.challenge.token}` : null };
