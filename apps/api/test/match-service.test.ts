@@ -251,9 +251,24 @@ test("durable match worker advances checkpoints, resumes on two early decisions 
     const created = await createFriendlyMatch(
       clubs[0]!.userId, clubs[1]!.clubId, `runtime-${suffix}`, kickoff,
     );
+    await prisma.footballMatch.update({ where: { id: created.match.id }, data: { seed: "runtime-injury-red0-90" } });
     const firstTick = await processDueMatchRuntimes("test-runtime-worker", kickoff, 5);
     assert.equal(firstTick.enqueued, 1);
     assert.equal(firstTick.advanced, 1);
+    const firstRuntime = await prisma.matchRuntime.findUniqueOrThrow({ where: { matchId: created.match.id } });
+    const firstState = firstRuntime.simulationState as {
+      segment: { events: Array<{ type: string; minute: number; playerId: string; detail: string }>; home: { side: { players: Array<{ id: string; position: string }> } } };
+      substitutions: { home: { substitutionsUsed: number; inPlayWindowsUsed: number; sentOffIds: string[] } };
+    };
+    const injuryEvent = firstState.segment.events.find((event) => event.type === "INJURY");
+    const redCardEvent = firstState.segment.events.find((event) => event.type === "RED_CARD");
+    assert.ok(injuryEvent);
+    assert.ok(redCardEvent);
+    assert.ok(firstState.segment.events.some((event) =>
+      event.type === "SUBSTITUTION" && event.minute === injuryEvent.minute && event.detail.includes("Forced injury")));
+    assert.equal(firstState.substitutions.home.substitutionsUsed, 1);
+    assert.equal(firstState.substitutions.home.inPlayWindowsUsed, 1);
+    assert.ok(firstState.substitutions.home.sentOffIds.includes(redCardEvent.playerId));
     const halfTime = await prisma.matchTacticalCheckpoint.findUniqueOrThrow({
       where: { matchId_checkpointKey: { matchId: created.match.id, checkpointKey: "minute-45" } },
     });
@@ -262,8 +277,9 @@ test("durable match worker advances checkpoints, resumes on two early decisions 
     const homeRoster = await prisma.player.findMany({
       where: { clubId: clubs[0]!.clubId }, select: { id: true, position: true, lineupSlot: true },
     });
-    const outgoing = homeRoster.find((player) => player.lineupSlot === 11)!;
-    const incoming = homeRoster.find((player) => player.lineupSlot === null && player.position === "ST")!;
+    const activeHomeIds = new Set(firstState.segment.home.side.players.map((player) => player.id));
+    const outgoing = homeRoster.find((player) => activeHomeIds.has(player.id) && player.position === "ST")!;
+    const incoming = homeRoster.find((player) => player.lineupSlot === null && player.position === "ST" && !activeHomeIds.has(player.id))!;
     await submitMatchCheckpointDecision(
       clubs[0]!.userId, created.match.id, "minute-45", `decision-home-${suffix}`,
       {
@@ -310,7 +326,20 @@ test("durable match worker advances checkpoints, resumes on two early decisions 
     assert.equal(await prisma.matchEvent.count({ where: { matchId: match.id } }),
       match.homeScore! + match.awayScore!
       + await prisma.matchEvent.count({ where: { matchId: match.id, type: "YELLOW_CARD" } })
+      + await prisma.matchEvent.count({ where: { matchId: match.id, type: "RED_CARD" } })
+      + await prisma.matchEvent.count({ where: { matchId: match.id, type: "INJURY" } })
       + await prisma.matchEvent.count({ where: { matchId: match.id, type: "SUBSTITUTION" } }));
+    const injuryPerformance = await prisma.playerMatchPerformance.findFirstOrThrow({
+      where: { matchId: match.id, playerId: injuryEvent.playerId },
+    });
+    const redCardPerformance = await prisma.playerMatchPerformance.findFirstOrThrow({
+      where: { matchId: match.id, playerId: redCardEvent.playerId },
+    });
+    assert.equal(injuryPerformance.minutesPlayed, injuryEvent.minute);
+    assert.equal(redCardPerformance.minutesPlayed, redCardEvent.minute);
+    assert.equal(redCardPerformance.redCards, 1);
+    const injuredPlayer = await prisma.player.findUniqueOrThrow({ where: { id: injuryEvent.playerId } });
+    assert.equal(injuredPlayer.status, "INJURED");
     const replay = await simulateScheduledMatch(clubs[1]!.userId, match.id);
     assert.equal(replay.replayed, true);
     assert.equal(await prisma.ledgerTransaction.count({
