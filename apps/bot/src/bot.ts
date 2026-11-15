@@ -114,7 +114,7 @@ async function pollLeagueNoticeQueue() {
       const telegramId = Number(notice.telegramId);
       try {
         if (!Number.isSafeInteger(telegramId)) throw new Error("Telegram user id is outside JavaScript safe integer range");
-        await bot.api.sendMessage(telegramId, notice.title + "\\n\\n" + notice.body);
+        await bot.api.sendMessage(telegramId, notice.title + "\n\n" + notice.body);
         await apiSystem("/v1/bot/league-notices/" + encodeURIComponent(notice.id) + "/complete", { claimToken: notice.claimToken });
       } catch (error) {
         await apiSystem("/v1/bot/league-notices/" + encodeURIComponent(notice.id) + "/fail", {
@@ -807,7 +807,7 @@ bot.command("pyramidleagues", async (ctx) => {
     const result = await api<{ season: number; tiers: Array<{ tier: number; name: string; waitingTeams: number; leagues: Array<{ id: string; name: string; status: string; teams: number; isMyLeague: boolean }>; myApplication: string | null }>; promotionOffers: Array<{ id: string; targetTier: number; finalPosition: number; season: number }> }>("/v1/pyramid-leagues", ctx.from.id);
     const lines = result.tiers.map((tier) => tier.name + " · صف انتظار " + tier.waitingTeams + "/8"
       + (tier.myApplication ? " · درخواست شما: " + tier.myApplication : "")
-      + (tier.leagues.length ? "\\n" + tier.leagues.map((league) => "  " + league.name + " · " + league.teams + "/8 تیم" + (league.isMyLeague ? " · لیگ شما" : "") + " · " + league.status + " · " + league.id).join("\\n") : ""));
+      + (tier.leagues.length ? "\n" + tier.leagues.map((league) => "  " + league.name + " · " + league.teams + "/8 تیم" + (league.isMyLeague ? " · لیگ شما" : "") + " · " + league.status + " · " + league.id).join("\n") : ""));
     const offers = result.promotionOffers.map((offer) =>
       "پیشنهاد صعود به سطح " + offer.targetTier + " · رتبه " + offer.finalPosition + " · شناسه " + offer.id
       + "\n/promotion " + offer.id + " accept یا decline");
@@ -841,7 +841,7 @@ bot.command("leaguenotices", async (ctx) => {
   if (!ctx.from || ctx.chat.type !== "private") return;
   try {
     const result = await api<{ notices: Array<{ id: string; title: string; body: string; createdAt: string }> }>("/v1/league-notices", ctx.from.id);
-    await ctx.reply("اعلان‌های لیگ:\\n" + (result.notices.map((notice) => "• " + notice.title + "\\n" + notice.body).join("\\n\\n") || "اعلان خوانده‌نشده‌ای ندارید."));
+    await ctx.reply("اعلان‌های لیگ:\n" + (result.notices.map((notice) => "• " + notice.title + "\n" + notice.body).join("\n\n") || "اعلان خوانده‌نشده‌ای ندارید."));
     await api("/v1/league-notices/read", ctx.from.id, "POST", {});
   } catch (error) { await ctx.reply("دریافت اعلان‌ها ناموفق بود: " + (error instanceof Error ? error.message : "خطای نامشخص")); }
 });
