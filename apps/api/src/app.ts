@@ -15,6 +15,7 @@ import { prisma } from "./db.js";
 import { registerAdminRoutes } from "./admin-routes.js";
 import { registerGiftCodeRoutes } from "./gift-code-routes.js";
 import { registerTelegramMessageDeletionRoutes } from "./telegram-message-deletion-routes.js";
+import { registerLeagueNoticeRoutes } from "./league-notice-routes.js";
 
 const healthResponse = z.object({
   status: z.literal("ok"),
@@ -62,6 +63,7 @@ export function buildApp() {
   registerAdminRoutes(app);
   registerGiftCodeRoutes(app);
   registerTelegramMessageDeletionRoutes(app);
+  registerLeagueNoticeRoutes(app);
 
   app.get("/v1", async () => ({
     name: "Football Empire API",
