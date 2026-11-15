@@ -60,7 +60,8 @@ export async function createAlliance(i: { telegramUserId: string; telegramGroupI
     if (existing) throw new AllianceServiceError("GROUP_ALREADY_IN_ALLIANCE");
     const slug = i.idempotencyKey;
     const alliance = await tx.alliance.create({ data: { slug, name: i.name, description: i.description ?? "", createdByGroupId: group.id, groups: { create: { groupId: group.id, role: "FOUNDER" } } } });
-    await tx.allianceSeason.create({ data: { allianceId: alliance.id, number: 1, endsAt: new Date(Date.now() + 30 * 86400000) } });
+    const durationDays = await getAllianceSeasonDuration(tx);
+    await tx.allianceSeason.create({ data: { allianceId: alliance.id, number: 1, endsAt: new Date(Date.now() + durationDays * 86_400_000) } });
     await audit(tx, { allianceId: alliance.id, actorTelegramId: i.telegramUserId, groupTelegramId: group.telegramId, action: "ALLIANCE_CREATED", metadata: { name: i.name } });
     return { alliance, replayed: false };
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
