@@ -66,7 +66,7 @@ test("wallet gift redemption uses one guarded D1 batch and preserves large integ
   assert.equal(db.statements.length, 9);
   assert.match(db.statements[0].sql, /"redeemedCount" < "g"."maxRedemptions"/);
   assert.match(db.statements[6].sql, /9223372036854775807/);
-  assert.match(db.statements[4].sql, /ON CONFLICT\("userId", "asset"\) DO UPDATE/);
+  assert.match(db.statements[6].sql, /ON CONFLICT\("userId", "asset"\) DO UPDATE/);
   assert.equal(db.statements[0].values[3], "9007199254740993");
 });
 
