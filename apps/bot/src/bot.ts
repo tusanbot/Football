@@ -1699,4 +1699,4 @@ const stopBot = () => {
 };
 process.once("SIGTERM", stopBot);
 process.once("SIGINT", stopBot);
-await bot.start();
+await bot.start({ allowed_updates: ["message", "edited_message", "callback_query", "chat_member", "my_chat_member"] });
