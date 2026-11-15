@@ -305,21 +305,19 @@ export function advanceMatchSegment(input: {
   const cumulativeStats = new Map((state.playerStats ?? []).map((item) => [item.playerId, { ...item }]));
   const collectPlayerStats = (side: MatchSide) => {
     const sideEvents = processedEvents.filter((event) => event.teamId === side.clubId);
-    const activeMinutes = new Map<string, number>(side.players.map((player) => [player.id, duration]));
+    const activeRanges = new Map<string, { start: number; end: number }>(
+      side.players.map((player) => [player.id, { start: fromMinute, end: toMinute }]),
+    );
     for (const event of sideEvents) {
       if (event.type === "SUBSTITUTION") {
-        const playedBefore = clamp(event.minute - fromMinute, 0, duration);
-        const playedAfter = duration - playedBefore;
-        if (activeMinutes.has(event.playerId)) {
-          activeMinutes.set(event.playerId, Math.min(activeMinutes.get(event.playerId)!, playedBefore));
-        }
+        const outgoing = activeRanges.get(event.playerId);
+        if (outgoing) outgoing.end = Math.min(outgoing.end, event.minute);
         if (event.relatedPlayerId) {
-          activeMinutes.set(event.relatedPlayerId, Math.max(activeMinutes.get(event.relatedPlayerId) ?? 0, playedAfter));
+          activeRanges.set(event.relatedPlayerId, { start: event.minute, end: toMinute });
         }
       } else if (event.type === "RED_CARD" || event.type === "INJURY") {
-        if (activeMinutes.has(event.playerId)) {
-          activeMinutes.set(event.playerId, Math.min(activeMinutes.get(event.playerId)!, clamp(event.minute - fromMinute, 0, duration)));
-        }
+        const range = activeRanges.get(event.playerId);
+        if (range) range.end = Math.min(range.end, event.minute);
       }
     }
     const passingMultiplier = side.tactics.passingStyle === "SHORT" ? 1.12
@@ -332,7 +330,8 @@ export function advanceMatchSegment(input: {
       : side.tactics.pressing === "LOW_BLOCK" ? 4 : 5;
     const roster = [...side.players, ...(side.bench ?? [])];
     for (const player of roster) {
-      const minutes = activeMinutes.get(player.id) ?? 0;
+      const range = activeRanges.get(player.id);
+      const minutes = range ? Math.max(0, range.end - range.start) : 0;
       if (minutes <= 0) continue;
       const fraction = minutes / duration;
       const shots = Math.round((isAttacker(player.position)
