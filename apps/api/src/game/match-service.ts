@@ -669,3 +669,289 @@ export async function simulateScheduledMatch(userId: string, matchId: string, no
   }
   return settlement;
 }
+
+type RuntimeState = {
+  segment: MatchSegmentState;
+  substitutions: { home: MatchSubstitutionState; away: MatchSubstitutionState };
+  substitutionErrors: string[];
+};
+function jsonSafe(value: unknown): Prisma.InputJsonValue {
+  return JSON.parse(JSON.stringify(value, (_key, item: unknown) =>
+    typeof item === "bigint" ? item.toString() : item)) as Prisma.InputJsonValue;
+}
+function restoreRuntimeState(value: Prisma.JsonValue | null): RuntimeState | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const parsed = value as unknown as RuntimeState;
+  for (const side of [parsed.segment.home.side, parsed.segment.away.side]) {
+    side.ticketPrice = BigInt(String(side.ticketPrice));
+  }
+  return parsed;
+}
+function substitutionState(side: MatchSide): MatchSubstitutionState {
+  return {
+    onPitch: side.players.map(({ id, position }) => ({ id, position })),
+    bench: (side.bench ?? []).map(({ id, position }) => ({ id, position })),
+    substitutionsUsed: 0, inPlayWindowsUsed: 0, substitutedOutIds: [], sentOffIds: [], usedCheckpointIds: [],
+  };
+}
+function applyRuntimeInstruction(
+  side: MatchSide,
+  current: MatchSubstitutionState,
+  instruction: MatchTacticalInstruction,
+  checkpoint: "HALF_TIME" | "MINUTE_60" | "MINUTE_75",
+  checkpointId: string,
+  source: "MANAGER" | "PREMATCH_PLAN" | "AI",
+): { side: MatchSide; substitutions: MatchSubstitutionState; error: string | null } {
+  let nextSide = side;
+  let nextSubstitutions = current;
+  let error: string | null = null;
+  if (instruction.substitutions?.length) {
+    try {
+      const applied = applyMatchSubstitutions({
+        state: current,
+        changes: instruction.substitutions,
+        checkpoint,
+        checkpointId,
+        source,
+      });
+      const players = new Map([...(side.players), ...(side.bench ?? [])].map((player) => [player.id, player]));
+      nextSide = {
+        ...side,
+        players: applied.state.onPitch.map((player) => players.get(player.id)!).filter(Boolean),
+        bench: applied.state.bench.map((player) => players.get(player.id)!).filter(Boolean),
+      };
+      nextSubstitutions = applied.state;
+    } catch (cause) {
+      error = cause instanceof Error ? cause.message : "INVALID_SUBSTITUTION_PACKAGE";
+    }
+  }
+  const { substitutions: _ignored, ...tactics } = instruction;
+  return {
+    side: {
+      ...nextSide,
+      formation: tactics.formation ?? nextSide.formation,
+      tactics: {
+        mentality: tactics.mentality ?? nextSide.tactics.mentality,
+        pressing: tactics.pressing ?? nextSide.tactics.pressing,
+        tempo: tactics.tempo ?? nextSide.tactics.tempo,
+        passingStyle: tactics.passingStyle ?? nextSide.tactics.passingStyle,
+      },
+    },
+    substitutions: nextSubstitutions,
+    error,
+  };
+}
+
+/** Create durable kickoff snapshots for due fixtures that predate runtime creation. */
+export async function enqueueDueMatchRuntimes(now = new Date(), limit = 50) {
+  const fixtures = await prisma.footballMatch.findMany({
+    where: { status: "SCHEDULED", scheduledAt: { lte: now }, runtime: { is: null } },
+    include: { homeClub: { include: matchClubInclude }, awayClub: { include: matchClubInclude } },
+    orderBy: { scheduledAt: "asc" }, take: limit,
+  });
+  let created = 0;
+  for (const fixture of fixtures) {
+    const home = toSide(fixture.homeClub);
+    const away = toSide(fixture.awayClub);
+    const result = await prisma.matchRuntime.createMany({
+      data: [{
+        matchId: fixture.id, status: "QUEUED", currentMinute: 0,
+        nextActionAt: fixture.scheduledAt,
+        kickoffSnapshot: jsonSafe({ home, away }),
+        fallbackPlan: jsonSafe({ home: null, away: null }),
+      }],
+      skipDuplicates: true,
+    });
+    created += result.count;
+  }
+  return created;
+}
+
+async function processClaimedMatchRuntime(
+  runtimeId: string,
+  now: Date,
+): Promise<"WAITING" | "ADVANCED" | "SETTLED"> {
+  const runtime = await prisma.matchRuntime.findUnique({
+    where: { id: runtimeId },
+    include: {
+      match: {
+        include: {
+          homeClub: { include: matchClubInclude },
+          awayClub: { include: matchClubInclude },
+        },
+      },
+    },
+  });
+  if (!runtime || runtime.match.status === "COMPLETED" || runtime.status === "COMPLETED") return "SETTLED";
+
+  let state = restoreRuntimeState(runtime.simulationState);
+  if (!state) {
+    const snapshot = runtime.kickoffSnapshot as unknown as { home: MatchSide; away: MatchSide } | null;
+    if (!snapshot?.home || !snapshot?.away) throw new MatchServiceError("MATCH_KICKOFF_SNAPSHOT_MISSING");
+    snapshot.home.ticketPrice = BigInt(String(snapshot.home.ticketPrice));
+    snapshot.away.ticketPrice = BigInt(String(snapshot.away.ticketPrice));
+    const initial: MatchSegmentState = {
+      currentMinute: 0, nextSequence: 1,
+      home: { side: snapshot.home, score: 0, expectedGoals: 0 },
+      away: { side: snapshot.away, score: 0, expectedGoals: 0 },
+      events: [],
+    };
+    const first = advanceMatchSegment({ seed: runtime.match.seed, state: initial, toMinute: 45 });
+    const checkpointAt = new Date(now.getTime() + 60_000);
+    state = {
+      segment: first.state,
+      substitutions: { home: substitutionState(snapshot.home), away: substitutionState(snapshot.away) },
+      substitutionErrors: [],
+    };
+    await prisma.$transaction(async (tx) => {
+      await tx.matchRuntime.updateMany({
+        where: { id: runtime.id, stateVersion: runtime.stateVersion, leaseToken: runtime.leaseToken },
+        data: {
+          status: "AWAITING_CHECKPOINT", currentMinute: 45, stateVersion: { increment: 1 },
+          simulationState: jsonSafe(state), startedAt: runtime.startedAt ?? now,
+          nextActionAt: new Date(now.getTime() + 5_000), lastError: null,
+        },
+      });
+      await tx.footballMatch.updateMany({
+        where: { id: runtime.matchId, status: "SCHEDULED" },
+        data: { status: "IN_PROGRESS", startedAt: runtime.match.startedAt ?? now },
+      });
+      await tx.matchTacticalCheckpoint.createMany({
+        data: [{
+          matchId: runtime.matchId, checkpointKey: "minute-45", kind: "HALF_TIME", minute: 45,
+          openedAt: now, decisionDeadlineAt: checkpointAt, nextSegmentAt: checkpointAt,
+        }],
+        skipDuplicates: true,
+      });
+    });
+    return "ADVANCED";
+  }
+
+  if (state.segment.currentMinute === 90) {
+    await simulateScheduledMatch(runtime.match.homeClub.ownerId, runtime.matchId, now);
+    return "SETTLED";
+  }
+
+  const checkpoint = await prisma.matchTacticalCheckpoint.findFirst({
+    where: { matchId: runtime.matchId, status: "OPEN" },
+    orderBy: { minute: "asc" },
+  });
+  if (!checkpoint) throw new MatchServiceError("MATCH_OPEN_CHECKPOINT_MISSING");
+  const decisions = await prisma.matchTacticalDecision.findMany({
+    where: { checkpointId: checkpoint.id },
+    orderBy: [{ submittedAt: "desc" }, { id: "asc" }],
+  });
+  const bothResponded = [runtime.match.homeClubId, runtime.match.awayClubId]
+    .every((clubId) => decisions.some((decision) => decision.clubId === clubId
+      && decision.submittedAt >= checkpoint.openedAt
+      && decision.submittedAt < checkpoint.decisionDeadlineAt));
+  if (!bothResponded && now < checkpoint.nextSegmentAt) return "WAITING";
+
+  const kind = checkpoint.kind;
+  const checkpointName = kind === "HALF_TIME" ? "HALF_TIME" : kind === "MINUTE_60" ? "MINUTE_60" : "MINUTE_75";
+  const fallback = runtime.fallbackPlan as unknown as { home: MatchTacticalInstruction | null; away: MatchTacticalInstruction | null } | null;
+  const resolution = resolveMatchCheckpoint<MatchTacticalInstruction>({
+    window: {
+      checkpointId: checkpoint.id, checkpoint: checkpointName,
+      openedAt: checkpoint.openedAt, decisionDeadlineAt: checkpoint.decisionDeadlineAt,
+      nextSegmentAt: checkpoint.nextSegmentAt,
+      homeClubId: runtime.match.homeClubId, awayClubId: runtime.match.awayClubId,
+    },
+    now: new Date(Math.max(now.getTime(), checkpoint.nextSegmentAt.getTime())),
+    decisions: decisions.map((decision) => ({
+      id: decision.id, clubId: decision.clubId, submittedAt: decision.submittedAt,
+      instruction: decision.instruction as unknown as MatchTacticalInstruction,
+    })),
+    fallback: fallback ?? { home: null, away: null },
+    aiDefaults: { home: {}, away: {} },
+  });
+  const homeApplied = applyRuntimeInstruction(
+    state.segment.home.side, state.substitutions.home, resolution.home.instruction,
+    checkpointName, checkpoint.checkpointKey, resolution.home.source,
+  );
+  const awayApplied = applyRuntimeInstruction(
+    state.segment.away.side, state.substitutions.away, resolution.away.instruction,
+    checkpointName, checkpoint.checkpointKey, resolution.away.source,
+  );
+  const nextMinute = checkpoint.minute === 45 ? 60 : checkpoint.minute === 60 ? 75 : 90;
+  const advanced = advanceMatchSegment({
+    seed: runtime.match.seed,
+    state: {
+      ...state.segment,
+      home: { ...state.segment.home, side: homeApplied.side },
+      away: { ...state.segment.away, side: awayApplied.side },
+    },
+    toMinute: nextMinute,
+  });
+  const nextState: RuntimeState = {
+    segment: advanced.state,
+    substitutions: { home: homeApplied.substitutions, away: awayApplied.substitutions },
+    substitutionErrors: [
+      ...state.substitutionErrors,
+      ...(homeApplied.error ? ["HOME:" + homeApplied.error] : []),
+      ...(awayApplied.error ? ["AWAY:" + awayApplied.error] : []),
+    ],
+  };
+  const isFullTime = nextMinute === 90;
+  await prisma.$transaction(async (tx) => {
+    await tx.matchTacticalCheckpoint.updateMany({
+      where: { id: checkpoint.id, status: "OPEN" },
+      data: { status: "RESOLVED", resolvedAt: now, resolution: jsonSafe(resolution) },
+    });
+    await tx.matchRuntime.updateMany({
+      where: { id: runtime.id, stateVersion: runtime.stateVersion, leaseToken: runtime.leaseToken },
+      data: {
+        status: "RUNNING", currentMinute: nextMinute, stateVersion: { increment: 1 },
+        simulationState: jsonSafe(nextState), nextActionAt: isFullTime ? now : new Date(now.getTime() + 5_000),
+        lastError: null,
+      },
+    });
+    if (!isFullTime) {
+      const nextKind = nextMinute === 60 ? "MINUTE_60" : "MINUTE_75";
+      const nextAt = new Date(now.getTime() + 60_000);
+      await tx.matchTacticalCheckpoint.createMany({
+        data: [{
+          matchId: runtime.matchId, checkpointKey: "minute-" + nextMinute,
+          kind: nextKind, minute: nextMinute, openedAt: now,
+          decisionDeadlineAt: nextAt, nextSegmentAt: nextAt,
+        }],
+        skipDuplicates: true,
+      });
+    }
+  });
+  if (isFullTime) {
+    await simulateScheduledMatch(runtime.match.homeClub.ownerId, runtime.matchId, now);
+    return "SETTLED";
+  }
+  return "ADVANCED";
+}
+
+/** Durable worker tick. Checkpoints are polled every five seconds so two early replies resume immediately. */
+export async function processDueMatchRuntimes(
+  workerId = "match-worker",
+  now = new Date(),
+  limit = 10,
+): Promise<{ enqueued: number; claimed: number; advanced: number; waiting: number; settled: number; failed: number }> {
+  const enqueued = await enqueueDueMatchRuntimes(now, Math.max(limit, 10));
+  const claimed = await claimDueMatchRuntimes(workerId, now, 30_000, limit);
+  const totals = { enqueued, claimed: claimed.length, advanced: 0, waiting: 0, settled: 0, failed: 0 };
+  for (const item of claimed) {
+    try {
+      const outcome = await processClaimedMatchRuntime(item.runtime.id, now);
+      if (outcome === "ADVANCED") totals.advanced++;
+      else if (outcome === "WAITING") totals.waiting++;
+      else totals.settled++;
+      if (outcome !== "SETTLED") {
+        const nextActionAt = outcome === "WAITING" ? new Date(now.getTime() + 5_000) : new Date(now.getTime() + 5_000);
+        await releaseMatchRuntimeLease(item.runtime.id, item.lease.token, nextActionAt, null);
+      }
+    } catch (error) {
+      totals.failed++;
+      await releaseMatchRuntimeLease(
+        item.runtime.id, item.lease.token, new Date(now.getTime() + 10_000),
+        error instanceof Error ? error.message.slice(0, 500) : "MATCH_RUNTIME_WORKER_ERROR",
+      );
+    }
+  }
+  return totals;
+}
