@@ -231,6 +231,76 @@ test("knockout cup fills its bracket, advances winners and crowns a champion", a
   }
 });
 
+test("two-legged knockout cup waits for both legs and advances on aggregate score", async (t) => {
+  if (!process.env.DATABASE_URL) {
+    t.skip("DATABASE_URL is only configured in the ephemeral PostgreSQL CI job.");
+    return;
+  }
+  const suffix = randomUUID().replaceAll("-", "");
+  const clubs: Array<{ userId: string; clubId: string }> = [];
+  let competitionId: string | undefined;
+  try {
+    for (let i = 0; i < 4; i++) clubs.push(await makeClub(suffix, i + 60));
+    const created = await createLeague(
+      clubs[0]!.userId, `Two Leg Cup ${suffix.slice(0, 6)}`, 4,
+      `two-leg-cup-${suffix}`, "CUP", undefined, 2,
+    );
+    competitionId = created.competition.id;
+    assert.equal(created.competition.cupLegs, 2);
+    for (const member of clubs.slice(1)) await joinLeague(member.userId, competitionId);
+    const started = await startLeague(clubs[0]!.userId, competitionId, new Date());
+    assert.equal(started.fixturesCreated, 4);
+    assert.equal(started.cupLegs, 2);
+    const firstRound = await prisma.footballMatch.findMany({
+      where: { competitionId, round: 1 }, orderBy: [{ tieId: "asc" }, { leg: "asc" }],
+    });
+    assert.equal(firstRound.length, 4);
+    assert.deepEqual(firstRound.map((fixture) => fixture.leg), [1, 2, 1, 2]);
+    assert.equal(new Set(firstRound.map((fixture) => fixture.tieId)).size, 2);
+    for (const fixture of firstRound.filter((item) => item.leg === 1)) {
+      const owner = clubs.find((club) => club.clubId === fixture.homeClubId)!;
+      const result = await simulateScheduledMatch(owner.userId, fixture.id, new Date(fixture.scheduledAt.getTime() + 60_000));
+      assert.equal(result.winnerClubId, null);
+    }
+    assert.equal(await prisma.footballMatch.count({ where: { competitionId, round: 2 } }), 0);
+    for (const fixture of firstRound.filter((item) => item.leg === 2)) {
+      const owner = clubs.find((club) => club.clubId === fixture.homeClubId)!;
+      await simulateScheduledMatch(owner.userId, fixture.id, new Date(fixture.scheduledAt.getTime() + 60_000));
+    }
+    const secondRound = await prisma.footballMatch.findMany({
+      where: { competitionId, round: 2 }, orderBy: [{ tieId: "asc" }, { leg: "asc" }],
+    });
+    assert.equal(secondRound.length, 2);
+    assert.deepEqual(secondRound.map((fixture) => fixture.leg), [1, 2]);
+    assert.equal(new Set(secondRound.map((fixture) => fixture.tieId)).size, 1);
+    for (const fixture of secondRound) {
+      const owner = clubs.find((club) => club.clubId === fixture.homeClubId)!;
+      await simulateScheduledMatch(owner.userId, fixture.id, new Date(fixture.scheduledAt.getTime() + 60_000));
+    }
+    const details = await getLeague(clubs[0]!.userId, competitionId);
+    assert.equal(details.competition.status, "COMPLETED");
+    assert.equal(details.matches.length, 6);
+    assert.ok(details.matches.every((match) => match.status === "COMPLETED"));
+    const finalTie = details.matches.filter((match) => match.round === 2);
+    assert.ok(finalTie.find((match) => match.leg === 2)?.winnerClubId);
+    assert.equal(finalTie.find((match) => match.leg === 1)?.winnerClubId, null);
+  } finally {
+    const clubIds = clubs.map((club) => club.clubId);
+    if (clubIds.length) {
+      await prisma.footballMatch.deleteMany({ where: { OR: [{ homeClubId: { in: clubIds } }, { awayClubId: { in: clubIds } }] } });
+      if (competitionId) await prisma.competition.deleteMany({ where: { id: competitionId } });
+      await prisma.player.deleteMany({ where: { clubId: { in: clubIds } } });
+      await prisma.club.deleteMany({ where: { id: { in: clubIds } } });
+    }
+    const userIds = clubs.map((club) => club.userId);
+    if (userIds.length) {
+      await prisma.ledgerTransaction.deleteMany({ where: { userId: { in: userIds } } });
+      await prisma.wallet.deleteMany({ where: { userId: { in: userIds } } });
+      await prisma.user.deleteMany({ where: { id: { in: userIds } } });
+    }
+  }
+});
+
 test("checkpoint decisions persist idempotently and runtime leases recover after expiry", async (t) => {
  if (!process.env.DATABASE_URL) { t.skip("DATABASE_URL is only configured in the ephemeral PostgreSQL CI job."); return; }
  const suffix=randomUUID().replaceAll("-",""), clubs:Array<{userId:string;clubId:string}>=[];
