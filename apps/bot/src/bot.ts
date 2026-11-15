@@ -494,11 +494,11 @@ bot.command("adminseason", async (ctx) => {
   if (!ctx.from || !adminOnlyInPrivate(ctx)) return;
   const [operation, targetId, argument] = String(ctx.match ?? "").trim().split(/\s+/);
   if (operation === "start" && targetId) {
-    const durationDays = Number(argument ?? 30);
-    if (!Number.isInteger(durationDays) || durationDays < 7 || durationDays > 90) return ctx.reply("مدت فصل باید بین ۷ تا ۹۰ روز باشد.");
+    const durationDays = argument === undefined ? undefined : Number(argument);
+    if (durationDays !== undefined && (!Number.isInteger(durationDays) || durationDays < 7 || durationDays > 90)) return ctx.reply("مدت فصل باید بین ۷ تا ۹۰ روز باشد.");
     try {
       const result = await api<{seasonNumber:number;endsAt:string}>("/v1/admin/actions", ctx.from.id, "POST", {
-        action: "start-alliance-season", targetId, durationDays, idempotencyKey: randomUUID(),
+        action: "start-alliance-season", targetId, ...(durationDays !== undefined ? { durationDays } : {}), idempotencyKey: randomUUID(),
       });
       return ctx.reply("فصل شماره " + result.seasonNumber + " آغاز شد و در " + result.endsAt + " پایان می‌یابد.");
     } catch (error) {
