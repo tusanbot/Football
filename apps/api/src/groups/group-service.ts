@@ -7,6 +7,14 @@ export class GroupServiceError extends Error {
 }
 
 const MIN_TELEGRAM_MEMBERS = 10;
+function settingInteger(value: unknown, fallback: number, minimum: number, maximum: number) {
+  const parsed = typeof value === "number" ? value : typeof value === "string" ? Number(value) : NaN;
+  return Number.isSafeInteger(parsed) && parsed >= minimum && parsed <= maximum ? parsed : fallback;
+}
+async function getIntegerSetting(tx: Prisma.TransactionClient, key: string, fallback: number, minimum: number, maximum: number) {
+  const setting = await tx.gameSetting.findUnique({ where: { key }, select: { value: true } });
+  return settingInteger(setting?.value, fallback, minimum, maximum);
+}
 async function requireClubOwner(tx: Prisma.TransactionClient, telegramId: string) {
   const user = await tx.user.findUnique({ where: { telegramId }, select: { id: true, club: { select: { id: true } } } });
   if (!user) throw new GroupServiceError("ACCOUNT_NOT_FOUND");
@@ -15,8 +23,9 @@ async function requireClubOwner(tx: Prisma.TransactionClient, telegramId: string
 }
 
 export async function registerTelegramGroup(input: { telegramUserId: string; telegramGroupId: string; title: string; role: Extract<GroupRole, "OWNER" | "ADMIN">; memberCount: number }) {
-  if (input.memberCount < MIN_TELEGRAM_MEMBERS) throw new GroupServiceError("GROUP_MINIMUM_MEMBERS_REQUIRED");
   return prisma.$transaction(async (tx) => {
+    const minimumMembers = await getIntegerSetting(tx, "groups.minimumMembers", MIN_TELEGRAM_MEMBERS, 5, 1000);
+    if (input.memberCount < minimumMembers) throw new GroupServiceError("GROUP_MINIMUM_MEMBERS_REQUIRED");
     const user = await requireClubOwner(tx, input.telegramUserId);
     const existingGroup = await tx.telegramGroup.findUnique({ where: { telegramId: input.telegramGroupId }, select: { isSuspended: true } });
     if (existingGroup?.isSuspended) throw new GroupServiceError("GROUP_SUSPENDED");
@@ -69,16 +78,10 @@ export async function awardDailyGroupActivity(input: { telegramUserId: string; t
     const idempotencyKey = `group-daily-activity:${group.id}:${user.id}:${day}`;
     const existing = await tx.groupPointLedger.findUnique({ where: { idempotencyKey }, select: { id: true } });
     if (existing) return { awarded: false, replayed: true, points: group.points.toString(), award: "0" };
-    const [rewardSetting, capSetting] = await Promise.all([
-      tx.gameSetting.findUnique({ where: { key: "groups.dailyActivityPoints" }, select: { value: true } }),
-      tx.gameSetting.findUnique({ where: { key: "groups.dailyPointCap" }, select: { value: true } }),
+    const [reward, dailyCap] = await Promise.all([
+      getIntegerSetting(tx, "groups.dailyActivityPoints", 1, 0, 1000).then(BigInt),
+      getIntegerSetting(tx, "groups.dailyPointCap", GROUP_DAILY_POINT_CAP, 0, 100_000),
     ]);
-    const settingInteger = (value: unknown, fallback: number, maximum: number) => {
-      const parsed = typeof value === "number" ? value : typeof value === "string" ? Number(value) : NaN;
-      return Number.isSafeInteger(parsed) && parsed >= 0 && parsed <= maximum ? parsed : fallback;
-    };
-    const reward = BigInt(settingInteger(rewardSetting?.value, 1, 1000));
-    const dailyCap = settingInteger(capSetting?.value, GROUP_DAILY_POINT_CAP, 100_000);
     const earned = await earnedGroupPointsToday(tx, group.id, user.id);
     if (earned >= BigInt(dailyCap)) return { awarded: false, replayed: false, capped: true, points: group.points.toString(), award: "0" };
     if (reward === 0n) return { awarded: false, replayed: false, disabled: true, points: group.points.toString(), award: "0" };
@@ -118,7 +121,7 @@ export async function listGroupChallenges(telegramId:string,groupTelegramId:stri
 export async function createGroupChallenge(i:{telegramUserId:string;telegramGroupId:string;title:string;startsAt:Date;endsAt:Date;rewardPoints:bigint;idempotencyKey:string}){if(!/^[A-Za-z0-9:_-]{12,128}$/.test(i.idempotencyKey))throw new GroupServiceError("INVALID_IDEMPOTENCY_KEY");return prisma.$transaction(async tx=>{const {user,group}=await groupMember(tx,i.telegramUserId,i.telegramGroupId,true);const old=await tx.groupChallenge.findUnique({where:{idempotencyKey:i.idempotencyKey}});if(old){if(old.groupId!==group.id||old.createdByUserId!==user.id)throw new GroupServiceError("IDEMPOTENCY_CONFLICT");return {challenge:{id:old.id,title:old.title,status:old.status,rewardPoints:old.rewardPoints.toString(),startsAt:old.startsAt,endsAt:old.endsAt},replayed:true};}if(i.endsAt<=i.startsAt||i.startsAt<new Date(Date.now()-60000)||i.endsAt.getTime()-i.startsAt.getTime()>30*86400000)throw new GroupServiceError("INVALID_CHALLENGE_WINDOW");if(i.rewardPoints<0n||i.rewardPoints>group.points)throw new GroupServiceError("INVALID_CHALLENGE_REWARD");if(i.rewardPoints>0n){const debited=await tx.telegramGroup.updateMany({where:{id:group.id,points:{gte:i.rewardPoints}},data:{points:{decrement:i.rewardPoints}}});if(!debited.count)throw new GroupServiceError("INSUFFICIENT_GROUP_POINTS");await tx.groupPointLedger.create({data:{idempotencyKey:"challenge:"+i.idempotencyKey+":reserve",groupId:group.id,userId:user.id,amount:-i.rewardPoints,source:"CHALLENGE_REWARD",description:"Reserved prize for group challenge"}});}const c=await tx.groupChallenge.create({data:{groupId:group.id,title:i.title,status:"OPEN",startsAt:i.startsAt,endsAt:i.endsAt,rewardPoints:i.rewardPoints,createdByUserId:user.id,idempotencyKey:i.idempotencyKey}});return {challenge:{id:c.id,title:c.title,status:c.status,rewardPoints:c.rewardPoints.toString(),startsAt:c.startsAt,endsAt:c.endsAt},replayed:false};},{isolationLevel:Prisma.TransactionIsolationLevel.Serializable});}
 export async function joinGroupChallenge(i:{telegramUserId:string;telegramGroupId:string;challengeId:string}){return prisma.$transaction(async tx=>{const {user,group}=await groupMember(tx,i.telegramUserId,i.telegramGroupId),c=await tx.groupChallenge.findFirst({where:{id:i.challengeId,groupId:group.id}});if(!c)throw new GroupServiceError("CHALLENGE_NOT_FOUND");const now=new Date();if(c.status!=="OPEN"||(c.startsAt&&c.startsAt>now)||(c.endsAt&&c.endsAt<=now))throw new GroupServiceError("CHALLENGE_NOT_OPEN");const p=await tx.groupChallengeParticipant.upsert({where:{challengeId_userId:{challengeId:c.id,userId:user.id}},create:{challengeId:c.id,userId:user.id},update:{}});return {joined:true,participantId:p.id};},{isolationLevel:Prisma.TransactionIsolationLevel.Serializable});}
 export async function completeGroupChallenge(i:{telegramUserId:string;telegramGroupId:string;challengeId:string;winnerTelegramId:string}){return prisma.$transaction(async tx=>{const {user,group}=await groupMember(tx,i.telegramUserId,i.telegramGroupId,true,false),c=await tx.groupChallenge.findFirst({where:{id:i.challengeId,groupId:group.id},include:{participants:true}});if(!c)throw new GroupServiceError("CHALLENGE_NOT_FOUND");if(c.status==="COMPLETED")return {completed:true,replayed:true,points:group.points.toString()};if(c.status!=="OPEN"||(c.endsAt&&c.endsAt>new Date()))throw new GroupServiceError("CHALLENGE_NOT_READY");const winner=await tx.user.findUnique({where:{telegramId:i.winnerTelegramId},select:{id:true}});if(!winner||!c.participants.some(p=>p.userId===winner.id))throw new GroupServiceError("WINNER_NOT_PARTICIPANT");const changed=await tx.groupChallenge.updateMany({where:{id:c.id,status:"OPEN"},data:{status:"COMPLETED"}});if(!changed.count)throw new GroupServiceError("CHALLENGE_ALREADY_SETTLED");if(c.rewardPoints>0n){await tx.groupMemberRewardBalance.upsert({where:{groupId_userId:{groupId:group.id,userId:winner.id}},create:{groupId:group.id,userId:winner.id,balance:c.rewardPoints},update:{balance:{increment:c.rewardPoints}}});await tx.groupPointLedger.create({data:{idempotencyKey:"challenge:"+c.id+":winner:"+winner.id,groupId:group.id,userId:winner.id,amount:c.rewardPoints,source:"CHALLENGE_REWARD",description:"Challenge winner reward"}});}const balance=await tx.telegramGroup.findUniqueOrThrow({where:{id:group.id},select:{points:true}});return {completed:true,replayed:false,winnerTelegramId:i.winnerTelegramId,points:balance.points.toString()};},{isolationLevel:Prisma.TransactionIsolationLevel.Serializable});}
-export async function checkTelegramGroupMembers(groupTelegramId:string,memberCount:number,botPresent=true){const group=await prisma.telegramGroup.findUnique({where:{telegramId:groupTelegramId},select:{id:true,isSuspended:true}});if(!group)return {found:false,isActive:false,memberCount,minimumMembers:10};const active=memberCount>=10&&botPresent&&!group.isSuspended;await prisma.telegramGroup.update({where:{id:group.id},data:{memberCount,isActive:active,lastMemberCountCheckAt:new Date()}});return {found:true,isActive:active,memberCount,minimumMembers:10};}
+export async function checkTelegramGroupMembers(groupTelegramId:string,memberCount:number,botPresent=true){const [group,minimumMembers]=await Promise.all([prisma.telegramGroup.findUnique({where:{telegramId:groupTelegramId},select:{id:true,isSuspended:true}}),prisma.gameSetting.findUnique({where:{key:"groups.minimumMembers"},select:{value:true}})]);const required=settingInteger(minimumMembers?.value,MIN_TELEGRAM_MEMBERS,5,1000);if(!group)return {found:false,isActive:false,memberCount,minimumMembers:required};const active=memberCount>=required&&botPresent&&!group.isSuspended;await prisma.telegramGroup.update({where:{id:group.id},data:{memberCount,isActive:active,lastMemberCountCheckAt:new Date()}});return {found:true,isActive:active,memberCount,minimumMembers:required};}
 export async function createGroupLeague(i:{telegramUserId:string;telegramGroupId:string;name:string;maxTeams:number;idempotencyKey:string}){if(!/^[A-Za-z0-9:_-]{12,128}$/.test(i.idempotencyKey))throw new GroupServiceError("INVALID_IDEMPOTENCY_KEY");return prisma.$transaction(async tx=>{const {user,group}=await groupMember(tx,i.telegramUserId,i.telegramGroupId,true),club=await tx.club.findUnique({where:{ownerId:user.id},select:{id:true}});if(!club)throw new GroupServiceError("CLUB_NOT_FOUND");const old=await tx.competition.findUnique({where:{idempotencyKey:i.idempotencyKey}});if(old){if(old.groupId!==group.id||old.createdByClubId!==club.id)throw new GroupServiceError("IDEMPOTENCY_CONFLICT");return {competition:old,replayed:true};}const competition=await tx.competition.create({data:{idempotencyKey:i.idempotencyKey,name:i.name,season:new Date().getUTCFullYear(),format:"LEAGUE",maxTeams:i.maxTeams,createdByClubId:club.id,groupId:group.id,entries:{create:{clubId:club.id}}}});return {competition,replayed:false};},{isolationLevel:Prisma.TransactionIsolationLevel.Serializable});}
 export async function joinGroupLeague(i:{telegramUserId:string;telegramGroupId:string;competitionId:string}){return prisma.$transaction(async tx=>{const {user,group}=await groupMember(tx,i.telegramUserId,i.telegramGroupId),club=await tx.club.findUnique({where:{ownerId:user.id},select:{id:true}});if(!club)throw new GroupServiceError("CLUB_NOT_FOUND");const c=await tx.competition.findFirst({where:{id:i.competitionId,groupId:group.id},include:{entries:true}});if(!c)throw new GroupServiceError("COMPETITION_NOT_FOUND");if(c.status!=="REGISTRATION")throw new GroupServiceError("COMPETITION_NOT_OPEN");if(c.entries.some(e=>e.clubId===club.id))return {joined:true,replayed:true,teams:c.entries.length};if(c.entries.length>=c.maxTeams)throw new GroupServiceError("COMPETITION_FULL");await tx.competitionEntry.create({data:{competitionId:c.id,clubId:club.id}});return {joined:true,replayed:false,teams:c.entries.length+1};},{isolationLevel:Prisma.TransactionIsolationLevel.Serializable});}
 export async function startGroupLeague(i:{telegramUserId:string;telegramGroupId:string;competitionId:string}){const u=await prisma.user.findUnique({where:{telegramId:i.telegramUserId},select:{id:true,club:{select:{id:true}}}});if(!u?.club)throw new GroupServiceError("CLUB_NOT_FOUND");const g=await prisma.telegramGroup.findUnique({where:{telegramId:i.telegramGroupId},select:{id:true,isActive:true,memberships:{where:{userId:u.id},select:{role:true}}}});if(!g)throw new GroupServiceError("GROUP_NOT_REGISTERED");if(!g.isActive)throw new GroupServiceError("GROUP_INACTIVE");if(!g.memberships.length||g.memberships[0]!.role==="MEMBER")throw new GroupServiceError("GROUP_MANAGER_REQUIRED");const c=await prisma.competition.findFirst({where:{id:i.competitionId,groupId:g.id},select:{id:true,createdByClubId:true}});if(!c)throw new GroupServiceError("COMPETITION_NOT_FOUND");if(c.createdByClubId!==u.club.id)throw new GroupServiceError("ONLY_CREATOR_CAN_START");return startLeague(u.id,c.id);}
@@ -126,7 +129,8 @@ export async function getGroupLeagueTable(telegramId:string,groupTelegramId:stri
 
 
 const GROUP_DAILY_POINT_CAP = 3;
-const GROUP_ACTIVITY_POINTS = { CHALLENGE_JOIN: 1n, CHALLENGE_CREATE: 1n, LEAGUE_JOIN: 1n, LEAGUE_CREATE: 1n, MATCH_PLAYED: 2n } as const;
+const GROUP_ACTIVITY_POINTS = { CHALLENGE_JOIN: 1, CHALLENGE_CREATE: 1, LEAGUE_JOIN: 1, LEAGUE_CREATE: 1, MATCH_PLAYED: 2 } as const;
+const GROUP_ACTIVITY_SETTING_KEYS: Record<GroupActivityType, string> = { CHALLENGE_JOIN: "groups.challengeJoinPoints", CHALLENGE_CREATE: "groups.challengeCreatePoints", LEAGUE_JOIN: "groups.leagueJoinPoints", LEAGUE_CREATE: "groups.leagueCreatePoints", MATCH_PLAYED: "groups.matchPlayedPoints" };
 type GroupActivityType = keyof typeof GROUP_ACTIVITY_POINTS;
 function utcDayStart(now = new Date()) { return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())); }
 async function earnedGroupPointsToday(tx: Prisma.TransactionClient, groupId: string, userId: string, now = new Date()) {
@@ -139,10 +143,12 @@ export async function recordGroupGameActivity(i:{telegramUserId:string;telegramG
   const {user,group}=await groupMember(tx,i.telegramUserId,i.telegramGroupId);
   const day=utcDayStart().toISOString().slice(0,10),key="group-game:"+group.id+":"+user.id+":"+day+":"+i.activityType+":"+i.referenceId;
   const old=await tx.groupPointLedger.findUnique({where:{idempotencyKey:key},select:{amount:true}});
-  if(old)return {awarded:false,replayed:true,award:old.amount.toString(),points:group.points.toString(),dailyCap:GROUP_DAILY_POINT_CAP};
-  const earned=await earnedGroupPointsToday(tx,group.id,user.id),remaining=BigInt(GROUP_DAILY_POINT_CAP)-earned;
-  if(remaining<=0n)return {awarded:false,replayed:false,capped:true,award:"0",points:group.points.toString(),dailyCap:GROUP_DAILY_POINT_CAP};
-  const requested=GROUP_ACTIVITY_POINTS[i.activityType],award=requested<remaining?requested:remaining;
+  if(old)return {awarded:false,replayed:true,award:old.amount.toString(),points:group.points.toString(),dailyCap};
+  const [dailyCap,requestedPoints]=await Promise.all([getIntegerSetting(tx,"groups.dailyPointCap",GROUP_DAILY_POINT_CAP,0,100_000),getIntegerSetting(tx,GROUP_ACTIVITY_SETTING_KEYS[i.activityType],GROUP_ACTIVITY_POINTS[i.activityType],0,1000)]);
+  const earned=await earnedGroupPointsToday(tx,group.id,user.id),remaining=BigInt(dailyCap)-earned;
+  if(remaining<=0n)return {awarded:false,replayed:false,capped:true,award:"0",points:group.points.toString(),dailyCap};
+  if(requestedPoints===0)return {awarded:false,replayed:false,disabled:true,award:"0",points:group.points.toString(),dailyCap};
+  const requested=BigInt(requestedPoints),award=requested<remaining?requested:remaining;
   await tx.groupPointLedger.create({data:{idempotencyKey:key,groupId:group.id,userId:user.id,amount:award,source:"GAME_ACTIVITY",description:"Verified group game action: "+i.activityType}});
   const updated=await tx.telegramGroup.update({where:{id:group.id},data:{points:{increment:award}},select:{points:true}});
   return {awarded:true,replayed:false,award:award.toString(),points:updated.points.toString(),dailyCap:GROUP_DAILY_POINT_CAP};
