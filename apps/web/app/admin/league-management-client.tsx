@@ -1,5 +1,7 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
+import type { CSSProperties } from "react";
+declare global { interface Window { Telegram?: { WebApp?: { initData?: string; ready?: () => void; expand?: () => void } } } }
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
 type Status = "DRAFT" | "REGISTRATION" | "ACTIVE" | "COMPLETED" | "CANCELLED";
@@ -14,7 +16,7 @@ type League = {
 type Queue = { id: string; tier: number; season: number; appliedAt: string; club: { id: string; name: string }; user: { displayName: string | null; telegramId: string } };
 type Offer = { id: string; club: { id: string; name: string }; tier: number; season: number; groupNumber: number; leagueName: string; targetTier: number; finalPosition: number; status: string; offeredAt: string; expiresAt: string };
 type Payload = { leagues: League[]; queues: Queue[]; offers: Offer[]; applicationCounts: Record<string, number> };
-const panel: React.CSSProperties = { background: "#1b293b", border: "1px solid #31445d", borderRadius: 12, padding: 14 };
+const panel: CSSProperties = { background: "#1b293b", border: "1px solid #31445d", borderRadius: 12, padding: 14 };
 const button: React.CSSProperties = { border: 0, borderRadius: 7, padding: "8px 11px", color: "white", background: "#315b91", cursor: "pointer" };
 const date = (value: string | null) => value ? new Date(value).toLocaleString("fa-IR") : "—";
 export default function LeagueManagementClient() {
