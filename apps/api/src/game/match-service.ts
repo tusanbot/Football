@@ -15,6 +15,21 @@ export class MatchServiceError extends Error {
     super(code); this.name = "MatchServiceError";
   }
 }
+function aggregateCupScore<T extends { id: string; tieId: string | null; leg: number; homeScore: number | null; awayScore: number | null }>(
+  match: T, fixtures: readonly T,
+) {
+  if (!match.tieId || match.leg !== 2 || match.homeScore === null || match.awayScore === null) {
+    return { aggregateHomeScore: null, aggregateAwayScore: null };
+  }
+  const firstLeg = fixtures.find((fixture) => fixture.tieId === match.tieId && fixture.leg === 1);
+  if (!firstLeg || firstLeg.homeScore === null || firstLeg.awayScore === null) {
+    return { aggregateHomeScore: null, aggregateAwayScore: null };
+  }
+  return {
+    aggregateHomeScore: match.homeScore + firstLeg.awayScore,
+    aggregateAwayScore: match.awayScore + firstLeg.homeScore,
+  };
+}
 function rulesForMatch(match: { type: "FRIENDLY" | "LEAGUE" | "CUP"; rulesSnapshot: Prisma.JsonValue | null }): MatchRules {
   return validateMatchRules(match.rulesSnapshot ?? defaultMatchRules(match.type));
 }
@@ -346,10 +361,7 @@ export async function getLeague(userId: string, competitionId: string) {
     matches: competition.matches.map((match) => ({
       id: match.id, round: match.round, leg: match.leg, tieId: match.tieId, scheduledAt: match.scheduledAt.toISOString(), status: match.status,
       homeClub: match.homeClub, awayClub: match.awayClub, homeScore: match.homeScore, awayScore: match.awayScore,
-      aggregateHomeScore: match.tieId && match.leg === 2
-        ? match.homeScore! + (competition.matches.find((leg) => leg.tieId === match.tieId && leg.leg === 1)?.awayScore ?? 0) : null,
-      aggregateAwayScore: match.tieId && match.leg === 2
-        ? match.awayScore! + (competition.matches.find((leg) => leg.tieId === match.tieId && leg.leg === 1)?.homeScore ?? 0) : null,
+      ...aggregateCupScore(match, competition.matches),
       rules: validateMatchRules(match.rulesSnapshot ?? defaultMatchRules(match.type)), homePenalties: match.homePenalties, awayPenalties: match.awayPenalties, winnerClubId: match.winnerClubId,
     })),
   };
@@ -387,10 +399,7 @@ export async function listClubMatches(userId: string) {
   return {
     matches: matches.map((match) => ({
       id: match.id, type: match.type, status: match.status, round: match.round, leg: match.leg, tieId: match.tieId,
-      aggregateHomeScore: match.tieId && match.leg === 2
-        ? match.homeScore! + (matches.find((leg) => leg.tieId === match.tieId && leg.leg === 1)?.awayScore ?? 0) : null,
-      aggregateAwayScore: match.tieId && match.leg === 2
-        ? match.awayScore! + (matches.find((leg) => leg.tieId === match.tieId && leg.leg === 1)?.homeScore ?? 0) : null,
+      ...aggregateCupScore(match, matches),
       rules: validateMatchRules(match.rulesSnapshot ?? defaultMatchRules(match.type)), simulationVersion: match.simulationVersion, scheduledAt: match.scheduledAt.toISOString(),
       runtime: match.runtime ? (() => {
         const simulation = match.runtime.simulationState as unknown as {
