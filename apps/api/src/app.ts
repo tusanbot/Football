@@ -12,6 +12,7 @@ import { registerMatchNotificationRoutes } from "./game/match-notification-route
 import { registerGroupRoutes } from "./groups/group-routes.js";
 import { registerAllianceRoutes } from "./groups/alliance-routes.js";
 import { prisma } from "./db.js";
+import { parseAdminTelegramIds } from "./runtime-config.js";
 import { registerAdminRoutes } from "./admin-routes.js";
 import { registerAdminLeagueRoutes } from "./admin-league-routes.js";
 import { registerGiftCodeRoutes } from "./gift-code-routes.js";
@@ -56,7 +57,7 @@ export function buildApp() {
       ...(!process.env.TELEGRAM_BOT_TOKEN ? ["TELEGRAM_BOT_TOKEN"] : []),
       ...(!process.env.BOT_API_SECRET || process.env.BOT_API_SECRET.length < 32 ? ["BOT_API_SECRET"] : []),
       ...(!process.env.CORS_ORIGIN?.split(",").some((origin) => origin.trim()) ? ["CORS_ORIGIN"] : []),
-      ...(!process.env.GAME_ADMIN_TELEGRAM_IDS?.split(",").some((id) => /^\\d{1,20}$/.test(id.trim())) ? ["GAME_ADMIN_TELEGRAM_IDS"] : []),
+      ...(parseAdminTelegramIds(process.env.GAME_ADMIN_TELEGRAM_IDS).length === 0 ? ["GAME_ADMIN_TELEGRAM_IDS"] : []),
       ...(/^(replace-with|change-me|your-)/i.test(process.env.BOT_API_SECRET ?? "") ? ["BOT_API_SECRET"] : []),
     ];
     if (missing.length) return reply.code(503).send({ status: "not_ready", missing });
