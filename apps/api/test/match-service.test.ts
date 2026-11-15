@@ -224,8 +224,8 @@ test("checkpoint decisions persist idempotently and runtime leases recover after
   assert.equal((await claimDueMatchRuntimes("worker-b",now,30000,10)).length,0);
   await prisma.matchRuntime.update({where:{matchId:created.match.id},data:{leaseExpiresAt:new Date(now.getTime()-1)}});
   const recovered=await claimDueMatchRuntimes("worker-b",now,30000,10); assert.equal(recovered.length,1);
-  assert.equal(await releaseMatchRuntimeLease(created.match.id,claimed[0]!.lease.token,null),false);
-  assert.equal(await releaseMatchRuntimeLease(created.match.id,recovered[0]!.lease.token,null),true);
+  assert.equal(await releaseMatchRuntimeLease(claimed[0]!.runtime.id,claimed[0]!.lease.token,null),false);
+  assert.equal(await releaseMatchRuntimeLease(recovered[0]!.runtime.id,recovered[0]!.lease.token,null),true);
  } finally {
   const clubIds=clubs.map(c=>c.clubId);
   if(clubIds.length){await prisma.footballMatch.deleteMany({where:{OR:[{homeClubId:{in:clubIds}},{awayClubId:{in:clubIds}}]}});
