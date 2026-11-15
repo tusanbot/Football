@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { CSSProperties } from "react";
-import { createTelegramSession } from "../../lib/telegram-session.js";
+import { createTelegramSession } from "../../lib/telegram-session";
 
 type Player = { id:string; firstName:string; lastName:string; position:string; overall:number; lineupSlot:number|null; status?:string };
 type MatchEvent = { minute:number; type:string; detail:string; playerName:string; relatedPlayerName:string|null };

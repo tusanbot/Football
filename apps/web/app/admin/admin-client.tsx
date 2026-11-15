@@ -1,7 +1,7 @@
 "use client";
 import LeagueManagementClient from "./league-management-client";
 import {useCallback,useEffect,useState} from "react";
-import { createTelegramSession } from "../../lib/telegram-session.js";
+import { createTelegramSession } from "../../lib/telegram-session";
 declare global{interface Window{Telegram?:{WebApp?:{initData?:string;ready?:()=>void;expand?:()=>void}}}}
 const API=process.env.NEXT_PUBLIC_API_URL??"http://localhost:4000";
 const sections=[["players","بازیکنان"],["clubs","باشگاه‌ها"],["alliance-seasons","فصل‌های اتحاد"],["users","کاربران"],["groups","گروه‌ها"],["challenges","چالش‌ها"],["leagues","مسابقات"],["pyramid","مدیریت هرم لیگ"],["items","آیتم‌ها"],["gift-codes","کدهای هدیه"],["alliances","اتحادها"],["matches","مسابقات"],["wallet-ledger","گردش کیف پول"],["group-ledger","گردش امتیاز گروه"],["audit","سوابق مدیران"],["roles","نقش مدیران"],["settings","تنظیمات بازی"],["finance-summary","گزارش مالی پیشرفته"],["broadcast","پیام مدیریتی"],["season-awards","جوایز بازیکنان"]];

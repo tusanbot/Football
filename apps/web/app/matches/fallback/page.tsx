@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import type { CSSProperties } from "react";
-import { createTelegramSession } from "../../../lib/telegram-session.js";
+import { createTelegramSession } from "../../../lib/telegram-session";
 
 type Plan = {
   formation: string;

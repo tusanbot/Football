@@ -1,7 +1,7 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
 import type { CSSProperties } from "react";
-import { createTelegramSession } from "../../lib/telegram-session.js";
+import { createTelegramSession } from "../../lib/telegram-session";
 declare global { interface Window { Telegram?: { WebApp?: { initData?: string; ready?: () => void; expand?: () => void } } } }
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
