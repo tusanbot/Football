@@ -13,9 +13,16 @@ export function createPrismaClient(connectionString = process.env.DATABASE_URL, 
 }
 
 let defaultPrisma: PrismaClient | undefined;
+let requestScopeRequired = false;
+
+export function requireRequestScopedPrisma(): void {
+  requestScopeRequired = true;
+}
+
 function currentPrisma(): PrismaClient {
   const scoped = requestPrisma.getStore();
   if (scoped) return scoped;
+  if (requestScopeRequired) throw new Error("Prisma access outside the Worker request context is blocked.");
   defaultPrisma ??= createPrismaClient();
   return defaultPrisma;
 }

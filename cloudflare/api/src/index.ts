@@ -1,6 +1,6 @@
 import { Buffer } from "node:buffer";
 import { buildApp } from "../../../apps/api/src/app.js";
-import { createPrismaClient, prisma, withPrismaClient } from "../../../apps/api/src/db.js";
+import { createPrismaClient, prisma, requireRequestScopedPrisma, withPrismaClient } from "../../../apps/api/src/db.js";
 import { processDueMatchRuntimes } from "../../../apps/api/src/game/match-service.js";
 import { processDuePromotionOffers } from "../../../apps/api/src/game/league-pyramid-service.js";
 import { isValidTelegramBotToken, parseAdminTelegramIds, parseCorsOrigins } from "../../../apps/api/src/runtime-config.js";
@@ -26,6 +26,8 @@ interface Env {
   ENVIRONMENT?: string;
 }
 interface ExecutionContext { waitUntil(promise: Promise<unknown>): void }
+requireRequestScopedPrisma();
+
 const MAX_BODY_BYTES = 1_048_576;
 const HOP_BY_HOP = new Set(["connection", "keep-alive", "proxy-authenticate", "proxy-authorization", "te", "trailer", "transfer-encoding", "upgrade"]);
 class PayloadTooLargeError extends Error {}
