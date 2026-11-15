@@ -28,6 +28,8 @@ export const DEFAULT_MATCH_RULES: Readonly<MatchRules> = Object.freeze({
   penaltiesOnDraw: false,
 });
 
+export const DEFAULT_MATCH_SUBSTITUTION_RULES: Readonly<MatchSubstitutionRules> = Object.freeze({ maxSubstitutions: 5, maxInPlayWindows: 3 });
+
 export const DEFAULT_CUP_MATCH_RULES: Readonly<MatchRules> = Object.freeze({
   ...DEFAULT_MATCH_RULES,
   penaltiesOnDraw: true,
