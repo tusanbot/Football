@@ -5,7 +5,7 @@ import { requireTelegramUser } from "../auth/require-telegram-user.js";
 import { getMatchFallbackPlan, saveMatchFallbackPlan, MatchFallbackPlanError } from "./match-fallback-service.js";
 import {
   MatchServiceError, createFriendlyMatch, createLeague, getLeague, joinLeague,
-  listClubMatches, listMatchOpponents, listOpenLeagues, simulateScheduledMatch, startLeague, submitMatchCheckpointDecision, updateCompetitionRules,
+  listClubMatches, listMatchOpponents, listOpenLeagues, simulateScheduledMatch, startLeague, submitMatchCheckpointDecision, updateCompetitionRules, updateCompetitionRules,
 } from "./match-service.js";
 
 const keySchema = z.string().regex(/^[A-Za-z0-9:_-]{12,128}$/);
