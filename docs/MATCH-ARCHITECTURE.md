@@ -135,7 +135,7 @@ Each club can now store an independent, versioned fallback tactical plan (format
 Competitions store a validated rules object while registration is open. The creator can edit it until fixtures are generated; starting the competition freezes a rules snapshot into every fixture, so later edits cannot change a scheduled or running match. Friendly fixtures also carry their own default snapshot.
 
 Supported settings:
-- Maximum substitutions (0–7) and in-play windows (0–5), including forced injury substitutions; halftime changes still count toward the total but not an in-play window.
+- Maximum substitutions (0–7) and in-play windows (0–3), including forced injury substitutions; halftime changes still count toward the total but not an in-play window.
 - Enable or disable in-match injuries.
 - Red-card suspension length (0–5 completed fixtures).
 - Yellow-card accumulation threshold (0 disables it) and resulting suspension length (0–5 fixtures).
