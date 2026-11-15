@@ -32,7 +32,7 @@ export class PyramidLeagueError extends Error {
 async function ownedClub(userId: string) {
   const club = await prisma.club.findUnique({
     where: { ownerId: userId },
-    select: { id: true, name: true, ownerId: true, players: { where: { status: "ACTIVE" }, select: { id: true, position: true } } },
+    select: { id: true, name: true, ownerId: true, players: { where: { status: "ACTIVE", suspensionMatchesRemaining: 0 }, select: { id: true, position: true } } },
   });
   if (!club) throw new PyramidLeagueError("CLUB_NOT_FOUND");
   if (club.players.length < 11 || !club.players.some((player) => player.position === "GK")) {
@@ -552,7 +552,7 @@ export async function acceptFriendlyChallenge(userId: string, token: string, now
 
     const creatorClub = await tx.club.findUnique({
       where: { id: challenge.creatorClubId },
-      select: { id: true, players: { where: { status: "ACTIVE" }, select: { position: true } } },
+      select: { id: true, players: { where: { status: "ACTIVE", suspensionMatchesRemaining: 0 }, select: { position: true } } },
     });
     if (!creatorClub || creatorClub.players.length < 11 || !creatorClub.players.some((player) => player.position === "GK")) {
       throw new PyramidLeagueError("ALL_TEAMS_NEED_VALID_LINEUPS");
