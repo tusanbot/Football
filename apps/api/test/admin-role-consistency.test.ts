@@ -18,9 +18,9 @@ test("database admin role revocation overrides environment-scoped role map in le
   const app = buildApp();
   await app.ready();
   t.after(async () => {
-    await app.close();
     await prisma.adminRoleAssignment.deleteMany({ where: { telegramId } });
     await prisma.user.delete({ where: { id: user.id } });
+    await app.close();
     if (previousSecret === undefined) delete process.env.BOT_API_SECRET;
     else process.env.BOT_API_SECRET = previousSecret;
     if (previousMap === undefined) delete process.env.GAME_ADMIN_ROLE_MAP;
