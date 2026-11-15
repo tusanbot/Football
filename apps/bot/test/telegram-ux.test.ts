@@ -114,9 +114,9 @@ test("private menu stays compact and every button remains uniquely routable", ()
 });
 
 test("admin command argument parsing uses whitespace-aware splitting", () => {
-  assert.doesNotMatch(botSource, /split\\(\\/s\\+\\/\\)/);
-  assert.match(botSource, /const \\[id,state\\] = rest\\.split\\(\\/\\\\s\\+\\/\\)/);
-  assert.match(botSource, /const parts=input\\.split\\(\\/\\\\s\\+\\/\\)/);
+  assert.equal(botSource.includes("split(/s+/)"), false);
+  assert.ok(botSource.includes("const [id,state]=rest.split(/\\\\s+/);"));
+  assert.ok(botSource.includes("const parts=input.split(/\\\\s+/);"));
 });
 
 test("onboarding and help copy are Persian-first", () => {
