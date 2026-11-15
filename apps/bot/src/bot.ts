@@ -1270,7 +1270,7 @@ bot.command("challenge", async (ctx) => {
   if (!ctx.from) return;
   try {
     const result = await api<{ challenge: { token: string; expiresAt: string }; asset: string; goldCost: string; shareUrl: string | null }>(
-      "/v1/friendly-challenges", ctx.from.id, "POST", (ctx.chat.type === "group" || ctx.chat.type === "supergroup") ? { groupTelegramId: String(ctx.chat.id) } : {},
+      "/v1/friendly-challenges", ctx.from.id, "POST", { idempotencyKey: randomUUID(), ...((ctx.chat.type === "group" || ctx.chat.type === "supergroup") ? { groupTelegramId: String(ctx.chat.id) } : {}) },
     );
     const invite = result.shareUrl ?? ("کد دعوت: " + result.challenge.token + "\nدستور پذیرش: /acceptchallenge " + result.challenge.token);
     const message = "چالش دوستانه ایجاد شد.\nهزینه: " + (result.asset === "FREE" ? "رایگان" : result.asset === "GOLD" ? result.goldCost + " گلد" : "اعتبار خریداری‌شده")
