@@ -13,6 +13,7 @@ import { registerGroupRoutes } from "./groups/group-routes.js";
 import { registerAllianceRoutes } from "./groups/alliance-routes.js";
 import { prisma } from "./db.js";
 import { registerAdminRoutes } from "./admin-routes.js";
+import { registerAdminLeagueRoutes } from "./admin-league-routes.js";
 import { registerGiftCodeRoutes } from "./gift-code-routes.js";
 import { registerTelegramMessageDeletionRoutes } from "./telegram-message-deletion-routes.js";
 import { registerLeagueNoticeRoutes } from "./league-notice-routes.js";
@@ -61,6 +62,7 @@ export function buildApp() {
   registerGroupRoutes(app);
   registerAllianceRoutes(app);
   registerAdminRoutes(app);
+  registerAdminLeagueRoutes(app);
   registerGiftCodeRoutes(app);
   registerTelegramMessageDeletionRoutes(app);
   registerLeagueNoticeRoutes(app);
