@@ -158,11 +158,10 @@ export async function createLeague(userId: string, name: string, maxTeams: numbe
   const rules = validateMatchRules(inputRules ?? defaultMatchRules(format));
   const existing = await prisma.competition.findUnique({ where: { idempotencyKey } });
   if (existing) {
-    const existingRules = validateMatchRules(existing.rules ?? defaultMatchRules(format));
-    const sameRules = (Object.keys(rules) as Array<keyof MatchRules>)
-      .every((key) => existingRules[key] === rules[key]);
-    if (existing.createdByClubId !== club.id || existing.name !== name || existing.maxTeams !== maxTeams
-      || existing.format !== format || !sameRules) {
+    // Rules may be edited after creation; replaying the original create command
+    // must return that competition rather than treating its current rules as a new payload.
+    if (existing.createdByClubId !== club.id || existing.name !== name
+      || existing.maxTeams !== maxTeams || existing.format !== format) {
       throw new MatchServiceError("IDEMPOTENCY_CONFLICT");
     }
     return { competition: existing, replayed: true };
