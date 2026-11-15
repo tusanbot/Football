@@ -19,7 +19,7 @@ test("group replies use a one-minute transient retention window", () => {
 test("every private keyboard button resolves to a registered no-argument command", () => {
   const expected = [
     "club", "wallet", "players", "lineup", "development", "operations",
-    "finance", "scout", "opponents", "matches", "leagues", "market",
+    "finance", "scout", "opponents", "matches", "fallback", "leagues", "market",
     "special", "help", "menu",
   ];
   const actual = PRIVATE_MENU_ROWS.flat().map((item) => resolvePrivateMenuCommand(item.label));
