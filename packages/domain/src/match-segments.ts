@@ -10,12 +10,23 @@ export type MatchSegmentSideState = {
   expectedGoals: number;
 };
 
+export type MatchSegmentPlayerStats = {
+  playerId: string;
+  clubId: string;
+  minutesPlayed: number;
+  shots: number;
+  passes: number;
+  tackles: number;
+  fitnessLoss: number;
+};
+
 export type MatchSegmentState = {
   currentMinute: number;
   nextSequence: number;
   home: MatchSegmentSideState;
   away: MatchSegmentSideState;
   events: MatchEvent[];
+  playerStats?: MatchSegmentPlayerStats[];
 };
 
 export type MatchSegmentInstruction = Partial<MatchTactics> & { formation?: string };
@@ -291,6 +302,64 @@ export function advanceMatchSegment(input: {
   const awaySubstitutions = substitutionStates.get(away.clubId)!.state;
   const homeFinal = substitutionStates.get(home.clubId)!.side;
   const awayFinal = substitutionStates.get(away.clubId)!.side;
+  const cumulativeStats = new Map((state.playerStats ?? []).map((item) => [item.playerId, { ...item }]));
+  const collectPlayerStats = (side: MatchSide) => {
+    const sideEvents = processedEvents.filter((event) => event.teamId === side.clubId);
+    const activeMinutes = new Map<string, number>(side.players.map((player) => [player.id, duration]));
+    for (const event of sideEvents) {
+      if (event.type === "SUBSTITUTION") {
+        const playedBefore = clamp(event.minute - fromMinute, 0, duration);
+        const playedAfter = duration - playedBefore;
+        if (activeMinutes.has(event.playerId)) {
+          activeMinutes.set(event.playerId, Math.min(activeMinutes.get(event.playerId)!, playedBefore));
+        }
+        if (event.relatedPlayerId) {
+          activeMinutes.set(event.relatedPlayerId, Math.max(activeMinutes.get(event.relatedPlayerId) ?? 0, playedAfter));
+        }
+      } else if (event.type === "RED_CARD" || event.type === "INJURY") {
+        if (activeMinutes.has(event.playerId)) {
+          activeMinutes.set(event.playerId, Math.min(activeMinutes.get(event.playerId)!, clamp(event.minute - fromMinute, 0, duration)));
+        }
+      }
+    }
+    const passingMultiplier = side.tactics.passingStyle === "SHORT" ? 1.12
+      : side.tactics.passingStyle === "DIRECT" ? 0.82 : 1;
+    const tempoMultiplier = side.tactics.tempo === "FAST" ? 1.1
+      : side.tactics.tempo === "SLOW" ? 0.9 : 1;
+    const pressingMultiplier = side.tactics.pressing === "HIGH_PRESS" ? 1.15
+      : side.tactics.pressing === "LOW_BLOCK" ? 0.85 : 1;
+    const fitnessBase = side.tactics.pressing === "HIGH_PRESS" ? 7
+      : side.tactics.pressing === "LOW_BLOCK" ? 4 : 5;
+    const roster = [...side.players, ...(side.bench ?? [])];
+    for (const player of roster) {
+      const minutes = activeMinutes.get(player.id) ?? 0;
+      if (minutes <= 0) continue;
+      const fraction = minutes / duration;
+      const shots = Math.round((isAttacker(player.position)
+        ? random() * (side.tactics.mentality === "ATTACKING" ? 3 : 2)
+        : random()) * fraction);
+      const passes = Math.round(player.attributes.passing / 100 * duration * 0.8
+        * passingMultiplier * tempoMultiplier * fraction);
+      const tackles = Math.round((player.attributes.defending / 100 * duration / 12
+        * pressingMultiplier + random()) * fraction);
+      const fitnessLoss = Math.round((fitnessBase * tempoMultiplier * duration / 45
+        + random() * 1.5) * fraction);
+      const previous = cumulativeStats.get(player.id) ?? {
+        playerId: player.id, clubId: side.clubId, minutesPlayed: 0,
+        shots: 0, passes: 0, tackles: 0, fitnessLoss: 0,
+      };
+      cumulativeStats.set(player.id, {
+        ...previous,
+        minutesPlayed: previous.minutesPlayed + minutes,
+        shots: previous.shots + shots,
+        passes: previous.passes + passes,
+        tackles: previous.tackles + tackles,
+        fitnessLoss: previous.fitnessLoss + fitnessLoss,
+      });
+    }
+  };
+  collectPlayerStats(home);
+  collectPlayerStats(away);
   const resultState: MatchSegmentState = {
     currentMinute: toMinute,
     nextSequence: state.nextSequence + resequenced.length,
@@ -303,6 +372,7 @@ export function advanceMatchSegment(input: {
       expectedGoals: state.away.expectedGoals + awayResult.expectedGoals,
     },
     events: [...state.events, ...resequenced],
+    playerStats: [...cumulativeStats.values()],
   };
   return {
     state: resultState, fromMinute, toMinute, events: resequenced,
