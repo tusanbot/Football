@@ -165,6 +165,40 @@ async function pollGroupMessageDeletionQueue() {
   }
 }
 
+let matchNotificationWorkerBusy = false;
+async function pollMatchCheckpointNotifications() {
+  if (matchNotificationWorkerBusy || !apiUrl || !botApiSecret) return;
+  matchNotificationWorkerBusy = true;
+  try {
+    const result = await apiSystem<{ notifications: Array<{
+      matchId:string; checkpointKey:string; minute:number; deadlineAt:string;
+      clubName:string; opponentName:string; telegramUserId:string;
+    }> }>("/v1/bot/match-checkpoints/claim", { limit: 25 });
+    for (const notification of result.notifications) {
+      const telegramId = Number(notification.telegramUserId);
+      if (!Number.isSafeInteger(telegramId)) continue;
+      const keyboard = new InlineKeyboard()
+        .text("دفاعی", "mc:" + notification.matchId + ":" + notification.checkpointKey + ":DEFENSIVE")
+        .text("متعادل", "mc:" + notification.matchId + ":" + notification.checkpointKey + ":BALANCED")
+        .text("هجومی", "mc:" + notification.matchId + ":" + notification.checkpointKey + ":ATTACKING");
+      try {
+        await bot.api.sendMessage(telegramId,
+          "وقفه تاکتیکی مسابقه شما باز شد.\n"
+          + notification.clubName + " مقابل " + notification.opponentName
+          + "\nدقیقه " + notification.minute + " · مهلت تا " + new Date(notification.deadlineAt).toLocaleTimeString("fa-IR")
+          + "\nبرای انتخاب سریع ذهنیت یکی از گزینه‌ها را بزنید. برای سایر تنظیمات از /tactic و برای تعویض از /sub استفاده کنید.",
+          { reply_markup: keyboard });
+      } catch (sendError) {
+        console.warn("Match checkpoint notification could not be delivered:", sendError instanceof Error ? sendError.message : sendError);
+      }
+    }
+  } catch (error) {
+    console.warn("Match checkpoint notification poll failed:", error instanceof Error ? error.message : error);
+  } finally {
+    matchNotificationWorkerBusy = false;
+  }
+}
+
 function privateMenuKeyboard() {
   const keyboard = new Keyboard();
   for (const row of PRIVATE_MENU_ROWS) {
@@ -984,6 +1018,9 @@ bot.on(["chat_member","my_chat_member"],async ctx=>{
 bot.catch((error) => console.error("Telegram bot error:", error));
 if (apiUrl && botApiSecret) {
   const deletionQueueTimer = setInterval(() => { void pollGroupMessageDeletionQueue(); }, 5_000);
+  const matchNotificationTimer = setInterval(() => { void pollMatchCheckpointNotifications(); }, 5_000);
+  matchNotificationTimer.unref();
+  void pollMatchCheckpointNotifications();
   deletionQueueTimer.unref();
   void pollGroupMessageDeletionQueue();
 } else {
