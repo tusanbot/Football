@@ -55,7 +55,7 @@ test("market transfer uses one guarded D1 batch for both wallets, listing, playe
   assert.match(db.statements[4].sql, /9223372036854775807/);
   assert.match(db.statements[6].sql, /"status" = 'OPEN'/);
   assert.match(db.statements[8].sql, /"lineupSlot" = NULL/);
-  assert.match(db.statements[10].sql, /"PLAYER_TRANSFER"/);
+  assert.match(db.statements[10].sql, /PLAYER_TRANSFER/);
   assert.equal(db.statements[0].values[2], "9007199254740993");
 });
 
