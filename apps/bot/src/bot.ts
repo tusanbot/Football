@@ -838,61 +838,61 @@ bot.command("group-leagues",async ctx=>{if(!ctx.from||!(ctx.chat.type==="group"|
 
 bot.command("club", async (ctx) => {
   if (!ctx.from) return;
-  if (ctx.chat.type !== "private") return ctx.reply("Use /club in a private chat to view your club.");
+  if (ctx.chat.type !== "private") return ctx.reply("برای مشاهده باشگاه، دستور /club را در گفت‌وگوی خصوصی اجرا کنید.");
   try {
     const result = await api<{
       club: { name: string; level: number; reputation: number; createdAt: string } | null;
       user: { displayName: string };
     }>("/v1/me", ctx.from.id);
-    if (!result.club) return ctx.reply("You do not have a club yet. Send /start to create one.");
+    if (!result.club) return ctx.reply("هنوز باشگاهی ندارید. برای ساخت باشگاه دستور /start را ارسال کنید.");
     await ctx.reply(
-      `Club: ${result.club.name}\nManager: ${result.user.displayName}\nLevel: ${result.club.level}\nReputation: ${result.club.reputation}\nFounded: ${new Date(result.club.createdAt).toLocaleDateString("en-US")}`,
+      `باشگاه: ${result.club.name}\nمدیر: ${result.user.displayName}\nسطح: ${result.club.level}\nاعتبار: ${result.club.reputation}\nتاریخ تأسیس: ${new Date(result.club.createdAt).toLocaleDateString("fa-IR")}`,
     );
   } catch (error) {
-    await ctx.reply(`Could not load club: ${error instanceof Error ? error.message : "unknown error"}`);
+    await ctx.reply(`دریافت اطلاعات باشگاه ناموفق بود: ${error instanceof Error ? error.message : "خطای نامشخص"}`);
   }
 });
 
 bot.command("wallet", async (ctx) => {
   if (!ctx.from) return;
-  if (ctx.chat.type !== "private") return ctx.reply("Use /wallet in a private chat to view your balances.");
+  if (ctx.chat.type !== "private") return ctx.reply("برای مشاهده موجودی، دستور /wallet را در گفت‌وگوی خصوصی اجرا کنید.");
   try {
     const result = await api<{ wallets: Array<{ asset: "CASH" | "GOLD"; balance: string }> }>("/v1/wallet", ctx.from.id);
-    const balances = result.wallets.map((wallet) => `${wallet.asset}: ${cash(wallet.balance)}`).join("\n");
-    await ctx.reply(`Your club wallet:\n${balances || "No wallet balances found."}`);
+    const balances = result.wallets.map((wallet) => `${wallet.asset === "CASH" ? "کش" : "طلا"}: ${cash(wallet.balance)}`).join("\n");
+    await ctx.reply(`کیف پول باشگاه:\n${balances || "موجودی‌ای ثبت نشده است."}`);
   } catch (error) {
-    await ctx.reply(`Could not load wallet: ${error instanceof Error ? error.message : "unknown error"}`);
+    await ctx.reply(`دریافت کیف پول ناموفق بود: ${error instanceof Error ? error.message : "خطای نامشخص"}`);
   }
 });
 
 bot.command("rename", async (ctx) => {
   if (!ctx.from) return;
-  if (ctx.chat.type !== "private") return ctx.reply("Use /rename in a private chat to rename your club.");
+  if (ctx.chat.type !== "private") return ctx.reply("برای تغییر نام باشگاه، دستور /rename را در گفت‌وگوی خصوصی اجرا کنید.");
   const name = String(ctx.match ?? "").trim();
-  if (name.length < 2 || name.length > 32) return ctx.reply("Usage: /rename NEW CLUB NAME (2–32 characters)");
+  if (name.length < 2 || name.length > 32) return ctx.reply("روش استفاده: /rename نام جدید (۲ تا ۳۲ نویسه)");
   try {
     const result = await api<{ club: { name: string } }>("/v1/club", ctx.from.id, "PATCH", { name });
-    await ctx.reply(`Your club is now called ${result.club.name}.`);
+    await ctx.reply(`نام باشگاه با موفقیت به «${result.club.name}» تغییر کرد.`);
   } catch (error) {
-    await ctx.reply(`Could not rename club: ${error instanceof Error ? error.message : "unknown error"}`);
+    await ctx.reply(`تغییر نام باشگاه ناموفق بود: ${error instanceof Error ? error.message : "خطای نامشخص"}`);
   }
 });
 
 bot.command("players", async (ctx) => {
   if (!ctx.from) return;
-  if (ctx.chat.type !== "private") return ctx.reply("Use /players in a private chat to view your squad.");
+  if (ctx.chat.type !== "private") return ctx.reply("برای مشاهده بازیکنان، دستور /players را در گفت‌وگوی خصوصی اجرا کنید.");
   try {
     await api("/v1/club/development", ctx.from.id);
     const result = await api<{ players: ApiPlayer[] }>("/v1/club/players", ctx.from.id);
-    if (!result.players.length) return ctx.reply("Your squad is empty. Open the Mini App to complete club setup.");
-    const lines = result.players.map((p) => `• ${playerName(p)} | ${p.position} | OVR ${p.overall} | POT ${p.potential}${p.lineupSlot ? ` | XI #${p.lineupSlot}` : ""}\n  Fitness ${p.fitness ?? "-"} · Morale ${p.morale ?? "-"} · Contract ${p.contractDays ?? "-"}d · Wage ${p.wage ? cash(p.wage) : "-"} / week · ${p.status ?? "ACTIVE"}\n  ID: ${p.id}`);
-    await ctx.reply("Your active squad:\n\n" + lines.join("\n"));
-  } catch (error) { await ctx.reply(`Could not load squad: ${error instanceof Error ? error.message : "unknown error"}`); }
+    if (!result.players.length) return ctx.reply("فهرست بازیکنان خالی است. برای تکمیل ترکیب باشگاه، مینی‌اپ را باز کنید.");
+    const lines = result.players.map((p) => `• ${playerName(p)} | ${p.position} | قدرت ${p.overall} | پتانسیل ${p.potential}${p.lineupSlot ? ` | ترکیب اصلی #${p.lineupSlot}` : ""}\n  آمادگی ${p.fitness ?? "-"} · روحیه ${p.morale ?? "-"} · قرارداد ${p.contractDays ?? "-"} روز · دستمزد ${p.wage ? cash(p.wage) : "-"} در هفته · ${p.status === "INJURED" ? "مصدوم" : p.status === "SUSPENDED" ? "محروم" : "فعال"}\n  شناسه: ${p.id}`);
+    await ctx.reply("فهرست بازیکنان فعال:\n\n" + lines.join("\n"));
+  } catch (error) { await ctx.reply(`دریافت فهرست بازیکنان ناموفق بود: ${error instanceof Error ? error.message : "خطای نامشخص"}`); }
 });
 
 bot.command("lineup", async (ctx) => {
   if (!ctx.from) return;
-  if (ctx.chat.type !== "private") return ctx.reply("Use /lineup in a private chat to view your starting XI.");
+  if (ctx.chat.type !== "private") return ctx.reply("برای مشاهده ترکیب اصلی، دستور /lineup را در گفت‌وگوی خصوصی اجرا کنید.");
   try {
     await api("/v1/club/development", ctx.from.id);
     const result = await api<{ club: {
@@ -901,40 +901,40 @@ bot.command("lineup", async (ctx) => {
       lineupVersion: number;
       players: Array<{ id: string; firstName: string; lastName: string; position: string; overall: number; lineupSlot: number }>;
     } }>("/v1/club/lineup", ctx.from.id);
-    const players = result.club.players.map((player) => `${player.lineupSlot}. ${player.firstName} ${player.lastName} — ${player.position} · OVR ${player.overall}`);
+    const players = result.club.players.map((player) => `${player.lineupSlot}. ${player.firstName} ${player.lastName} — ${player.position} · قدرت ${player.overall}`);
     await ctx.reply(
       `Formation: ${result.club.formation} · Version: ${result.club.lineupVersion}\n` +
       `Tactics: ${result.club.tactics.mentality}, ${result.club.tactics.pressing}, ${result.club.tactics.tempo}, ${result.club.tactics.passingStyle}\n\n` +
-      (players.join("\n") || "No starting XI configured.") +
-      "\n\nUse /players to find IDs, then /setlineup FORMATION ID1 ... ID11.\nFormations: 4-3-3, 4-4-2, 3-5-2, 4-2-3-1",
+      (players.join("\n") || "ترکیب اصلی هنوز تنظیم نشده است.") +
+      "\n\nبرای مشاهده شناسه بازیکنان از /players و برای ثبت ترکیب از /setlineup FORMATION ID1 ... ID11 استفاده کنید.\nآرایش‌ها: 4-3-3، 4-4-2، 3-5-2، 4-2-3-1",
     );
   } catch (error) {
-    await ctx.reply(`Could not load lineup: ${error instanceof Error ? error.message : "unknown error"}`);
+    await ctx.reply(`دریافت ترکیب ناموفق بود: ${error instanceof Error ? error.message : "خطای نامشخص"}`);
   }
 });
 
 bot.command("setlineup", async (ctx) => {
   if (!ctx.from) return;
-  if (ctx.chat.type !== "private") return ctx.reply("Use /setlineup in a private chat to change your starting XI.");
+  if (ctx.chat.type !== "private") return ctx.reply("برای تغییر ترکیب اصلی، دستور /setlineup را در گفت‌وگوی خصوصی اجرا کنید.");
   const parts = String(ctx.match ?? "").trim().split(/\s+/);
   const [formation, ...playerIds] = parts;
   if (!formation || playerIds.length !== 11) {
-    return ctx.reply("Usage: /setlineup 4-3-3 PLAYER_ID_1 ... PLAYER_ID_11\nSupported: 4-3-3, 4-4-2, 3-5-2, 4-2-3-1");
+    return ctx.reply("روش استفاده: /setlineup 4-3-3 PLAYER_ID_1 ... PLAYER_ID_11\nآرایش‌های مجاز: 4-3-3، 4-4-2، 3-5-2، 4-2-3-1");
   }
   try {
     const current = await api<{ club: { lineupVersion: number } }>("/v1/club/lineup", ctx.from.id);
     await api("/v1/club/lineup", ctx.from.id, "PUT", {
       formation, playerIds, expectedVersion: current.club.lineupVersion,
     });
-    await ctx.reply("Starting XI and formation saved. Use /lineup to review your setup.");
+    await ctx.reply("ترکیب اصلی و آرایش ذخیره شد. برای مشاهده نتیجه از /lineup استفاده کنید.");
   } catch (error) {
-    await ctx.reply(`Could not save lineup: ${error instanceof Error ? error.message : "unknown error"}`);
+    await ctx.reply(`ذخیره ترکیب ناموفق بود: ${error instanceof Error ? error.message : "خطای نامشخص"}`);
   }
 });
 
 bot.command("development", async (ctx) => {
   if (!ctx.from) return;
-  if (ctx.chat.type !== "private") return ctx.reply("Use /development in a private chat.");
+  if (ctx.chat.type !== "private") return ctx.reply("برای مشاهده وضعیت توسعه، دستور /development را در گفت‌وگوی خصوصی اجرا کنید.");
   try {
     const result = await api<{ club: {
       trainingGroundLevel: number;
