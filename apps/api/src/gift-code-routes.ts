@@ -147,6 +147,21 @@ export function registerGiftCodeRoutes(app: FastifyInstance) {
         const status = error.code === "TELEGRAM_BOT_TOKEN_NOT_CONFIGURED" ? 503 : error.code === "TELEGRAM_GROUP_CHECK_FAILED" ? 502 : 403;
         return reply.code(status).send({ error: error.code });
       }
+      if (typeof error === "object" && error !== null && "code" in error && error.code === "P2002") {
+        const prior = await prisma.giftCodeRedemption.findUnique({
+          where: { idempotencyKey: body.data.idempotencyKey },
+          include: { giftCode: { select: { code: true } }, group: { select: { telegramId: true } } },
+        });
+        if (prior && prior.userId === user.id && prior.giftCode.code === code
+          && prior.group?.telegramId === (body.data.telegramGroupId ?? null)) {
+          return {
+            ok: true,
+            reward: { cash: prior.cashAmount.toString(), gold: prior.goldAmount.toString(), groupPoints: prior.groupPoints.toString() },
+            replayed: true,
+          };
+        }
+        return reply.code(409).send({ error: "IDEMPOTENCY_CONFLICT" });
+      }
       if (error instanceof Error && (
         error.message.startsWith("GIFT_CODE_") || error.message === "IDEMPOTENCY_CONFLICT"
       )) return reply.code(409).send({ error: error.message });
