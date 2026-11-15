@@ -425,10 +425,12 @@ model AcademyProspect {
   recruitmentCost   BigInt
   status            AcademyProspectStatus @default(AVAILABLE)
   recruitedPlayerId String?  @unique
+  scoutingBatchKey  String?
   createdAt         DateTime @default(now())
   recruitedAt       DateTime?
   club              Club     @relation(fields: [clubId], references: [id], onDelete: Cascade)
   @@index([clubId, status, createdAt])
+  @@index([clubId, scoutingBatchKey, createdAt])
 }
 
 model ClubFinanceEntry {
