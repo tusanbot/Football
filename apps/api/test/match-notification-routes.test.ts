@@ -81,7 +81,7 @@ test("checkpoint notifications retry after failed delivery and acknowledge succe
     });
     const headers = { "x-football-bot-secret": "test-match-notification-secret" };
     const claim = await app.inject({
-      method: "POST", url: "/v1/bot/match-checkpoints/claim", headers, payload: { limit: 10 },
+      method: "POST", url: "/v1/bot/match-checkpoints/claim", headers, payload: { limit: 10, checkpointId: checkpoint.id },
     });
     assert.equal(claim.statusCode, 200);
     const first = claim.json() as { notifications: Array<{ checkpointId:string; side:string; attempt:number }> };
@@ -100,7 +100,7 @@ test("checkpoint notifications retry after failed delivery and acknowledge succe
       data: { homeBotNotificationClaimedAt: new Date(Date.now() - 31_000) },
     });
     const retry = await app.inject({
-      method: "POST", url: "/v1/bot/match-checkpoints/claim", headers, payload: { limit: 10 },
+      method: "POST", url: "/v1/bot/match-checkpoints/claim", headers, payload: { limit: 10, checkpointId: checkpoint.id },
     });
     assert.equal(retry.statusCode, 200);
     const retried = retry.json() as { notifications: Array<{ checkpointId:string; side:string; attempt:number }> };
@@ -121,7 +121,7 @@ test("checkpoint notifications retry after failed delivery and acknowledge succe
     assert.equal(completed.awayBotNotificationAttempts, 1);
     assert.equal(completed.homeBotNotificationLastError, null);
     const finalClaim = await app.inject({
-      method: "POST", url: "/v1/bot/match-checkpoints/claim", headers, payload: { limit: 10 },
+      method: "POST", url: "/v1/bot/match-checkpoints/claim", headers, payload: { limit: 10, checkpointId: checkpoint.id },
     });
     assert.deepEqual(finalClaim.json(), { notifications: [] });
   } finally {
