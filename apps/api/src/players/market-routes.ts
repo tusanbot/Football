@@ -58,7 +58,7 @@ export function registerPlayerMarketRoutes(app: FastifyInstance) {
       select: { id: true, askingPrice: true, status: true, expiresAt: true, createdAt: true,
         player: { select: { id: true, firstName: true, lastName: true, overall: true, position: true, marketValue: true } } },
     });
-    return { listings: listings.map((item) => ({ ...item, askingPrice: item.askingPrice.toString() })) };
+    return { listings: listings.map((item) => ({ ...item, askingPrice: item.askingPrice.toString(), player: { ...item.player, marketValue: item.player.marketValue.toString() } })) };
   });
 
   app.get("/v1/market/listings", async (request, reply) => {
