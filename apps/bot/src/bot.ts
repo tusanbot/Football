@@ -687,7 +687,9 @@ bot.command("help", async (ctx) => ctx.reply(
 ));
 
 bot.command("group-cleanup-test", async (ctx) => {
-  if (ctx.chat.type !== "group" && ctx.chat.type !== "supergroup") return;
+  if (!ctx.from || (ctx.chat.type !== "group" && ctx.chat.type !== "supergroup")) return;
+  const member = await ctx.api.getChatMember(ctx.chat.id, ctx.from.id);
+  if (member.status !== "creator" && member.status !== "administrator") return ctx.reply("فقط مدیران گروه می‌توانند آزمون حذف خودکار را اجرا کنند.");
   await ctx.reply("پیام آزمایشی حذف خودکار Football Empire است. اگر صف حذف فعال باشد، این پیام حدود ۶۰ ثانیه دیگر حذف می‌شود.");
 });
 
