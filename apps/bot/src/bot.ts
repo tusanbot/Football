@@ -8,6 +8,7 @@ import {
   PRIVATE_MENU_ROWS,
   resolvePrivateMenuCommand,
   formatApiError,
+  limitTelegramMessage,
 } from "./telegram-ux.js";
 
 const token = process.env.TELEGRAM_BOT_TOKEN;
@@ -34,6 +35,19 @@ const bot = new Bot(token);
 let botTelegramId: number | undefined;
 const botRuntimeInstanceId = randomUUID();
 const backgroundTimers: NodeJS.Timeout[] = [];
+
+bot.use(async (ctx, next) => {
+  const originalReply = ctx.reply.bind(ctx);
+  Object.defineProperty(ctx, "reply", {
+    configurable: true,
+    value: async (...args: Parameters<typeof ctx.reply>) => {
+      const safeArgs = [...args] as Parameters<typeof ctx.reply>;
+      if (typeof safeArgs[0] === "string") safeArgs[0] = limitTelegramMessage(safeArgs[0]);
+      return originalReply(...safeArgs);
+    },
+  });
+  await next();
+});
 
 bot.use(async (ctx, next) => {
   if (ctx.chat?.type === "private" && ctx.message && "text" in ctx.message) {
