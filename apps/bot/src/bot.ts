@@ -1521,14 +1521,14 @@ bot.command("league", async (ctx) => {
   const maxTeams = last && /^\d+$/.test(last) ? Number(parts.pop()) : 8;
   const name = parts.join(" ");
   if (name.length < 3 || name.length > 40 || !Number.isInteger(maxTeams) || maxTeams < 4 || maxTeams > 10) {
-    return ctx.reply("Usage: /league LEAGUE NAME [4-10]");
+    return ctx.reply("روش استفاده: /league LEAGUE NAME [4-10]");
   }
   try {
     const result = await api<{ competition: { id: string; name: string; maxTeams: number }; replayed: boolean }>("/v1/competitions", ctx.from.id, "POST", {
       name, maxTeams, idempotencyKey: `bot-league-${ctx.from.id}-${ctx.update.update_id}`,
     });
-    await ctx.reply(`League created: ${result.competition.name}\nID: ${result.competition.id}\nCapacity: ${result.competition.maxTeams} clubs\nInvite other managers with /leagues.`);
-  } catch (error) { await ctx.reply(`Could not create league: ${error instanceof Error ? error.message : "unknown error"}`); }
+    await ctx.reply(`لیگ «${result.competition.name}» ایجاد شد.\nشناسه: ${result.competition.id}\nظرفیت: ${result.competition.maxTeams} باشگاه\nبرای دعوت مدیران دیگر از /leagues استفاده کنید.`);
+  } catch (error) { await ctx.reply(`ایجاد لیگ ناموفق بود: ${error instanceof Error ? error.message : "خطای نامشخص"}`); }
 });
 
 bot.command("cup", async (ctx) => {
@@ -1542,7 +1542,7 @@ bot.command("cup", async (ctx) => {
   if (capacityToken) parts.splice(parts.indexOf(capacityToken), 1);
   const name = parts.join(" ");
   if (name.length < 3 || name.length > 40 || ![4, 8].includes(maxTeams) || ![1, 2].includes(cupLegs)) {
-    return ctx.reply("Usage: /cup CUP NAME [4|8] [legs=1|2]");
+    return ctx.reply("روش استفاده: /cup CUP NAME [4|8] [legs=1|2]");
   }
   try {
     const result = await api<{ competition: { id: string; name: string; maxTeams: number; cupLegs:number }; replayed: boolean }>("/v1/competitions", ctx.from.id, "POST", {
@@ -1552,13 +1552,13 @@ bot.command("cup", async (ctx) => {
       + "\nBracket: " + result.competition.maxTeams + " clubs · "
       + (result.competition.cupLegs === 2 ? "two-legged ties" : "single-match ties")
       + ". Fill all places before starting.");
-  } catch (error) { await ctx.reply("Could not create cup: " + (error instanceof Error ? error.message : "unknown error")); }
+  } catch (error) { await ctx.reply("ایجاد جام حذفی ناموفق بود: " + (error instanceof Error ? error.message : "خطای نامشخص")); }
 });
 bot.command("competitionrules", async (ctx) => {
   if (!ctx.from || ctx.chat.type !== "private") return;
   const parts = String(ctx.match ?? "").trim().split(/\s+/).filter(Boolean);
   const competitionId = parts.shift();
-  if (!competitionId) return ctx.reply("Usage: /competitionrules COMPETITION_ID subs=5 windows=3 injuries=on red=1 yellow=3 yellowban=1 penalties=on");
+  if (!competitionId) return ctx.reply("روش استفاده: /competitionrules COMPETITION_ID subs=5 windows=3 injuries=on red=1 yellow=3 yellowban=1 penalties=on");
   try {
     const current = await api<{ competition: { rules: {
       maxSubstitutions:number; maxInPlayWindows:number; injuriesEnabled:boolean; injuryDurationDays:number;
@@ -1576,7 +1576,7 @@ bot.command("competitionrules", async (ctx) => {
       else if (key === "penalties" && (value === "on" || value === "off")) rules.penaltiesOnDraw = value === "on";
       else if (key && value && keys[key] && /^\d+$/.test(value)) {
         (rules[keys[key]] as number) = Number(value);
-      } else return ctx.reply("Invalid rule: " + part);
+      } else return ctx.reply("قانون نامعتبر است: " + part);
     }
     const saved = await api<{ rules: typeof rules }>("/v1/competitions/" + competitionId + "/rules", ctx.from.id, "PUT", rules);
     await ctx.reply("Competition rules saved. Substitutions: " + saved.rules.maxSubstitutions
@@ -1587,7 +1587,7 @@ bot.command("competitionrules", async (ctx) => {
       + ", yellow-card ban: " + saved.rules.yellowCardSuspensionMatches
       + ", penalties on draw: " + (saved.rules.penaltiesOnDraw ? "on" : "off") + ".");
   } catch (error) {
-    await ctx.reply("Could not update competition rules: " + (error instanceof Error ? error.message : "unknown error"));
+    await ctx.reply("ذخیره قوانین رقابت ناموفق بود: " + (error instanceof Error ? error.message : "خطای نامشخص"));
   }
 });
 
@@ -1596,52 +1596,52 @@ bot.command("leagues", async (ctx) => {
   try {
     const result = await api<{ competitions: Array<{ id: string; name: string; season: number; format: string; teams: number; maxTeams: number; joined: boolean; isCreator: boolean }> }>("/v1/competitions", ctx.from.id);
     const lines = result.competitions.map((item) =>
-      `• ${item.name} · ${item.format === "CUP" ? "Knockout cup" : "League"} · ${item.teams}/${item.maxTeams} clubs · Season ${item.season}${item.joined ? " · joined" : ""}\n  ID: ${item.id}`,
+      `• ${item.name} · ${item.format === "CUP" ? "جام حذفی" : "لیگ"} · ${item.teams}/${item.maxTeams} باشگاه · فصل ${item.season}${item.joined ? " · عضو هستید" : ""}\n  شناسه: ${item.id}`,
     );
-    await ctx.reply("Open competitions:\n" + (lines.join("\n\n") || "No open leagues.") + "\n\n/joinleague ID");
-  } catch (error) { await ctx.reply(`Could not load leagues: ${error instanceof Error ? error.message : "unknown error"}`); }
+    await ctx.reply("رقابت‌های قابل ثبت‌نام:\n" + (lines.join("\n\n") || "در حال حاضر رقابتی برای ثبت‌نام وجود ندارد.") + "\n\n/joinleague ID");
+  } catch (error) { await ctx.reply(`دریافت رقابت‌ها ناموفق بود: ${error instanceof Error ? error.message : "خطای نامشخص"}`); }
 });
 
 bot.command("joinleague", async (ctx) => {
   if (!ctx.from || ctx.chat.type !== "private") return;
   const id = String(ctx.match ?? "").trim().split(/\s+/)[0];
-  if (!id) return ctx.reply("Usage: /joinleague COMPETITION_ID");
+  if (!id) return ctx.reply("روش استفاده: /joinleague COMPETITION_ID");
   try {
     const result = await api<{ joined: boolean; replayed: boolean; teams: number }>(`/v1/competitions/${encodeURIComponent(id)}/join`, ctx.from.id, "POST", {});
-    await ctx.reply(`You are registered. Clubs in league: ${result.teams}.`);
-  } catch (error) { await ctx.reply(`Could not join league: ${error instanceof Error ? error.message : "unknown error"}`); }
+    await ctx.reply(`ثبت‌نام شما در رقابت انجام شد. تعداد تیم‌ها: ${result.teams}.`);
+  } catch (error) { await ctx.reply(`عضویت در رقابت ناموفق بود: ${error instanceof Error ? error.message : "خطای نامشخص"}`); }
 });
 
 bot.command("startleague", async (ctx) => {
   if (!ctx.from || ctx.chat.type !== "private") return;
   const id = String(ctx.match ?? "").trim().split(/\s+/)[0];
-  if (!id) return ctx.reply("Usage: /startleague COMPETITION_ID");
+  if (!id) return ctx.reply("روش استفاده: /startleague COMPETITION_ID");
   try {
     const result = await api<{ fixturesCreated: number; rounds: number; teams: number }>(`/v1/competitions/${encodeURIComponent(id)}/start`, ctx.from.id, "POST", {});
-    await ctx.reply(`League started with ${result.teams} clubs. ${result.fixturesCreated} fixtures across ${result.rounds} rounds have been scheduled.`);
-  } catch (error) { await ctx.reply(`Could not start league: ${error instanceof Error ? error.message : "unknown error"}`); }
+    await ctx.reply(`لیگ با ${result.teams} باشگاه آغاز شد. ${result.fixturesCreated} مسابقه در ${result.rounds} هفته برنامه‌ریزی شد.`);
+  } catch (error) { await ctx.reply(`آغاز لیگ ناموفق بود: ${error instanceof Error ? error.message : "خطای نامشخص"}`); }
 });
 
 bot.command("startcup", async (ctx) => {
   if (!ctx.from || ctx.chat.type !== "private") return;
   const id = String(ctx.match ?? "").trim().split(/\s+/)[0];
-  if (!id) return ctx.reply("Usage: /startcup CUP_ID");
+  if (!id) return ctx.reply("روش استفاده: /startcup CUP_ID");
   try {
     const result = await api<{ fixturesCreated: number; rounds: number; teams: number; replayed?: boolean }>(`/v1/competitions/${encodeURIComponent(id)}/start`, ctx.from.id, "POST", {});
-    await ctx.reply("Cup started with " + result.teams + " clubs. " + result.fixturesCreated + " first-round fixtures; " + result.rounds + " knockout rounds.");
-  } catch (error) { await ctx.reply("Could not start cup: " + (error instanceof Error ? error.message : "unknown error")); }
+    await ctx.reply("جام حذفی با " + result.teams + " باشگاه آغاز شد. " + result.fixturesCreated + " مسابقه در دور نخست و " + result.rounds + " دور حذفی برنامه‌ریزی شد.");
+  } catch (error) { await ctx.reply("آغاز جام حذفی ناموفق بود: " + (error instanceof Error ? error.message : "خطای نامشخص")); }
 });
 bot.command("table", async (ctx) => {
   if (!ctx.from || ctx.chat.type !== "private") return;
   const id = String(ctx.match ?? "").trim().split(/\s+/)[0];
-  if (!id) return ctx.reply("Usage: /table COMPETITION_ID");
+  if (!id) return ctx.reply("روش استفاده: /table COMPETITION_ID");
   try {
     const result = await api<{ competition: { name: string; status: string; format: string }; standings: Array<{ position: number; clubName: string; played: number; won: number; drawn: number; lost: number; goalDifference: number; points: number }>; matches: Array<{ round: number | null; homeClub: { name: string }; awayClub: { name: string }; homeScore: number | null; awayScore: number | null; homePenalties: number | null; awayPenalties: number | null }> }>(`/v1/competitions/${encodeURIComponent(id)}`, ctx.from.id);
     const rows = result.competition.format === "CUP"
-      ? result.matches.map((match) => "Round " + match.round + ": " + match.homeClub.name + " " + (match.homeScore ?? "–") + "–" + (match.awayScore ?? "–") + " " + match.awayClub.name + (match.homePenalties !== null ? " (pens " + match.homePenalties + "–" + match.awayPenalties + ")" : ""))
-      : result.standings.map((row) => row.position + ". " + row.clubName + " · Pts " + row.points + " · P " + row.played + " · W " + row.won + " D " + row.drawn + " L " + row.lost + " · GD " + row.goalDifference);
-    await ctx.reply(result.competition.name + " · " + result.competition.status + "\n\n" + rows.join("\n"));
-  } catch (error) { await ctx.reply("Could not load standings: " + (error instanceof Error ? error.message : "unknown error")); }
+      ? result.matches.map((match) => "دور " + match.round + ": " + match.homeClub.name + " " + (match.homeScore ?? "–") + "–" + (match.awayScore ?? "–") + " " + match.awayClub.name + (match.homePenalties !== null ? " (پنالتی " + match.homePenalties + "–" + match.awayPenalties + ")" : ""))
+      : result.standings.map((row) => row.position + ". " + row.clubName + " · امتیاز " + row.points + " · بازی " + row.played + " · برد " + row.won + " · مساوی " + row.drawn + " · باخت " + row.lost + " · تفاضل " + row.goalDifference);
+    await ctx.reply(result.competition.name + " · " + ({DRAFT:"پیش‌نویس",REGISTRATION:"ثبت‌نام",ACTIVE:"در جریان",COMPLETED:"پایان‌یافته",CANCELLED:"لغوشده"} as Record<string,string>)[result.competition.status] + "\n\n" + rows.join("\n"));
+  } catch (error) { await ctx.reply("دریافت جدول رقابت ناموفق بود: " + (error instanceof Error ? error.message : "خطای نامشخص")); }
 });
 
 
