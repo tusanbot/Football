@@ -31,6 +31,7 @@ const healthResponse = z.object({
 });
 
 export function buildApp() {
+  const corsOrigins = parseCorsOrigins(process.env.CORS_ORIGIN);
   const app = Fastify({
     logger: process.env.NODE_ENV !== "test",
     requestIdHeader: "x-request-id",
@@ -47,7 +48,7 @@ export function buildApp() {
   });
 
   void app.register(cors, {
-    origin: parseCorsOrigins(process.env.CORS_ORIGIN).length ? parseCorsOrigins(process.env.CORS_ORIGIN) : false,
+    origin: corsOrigins.length ? corsOrigins : false,
     credentials: true,
   });
 
