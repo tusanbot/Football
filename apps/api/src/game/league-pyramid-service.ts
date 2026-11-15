@@ -160,7 +160,6 @@ export async function getPyramidLeagueDetails(userId: string, leagueId: string) 
     },
   });
   if (!league) throw new PyramidLeagueError("PYRAMID_LEAGUE_NOT_FOUND");
-  if (!league.entries.some((entry) => entry.clubId === club.id)) throw new PyramidLeagueError("NOT_PYRAMID_LEAGUE_MEMBER");
   const standings = rankLeagueTeams(league.competition.entries.map((entry) => ({
     clubId: entry.clubId, clubName: entry.club.name, played: entry.played, won: entry.won, drawn: entry.drawn, lost: entry.lost,
     goalsFor: entry.goalsFor, goalsAgainst: entry.goalsAgainst, goalDifference: entry.goalsFor - entry.goalsAgainst,
@@ -223,17 +222,17 @@ export async function respondToPromotion(userId: string, offerId: string, accept
     const existingOffers = await tx.leaguePromotionOffer.findMany({ where: { leagueId: offer.leagueId }, select: { finalPosition: true, status: true, clubId: true } });
     const filledSlots = existingOffers.filter((item) => item.status === "PENDING" || item.status === "ACCEPTED").length;
     if (filledSlots < 2) {
-      const next = rankLeagueTeams(offer.league.competition.entries.map((entry) => ({
+      const rankedForReplacement = rankLeagueTeams(offer.league.competition.entries.map((entry) => ({
         clubId: entry.clubId, points: entry.points, goalDifference: entry.goalsFor - entry.goalsAgainst,
         goalsFor: entry.goalsFor, wins: entry.won,
-      }))).find((row) => !existingOffers.some((item) => item.clubId === row.clubId));
+      })));
+      const next = rankedForReplacement.find((row) => !existingOffers.some((item) => item.clubId === row.clubId));
       if (next) {
         const replacement = offer.league.competition.entries.find((entry) => entry.clubId === next.clubId);
         if (replacement) {
           const nextUser = await tx.user.findUnique({ where: { id: replacement.club.ownerId }, select: { id: true } });
           if (nextUser) {
-            const nextPosition = offer.league.competition.entries
-              .sort((a, b) => b.points - a.points || (b.goalsFor - b.goalsAgainst) - (a.goalsFor - a.goalsAgainst))[0]?.clubId === next.clubId ? 1 : existingOffers.length + 1;
+            const nextPosition = rankedForReplacement.findIndex((row) => row.clubId === next.clubId) + 1;
             const nextOffer = await tx.leaguePromotionOffer.create({ data: { leagueId: offer.leagueId, clubId: next.clubId, targetTier: offer.targetTier, finalPosition: nextPosition } });
             await addNotice(tx, nextUser.id, "PROMOTION_REPLACEMENT", "فرصت صعود به شما رسید", "به‌دلیل انصراف تیم بالاتر، سهمیه صعود به تیم شما پیشنهاد شده است. برای پذیرش یا رد، وارد بخش لیگ‌ها شوید.", nextOffer.id);
             await addNotice(tx, userId, "PROMOTION_REPLACEMENT_NOTIFIED", "تیم جایگزین مطلع شد", "تیم بعدی جدول از پیشنهاد صعود مطلع شد.", nextOffer.id);
