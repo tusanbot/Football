@@ -15,7 +15,7 @@ try {
     void processDueMatchRuntimes("api-match-worker", new Date(), 10)
       .then(async (result) => {
         const promotions = await processDuePromotionOffers(new Date(), 50);
-        if (result.advanced || result.settled || result.failed || promotions.accepted) app.log.info({ ...result, promotions }, "Game worker tick");
+        if (result.advanced || result.settled || result.failed || promotions.accepted || promotions.completedLeagues) app.log.info({ ...result, promotions }, "Game worker tick");
       })
       .catch((error: unknown) => app.log.error({ error }, "Match runtime worker failed"))
       .finally(() => { workerRunning = false; });
