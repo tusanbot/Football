@@ -572,12 +572,15 @@ model FriendlyChallenge {
   token String @unique
   creatorUserId String
   creatorClubId String
+  groupId String?
   status FriendlyChallengeStatus @default(OPEN)
   matchId String? @unique
   expiresAt DateTime
   createdAt DateTime @default(now())
   creator User @relation(fields: [creatorUserId], references: [id], onDelete: Cascade)
   club Club @relation(fields: [creatorClubId], references: [id], onDelete: Cascade)
+  group TelegramGroup? @relation(fields: [groupId], references: [id], onDelete: SetNull)
+  @@index([groupId, status, expiresAt])
   @@index([status, expiresAt])
   @@index([creatorClubId, createdAt])
 }
@@ -853,6 +856,7 @@ model TelegramGroup {
   rewardBalances GroupMemberRewardBalance[]
   pointEntries GroupPointLedger[]
   localCompetitions Competition[]
+  friendlyChallenges FriendlyChallenge[]
   createdAlliances Alliance[] @relation("AllianceCreatorGroup")
   allianceMembership AllianceGroup?
   allianceInvitations AllianceInvitation[]
