@@ -162,7 +162,10 @@ export class MatchCoordinator {
           }),
         ]);
         const candidates: number[] = [];
-        if (runtime) candidates.push(Math.max(runtime.nextActionAt.getTime(), runtime.leaseExpiresAt?.getTime() ?? 0));
+        if (runtime) {
+          const nextActionAt = runtime.nextActionAt?.getTime() ?? Date.now() + 10_000;
+          candidates.push(Math.max(nextActionAt, runtime.leaseExpiresAt?.getTime() ?? 0));
+        }
         if (futureFixture) candidates.push(futureFixture.scheduledAt.getTime());
         if (overdueFixture) candidates.push(now.getTime() + 5_000);
         nextAlarm = candidates.length ? Math.min(...candidates) : null;
