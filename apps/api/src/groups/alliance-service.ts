@@ -96,7 +96,7 @@ export async function contributeAllianceTreasury(i: { telegramUserId: string; te
     const old = await tx.allianceLedger.findUnique({ where: { idempotencyKey: i.idempotencyKey } });
     if (old) {
       const priorGroupEntry = await tx.groupPointLedger.findUnique({ where: { idempotencyKey: "alliance-contribution:" + i.idempotencyKey }, select: { groupId: true, amount: true } });
-      if (old.allianceId !== membership.allianceId || old.amount !== i.amount || priorGroupEntry?.groupId !== group.id || priorGroupEntry.amount !== -i.amount) throw new AllianceServiceError("IDEMPOTENCY_CONFLICT");
+      if (old.allianceId !== membership.allianceId || old.amount !== i.amount || !priorGroupEntry || priorGroupEntry.groupId !== group.id || priorGroupEntry.amount !== -i.amount) throw new AllianceServiceError("IDEMPOTENCY_CONFLICT");
       return { contributed: true, replayed: true, treasuryPoints: (await tx.alliance.findUniqueOrThrow({where:{id:membership.allianceId},select:{treasuryPoints:true}})).treasuryPoints.toString() };
     }
     const activeSeason = await tx.allianceSeason.findFirst({ where: { allianceId: membership.allianceId, status: "ACTIVE" } });
