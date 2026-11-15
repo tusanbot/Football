@@ -50,7 +50,7 @@ export function validateMatchRules(value: unknown): MatchRules {
     penaltiesOnDraw: input.penaltiesOnDraw as boolean,
   };
   if (!Number.isInteger(rules.maxSubstitutions) || rules.maxSubstitutions < 0 || rules.maxSubstitutions > 7
-    || !Number.isInteger(rules.maxInPlayWindows) || rules.maxInPlayWindows < 0 || rules.maxInPlayWindows > 5
+    || !Number.isInteger(rules.maxInPlayWindows) || rules.maxInPlayWindows < 0 || rules.maxInPlayWindows > 3
     || rules.maxInPlayWindows > rules.maxSubstitutions
     || !Number.isInteger(rules.redCardSuspensionMatches) || rules.redCardSuspensionMatches < 0 || rules.redCardSuspensionMatches > 5
     || !Number.isInteger(rules.yellowCardsToSuspend) || rules.yellowCardsToSuspend < 0 || rules.yellowCardsToSuspend > 10
