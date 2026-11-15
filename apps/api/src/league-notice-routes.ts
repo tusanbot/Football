@@ -27,6 +27,7 @@ export function registerLeagueNoticeRoutes(app: FastifyInstance) {
         FROM "LeagueNotice" n
         INNER JOIN "User" u ON u."id" = n."userId"
         WHERE n."deliveredAt" IS NULL
+          AND n."readAt" IS NULL
           AND n."deliveryAttempts" < 8
           AND (n."deliveryLockedUntil" IS NULL OR n."deliveryLockedUntil" <= NOW())
         ORDER BY n."createdAt" ASC
