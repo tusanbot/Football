@@ -806,7 +806,10 @@ export async function enqueueDueMatchRuntimes(now = new Date(), limit = 50) {
           matchId: fixture.id, status: "QUEUED", currentMinute: 0,
           nextActionAt: fixture.scheduledAt,
           kickoffSnapshot: jsonSafe({ home, away }),
-          fallbackPlan: jsonSafe({ home: null, away: null }),
+          fallbackPlan: jsonSafe({
+            home: { formation: home.formation, ...home.tactics },
+            away: { formation: away.formation, ...away.tactics },
+          }),
         }],
         skipDuplicates: true,
       });
