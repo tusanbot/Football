@@ -8,6 +8,8 @@ test("API responses include baseline browser security headers", async (t) => {
   t.after(async () => app.close());
   const response = await app.inject({ method: "GET", url: "/health" });
   assert.equal(response.statusCode, 200);
+  assert.equal(response.headers["cache-control"], "no-store");
+  assert.equal(response.headers.pragma, "no-cache");
   assert.equal(response.headers["x-content-type-options"], "nosniff");
   assert.equal(response.headers["x-frame-options"], "DENY");
   assert.equal(response.headers["referrer-policy"], "no-referrer");
