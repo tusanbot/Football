@@ -1,4 +1,4 @@
-import type { FastifyInstance, FastifyReply } from "fastify";
+import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { requireTelegramUser } from "./auth/require-telegram-user.js";
 import { prisma } from "./db.js";
@@ -16,7 +16,7 @@ function isValidImage(bytes: Buffer, mimeType: string) {
 }
 
 function statsFor(entries: Array<{ finalPosition: number | null; league: { season: number; tier: number; competition: { status: string }; awards: Array<{ clubId: string; placement: number; awardName: string; awardType: string }>; promotionOffers: Array<{ clubId: string; status: string; targetTier: number; finalPosition: number; resolvedAt: Date | null }> } }>, clubId: string) {
-  const completed = entries.filter((entry) => entry.finalPosition !== null);
+  const completed = entries.filter((entry) => entry.finalPosition !== null && entry.league.competition.status === "COMPLETED");
   const promotions = completed.flatMap((entry) => entry.league.promotionOffers.filter((offer) => offer.clubId === clubId && offer.status === "ACCEPTED")
     .map((offer) => ({ season: entry.league.season, tier: entry.league.tier, tierName: tierName(entry.league.tier), position: offer.finalPosition, targetTier: offer.targetTier, movement: "PROMOTION" as const, date: offer.resolvedAt?.toISOString() ?? null })));
   const relegations = completed.filter((entry) => entry.league.tier > 1 && entry.finalPosition! >= 7)
