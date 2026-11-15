@@ -123,3 +123,8 @@ At minute 90, the worker invokes the existing transactional settlement path; sco
 **Delivered client integration:** The Mini App now has a dedicated match-center route with live runtime status, score, event timeline, current lineups and benches, checkpoint deadline, tactical controls and up to five proposed substitutions. The Bot exposes inline mentality callbacks plus `/tactic` and `/sub` commands. A durable checkpoint-notification claim endpoint and Bot poller send private Telegram alerts to managers who have not yet submitted a decision; notifications are claimed once per club/checkpoint. Both clients submit to the same authenticated decision endpoint.
 
 **Remaining integration work:** Pre-match fallback-plan editing is not yet exposed. Detailed per-player non-goal statistics currently reuse the existing simulation-statistics routine; segmented injury and red-card generation, forced injury substitutions and their downstream effects are not yet implemented. Notification delivery is best-effort after an atomic claim; failed Telegram sends are logged but are not automatically re-queued.
+
+
+### Pre-match fallback-plan editor
+
+Each club can now store an independent, versioned fallback tactical plan (formation, mentality, pressing, tempo and passing style). The authenticated Mini App editor and private Bot commands `/fallback` and `/setfallback` use the same API. Writes use optimistic version checks to prevent lost updates. The plan is copied into each fixture's runtime snapshot when its kickoff runtime is enqueued; later edits never mutate a running or already-snapshotted match. If no custom plan exists, the club's current primary tactics remain the fallback.
