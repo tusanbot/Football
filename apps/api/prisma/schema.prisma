@@ -1155,3 +1155,27 @@ model TelegramMessageDeletion {
   @@index([status, deleteAt, availableAt])
   @@index([status, lockedUntil])
 }
+
+
+model AdminRoleAssignment {
+  id String @id @default(cuid())
+  telegramId String @unique
+  role String
+  active Boolean @default(true)
+  createdByTelegramId String
+  updatedByTelegramId String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@index([role, active])
+}
+
+model GameSetting {
+  id String @id @default(cuid())
+  key String @unique
+  value Json
+  description String?
+  updatedByTelegramId String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@index([updatedAt])
+}

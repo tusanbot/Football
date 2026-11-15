@@ -11,7 +11,7 @@ const ROLE_PERMISSIONS: Record<string, Permission[]> = {
   moderator: ["read"],
 };
 
-function roleFor(telegramId: string) {
+async function roleFor(telegramId: string) {
   const superAdmins = (process.env.GAME_ADMIN_TELEGRAM_IDS ?? "").split(",").map((value) => value.trim()).filter(Boolean);
   if (superAdmins.includes(telegramId)) return "superadmin";
   try {
@@ -28,7 +28,7 @@ async function authorize(request: FastifyRequest, reply: FastifyReply, permissio
     reply.code(401).send({ error: "UNAUTHENTICATED" });
     return null;
   }
-  const role = roleFor(user.telegramId);
+  const role = await roleFor(user.telegramId);
   if (!role || !ROLE_PERMISSIONS[role]?.includes(permission)) {
     reply.code(403).send({ error: "ADMIN_PERMISSION_REQUIRED", permission });
     return null;
