@@ -24,7 +24,7 @@ export function verifyTelegramInitData(
   if (typeof initData !== "string" || initData.length === 0 || initData.length > 8192) {
     throw new Error("Invalid Telegram initData size");
   }
-  if (typeof botToken !== "string" || !/^\\d{5,}:[A-Za-z0-9_-]{20,}$/.test(botToken)) {
+  if (typeof botToken !== "string" || !/^\d{5,}:[A-Za-z0-9_-]{20,}$/.test(botToken)) {
     throw new Error("Invalid Telegram bot token");
   }
   const maxAgeSeconds = options.maxAgeSeconds ?? 300;
@@ -43,9 +43,9 @@ export function verifyTelegramInitData(
 
   params.delete("hash");
   const dataCheckString = [...params.entries()]
-    .sort(([a], [b]) => a.localeCompare(b))
+    .sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)
     .map(([key, value]) => `${key}=${value}`)
-    .join("\\n");
+    .join("\n");
 
   const secretKey = createHmac("sha256", "WebAppData").update(botToken).digest();
   const expectedHash = createHmac("sha256", secretKey).update(dataCheckString).digest();
@@ -55,7 +55,7 @@ export function verifyTelegramInitData(
   }
 
   const rawAuthDate = params.get("auth_date");
-  if (!rawAuthDate || !/^\\d{1,12}$/.test(rawAuthDate)) throw new Error("Invalid Telegram auth_date");
+  if (!rawAuthDate || !/^\d{1,12}$/.test(rawAuthDate)) throw new Error("Invalid Telegram auth_date");
   const authDateValue = Number(rawAuthDate);
   if (!Number.isSafeInteger(authDateValue) || authDateValue <= 0) throw new Error("Invalid Telegram auth_date");
   const age = nowSeconds - authDateValue;
