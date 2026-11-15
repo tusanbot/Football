@@ -430,6 +430,7 @@ model Competition {
   format      CompetitionFormat @default(LEAGUE)
   status      CompetitionStatus @default(REGISTRATION)
   maxTeams    Int @default(8)
+  cupLegs     Int @default(1)
   rules       Json?
   createdByClubId String
   groupId String?
@@ -475,6 +476,8 @@ model FootballMatch {
   awayClubId     String
   competitionId  String?
   rulesSnapshot  Json?
+  tieId          String?
+  leg            Int @default(1)
   round          Int?
   scheduledAt    DateTime
   startedAt      DateTime?
