@@ -100,6 +100,7 @@ export function applyMatchSubstitutions(input: {
   if (!input.checkpointId.trim()) throw new Error("MATCH_SUBSTITUTION_CHECKPOINT_ID_REQUIRED");
   if (!Number.isInteger(rules.maxSubstitutions) || rules.maxSubstitutions < 0
     || !Number.isInteger(rules.maxInPlayWindows) || rules.maxInPlayWindows < 0
+    || rules.maxSubstitutions > 7 || rules.maxInPlayWindows > 3
     || rules.maxInPlayWindows > rules.maxSubstitutions) throw new Error("INVALID_MATCH_SUBSTITUTION_RULES");
   if (!changes.length) throw new Error("MATCH_SUBSTITUTION_EMPTY");
   if (state.usedCheckpointIds.includes(input.checkpointId)) throw new Error("MATCH_SUBSTITUTION_CHECKPOINT_ALREADY_USED");
