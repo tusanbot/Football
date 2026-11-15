@@ -20,7 +20,7 @@ test("every private keyboard button resolves to a registered no-argument command
   const expected = [
     "club", "wallet", "players", "lineup", "development", "operations",
     "finance", "scout", "opponents", "matches", "fallback", "leagues", "market",
-    "special", "help", "records", "seasonawards", "menu",
+    "special", "seasonawards", "records", "help", "menu",
   ];
   const actual = PRIVATE_MENU_ROWS.flat().map((item) => resolvePrivateMenuCommand(item.label));
   assert.deepEqual(actual, expected);
@@ -105,4 +105,22 @@ test("bot source does not bypass the group reply retention wrapper with direct s
   assert.ok(botSource.includes("bot.api.sendMessage(Number(delivery.telegramGroupId), delivery.message)"));
   assert.ok(botSource.includes("/v1/bot/admin-group-broadcasts/"));
   assert.ok(/" \+ delivery\.id \+ "\/complete"/.test(botSource));
+});
+
+test("private menu stays compact and every button remains uniquely routable", () => {
+  assert.equal(PRIVATE_MENU_ROWS.length, 9);
+  assert.ok(PRIVATE_MENU_ROWS.every((row) => row.length === 2));
+  assert.equal(new Set(PRIVATE_MENU_ROWS.flat().map((item) => item.command)).size, 18);
+});
+
+test("admin command argument parsing uses whitespace-aware splitting", () => {
+  assert.doesNotMatch(botSource, /split\\(\\/s\\+\\/\\)/);
+  assert.match(botSource, /const \\[id,state\\] = rest\\.split\\(\\/\\\\s\\+\\/\\)/);
+  assert.match(botSource, /const parts=input\\.split\\(\\/\\\\s\\+\\/\\)/);
+});
+
+test("onboarding and help copy are Persian-first", () => {
+  assert.ok(botSource.includes("به Football Empire خوش آمدید"));
+  assert.ok(botSource.includes("راهنمای Football Empire"));
+  assert.ok(botSource.includes("برای بازگشت به منوی دکمه‌ای"));
 });
