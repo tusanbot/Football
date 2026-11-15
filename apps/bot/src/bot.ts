@@ -171,25 +171,37 @@ async function pollMatchCheckpointNotifications() {
   matchNotificationWorkerBusy = true;
   try {
     const result = await apiSystem<{ notifications: Array<{
-      matchId:string; checkpointKey:string; minute:number; deadlineAt:string;
-      clubName:string; opponentName:string; telegramUserId:string;
+      checkpointId:string; matchId:string; checkpointKey:string; minute:number; deadlineAt:string;
+      clubName:string; opponentName:string; telegramUserId:string; side:"HOME"|"AWAY"; attempt:number;
     }> }>("/v1/bot/match-checkpoints/claim", { limit: 25 });
     for (const notification of result.notifications) {
+      const acknowledge = (delivered:boolean, error?:string) => apiSystem(
+        "/v1/bot/match-checkpoints/ack",
+        { checkpointId: notification.checkpointId, side: notification.side, delivered, ...(error ? { error } : {}) },
+      );
       const telegramId = Number(notification.telegramUserId);
-      if (!Number.isSafeInteger(telegramId)) continue;
+      if (!Number.isSafeInteger(telegramId)) {
+        await acknowledge(false, "INVALID_TELEGRAM_USER_ID").catch((error:unknown) =>
+          console.warn("Could not record invalid match notification recipient:", error instanceof Error ? error.message : error));
+        continue;
+      }
       const keyboard = new InlineKeyboard()
         .text("دفاعی", "mc:" + notification.matchId + ":" + notification.checkpointKey + ":DEFENSIVE")
         .text("متعادل", "mc:" + notification.matchId + ":" + notification.checkpointKey + ":BALANCED")
         .text("هجومی", "mc:" + notification.matchId + ":" + notification.checkpointKey + ":ATTACKING");
       try {
         await bot.api.sendMessage(telegramId,
-          "وقفه تاکتیکی مسابقه شما باز شد.\n"
+          "وقفه تاکتیکی مسابقه شما باز شد.\\n"
           + notification.clubName + " مقابل " + notification.opponentName
-          + "\nدقیقه " + notification.minute + " · مهلت تا " + new Date(notification.deadlineAt).toLocaleTimeString("fa-IR")
-          + "\nبرای انتخاب سریع ذهنیت یکی از گزینه‌ها را بزنید. برای سایر تنظیمات از /tactic و برای تعویض از /sub استفاده کنید.",
+          + "\\nدقیقه " + notification.minute + " · مهلت تا " + new Date(notification.deadlineAt).toLocaleTimeString("fa-IR")
+          + "\\nبرای انتخاب سریع ذهنیت یکی از گزینه‌ها را بزنید. برای سایر تنظیمات از /tactic و برای تعویض از /sub استفاده کنید.",
           { reply_markup: keyboard });
+        await acknowledge(true);
       } catch (sendError) {
-        console.warn("Match checkpoint notification could not be delivered:", sendError instanceof Error ? sendError.message : sendError);
+        const message = sendError instanceof Error ? sendError.message : "TELEGRAM_SEND_FAILED";
+        await acknowledge(false, message.slice(0, 500)).catch((ackError:unknown) =>
+          console.warn("Could not persist failed match notification:", ackError instanceof Error ? ackError.message : ackError));
+        console.warn("Match checkpoint notification could not be delivered:", message);
       }
     }
   } catch (error) {
