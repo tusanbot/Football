@@ -7,6 +7,7 @@
     "nodejs_compat"
   ],
   "upload_source_maps": true,
+  "dev": { "port": 8788 },
   "workers_dev": true,
   "preview_urls": false,
   "assets": {

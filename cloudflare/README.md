@@ -67,7 +67,7 @@ Required variables:
 
 Create a Cloudflare Hyperdrive configuration pointing at the existing **development PostgreSQL database**, then attach it with binding name `HYPERDRIVE`. Hyperdrive is preferred for connection pooling. Without it, set `DATABASE_URL` as a Worker secret. Never commit database credentials or put them in Wrangler `vars`.
 
-For local preview, copy `cloudflare/api/.dev.vars.example` to `.dev.vars` and replace placeholders with local development values. The real `.dev.vars` file is Git-ignored.
+For local development, copy `cloudflare/api/.dev.vars.example` to `cloudflare/api/.dev.vars` and replace placeholders with local development values. The real `.dev.vars` file is Git-ignored. The API Worker uses local port `8787`; the OpenNext Worker preview uses `8788`. For a fully functional local Mini App/API loop, run the API Worker and the ordinary Next.js dev server (port `3000`) with `NEXT_PUBLIC_API_URL=http://localhost:8787`. The production OpenNext build requires an HTTPS API origin, so use the deployed staging API Worker origin when validating the Cloudflare Mini App build.
 
 Commands from repository root:
 
