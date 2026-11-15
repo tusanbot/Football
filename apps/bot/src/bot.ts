@@ -354,6 +354,108 @@ bot.command("redeem", async (ctx) => {
   }
 });
 
+const adminOnlyInPrivate = (ctx: Context) => ctx.chat.type === "private";
+
+bot.command("admin", async (ctx) => {
+  if (!ctx.from || !adminOnlyInPrivate(ctx)) return;
+  try {
+    const data = await api<{ counts: Record<string, number> }>("/v1/admin/overview", ctx.from.id);
+    const labels: Record<string, string> = {
+      users: "کاربران", clubs: "باشگاه‌ها", players: "بازیکنان", groups: "گروه‌ها",
+      challenges: "چالش‌ها", leagues: "مسابقات", items: "آیتم‌ها", giftCodes: "کدهای هدیه",
+      flags: "پرچم‌های بررسی", alliances: "اتحادها", matches: "مسابقات انجام‌شده",
+      walletTransactions: "تراکنش‌های کیف پول", groupTransactions: "تراکنش‌های امتیاز گروه",
+    };
+    const rows = Object.entries(data.counts).map(([key, value]) => (labels[key] ?? key) + ": " + value);
+    await ctx.reply("پنل مدیریت Football Empire\n\n" + rows.join("\n") + "\n\nبرای فهرست‌ها: /adminlist RESOURCE [QUERY]\nراهنما: /adminhelp");
+  } catch (error) {
+    await ctx.reply("دسترسی مدیریت تأیید نشد یا سرویس در دسترس نیست: " + (error instanceof Error ? error.message : "خطای نامشخص"));
+  }
+});
+
+bot.command("adminlist", async (ctx) => {
+  if (!ctx.from || !adminOnlyInPrivate(ctx)) return;
+  const [resource, ...queryParts] = String(ctx.match ?? "").trim().split(/\s+/);
+  const allowed = new Set(["players", "clubs", "users", "groups", "challenges", "leagues", "items", "gift-codes", "alliances", "matches", "alliance-seasons", "wallet-ledger", "group-ledger", "audit"]);
+  if (!resource || !allowed.has(resource)) return ctx.reply("استفاده: /adminlist RESOURCE [QUERY]\nمنابع مجاز: " + [...allowed].join(", "));
+  try {
+    const query = queryParts.join(" ");
+    const result = await api<Array<Record<string, unknown>>>(
+      "/v1/admin/" + encodeURIComponent(resource) + "?limit=15" + (query ? "&q=" + encodeURIComponent(query) : ""),
+      ctx.from.id,
+    );
+    if (!result.length) return ctx.reply("موردی پیدا نشد.");
+    const rows = result.map((item) => {
+      const id = String(item.id ?? "—");
+      const title = String(item.name ?? item.title ?? item.displayName ?? item.code ?? item.firstName ?? item.telegramId ?? id);
+      const status = String(item.status ?? (item.active === false ? "غیرفعال" : ""));
+      return "• " + title.slice(0, 90) + (status ? " · " + status : "") + "\nID: " + id;
+    });
+    await ctx.reply(("نتایج مدیریت · " + resource + "\n\n" + rows.join("\n\n")).slice(0, 3900));
+  } catch (error) {
+    await ctx.reply("دریافت فهرست ناموفق بود: " + (error instanceof Error ? error.message : "خطای نامشخص"));
+  }
+});
+
+bot.command("adminuser", async (ctx) => {
+  if (!ctx.from || !adminOnlyInPrivate(ctx)) return;
+  const [operation, targetId, ...reasonParts] = String(ctx.match ?? "").trim().split(/\s+/);
+  if (!["suspend", "restore"].includes(operation ?? "") || !targetId) {
+    return ctx.reply("استفاده: /adminuser suspend|restore USER_ID [REASON]");
+  }
+  try {
+    await api("/v1/admin/actions", ctx.from.id, "POST", {
+      action: operation === "suspend" ? "suspend-user" : "restore-user",
+      targetId, reason: reasonParts.join(" ") || "Telegram admin command", idempotencyKey: randomUUID(),
+    });
+    await ctx.reply("وضعیت کاربر با موفقیت به‌روزرسانی شد.");
+  } catch (error) {
+    await ctx.reply("عملیات انجام نشد: " + (error instanceof Error ? error.message : "خطای نامشخص"));
+  }
+});
+
+bot.command("admingroup", async (ctx) => {
+  if (!ctx.from || !adminOnlyInPrivate(ctx)) return;
+  const [operation, targetId, ...reasonParts] = String(ctx.match ?? "").trim().split(/\s+/);
+  if (!["suspend", "restore"].includes(operation ?? "") || !targetId) {
+    return ctx.reply("استفاده: /admingroup suspend|restore GROUP_ID [REASON]");
+  }
+  try {
+    await api("/v1/admin/actions", ctx.from.id, "POST", {
+      action: operation === "suspend" ? "suspend-group" : "restore-group",
+      targetId, reason: reasonParts.join(" ") || "Telegram admin command", idempotencyKey: randomUUID(),
+    });
+    await ctx.reply("وضعیت گروه با موفقیت به‌روزرسانی شد.");
+  } catch (error) {
+    await ctx.reply("عملیات انجام نشد: " + (error instanceof Error ? error.message : "خطای نامشخص"));
+  }
+});
+
+bot.command("adminchallenge", async (ctx) => {
+  if (!ctx.from || !adminOnlyInPrivate(ctx)) return;
+  const [operation, targetId] = String(ctx.match ?? "").trim().split(/\s+/);
+  if (operation !== "cancel" || !targetId) return ctx.reply("استفاده: /adminchallenge cancel CHALLENGE_ID");
+  try {
+    await api("/v1/admin/actions", ctx.from.id, "POST", {
+      action: "cancel-challenge", targetId, idempotencyKey: randomUUID(),
+    });
+    await ctx.reply("چالش لغو شد و بازپرداخت امتیاز در دفترکل ثبت شد.");
+  } catch (error) {
+    await ctx.reply("لغو چالش ناموفق بود: " + (error instanceof Error ? error.message : "خطای نامشخص"));
+  }
+});
+
+bot.command("adminhelp", async (ctx) => {
+  if (!ctx.from || !adminOnlyInPrivate(ctx)) return;
+  await ctx.reply(
+    "راهنمای پنل مدیریت ربات\n/admin — آمار کلی\n/adminlist RESOURCE [QUERY] — فهرست منابع\n" +
+    "/adminuser suspend|restore USER_ID [REASON] — تعلیق/رفع تعلیق کاربر\n" +
+    "/admingroup suspend|restore GROUP_ID [REASON] — تعلیق/رفع تعلیق گروه\n" +
+    "/adminchallenge cancel CHALLENGE_ID — لغو چالش\n\n" +
+    "تمام درخواست‌ها در API با نقش و مجوز مدیر بررسی و در گزارش مدیریتی ثبت می‌شوند. این دستورات فقط در گفت‌وگوی خصوصی فعال‌اند."
+  );
+});
+
 bot.command("menu", async (ctx) => {
   if (ctx.chat.type !== "private") return;
   await ctx.reply("منوی اصلی Football Empire آماده است. برای عملیات دارای ورودی، از /help راهنمای دستورها را ببینید.", {
