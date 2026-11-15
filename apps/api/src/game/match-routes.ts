@@ -13,6 +13,7 @@ const competitionRulesSchema = z.object({
   maxSubstitutions: z.number().int().min(0).max(7),
   maxInPlayWindows: z.number().int().min(0).max(3),
   injuriesEnabled: z.boolean(),
+  injuryDurationDays: z.number().int().min(1).max(14),
   redCardSuspensionMatches: z.number().int().min(0).max(5),
   yellowCardsToSuspend: z.number().int().min(0).max(10),
   yellowCardSuspensionMatches: z.number().int().min(0).max(5),
