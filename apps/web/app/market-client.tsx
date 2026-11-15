@@ -20,18 +20,18 @@ type ClubOperations = {
   financeEntries: Array<{ id: string; category: string; direction: string; amount: string; description: string; occurredAt: string }>;
 };
 type MatchRecord = {
-  id: string; type: string; status: string; rules: MatchRulesForm; scheduledAt: string;
+  id: string; type: string; status: string; round:number|null; leg:number; tieId:string|null; rules: MatchRulesForm; scheduledAt: string;
   homeClub: { id: string; name: string }; awayClub: { id: string; name: string };
   homeScore: number | null; awayScore: number | null; homePenalties: number | null; awayPenalties: number | null; winnerClubId: string | null; attendance: number; ticketRevenue: string;
   events: Array<{ minute: number; type: string; detail: string; playerId: string; playerName: string; relatedPlayerName: string | null }>;
 };
 type MatchRulesForm = { maxSubstitutions:number; maxInPlayWindows:number; injuriesEnabled:boolean; injuryDurationDays:number; redCardSuspensionMatches:number; yellowCardsToSuspend:number; yellowCardSuspensionMatches:number; penaltiesOnDraw:boolean };
-type OpenLeague = { id: string; name: string; season: number; format: string; status: string; maxTeams: number; teams: number; joined: boolean; isCreator: boolean; creator: string; rules:MatchRulesForm };
+type OpenLeague = { id: string; name: string; season: number; format: string; status: string; cupLegs:number; maxTeams: number; teams: number; joined: boolean; isCreator: boolean; creator: string; rules:MatchRulesForm };
 type ClubCompetition = { id: string; name: string; season: number; format: string; status: string };
 type LeagueDetails = {
-  competition: { id: string; name: string; season: number; format: string; status: string; startsAt: string | null };
+  competition: { id: string; name: string; season: number; format: string; cupLegs:number; status: string; startsAt: string | null };
   standings: Array<{ position: number; clubId: string; clubName: string; played: number; won: number; drawn: number; lost: number; goalsFor: number; goalsAgainst: number; goalDifference: number; points: number }>;
-  matches: Array<{ id: string; round: number | null; scheduledAt: string; status: string; homeClub: { id: string; name: string }; awayClub: { id: string; name: string }; homeScore: number | null; awayScore: number | null; homePenalties: number | null; awayPenalties: number | null; winnerClubId: string | null; rules:MatchRulesForm }>;
+  matches: Array<{ id: string; round: number | null; scheduledAt: string; status: string; homeClub: { id: string; name: string }; awayClub: { id: string; name: string }; homeScore: number | null; awayScore: number | null; homePenalties: number | null; awayPenalties: number | null; winnerClubId: string | null; leg:number; tieId:string|null; rules:MatchRulesForm }>;
 };
 
 type GroupWorkspace = {
@@ -115,6 +115,7 @@ export default function MarketPage() {
   const [leagueName, setLeagueName] = useState("");
   const [leagueCapacity, setLeagueCapacity] = useState("8");
   const [competitionFormat, setCompetitionFormat] = useState("LEAGUE");
+  const [cupLegs, setCupLegs] = useState("1");
   const [competitionRules, setCompetitionRules] = useState<MatchRulesForm>({maxSubstitutions:5,maxInPlayWindows:3,injuriesEnabled:true,injuryDurationDays:5,redCardSuspensionMatches:1,yellowCardsToSuspend:3,yellowCardSuspensionMatches:1,penaltiesOnDraw:false});
   const [editingRulesFor, setEditingRulesFor] = useState("");
   const [coach, setCoach] = useState<{ name: string; level: number; trainingSkill: number; recoverySkill: number; medicalSkill: number; weeklySalary: string } | null>(null);
@@ -524,7 +525,7 @@ export default function MarketPage() {
         {matches.length === 0 ? <p className="muted">هنوز مسابقه‌ای ثبت نشده است.</p> : matches.map((match) => <div className="operation-row" key={match.id}>
           <div>
             <strong>{match.homeClub.name} {match.homeScore ?? "–"} : {match.awayScore ?? "–"} {match.awayClub.name}{match.homePenalties !== null ? ` (پنالتی ${match.homePenalties}-${match.awayPenalties})` : ""}</strong>
-            <small>{match.type === "CUP" ? "جام حذفی" : match.type === "LEAGUE" ? "لیگ" : "دوستانه"} · {match.status === "COMPLETED" ? "پایان‌یافته" : match.status === "SCHEDULED" ? "برنامه‌ریزی‌شده" : "لغوشده"} · {new Date(match.scheduledAt).toLocaleString("fa-IR")}</small>
+            <small>{match.type === "CUP" ? "جام حذفی" + (match.tieId ? " · " + (match.leg === 2 ? "بازی برگشت" : "بازی رفت") : "") : match.type === "LEAGUE" ? "لیگ" : "دوستانه"} · {match.status === "COMPLETED" ? "پایان‌یافته" : match.status === "SCHEDULED" ? "برنامه‌ریزی‌شده" : "لغوشده"} · {new Date(match.scheduledAt).toLocaleString("fa-IR")}</small>
             <small>قوانین: {match.rules.maxSubstitutions} تعویض · {match.rules.maxInPlayWindows} پنجره · محرومیت قرمز {match.rules.redCardSuspensionMatches} بازی · مصدومیت {match.rules.injuriesEnabled ? match.rules.injuryDurationDays + " روز" : "غیرفعال"}</small>
             {match.status === "COMPLETED" && <small>تماشاگر: {money(match.attendance)} · درآمد بلیت: {money(match.ticketRevenue)} Cash</small>}
             {match.events.slice(0, 8).map((event, index) => <small key={match.id + "-event-" + index}>{event.minute} دقیقه · {matchEventLabel[event.type] ?? event.type} · {event.playerName}{event.relatedPlayerName ? (event.type === "SUBSTITUTION" ? " (ورود: " : " (پاس گل: ") + event.relatedPlayerName + ")" : ""}</small>)}
@@ -536,8 +537,9 @@ export default function MarketPage() {
         <h2>{editingRulesFor ? "ویرایش قوانین رقابت" : "ایجاد رقابت جدید"}</h2>
         <p>لیگ دوره‌ای تک‌مرحله‌ای بسازید. پس از ثبت‌نام حداقل چهار باشگاه، مدیر لیگ می‌تواند برنامه مسابقات را تولید کند.</p>
         <label>نام لیگ<input value={leagueName} maxLength={40} onChange={(event) => setLeagueName(event.target.value)} placeholder="مثلاً لیگ دوستان توسن"/></label>
-        <label>نوع رقابت<select value={competitionFormat} onChange={(event) => { setCompetitionFormat(event.target.value); setLeagueCapacity(event.target.value === "CUP" ? "4" : "8"); setCompetitionRules(r=>({...r,penaltiesOnDraw:event.target.value === "CUP"})); }}><option value="LEAGUE">لیگ دوره‌ای</option><option value="CUP">جام حذفی</option></select></label>
+        <label>نوع رقابت<select value={competitionFormat} onChange={(event) => { setCompetitionFormat(event.target.value); setLeagueCapacity(event.target.value === "CUP" ? "4" : "8"); setCupLegs("1"); setCompetitionRules(r=>({...r,penaltiesOnDraw:event.target.value === "CUP"})); }}><option value="LEAGUE">لیگ دوره‌ای</option><option value="CUP">جام حذفی</option></select></label>
         <label>تعداد باشگاه‌ها<select value={leagueCapacity} onChange={(event) => setLeagueCapacity(event.target.value)}>{(competitionFormat === "CUP" ? ["4", "8"] : ["4", "6", "8", "10"]).map((size) => <option key={size} value={size}>{size} باشگاه</option>)}</select></label>
+        {competitionFormat === "CUP" && <label>تعداد بازی در هر مرحله<select value={cupLegs} onChange={e=>setCupLegs(e.target.value)}><option value="1">تک‌بازی</option><option value="2">رفت و برگشت</option></select></label>}
         <h3>قوانین اختصاصی رقابت</h3>
         <div className="development-stats">
           <label>سقف تعویض<input type="number" min="0" max="7" value={competitionRules.maxSubstitutions} onChange={e=>setCompetitionRules(r=>({...r,maxSubstitutions:Number(e.target.value),maxInPlayWindows:Math.min(r.maxInPlayWindows,Number(e.target.value))}))}/></label>
@@ -553,15 +555,15 @@ export default function MarketPage() {
         <div className="operation-row">
           <button disabled={!!busy || (editingRulesFor ? false : leagueName.trim().length < 3) || competitionRules.maxSubstitutions<0 || competitionRules.maxSubstitutions>7 || competitionRules.maxInPlayWindows<0 || competitionRules.maxInPlayWindows>3 || competitionRules.injuryDurationDays<1 || competitionRules.injuryDurationDays>14 || competitionRules.redCardSuspensionMatches<0 || competitionRules.redCardSuspensionMatches>5 || competitionRules.yellowCardsToSuspend<0 || competitionRules.yellowCardsToSuspend>10 || competitionRules.yellowCardSuspensionMatches<0 || competitionRules.yellowCardSuspensionMatches>5 || competitionRules.maxInPlayWindows>competitionRules.maxSubstitutions || (competitionRules.yellowCardsToSuspend===0 && competitionRules.yellowCardSuspensionMatches>0)} onClick={() => void (editingRulesFor
             ? action("save-competition-rules","/v1/competitions/"+editingRulesFor+"/rules","PUT",competitionRules).then(()=>setEditingRulesFor(""))
-            : action("create-league", "/v1/competitions", "POST", { name: leagueName.trim(), maxTeams: Number(leagueCapacity), format: competitionFormat, rules:competitionRules, idempotencyKey: "mini-league-" + crypto.randomUUID() }))}>{editingRulesFor ? "ذخیره قوانین" : "ایجاد رقابت"}</button>
+            : action("create-league", "/v1/competitions", "POST", { name: leagueName.trim(), maxTeams: Number(leagueCapacity), format: competitionFormat, cupLegs:Number(cupLegs), rules:competitionRules, idempotencyKey: "mini-league-" + crypto.randomUUID() }))}>{editingRulesFor ? "ذخیره قوانین" : "ایجاد رقابت"}</button>
           {editingRulesFor && <button className="secondary" onClick={()=>setEditingRulesFor("")}>انصراف</button>}
         </div>
       </div>
       <div className="market-card">
         <h2>رقابت‌های در حال ثبت‌نام</h2>
         {openLeagues.length === 0 ? <p className="muted">لیگ بازی برای ثبت‌نام باز نیست.</p> : openLeagues.map((league) => <div className="operation-row" key={league.id}>
-          <div><strong>{league.name}</strong><small>فصل {league.season} · {league.teams}/{league.maxTeams} باشگاه · سازنده: {league.creator}</small></div>
-          {league.isCreator && <button className="secondary" disabled={!!busy} onClick={()=>{setEditingRulesFor(league.id);setCompetitionFormat(league.format);setCompetitionRules(league.rules);setLeagueName(league.name);setLeagueCapacity(String(league.maxTeams));}}>قوانین</button>}
+          <div><strong>{league.name}</strong><small>فصل {league.season} · {league.teams}/{league.maxTeams} باشگاه · {league.format === "CUP" ? (league.cupLegs === 2 ? "رفت و برگشت" : "تک‌بازی") : "لیگ"} · سازنده: {league.creator}</small></div>
+          {league.isCreator && <button className="secondary" disabled={!!busy} onClick={()=>{setEditingRulesFor(league.id);setCompetitionFormat(league.format);setCupLegs(String(league.cupLegs));setCompetitionRules(league.rules);setLeagueName(league.name);setLeagueCapacity(String(league.maxTeams));}}>قوانین</button>}
           {!league.joined ? <button className="secondary" disabled={!!busy || league.teams >= league.maxTeams} onClick={() => void action("join-" + league.id, "/v1/competitions/" + league.id + "/join", "POST", {})}>عضویت</button>
             : league.isCreator ? <button className="secondary" disabled={!!busy || (league.format === "CUP" ? league.teams !== league.maxTeams : league.teams < 4)} onClick={() => void action("start-" + league.id, "/v1/competitions/" + league.id + "/start", "POST", {})}>{league.format === "CUP" ? "شروع جام" : "شروع لیگ"}</button>
               : <span className="muted">عضو هستید</span>}
@@ -581,7 +583,7 @@ export default function MarketPage() {
         </div>}
         <h3>برنامه مسابقات</h3>
         {leagueDetail.matches.map((match) => <div className="operation-row" key={match.id}>
-          <div><strong>{match.homeClub.name} {match.homeScore ?? "–"} : {match.awayScore ?? "–"} {match.awayClub.name}</strong><small>{leagueDetail.competition.format === "CUP" ? "مرحله " : "هفته "}{match.round ?? "—"} · {match.status} · {new Date(match.scheduledAt).toLocaleDateString("fa-IR")}{match.homePenalties !== null && match.homePenalties !== undefined ? ` · پنالتی ${match.homePenalties}-${match.awayPenalties}` : ""}{match.winnerClubId ? " · برنده: " + (match.winnerClubId === match.homeClub.id ? match.homeClub.name : match.awayClub.name) : ""}</small>
+          <div><strong>{match.homeClub.name} {match.homeScore ?? "–"} : {match.awayScore ?? "–"} {match.awayClub.name}</strong><small>{leagueDetail.competition.format === "CUP" ? "مرحله " : "هفته "}{match.round ?? "—"}{leagueDetail.competition.format === "CUP" && leagueDetail.competition.cupLegs === 2 ? (match.leg === 2 ? " · برگشت" : " · رفت") : ""} · {match.status} · {new Date(match.scheduledAt).toLocaleDateString("fa-IR")}{match.homePenalties !== null && match.homePenalties !== undefined ? ` · پنالتی ${match.homePenalties}-${match.awayPenalties}` : ""}{match.winnerClubId ? " · برنده: " + (match.winnerClubId === match.homeClub.id ? match.homeClub.name : match.awayClub.name) : ""}</small>
           <small>قوانین: {match.rules.maxSubstitutions} تعویض · {match.rules.maxInPlayWindows} پنجره · کارت زرد هر {match.rules.yellowCardsToSuspend || "—"} اخطار</small></div>
           {match.status === "SCHEDULED" && new Date(match.scheduledAt).getTime() <= Date.now() && <button disabled={!!busy} onClick={() => void action("play-" + match.id, "/v1/matches/" + match.id + "/simulate", "POST", {})}>شبیه‌سازی</button>}
         </div>)}
