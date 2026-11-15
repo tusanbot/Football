@@ -62,7 +62,7 @@ export function registerMatchRoutes(app: FastifyInstance) {
         tempo: z.enum(["SLOW", "NORMAL", "FAST"]),
         passingStyle: z.enum(["SHORT", "MIXED", "DIRECT"]),
       }).strict(),
-    }).strict().refine((value) => value.format === "CUP" || value.cupLegs === 1, { message: "INVALID_CUP_LEGS" }).safeParse(request.body);
+    }).strict().safeParse(request.body);
     if (!body.success) return reply.code(400).send({ error: "INVALID_FALLBACK_PLAN" });
     try { return await saveMatchFallbackPlan(user.id, body.data.plan, body.data.expectedVersion); }
     catch (error) { return sendMatchError(reply, error); }
