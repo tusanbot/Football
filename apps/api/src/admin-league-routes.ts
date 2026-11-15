@@ -3,6 +3,7 @@ import { z } from "zod";
 import { prisma } from "./db.js";
 import { requireTelegramUser } from "./auth/require-telegram-user.js";
 import { consumeAllianceActionRateLimit } from "./groups/alliance-rate-limit.js";
+import { parseAdminTelegramIds } from "./runtime-config.js";
 
 type Permission = "read" | "competitions";
 const ROLE_PERMISSIONS: Record<string, Permission[]> = {
@@ -13,7 +14,7 @@ const ROLE_PERMISSIONS: Record<string, Permission[]> = {
 };
 
 async function roleFor(telegramId: string) {
-  const superAdmins = (process.env.GAME_ADMIN_TELEGRAM_IDS ?? "").split(",").map((value) => value.trim()).filter(Boolean);
+  const superAdmins = parseAdminTelegramIds(process.env.GAME_ADMIN_TELEGRAM_IDS);
   if (superAdmins.includes(telegramId)) return "superadmin";
   // Database assignments are authoritative, including inactive rows that revoke
   // an environment-provisioned scoped role. Keep this in sync with admin-routes.
