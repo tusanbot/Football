@@ -3,6 +3,8 @@ import test from "node:test";
 import {
   applyMatchSubstitutions,
   DEFAULT_MATCH_SUBSTITUTION_RULES,
+  defaultMatchRules,
+  validateMatchRules,
   type MatchSubstitutionState,
 } from "./match-rules.js";
 import type { PlayerPosition } from "./players.js";
@@ -136,4 +138,22 @@ test("a goalkeeper cannot leave unless another goalkeeper remains on the pitch",
 
 test("default substitution rules expose the agreed five-player and three-window limits", () => {
   assert.deepEqual(DEFAULT_MATCH_SUBSTITUTION_RULES, { maxSubstitutions: 5, maxInPlayWindows: 3 });
+});
+
+
+test("competition rule defaults distinguish league, cup and friendly formats", () => {
+  assert.equal(defaultMatchRules("LEAGUE").penaltiesOnDraw, false);
+  assert.equal(defaultMatchRules("FRIENDLY").yellowCardsToSuspend, 3);
+  assert.equal(defaultMatchRules("CUP").penaltiesOnDraw, true);
+});
+
+test("competition rule validation rejects impossible limits and accepts customized rules", () => {
+  const custom = {
+    maxSubstitutions: 4, maxInPlayWindows: 2, injuriesEnabled: false,
+    redCardSuspensionMatches: 2, yellowCardsToSuspend: 4,
+    yellowCardSuspensionMatches: 2, penaltiesOnDraw: true,
+  };
+  assert.deepEqual(validateMatchRules(custom), custom);
+  assert.throws(() => validateMatchRules({ ...custom, maxInPlayWindows: 5 }), /INVALID_MATCH_RULES/);
+  assert.throws(() => validateMatchRules({ ...custom, yellowCardsToSuspend: 0 }), /INVALID_YELLOW_CARD_SUSPENSION_RULES/);
 });
