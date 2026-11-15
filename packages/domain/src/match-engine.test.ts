@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { simulateFootballMatch, simulatePenaltyShootout, type MatchSide } from "./match-engine.js";
+import { DEFAULT_MATCH_RULES } from "./match-rules.js";
 
 function side(clubId: string, overall: number): MatchSide {
   const positions = ["GK","RB","CB","CB","LB","CDM","CM","CAM","RW","ST","LW"] as const;
@@ -78,4 +79,27 @@ test("penalty shootout is deterministic and always resolves a winner", () => {
   assert.notEqual(first.homePenalties, first.awayPenalties);
   assert.ok(first.homePenalties >= 0 && first.awayPenalties >= 0);
   assert.equal(first.winner, first.homePenalties > first.awayPenalties ? "HOME" : "AWAY");
+});
+
+
+test("legacy simulation honors competition injury, substitution and window limits", () => {
+  const home = side("rules-home", 72);
+  const away = side("rules-away", 68);
+  const benchPositions = ["RB", "CB", "CM", "ST", "LW"] as const;
+  home.bench = benchPositions.map((position, index) => ({
+    ...home.players[index + 1]!, id: "rules-home-sub-" + index, name: "Home substitute " + index, position,
+  }));
+  away.bench = benchPositions.map((position, index) => ({
+    ...away.players[index + 1]!, id: "rules-away-sub-" + index, name: "Away substitute " + index, position,
+  }));
+  const result = simulateFootballMatch({
+    seed: "rules-legacy-simulation-seed", home, away,
+    rules: { ...DEFAULT_MATCH_RULES, maxSubstitutions: 1, maxInPlayWindows: 1, injuriesEnabled: false },
+  });
+  assert.equal(result.events.some((event) => event.type === "INJURY"), false);
+  for (const clubId of [home.clubId, away.clubId]) {
+    const substitutions = result.events.filter((event) => event.type === "SUBSTITUTION" && event.teamId === clubId);
+    assert.ok(substitutions.length <= 1);
+    assert.ok(new Set(substitutions.map((event) => event.minute)).size <= 1);
+  }
 });
