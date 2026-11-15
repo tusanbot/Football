@@ -20,7 +20,7 @@ type ClubOperations = {
   financeEntries: Array<{ id: string; category: string; direction: string; amount: string; description: string; occurredAt: string }>;
 };
 type MatchRecord = {
-  id: string; type: string; status: string; scheduledAt: string;
+  id: string; type: string; status: string; rules: MatchRulesForm; scheduledAt: string;
   homeClub: { id: string; name: string }; awayClub: { id: string; name: string };
   homeScore: number | null; awayScore: number | null; homePenalties: number | null; awayPenalties: number | null; winnerClubId: string | null; attendance: number; ticketRevenue: string;
   events: Array<{ minute: number; type: string; detail: string; playerId: string; playerName: string; relatedPlayerName: string | null }>;
@@ -31,7 +31,7 @@ type ClubCompetition = { id: string; name: string; season: number; format: strin
 type LeagueDetails = {
   competition: { id: string; name: string; season: number; format: string; status: string; startsAt: string | null };
   standings: Array<{ position: number; clubId: string; clubName: string; played: number; won: number; drawn: number; lost: number; goalsFor: number; goalsAgainst: number; goalDifference: number; points: number }>;
-  matches: Array<{ id: string; round: number | null; scheduledAt: string; status: string; homeClub: { id: string; name: string }; awayClub: { id: string; name: string }; homeScore: number | null; awayScore: number | null; homePenalties: number | null; awayPenalties: number | null; winnerClubId: string | null }>;
+  matches: Array<{ id: string; round: number | null; scheduledAt: string; status: string; homeClub: { id: string; name: string }; awayClub: { id: string; name: string }; homeScore: number | null; awayScore: number | null; homePenalties: number | null; awayPenalties: number | null; winnerClubId: string | null; rules:MatchRulesForm }>;
 };
 
 type GroupWorkspace = {
@@ -525,6 +525,7 @@ export default function MarketPage() {
           <div>
             <strong>{match.homeClub.name} {match.homeScore ?? "–"} : {match.awayScore ?? "–"} {match.awayClub.name}{match.homePenalties !== null ? ` (پنالتی ${match.homePenalties}-${match.awayPenalties})` : ""}</strong>
             <small>{match.type === "CUP" ? "جام حذفی" : match.type === "LEAGUE" ? "لیگ" : "دوستانه"} · {match.status === "COMPLETED" ? "پایان‌یافته" : match.status === "SCHEDULED" ? "برنامه‌ریزی‌شده" : "لغوشده"} · {new Date(match.scheduledAt).toLocaleString("fa-IR")}</small>
+            <small>قوانین: {match.rules.maxSubstitutions} تعویض · {match.rules.maxInPlayWindows} پنجره · محرومیت قرمز {match.rules.redCardSuspensionMatches} بازی · مصدومیت {match.rules.injuriesEnabled ? "فعال" : "غیرفعال"}</small>
             {match.status === "COMPLETED" && <small>تماشاگر: {money(match.attendance)} · درآمد بلیت: {money(match.ticketRevenue)} Cash</small>}
             {match.events.slice(0, 8).map((event, index) => <small key={match.id + "-event-" + index}>{event.minute} دقیقه · {matchEventLabel[event.type] ?? event.type} · {event.playerName}{event.relatedPlayerName ? (event.type === "SUBSTITUTION" ? " (ورود: " : " (پاس گل: ") + event.relatedPlayerName + ")" : ""}</small>)}
           </div>
@@ -579,7 +580,8 @@ export default function MarketPage() {
         </div>}
         <h3>برنامه مسابقات</h3>
         {leagueDetail.matches.map((match) => <div className="operation-row" key={match.id}>
-          <div><strong>{match.homeClub.name} {match.homeScore ?? "–"} : {match.awayScore ?? "–"} {match.awayClub.name}</strong><small>{leagueDetail.competition.format === "CUP" ? "مرحله " : "هفته "}{match.round ?? "—"} · {match.status} · {new Date(match.scheduledAt).toLocaleDateString("fa-IR")}{match.homePenalties !== null && match.homePenalties !== undefined ? ` · پنالتی ${match.homePenalties}-${match.awayPenalties}` : ""}{match.winnerClubId ? " · برنده: " + (match.winnerClubId === match.homeClub.id ? match.homeClub.name : match.awayClub.name) : ""}</small></div>
+          <div><strong>{match.homeClub.name} {match.homeScore ?? "–"} : {match.awayScore ?? "–"} {match.awayClub.name}</strong><small>{leagueDetail.competition.format === "CUP" ? "مرحله " : "هفته "}{match.round ?? "—"} · {match.status} · {new Date(match.scheduledAt).toLocaleDateString("fa-IR")}{match.homePenalties !== null && match.homePenalties !== undefined ? ` · پنالتی ${match.homePenalties}-${match.awayPenalties}` : ""}{match.winnerClubId ? " · برنده: " + (match.winnerClubId === match.homeClub.id ? match.homeClub.name : match.awayClub.name) : ""}</small>
+          <small>قوانین: {match.rules.maxSubstitutions} تعویض · {match.rules.maxInPlayWindows} پنجره · کارت زرد هر {match.rules.yellowCardsToSuspend || "—"} اخطار</small></div>
           {match.status === "SCHEDULED" && new Date(match.scheduledAt).getTime() <= Date.now() && <button disabled={!!busy} onClick={() => void action("play-" + match.id, "/v1/matches/" + match.id + "/simulate", "POST", {})}>شبیه‌سازی</button>}
         </div>)}
       </div>}
