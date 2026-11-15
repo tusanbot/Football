@@ -430,6 +430,7 @@ model Competition {
   format      CompetitionFormat @default(LEAGUE)
   status      CompetitionStatus @default(REGISTRATION)
   maxTeams    Int @default(8)
+  rules       Json?
   createdByClubId String
   groupId String?
   group TelegramGroup? @relation(fields: [groupId], references: [id], onDelete: SetNull)
@@ -473,6 +474,7 @@ model FootballMatch {
   homeClubId     String
   awayClubId     String
   competitionId  String?
+  rulesSnapshot  Json?
   round          Int?
   scheduledAt    DateTime
   startedAt      DateTime?
