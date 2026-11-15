@@ -102,6 +102,34 @@ async function scheduleGroupReplyDeletion(chatId: number, messageId: number) {
   }
 }
 
+
+type LeagueNoticeDelivery = { id: string; telegramId: string; title: string; body: string; claimToken: string };
+let leagueNoticeWorkerBusy = false;
+async function pollLeagueNoticeQueue() {
+  if (leagueNoticeWorkerBusy || !apiUrl || !botApiSecret) return;
+  leagueNoticeWorkerBusy = true;
+  try {
+    const result = await apiSystem<{ notices: LeagueNoticeDelivery[] }>("/v1/bot/league-notices/claim", { limit: 20 });
+    for (const notice of result.notices) {
+      const telegramId = Number(notice.telegramId);
+      try {
+        if (!Number.isSafeInteger(telegramId)) throw new Error("Telegram user id is outside JavaScript safe integer range");
+        await bot.api.sendMessage(telegramId, notice.title + "\\n\\n" + notice.body);
+        await apiSystem("/v1/bot/league-notices/" + encodeURIComponent(notice.id) + "/complete", { claimToken: notice.claimToken });
+      } catch (error) {
+        await apiSystem("/v1/bot/league-notices/" + encodeURIComponent(notice.id) + "/fail", {
+          claimToken: notice.claimToken,
+          error: error instanceof Error ? error.message : String(error),
+        }).catch((failure) => console.warn("Could not reschedule league notice:", failure));
+      }
+    }
+  } catch (error) {
+    console.warn("League notification worker failed:", error instanceof Error ? error.message : error);
+  } finally {
+    leagueNoticeWorkerBusy = false;
+  }
+}
+
 type TelegramMessageDeletionJob = {
   id: string;
   telegramChatId: string;
@@ -1202,8 +1230,8 @@ bot.on(["chat_member","my_chat_member"],async ctx=>{
 bot.catch((error) => console.error("Telegram bot error:", error));
 if (apiUrl && botApiSecret) {
   const deletionQueueTimer = setInterval(() => { void pollGroupMessageDeletionQueue(); }, 5_000);
-  const matchNotificationTimer = setInterval(() => { void pollMatchCheckpointNotifications(); }, 5_000);
-  matchNotificationTimer.unref();
+  const matchNotificationTimer = setInterval(() => { void pollMatchCheckpointNotifications(); }, 5_000);\n  const leagueNoticeTimer = setInterval(() => { void pollLeagueNoticeQueue(); }, 10_000);
+  matchNotificationTimer.unref();\n  leagueNoticeTimer.unref();\n  void pollLeagueNoticeQueue();
   void pollMatchCheckpointNotifications();
   deletionQueueTimer.unref();
   void pollGroupMessageDeletionQueue();
