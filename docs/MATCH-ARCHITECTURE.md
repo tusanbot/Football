@@ -128,3 +128,17 @@ At minute 90, the worker invokes the existing transactional settlement path; sco
 ### Pre-match fallback-plan editor
 
 Each club can now store an independent, versioned fallback tactical plan (formation, mentality, pressing, tempo and passing style). The authenticated Mini App editor and private Bot commands `/fallback` and `/setfallback` use the same API. Writes use optimistic version checks to prevent lost updates. The plan is copied into each fixture's runtime snapshot when its kickoff runtime is enqueued; later edits never mutate a running or already-snapshotted match. If no custom plan exists, the club's current primary tactics remain the fallback.
+
+
+### Competition-specific rule sets
+
+Competitions store a validated rules object while registration is open. The creator can edit it until fixtures are generated; starting the competition freezes a rules snapshot into every fixture, so later edits cannot change a scheduled or running match. Friendly fixtures also carry their own default snapshot.
+
+Supported settings:
+- Maximum substitutions (0–7) and in-play windows (0–5), including forced injury substitutions; halftime changes still count toward the total but not an in-play window.
+- Enable or disable in-match injuries.
+- Red-card suspension length (0–5 completed fixtures).
+- Yellow-card accumulation threshold (0 disables it) and resulting suspension length (0–5 fixtures).
+- Penalty shootouts on a tied score, independently configurable for a competition.
+
+The Mini App exposes these settings during creation and lets the creator edit them before kickoff. Telegram managers can use `/competitionrules COMPETITION_ID subs=5 windows=3 injuries=on red=1 yellow=3 yellowban=1 penalties=on`. The API validates ranges and combinations, enforces creator ownership and locks settings once registration ends. League defaults preserve the five-substitution/three-window rule and use accumulated yellow-card bans; knockout cups default to penalties on a draw.
