@@ -418,7 +418,7 @@ bot.command("admin", async (ctx) => {
 bot.command("adminlist", async (ctx) => {
   if (!ctx.from || !adminOnlyInPrivate(ctx)) return;
   const [resource, ...queryParts] = String(ctx.match ?? "").trim().split(/\s+/);
-  const allowed = new Set(["players", "clubs", "users", "groups", "challenges", "leagues", "items", "gift-codes", "alliances", "matches", "alliance-seasons", "wallet-ledger", "group-ledger", "audit"]);
+  const allowed = new Set(["players", "clubs", "users", "groups", "challenges", "leagues", "items", "gift-codes", "alliances", "matches", "alliance-seasons", "wallet-ledger", "group-ledger", "audit", "season-awards", "group-broadcasts"]);
   if (!resource || !allowed.has(resource)) return ctx.reply("استفاده: /adminlist RESOURCE [QUERY]\nمنابع مجاز: " + [...allowed].join(", "));
   try {
     const query = queryParts.join(" ");
@@ -511,11 +511,14 @@ bot.command("adminfinance", async (ctx) => {
   if (!ctx.from || ctx.chat.type !== "private") return;
   const days = Math.max(1, Math.min(365, Number(String(ctx.match ?? "30").trim()) || 30));
   try {
-    const data = await api<{wallet:Array<{asset:string;direction:string;total:string;count:number}>;clubFinance:Array<{category:string;direction:string;total:string;count:number}>;groupPoints:Array<{source:string;total:string;count:number}>}>("/v1/admin/finance-summary?days="+days,ctx.from.id);
+    const data = await api<{wallet:Array<{asset:string;direction:string;total:string;count:number}>;clubFinance:Array<{category:string;direction:string;total:string;count:number}>;groupPoints:Array<{source:string;total:string;count:number}>;walletReconciliation:Array<{asset:string;walletBalance:string;ledgerNet:string;difference:string}>;groupReconciliation:Array<{treasuryBalance:string;ledgerNet:string;difference:string}>;clubArrearsTotal:string}>("/v1/admin/finance-summary?days="+days,ctx.from.id);
     const rows = [
       ...data.wallet.map(x=>"کیف پول · "+x.asset+" · "+x.direction+": "+x.total+" ("+x.count+")"),
       ...data.clubFinance.map(x=>"باشگاه · "+x.category+" · "+x.direction+": "+x.total+" ("+x.count+")"),
       ...data.groupPoints.map(x=>"امتیاز گروه · "+x.source+": "+x.total+" ("+x.count+")"),
+      ...data.walletReconciliation.map(x=>"تطبیق "+x.asset+" · موجودی: "+x.walletBalance+" · دفترکل: "+x.ledgerNet+" · اختلاف: "+x.difference),
+      ...data.groupReconciliation.map(x=>"تطبیق خزانه گروه · موجودی: "+x.treasuryBalance+" · دفترکل: "+x.ledgerNet+" · اختلاف: "+x.difference),
+      "بدهی عملیاتی باشگاه‌ها: "+data.clubArrearsTotal,
     ];
     await ctx.reply(("گزارش مالی "+days+" روز اخیر\n\n"+(rows.join("\n")||"تراکنشی ثبت نشده است.")).slice(0,3900));
   } catch(error) { await ctx.reply("گزارش مالی در دسترس نیست: "+(error instanceof Error?error.message:"خطای نامشخص")); }
@@ -556,7 +559,11 @@ bot.command("adminhelp", async (ctx) => {
     "راهنمای پنل مدیریت ربات\n/admin — آمار کلی\n/adminlist RESOURCE [QUERY] — فهرست منابع\n" +
     "/adminuser suspend|restore USER_ID [REASON] — تعلیق/رفع تعلیق کاربر\n" +
     "/admingroup suspend|restore GROUP_ID [REASON] — تعلیق/رفع تعلیق گروه\n" +
-    "/adminchallenge cancel CHALLENGE_ID — لغو چالش\n\n" +
+    "/adminchallenge cancel CHALLENGE_ID — لغو چالش\n" +
+    "/adminrole assign|revoke TELEGRAM_ID [ROLE] — مدیریت نقش مدیران\n" +
+    "/adminsetting KEY JSON_VALUE — تنظیمات فعال بازی\n" +
+    "/adminfinance [DAYS] — گزارش مالی و مغایرت‌گیری\n" +
+    "/adminbroadcast users|groups TEXT — ارسال پیام مدیریتی\n\n" +
     "تمام درخواست‌ها در API با نقش و مجوز مدیر بررسی و در گزارش مدیریتی ثبت می‌شوند. این دستورات فقط در گفت‌وگوی خصوصی فعال‌اند."
   );
 });
