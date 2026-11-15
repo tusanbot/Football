@@ -235,6 +235,7 @@ export function generateD1Schema(parsed, sourceHash) {
   }
   statements.push("", "-- Secondary indexes");
   statements.push(...allIndexes);
+  statements.push("", "INSERT OR IGNORE INTO fe_schema_migrations (version) VALUES ('0002_game_schema');");
   statements.push("", "-- Source schema SHA-256: " + sourceHash);
   return statements.join("\n") + "\n";
 }

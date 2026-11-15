@@ -6,10 +6,12 @@ root = Path(__file__).resolve().parents[3]
 migration = root / "cloudflare/api/migrations/0002_game_schema.sql"
 inventory = root / "cloudflare/api/schema/prisma-d1-inventory.json"
 
+bootstrap = root / "cloudflare/api/migrations/0001_platform_bootstrap.sql"
 schema_sql = migration.read_text(encoding="utf-8")
 report = json.loads(inventory.read_text(encoding="utf-8"))
 connection = sqlite3.connect(":memory:")
 connection.execute("PRAGMA foreign_keys = ON")
+connection.executescript(bootstrap.read_text(encoding="utf-8"))
 connection.executescript(schema_sql)
 
 tables = connection.execute(

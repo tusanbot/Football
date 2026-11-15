@@ -24,7 +24,7 @@ const json = (body: unknown, status = 200): Response =>
 async function databaseStatus(db: D1Database): Promise<{ available: boolean; migrationVersion?: string }> {
   try {
     const row = await db
-      .prepare("SELECT version FROM fe_schema_migrations ORDER BY applied_at DESC LIMIT 1")
+      .prepare("SELECT version FROM fe_schema_migrations WHERE version IN ('0001_platform_bootstrap', '0002_game_schema') ORDER BY CASE WHEN version = '0002_game_schema' THEN 0 ELSE 1 END LIMIT 1")
       .first<{ version: string }>();
     return row ? { available: true, migrationVersion: row.version } : { available: false };
   } catch {
@@ -48,7 +48,7 @@ export default {
         database,
         missing: [
           ...(!database.available ? ["D1_BOOTSTRAP_MIGRATION"] : []),
-          "GAME_SCHEMA_MIGRATION",
+          ...(database.migrationVersion !== "0002_game_schema" ? ["GAME_SCHEMA_MIGRATION"] : []),
           "D1_ATOMIC_REPOSITORY",
           "GAME_API_ROUTE_PARITY",
           "AUTH_AND_RATE_LIMIT_MIGRATION",

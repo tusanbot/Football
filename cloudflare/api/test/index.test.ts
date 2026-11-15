@@ -44,3 +44,21 @@ test("game routes fail closed until migration gates pass", async () => {
   assert.equal(response.status, 503);
   assert.equal((await response.json() as { error: string }).error, "GAME_API_MIGRATION_INCOMPLETE");
 });
+
+
+test("readiness recognizes the generated game schema migration", async () => {
+  const db = {
+    prepare() {
+      return {
+        bind() { return this; },
+        async first() { return { version: "0002_game_schema" }; },
+      };
+    },
+  };
+  const response = await worker.fetch(new Request("https://api.example.test/ready"), { DB: db });
+  assert.equal(response.status, 503);
+  const body = await response.json() as { missing: string[]; database: { migrationVersion: string } };
+  assert.equal(body.database.migrationVersion, "0002_game_schema");
+  assert.ok(!body.missing.includes("GAME_SCHEMA_MIGRATION"));
+  assert.ok(body.missing.includes("D1_ATOMIC_REPOSITORY"));
+});

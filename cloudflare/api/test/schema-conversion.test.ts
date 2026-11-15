@@ -20,6 +20,7 @@ test("Prisma conversion inventories the complete game schema", () => {
   assert.match(converted.sql, /CREATE TABLE IF NOT EXISTS "LedgerTransaction"/);
   assert.match(converted.sql, /FOREIGN KEY/);
   assert.match(converted.sql, /signed 64-bit/);
+  assert.match(converted.sql, /0002_game_schema/);
 });
 
 test("Prisma enum values become database CHECK constraints", () => {
