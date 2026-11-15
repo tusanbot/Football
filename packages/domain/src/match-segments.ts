@@ -90,7 +90,8 @@ export function advanceMatchSegment(input: {
 }): MatchSegmentResult {
   const { state, toMinute } = input;
   const fromMinute = state.currentMinute;
-  if (![0, 45, 60, 75].includes(fromMinute) || toMinute <= fromMinute) {
+  const expectedNextMinute = fromMinute === 0 ? 45 : fromMinute === 45 ? 60 : fromMinute === 60 ? 75 : fromMinute === 75 ? 90 : null;
+  if (expectedNextMinute === null || toMinute !== expectedNextMinute) {
     throw new Error("INVALID_MATCH_SEGMENT_RANGE");
   }
   if (state.home.side.clubId === state.away.side.clubId) {
