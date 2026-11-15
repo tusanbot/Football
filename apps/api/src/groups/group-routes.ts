@@ -89,7 +89,23 @@ export function registerGroupRoutes(app: FastifyInstance) {
   app.post("/v1/groups/:telegramGroupId/challenges/:challengeId/cancel",async(request,reply)=>{const id=await authenticateGroupActor(request,reply);if(!id)return;const p=z.object({telegramGroupId:groupId,challengeId:z.string().min(1).max(64)}).safeParse(request.params);if(!p.success)return reply.code(400).send({error:"INVALID_CHALLENGE_ID"});try{return await cancelGroupChallenge({telegramUserId:id,...p.data});}catch(e){return sendGroupError(reply,e);}});
   app.get("/v1/groups/:telegramGroupId/leagues",async(request,reply)=>{const id=await authenticateGroupActor(request,reply);if(!id)return;const p=z.object({telegramGroupId:groupId}).safeParse(request.params);if(!p.success)return reply.code(400).send({error:"INVALID_GROUP_ID"});try{return await listGroupLeagues(id,p.data.telegramGroupId);}catch(e){return sendGroupError(reply,e);}});
   app.post("/v1/groups/:telegramGroupId/activity/award",async(request,reply)=>{const id=await authenticateBot(request,reply);if(!id)return;const p=z.object({telegramGroupId:groupId}).safeParse(request.params),b=z.object({activityType:z.enum(["CHALLENGE_JOIN","CHALLENGE_CREATE","LEAGUE_JOIN","LEAGUE_CREATE","MATCH_PLAYED"]),referenceId:z.string().min(1).max(80).regex(/^[A-Za-z0-9:_-]+$/)}).safeParse(request.body);if(!p.success||!b.success)return reply.code(400).send({error:"INVALID_GROUP_ACTIVITY"});try{return await recordGroupGameActivity({telegramUserId:id,...p.data,...b.data});}catch(e){return sendGroupError(reply,e);}});
-  app.post("/v1/groups/system/member-count",async(request,reply)=>{if(!authenticateSystemBot(request,reply))return;const b=z.object({telegramGroupId:groupId,memberCount:z.number().int().min(0).max(1000000)}).safeParse(request.body);if(!b.success)return reply.code(400).send({error:"INVALID_GROUP_CHECK"});return checkTelegramGroupMembers(b.data.telegramGroupId,b.data.memberCount);});
+  app.post("/v1/groups/system/member-update",async(request,reply)=>{
+ if(!authenticateSystemBot(request,reply))return;
+ const b=z.object({telegramGroupId:groupId,telegramUserId:z.string().regex(/^\\d{1,20}$/),isMember:z.boolean()}).safeParse(request.body);
+ if(!b.success)return reply.code(400).send({error:"INVALID_GROUP_MEMBER_UPDATE"});
+ const [group,user]=await Promise.all([
+  prisma.telegramGroup.findUnique({where:{telegramId:b.data.telegramGroupId},select:{id:true}}),
+  prisma.user.findUnique({where:{telegramId:b.data.telegramUserId},select:{id:true}}),
+ ]);
+ if(!group||!user)return{updated:false};
+ if(b.data.isMember){
+  await prisma.groupMembership.createMany({data:[{groupId:group.id,userId:user.id,role:"MEMBER"}],skipDuplicates:true});
+ }else{
+  await prisma.groupMembership.deleteMany({where:{groupId:group.id,userId:user.id}});
+ }
+ return{updated:true,isMember:b.data.isMember};
+ });
+ app.post("/v1/groups/system/member-count",async(request,reply)=>{if(!authenticateSystemBot(request,reply))return;const b=z.object({telegramGroupId:groupId,memberCount:z.number().int().min(0).max(1000000)}).safeParse(request.body);if(!b.success)return reply.code(400).send({error:"INVALID_GROUP_CHECK"});return checkTelegramGroupMembers(b.data.telegramGroupId,b.data.memberCount);});
 
   app.post("/v1/groups/register", async (request, reply) => {
     const telegramUserId = await authenticateBot(request, reply); if (!telegramUserId) return;

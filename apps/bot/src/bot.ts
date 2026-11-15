@@ -1649,8 +1649,19 @@ bot.command("clubprofile", async (ctx) => {
 
 bot.on(["chat_member","my_chat_member"],async ctx=>{
  if(ctx.chat.type!=="group"&&ctx.chat.type!=="supergroup")return;
- try{const memberCount=await ctx.api.getChatMemberCount(ctx.chat.id);await apiSystem("/v1/groups/system/member-count",{telegramGroupId:String(ctx.chat.id),memberCount});}
- catch(error){console.warn("Could not refresh Telegram group membership:",error instanceof Error?error.message:error);}
+ try{
+  const memberCount=await ctx.api.getChatMemberCount(ctx.chat.id);
+  const botChange="my_chat_member" in ctx.update?ctx.update.my_chat_member:null;
+  const memberChange="chat_member" in ctx.update?ctx.update.chat_member:null;
+  const botStatus=botChange?.new_chat_member.status;
+  const botPresent=botStatus?["creator","administrator","member"].includes(botStatus):undefined;
+  await apiSystem("/v1/groups/system/member-count",{telegramGroupId:String(ctx.chat.id),memberCount,...(botPresent!==undefined?{botPresent}:{})});
+  if(memberChange){
+   const member=memberChange.new_chat_member;
+   const isMember=member.status==="creator"||member.status==="administrator"||member.status==="member"||(member.status==="restricted"&&member.is_member);
+   await apiSystem("/v1/groups/system/member-update",{telegramGroupId:String(ctx.chat.id),telegramUserId:String(member.user.id),isMember});
+  }
+ }catch(error){console.warn("Could not refresh Telegram group membership:",error instanceof Error?error.message:error);}
 });
 bot.catch((error) => console.error("Telegram bot error:", error));
 if (apiUrl && botApiSecret) {
