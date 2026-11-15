@@ -3,6 +3,7 @@ import { z } from "zod";
 import { prisma } from "./db.js";
 import { requireTelegramUser } from "./auth/require-telegram-user.js";
 import { TelegramGroupAuthorizationError, verifyTelegramGroupActor } from "./groups/telegram-group-authorization.js";
+import { consumeAllianceActionRateLimit } from "./groups/alliance-rate-limit.js";
 
 export function registerGiftCodeRoutes(app: FastifyInstance) {
   app.post("/v1/gift-codes/redeem", async (req: FastifyRequest, reply: FastifyReply) => {
@@ -16,6 +17,9 @@ export function registerGiftCodeRoutes(app: FastifyInstance) {
     }).strict().safeParse(req.body);
     if (!body.success) return reply.code(400).send({ error: "INVALID_GIFT_CODE" });
 
+    if (!await consumeAllianceActionRateLimit({ telegramUserId: user.telegramId, telegramGroupId: "global", action: "gift-code-redeem", limit: 5 })) {
+      return reply.code(429).send({ error: "GIFT_CODE_RATE_LIMITED", retryAfterSeconds: 60 });
+    }
     const code = body.data.code.toUpperCase();
     try {
       // Do network membership verification before opening the financial transaction.

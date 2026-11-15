@@ -2,6 +2,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
 import { prisma } from "./db.js";
 import { requireTelegramUser } from "./auth/require-telegram-user.js";
+import { consumeAllianceActionRateLimit } from "./groups/alliance-rate-limit.js";
 
 type Permission = "read" | "competitions";
 const ROLE_PERMISSIONS: Record<string, Permission[]> = {
@@ -248,6 +249,7 @@ export function registerAdminLeagueRoutes(app: FastifyInstance) {
   app.post("/v1/admin/pyramid-leagues/actions", async (request, reply) => {
     const actor = await authorize(request, reply, "competitions");
     if (!actor) return;
+    if (!await consumeAllianceActionRateLimit({ telegramUserId: actor.telegramId, telegramGroupId: "global", action: "admin-pyramid-actions", limit: 20 })) return reply.code(429).send({ error: "ADMIN_RATE_LIMITED", retryAfterSeconds: 60 });
     const parsed = z.object({
       action: z.enum(["league-status", "withdraw-application", "extend-promotion-deadline", "update-award"]),
       targetId: z.string().min(1).max(128),
