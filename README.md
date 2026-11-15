@@ -54,6 +54,10 @@ A Telegram-first football management MMO. Telegram Bot, Telegram Mini App and Te
 - Telegram polling is protected by a PostgreSQL lease: only one Bot process per database may own polling at a time; the lease is renewed every 15 seconds and expires automatically after process loss.
 - Both clients use the same authenticated API; the Bot does not implement game/economy rules.
 
+## Cloudflare migration
+
+The approved target architecture and non-production Worker foundation are documented in [cloudflare/README.md](cloudflare/README.md). The API Worker currently provides health checks only and deliberately returns HTTP 503 for game routes until the D1 schema, atomic repository layer, authentication and route parity are implemented. The existing PostgreSQL API and polling Bot remain the active development runtime; no deployment or data cutover is performed by this repository change.
+
 ## Delivery status
 
 The core gameplay, economy, match lifecycle, league pyramid, group competitions, administration and Bot/Mini App integration are implemented on the development branch. This is still a development release, not a production launch declaration: CI verifies schema migration, seed integrity, TypeScript, automated tests and production builds, but it cannot verify a real BotFather token, Telegram group permissions, live Telegram delivery, production database backups, or behavior under production traffic.

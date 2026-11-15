@@ -62,6 +62,10 @@ jobs:
         run: pnpm --filter @football/domain build
       - name: Typecheck
         run: pnpm typecheck
+      - name: Typecheck Cloudflare API migration scaffold
+        run: pnpm exec tsc --noEmit -p cloudflare/api/tsconfig.json
+      - name: Test Cloudflare API migration scaffold
+        run: pnpm exec tsx --test cloudflare/api/test/*.test.ts
       - name: Test
         run: pnpm test
         env:
