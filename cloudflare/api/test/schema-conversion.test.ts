@@ -34,6 +34,7 @@ test("Prisma enum values become database CHECK constraints", () => {
   ].join("\n"));
   assert.deepEqual(converted.inventory.enums.WalletAsset, ["CASH", "GOLD"]);
   assert.match(converted.sql, /CHECK \(asset IN \('CASH', 'GOLD'\)\)/);
+  assert.match(converted.sql, /"id" TEXT PRIMARY KEY NOT NULL/);
   assert.match(converted.sql, /"balance" INTEGER NOT NULL DEFAULT 0/);
 });
 

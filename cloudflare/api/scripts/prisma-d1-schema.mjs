@@ -196,10 +196,11 @@ export function generateD1Schema(parsed, sourceHash) {
   const allIndexes = [];
   for (const model of parsed.models) {
     const columns = [];
+    const compositeIdFields = new Set(model.ids.flatMap((item) => item.fields));
     for (const field of model.columns) {
       const parts = ['"' + field.name + '"', columnType(field, enums)];
       if (field.isId) parts.push("PRIMARY KEY");
-      if (!field.isOptional && !field.isId) parts.push("NOT NULL");
+      if (!field.isOptional || field.isId || compositeIdFields.has(field.name)) parts.push("NOT NULL");
       if (field.isUnique && !field.isId) parts.push("UNIQUE");
       const defaultValue = sqlDefault(field);
       if (defaultValue !== null && !field.isId) parts.push("DEFAULT " + defaultValue);
