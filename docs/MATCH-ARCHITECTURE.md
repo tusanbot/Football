@@ -136,9 +136,9 @@ Competitions store a validated rules object while registration is open. The crea
 
 Supported settings:
 - Maximum substitutions (0–7) and in-play windows (0–3), including forced injury substitutions; halftime changes still count toward the total but not an in-play window.
-- Enable or disable in-match injuries.
+- Enable or disable in-match injuries and configure recovery duration (1–14 days).
 - Red-card suspension length (0–5 completed fixtures).
 - Yellow-card accumulation threshold (0 disables it) and resulting suspension length (0–5 fixtures).
 - Penalty shootouts on a tied score, independently configurable for a competition.
 
-The Mini App exposes these settings during creation and lets the creator edit them before kickoff. Telegram managers can use `/competitionrules COMPETITION_ID subs=5 windows=3 injuries=on red=1 yellow=3 yellowban=1 penalties=on`. The API validates ranges and combinations, enforces creator ownership and locks settings once registration ends. League defaults preserve the five-substitution/three-window rule and use accumulated yellow-card bans; knockout cups default to penalties on a draw.
+The Mini App exposes these settings during creation and lets the creator edit them before kickoff. Telegram managers can use `/competitionrules COMPETITION_ID subs=5 windows=3 injuries=on injurydays=5 red=1 yellow=3 yellowban=1 penalties=on`. The API validates ranges and combinations, enforces creator ownership and locks settings once registration ends. League defaults preserve the five-substitution/three-window rule and use accumulated yellow-card bans; knockout cups default to penalties on a draw.
