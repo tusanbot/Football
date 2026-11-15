@@ -193,6 +193,10 @@ async function adjustPlayerValues(tx: Prisma.TransactionClient, clubId: string, 
   const players = await tx.player.findMany({ where: { clubId }, select: { id: true, marketValue: true } });
   for (const player of players) {
     await tx.player.update({ where: { id: player.id }, data: { marketValue: calculateLeaguePlayerValue(player.marketValue, fromTier, toTier) } });
+    const listings = await tx.playerMarketListing.findMany({ where: { playerId: player.id, status: "OPEN" }, select: { id: true, askingPrice: true } });
+    for (const listing of listings) {
+      await tx.playerMarketListing.update({ where: { id: listing.id }, data: { askingPrice: calculateLeaguePlayerValue(listing.askingPrice, fromTier, toTier) } });
+    }
   }
 }
 
