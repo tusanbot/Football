@@ -45,10 +45,12 @@ jobs:
         run: pnpm --filter @football/api exec prisma validate
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/football_empire
+          DIRECT_URL: postgresql://postgres:postgres@localhost:5432/football_empire
       - name: Apply migrations to ephemeral PostgreSQL
         run: pnpm db:migrate:deploy
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/football_empire
+          DIRECT_URL: postgresql://postgres:postgres@localhost:5432/football_empire
       - name: Seed special-player catalog in ephemeral PostgreSQL
         run: pnpm --filter @football/api db:seed:special
         env:
