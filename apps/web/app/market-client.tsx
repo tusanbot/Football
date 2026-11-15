@@ -460,6 +460,7 @@ export default function MarketPage() {
       <button className={tab === "special" ? "active" : ""} onClick={() => setTab("special")}>ستاره‌های ویژه</button>
       <button className={tab === "clubs" ? "active" : ""} onClick={() => setTab("clubs")}>باشگاه‌ها و افتخارات</button>
       <button className={tab === "records" ? "active" : ""} onClick={() => setTab("records")}>رکوردهای بازیکنان</button>
+      <button onClick={() => window.location.assign("/season-awards")}>آرشیو جوایز فصل</button>
     </nav>
     {message && <div className="notice success">{message}</div>}{error && <div className="notice error">{error}</div>}
 
