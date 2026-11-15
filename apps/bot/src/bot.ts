@@ -808,7 +808,12 @@ bot.command("pyramidleagues", async (ctx) => {
     const lines = result.tiers.map((tier) => tier.name + " · صف انتظار " + tier.waitingTeams + "/8"
       + (tier.myApplication ? " · درخواست شما: " + tier.myApplication : "")
       + (tier.leagues.length ? "\\n" + tier.leagues.map((league) => "  " + league.name + " · " + league.teams + "/8 تیم" + (league.isMyLeague ? " · لیگ شما" : "") + " · " + league.status + " · " + league.id).join("\\n") : ""));
-    const offers = result.promotionOffers.map((offer) => "پیشنهاد صعود به سطح " + offer.targetTier + " · رتبه " + offer.finalPosition + " · شناسه " + offer.id + "\\n/promotion " + offer.id + " accept یا decline");\n    await ctx.reply("هرم لیگ‌های سراسری · فصل " + result.season + "\\n\\n" + lines.join("\\n\\n") + "\\n\\n" + (offers.length ? "پیشنهادهای صعود:\\n" + offers.join("\\n\\n") + "\\n\\n" : "") + "برای ورود به لیگ پایه: /leagueapply");
+    const offers = result.promotionOffers.map((offer) =>
+      "پیشنهاد صعود به سطح " + offer.targetTier + " · رتبه " + offer.finalPosition + " · شناسه " + offer.id
+      + "\n/promotion " + offer.id + " accept یا decline");
+    await ctx.reply("هرم لیگ‌های سراسری · فصل " + result.season + "\n\n" + lines.join("\n\n")
+      + "\n\n" + (offers.length ? "پیشنهادهای صعود:\n" + offers.join("\n\n") + "\n\n" : "")
+      + "برای ورود به لیگ پایه: /leagueapply");
   } catch (error) { await ctx.reply("دریافت لیگ‌ها ناموفق بود: " + (error instanceof Error ? error.message : "خطای نامشخص")); }
 });
 
