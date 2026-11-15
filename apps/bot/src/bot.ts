@@ -108,8 +108,10 @@ async function saveTelegramClubLogo(ctx: Context, fileId: string, mimeType: stri
   try {
     const telegramFile = await ctx.api.getFile(fileId);
     if (!telegramFile.file_path) throw new Error("TELEGRAM_FILE_PATH_MISSING");
-    const downloaded = await fetch("https://api.telegram.org/file/bot" + token + "/" + telegramFile.file_path);
+    const downloaded = await fetch("https://api.telegram.org/file/bot" + token + "/" + telegramFile.file_path, { signal: AbortSignal.timeout(15_000) });
     if (!downloaded.ok) throw new Error("TELEGRAM_FILE_DOWNLOAD_FAILED");
+    const contentLength = Number(downloaded.headers.get("content-length") ?? 0);
+    if (contentLength > 512 * 1024) throw new Error("LOGO_TOO_LARGE");
     const bytes = Buffer.from(await downloaded.arrayBuffer());
     if (bytes.length > 512 * 1024) throw new Error("LOGO_TOO_LARGE");
     await api("/v1/club/logo", ctx.from.id, "PUT", { mimeType, base64: bytes.toString("base64") });
