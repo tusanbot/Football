@@ -209,7 +209,7 @@ export function generateD1Schema(parsed, sourceHash) {
     for (const relationField of model.relations) {
       const relation = relationField.relation;
       const target = modelByName.get(relationField.type);
-      if (!target || !relation.fields.length || relation.fields.length !== relation.references.length) continue;
+      if (!target || !relation || !relation.fields.length || relation.fields.length !== relation.references.length) continue;
       const onDelete = ["Cascade", "Restrict", "SetNull", "SetDefault", "NoAction"].includes(relation.onDelete)
         ? relation.onDelete.replace(/[A-Z]/g, (letter) => " " + letter.toUpperCase()).trim().toUpperCase() : "NO ACTION";
       const onUpdate = ["Cascade", "Restrict", "SetNull", "SetDefault", "NoAction"].includes(relation.onUpdate)
@@ -260,7 +260,7 @@ export function buildInventory(parsed, sourceHash) {
       updatedAt: field.isUpdatedAt,
       dbAnnotation: field.dbAnnotation
     })),
-    foreignKeys: model.relations.map((field) => ({
+    foreignKeys: model.relations.filter((field) => field.relation).map((field) => ({
       field: field.name,
       target: field.type,
       columns: field.relation.fields,
