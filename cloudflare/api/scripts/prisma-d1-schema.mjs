@@ -203,7 +203,6 @@ export function generateD1Schema(parsed, sourceHash) {
       if (field.isUnique && !field.isId) parts.push("UNIQUE");
       const defaultValue = sqlDefault(field);
       if (defaultValue !== null && !field.isId) parts.push("DEFAULT " + defaultValue);
-      if (field.isList && field.default === "[]") parts.push("DEFAULT '[]'");
       parts.push(...fieldChecks(field, enums));
       columns.push("  " + parts.join(" "));
     }
