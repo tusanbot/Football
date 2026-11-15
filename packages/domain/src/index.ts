@@ -25,3 +25,4 @@ export * from "./match-runtime.js";
 export * from "./match-segments.js";
 
 export * from "./league-pyramid.js";
+export * from "./league-pyramid-registration.js";
