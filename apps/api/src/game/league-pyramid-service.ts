@@ -445,23 +445,29 @@ export async function createFriendlyChallenge(
       asset = "FREE";
       await tx.challengeDailyUsage.update({ where: { id: usage.id }, data: { freeUsed: { increment: 1 } } });
     } else if (usage.goldUsed < 2) {
-      asset = "GOLD";
       const wallet = await tx.wallet.findUnique({ where: { userId_asset: { userId, asset: "GOLD" } } });
-      if (!wallet || wallet.balance < goldCost) throw new PyramidLeagueError("INSUFFICIENT_GOLD");
-      const debited = await tx.wallet.updateMany({
-        where: { id: wallet.id, balance: wallet.balance, version: wallet.version },
-        data: { balance: { decrement: goldCost }, version: { increment: 1 } },
-      });
-      if (debited.count !== 1) throw new PyramidLeagueError("CONCURRENT_MODIFICATION");
-      chargedGold = goldCost;
-      await tx.ledgerTransaction.create({
-        data: {
-          idempotencyKey: `friendly-challenge:${userId}:${idempotencyKey}`,
-          userId, asset: "GOLD", direction: "DEBIT", amount: goldCost,
-          reason: "FRIENDLY_CHALLENGE_CREATE", referenceType: "FRIENDLY_CHALLENGE", referenceId: idempotencyKey,
-        },
-      });
-      await tx.challengeDailyUsage.update({ where: { id: usage.id }, data: { goldUsed: { increment: 1 } } });
+      if (wallet && wallet.balance >= goldCost) {
+        asset = "GOLD";
+        const debited = await tx.wallet.updateMany({
+          where: { id: wallet.id, balance: wallet.balance, version: wallet.version },
+          data: { balance: { decrement: goldCost }, version: { increment: 1 } },
+        });
+        if (debited.count !== 1) throw new PyramidLeagueError("CONCURRENT_MODIFICATION");
+        chargedGold = goldCost;
+        await tx.ledgerTransaction.create({
+          data: {
+            idempotencyKey: `friendly-challenge:${userId}:${idempotencyKey}`,
+            userId, asset: "GOLD", direction: "DEBIT", amount: goldCost,
+            reason: "FRIENDLY_CHALLENGE_CREATE", referenceType: "FRIENDLY_CHALLENGE", referenceId: idempotencyKey,
+          },
+        });
+        await tx.challengeDailyUsage.update({ where: { id: usage.id }, data: { goldUsed: { increment: 1 } } });
+      } else if (usage.purchasedCredits > 0) {
+        asset = "PURCHASED";
+        await tx.challengeDailyUsage.update({ where: { id: usage.id }, data: { purchasedCredits: { decrement: 1 } } });
+      } else {
+        throw new PyramidLeagueError("INSUFFICIENT_GOLD");
+      }
     } else if (usage.purchasedCredits > 0) {
       asset = "PURCHASED";
       await tx.challengeDailyUsage.update({ where: { id: usage.id }, data: { purchasedCredits: { decrement: 1 } } });
