@@ -108,3 +108,12 @@ Do not migrate a live database or deploy the Bot/API without separate explicit a
 - Worker restarts neither lose nor duplicate progression.
 - All substitution rules, including the five-player total and three in-play windows, are enforced.
 - Completed reports are immutable and historical matches remain readable.
+
+
+## 11. Durable runtime foundation (implementation status)
+
+Persistence now defines `MatchRuntime` (versioned state, minute, kickoff snapshot, simulation state, fallback plan, next action and worker leases), `MatchTacticalCheckpoint` (fixed decision deadline and next segment boundary), and append-only `MatchTacticalDecision` records. The match status enum also supports `IN_PROGRESS`.
+
+The API accepts validated tactical instructions only from a participating club owner while a checkpoint is open. Decision writes are idempotent. Runtime claim/release primitives use atomic compare-and-set updates; expired leases are recoverable after worker crashes.
+
+**This is persistence and orchestration groundwork, not yet a running match worker.** The simulation engine remains one-shot until deterministic segment simulation is implemented. Existing fixtures do not automatically receive runtime records yet; the next delivery connects kickoff snapshots, segment simulation, checkpoint resolution and settlement to these durable records.

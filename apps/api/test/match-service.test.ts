@@ -4,7 +4,7 @@ import test from "node:test";
 import { prisma } from "../src/db.js";
 import {
   createFriendlyMatch, createLeague, getLeague, joinLeague, listClubMatches,
-  simulateScheduledMatch, startLeague,
+  simulateScheduledMatch, startLeague, submitMatchCheckpointDecision, claimDueMatchRuntimes, releaseMatchRuntimeLease,
 } from "../src/game/match-service.js";
 
 const positions = ["GK","RB","CB","CB","LB","CDM","CM","CAM","RW","ST","LW"] as const;
@@ -203,4 +203,34 @@ test("knockout cup fills its bracket, advances winners and crowns a champion", a
       await prisma.user.deleteMany({ where: { id: { in: userIds } } });
     }
   }
+});
+
+test("checkpoint decisions persist idempotently and runtime leases recover after expiry", async (t) => {
+ if (!process.env.DATABASE_URL) { t.skip("DATABASE_URL is only configured in the ephemeral PostgreSQL CI job."); return; }
+ const suffix=randomUUID().replaceAll("-",""), clubs:Array<{userId:string;clubId:string}>=[];
+ try {
+  clubs.push(await makeClub(suffix,20),await makeClub(suffix,21));
+  const created=await createFriendlyMatch(clubs[0]!.userId,clubs[1]!.clubId,`checkpoint-${suffix}`,new Date(Date.now()+60000));
+  const now=new Date();
+  await prisma.matchRuntime.create({data:{matchId:created.match.id,status:"AWAITING_CHECKPOINT",currentMinute:45,nextActionAt:new Date(now.getTime()-1)}});
+  await prisma.matchTacticalCheckpoint.create({data:{matchId:created.match.id,checkpointKey:"half-time-v1",kind:"HALF_TIME",minute:45,
+   openedAt:new Date(now.getTime()-10000),decisionDeadlineAt:new Date(now.getTime()+20000),nextSegmentAt:new Date(now.getTime()+30000)}});
+  const first=await submitMatchCheckpointDecision(clubs[0]!.userId,created.match.id,"half-time-v1",`decision-${suffix}`,{tempo:"FAST"},now);
+  assert.equal(first.replayed,false); assert.deepEqual(first.decision.instruction,{tempo:"FAST"});
+  const replay=await submitMatchCheckpointDecision(clubs[0]!.userId,created.match.id,"half-time-v1",`decision-${suffix}`,{tempo:"FAST"},now);
+  assert.equal(replay.replayed,true);
+  const claimed=await claimDueMatchRuntimes("worker-a",now,30000,10); assert.equal(claimed.length,1);
+  assert.equal((await claimDueMatchRuntimes("worker-b",now,30000,10)).length,0);
+  await prisma.matchRuntime.update({where:{matchId:created.match.id},data:{leaseExpiresAt:new Date(now.getTime()-1)}});
+  const recovered=await claimDueMatchRuntimes("worker-b",now,30000,10); assert.equal(recovered.length,1);
+  assert.equal(await releaseMatchRuntimeLease(created.match.id,claimed[0]!.lease.token,null),false);
+  assert.equal(await releaseMatchRuntimeLease(created.match.id,recovered[0]!.lease.token,null),true);
+ } finally {
+  const clubIds=clubs.map(c=>c.clubId);
+  if(clubIds.length){await prisma.footballMatch.deleteMany({where:{OR:[{homeClubId:{in:clubIds}},{awayClubId:{in:clubIds}}]}});
+   await prisma.player.deleteMany({where:{clubId:{in:clubIds}}});await prisma.club.deleteMany({where:{id:{in:clubIds}}});}
+  const userIds=clubs.map(c=>c.userId);
+  if(userIds.length){await prisma.ledgerTransaction.deleteMany({where:{userId:{in:userIds}}});
+   await prisma.wallet.deleteMany({where:{userId:{in:userIds}}});await prisma.user.deleteMany({where:{id:{in:userIds}}});}
+ }
 });

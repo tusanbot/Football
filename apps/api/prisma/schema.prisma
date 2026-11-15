@@ -95,8 +95,29 @@ enum AcademyProspectStatus {
 
 enum MatchStatus {
   SCHEDULED
+  IN_PROGRESS
   COMPLETED
   CANCELLED
+}
+
+enum MatchRuntimeStatus {
+  QUEUED
+  RUNNING
+  AWAITING_CHECKPOINT
+  COMPLETED
+  FAILED
+}
+
+enum MatchCheckpointKind {
+  HALF_TIME
+  MINUTE_60
+  MINUTE_75
+}
+
+enum MatchCheckpointStatus {
+  OPEN
+  RESOLVED
+  EXPIRED
 }
 
 enum MatchType {
@@ -198,6 +219,7 @@ model Club {
   awayMatches FootballMatch[] @relation("MatchAwayClub")
   competitionEntries CompetitionEntry[]
   matchPerformances PlayerMatchPerformance[]
+  matchTacticalDecisions MatchTacticalDecision[]
 }
 
 model Player {
@@ -470,12 +492,69 @@ model FootballMatch {
   competition    Competition? @relation(fields: [competitionId], references: [id], onDelete: SetNull)
   events         MatchEvent[]
   performances  PlayerMatchPerformance[]
+  runtime       MatchRuntime?
+  checkpoints   MatchTacticalCheckpoint[]
   @@index([homeClubId, scheduledAt, status])
   @@index([awayClubId, scheduledAt, status])
   @@index([competitionId, round])
   @@index([status, scheduledAt])
 }
 
+model MatchRuntime {
+  id String @id @default(cuid())
+  matchId String @unique
+  status MatchRuntimeStatus @default(QUEUED)
+  currentMinute Int @default(0)
+  stateVersion Int @default(1)
+  nextActionAt DateTime?
+  kickoffSnapshot Json?
+  simulationState Json?
+  fallbackPlan Json?
+  leaseOwner String?
+  leaseToken String?
+  leaseExpiresAt DateTime?
+  lastError String?
+  startedAt DateTime?
+  completedAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  match FootballMatch @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  @@index([status, nextActionAt])
+  @@index([leaseExpiresAt])
+}
+model MatchTacticalCheckpoint {
+  id String @id @default(cuid())
+  matchId String
+  checkpointKey String
+  kind MatchCheckpointKind
+  minute Int
+  status MatchCheckpointStatus @default(OPEN)
+  openedAt DateTime
+  decisionDeadlineAt DateTime
+  nextSegmentAt DateTime
+  resolvedAt DateTime?
+  resolution Json?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  match FootballMatch @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  decisions MatchTacticalDecision[]
+  @@unique([matchId, checkpointKey])
+  @@index([status, nextSegmentAt])
+  @@index([matchId, minute])
+}
+model MatchTacticalDecision {
+  id String @id @default(cuid())
+  idempotencyKey String @unique
+  checkpointId String
+  clubId String
+  submittedByUserId String
+  instruction Json
+  submittedAt DateTime @default(now())
+  checkpoint MatchTacticalCheckpoint @relation(fields: [checkpointId], references: [id], onDelete: Cascade)
+  club Club @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  @@index([checkpointId, clubId, submittedAt])
+  @@index([clubId, submittedAt])
+}
 model MatchEvent {
   id               String @id @default(cuid())
   matchId          String

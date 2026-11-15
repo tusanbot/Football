@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { Prisma } from "@prisma/client";
-import { calculateStadiumCapacity, simulateFootballMatch, simulatePenaltyShootout, type MatchSide, type MatchTactics } from "@football/domain";
+import { calculateStadiumCapacity, simulateFootballMatch, simulatePenaltyShootout, type MatchSide, type MatchTactics, type MatchTacticalInstruction } from "@football/domain";
 import { prisma } from "../db.js";
 
 const DAY_MS = 86_400_000;
@@ -377,6 +377,64 @@ async function advanceCupRound(competitionId: string, round: number, now: Date) 
     });
   }
   await prisma.footballMatch.createMany({ data: fixtures, skipDuplicates: true });
+}
+
+
+export async function submitMatchCheckpointDecision(userId: string, matchId: string, checkpointKey: string,
+  idempotencyKey: string, instruction: MatchTacticalInstruction, now = new Date()) {
+  keyValid(idempotencyKey);
+  if (!checkpointKey.trim() || checkpointKey.length > 100) throw new MatchServiceError("INVALID_MATCH_CHECKPOINT");
+  return prisma.$transaction(async (tx) => {
+    const match = await tx.footballMatch.findUnique({ where: { id: matchId },
+      include: { homeClub: { select: { id: true, ownerId: true } }, awayClub: { select: { id: true, ownerId: true } } } });
+    if (!match) throw new MatchServiceError("MATCH_NOT_FOUND");
+    const club = match.homeClub.ownerId === userId ? match.homeClub : match.awayClub.ownerId === userId ? match.awayClub : null;
+    if (!club) throw new MatchServiceError("NOT_MATCH_PARTICIPANT");
+    const checkpoint = await tx.matchTacticalCheckpoint.findUnique({ where: { matchId_checkpointKey: { matchId, checkpointKey } } });
+    if (!checkpoint) throw new MatchServiceError("MATCH_CHECKPOINT_NOT_FOUND");
+    const previous = await tx.matchTacticalDecision.findUnique({ where: { idempotencyKey } });
+    if (previous) {
+      if (previous.checkpointId !== checkpoint.id || previous.clubId !== club.id || previous.submittedByUserId !== userId)
+        throw new MatchServiceError("IDEMPOTENCY_CONFLICT");
+      return { decision: previous, replayed: true };
+    }
+    const cutoff = Math.min(checkpoint.decisionDeadlineAt.getTime(), checkpoint.nextSegmentAt.getTime());
+    if (checkpoint.status !== "OPEN" || now.getTime() < checkpoint.openedAt.getTime() || now.getTime() >= cutoff)
+      throw new MatchServiceError("MATCH_CHECKPOINT_CLOSED");
+    const decision = await tx.matchTacticalDecision.create({ data: {
+      idempotencyKey, checkpointId: checkpoint.id, clubId: club.id, submittedByUserId: userId,
+      instruction: instruction as Prisma.InputJsonValue, submittedAt: now,
+    } });
+    return { decision, replayed: false };
+  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+}
+
+/** Atomically lease due runtimes; expired leases are recoverable after worker crashes. */
+export async function claimDueMatchRuntimes(workerId: string, now = new Date(), leaseMs = 30_000, limit = 10) {
+  if (!workerId.trim() || workerId.length > 100 || !Number.isInteger(leaseMs) || leaseMs < 1_000
+    || !Number.isInteger(limit) || limit < 1 || limit > 100) throw new MatchServiceError("INVALID_MATCH_WORKER_LEASE");
+  const candidates = await prisma.matchRuntime.findMany({ where: {
+    status: { in: ["QUEUED", "RUNNING", "AWAITING_CHECKPOINT"] }, nextActionAt: { lte: now },
+    OR: [{ leaseExpiresAt: null }, { leaseExpiresAt: { lte: now } }],
+  }, orderBy: [{ nextActionAt: "asc" }, { createdAt: "asc" }], take: limit, select: { id: true } });
+  const claimed = [];
+  for (const candidate of candidates) {
+    const token = randomUUID(), leaseExpiresAt = new Date(now.getTime() + leaseMs);
+    const updated = await prisma.matchRuntime.updateMany({ where: {
+      id: candidate.id, status: { in: ["QUEUED", "RUNNING", "AWAITING_CHECKPOINT"] },
+      nextActionAt: { lte: now }, OR: [{ leaseExpiresAt: null }, { leaseExpiresAt: { lte: now } }],
+    }, data: { leaseOwner: workerId, leaseToken: token, leaseExpiresAt } });
+    if (updated.count !== 1) continue;
+    const runtime = await prisma.matchRuntime.findUnique({ where: { id: candidate.id } });
+    if (runtime) claimed.push({ runtime, lease: { owner: workerId, token, expiresAt: leaseExpiresAt } });
+  }
+  return claimed;
+}
+export async function releaseMatchRuntimeLease(runtimeId: string, leaseToken: string,
+  nextActionAt: Date | null, lastError: string | null = null) {
+  const result = await prisma.matchRuntime.updateMany({ where: { id: runtimeId, leaseToken },
+    data: { leaseOwner: null, leaseToken: null, leaseExpiresAt: null, nextActionAt, lastError } });
+  return result.count === 1;
 }
 
 export async function simulateScheduledMatch(userId: string, matchId: string, now = new Date()) {

@@ -3,7 +3,7 @@ import { z } from "zod";
 import { requireTelegramUser } from "../auth/require-telegram-user.js";
 import {
   MatchServiceError, createFriendlyMatch, createLeague, getLeague, joinLeague,
-  listClubMatches, listMatchOpponents, listOpenLeagues, simulateScheduledMatch, startLeague,
+  listClubMatches, listMatchOpponents, listOpenLeagues, simulateScheduledMatch, startLeague, submitMatchCheckpointDecision,
 } from "./match-service.js";
 
 const keySchema = z.string().regex(/^[A-Za-z0-9:_-]{12,128}$/);
@@ -19,6 +19,7 @@ function sendMatchError(reply: FastifyReply, error: unknown) {
     "COMPETITION_FULL", "ONLY_CREATOR_CAN_START", "LEAGUE_NEEDS_FOUR_TEAMS",
     "ALL_TEAMS_NEED_VALID_LINEUPS", "NOT_COMPETITION_MEMBER", "NOT_MATCH_PARTICIPANT",
     "MATCH_NOT_SCHEDULED", "MATCH_NOT_DUE", "MATCH_ALREADY_SIMULATED", "CONCURRENT_MODIFICATION",
+    "MATCH_CHECKPOINT_CLOSED", "MATCH_CHECKPOINT_NOT_FOUND",
   ];
   const status = notFound.includes(error.code) ? 404 : conflicts.includes(error.code) ? 409 : 400;
   return reply.code(status).send({ error: error.code, ...(error.details ? { details: error.details } : {}) });
@@ -58,6 +59,32 @@ export function registerMatchRoutes(app: FastifyInstance) {
     try { return { result: await simulateScheduledMatch(user.id, params.data.id) }; }
     catch (error) { return sendMatchError(reply, error); }
   });
+
+  app.post("/v1/matches/:id/checkpoints/:checkpointKey/decisions", async (request, reply) => {
+    const user = await requireTelegramUser(request);
+    if (!user) return reply.code(401).send({ error: "UNAUTHENTICATED" });
+    const params = z.object({ id: z.string().min(1).max(64), checkpointKey: z.string().trim().min(1).max(100) }).safeParse(request.params);
+    if (!params.success) return reply.code(400).send({ error: "INVALID_MATCH_CHECKPOINT" });
+    const body = z.object({
+      idempotencyKey: keySchema,
+      instruction: z.object({
+        formation: z.string().regex(/^[0-9](?:-[0-9]){2,4}$/).optional(),
+        mentality: z.enum(["DEFENSIVE", "BALANCED", "ATTACKING"]).optional(),
+        pressing: z.enum(["LOW_BLOCK", "MID_BLOCK", "HIGH_PRESS"]).optional(),
+        tempo: z.enum(["SLOW", "NORMAL", "FAST"]).optional(),
+        passingStyle: z.enum(["SHORT", "MIXED", "DIRECT"]).optional(),
+        substitutions: z.array(z.object({
+          outgoingPlayerId: z.string().min(1).max(64), incomingPlayerId: z.string().min(1).max(64),
+        }).strict()).max(5).optional(),
+      }).strict().refine((value) => Object.keys(value).length > 0, "At least one tactical change is required"),
+    }).strict().safeParse(request.body);
+    if (!body.success) return reply.code(400).send({ error: "INVALID_MATCH_DECISION" });
+    try {
+      return await submitMatchCheckpointDecision(user.id, params.data.id, params.data.checkpointKey,
+        body.data.idempotencyKey, body.data.instruction);
+    } catch (error) { return sendMatchError(reply, error); }
+  });
+
   app.get("/v1/competitions", async (request, reply) => {
     const user = await requireTelegramUser(request);
     if (!user) return reply.code(401).send({ error: "UNAUTHENTICATED" });
