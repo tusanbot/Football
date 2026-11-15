@@ -443,7 +443,7 @@ export default function MarketPage() {
   async function createFriendlyChallengeLink() {
     setBusy("friendly-challenge"); setError(""); setMessage("");
     try {
-      const response = await fetch(API + "/v1/friendly-challenges", { method: "POST", headers, body: "{}" });
+      const response = await fetch(API + "/v1/friendly-challenges", { method: "POST", headers, body: JSON.stringify({ idempotencyKey: crypto.randomUUID() }) });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error ?? "ساخت چالش ناموفق بود.");
       const shareText = data.shareUrl ?? ("کد دعوت: " + data.challenge.token + " · دستور پذیرش در ربات: /acceptchallenge " + data.challenge.token);
