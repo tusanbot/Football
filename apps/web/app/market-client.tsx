@@ -568,7 +568,7 @@ export default function MarketPage() {
             {tier.leagues.map((league) => <small key={league.id}>{league.name} · {league.teams}/8 تیم · {league.status} {league.isMyLeague ? " · لیگ شما" : ""}</small>)}
           </div>
           {tier.tier === 1 && !tier.myApplication && <button className="secondary" disabled={!!busy} onClick={() => void action("pyramid-apply", "/v1/pyramid-leagues/apply", "POST", {tier:1})}>درخواست ورود به لیگ پایه</button>}
-          {tier.leagues.filter((league) => league.isMyLeague).map((league) => <button key={league.id} className="secondary" disabled={!!busy} onClick={() => void viewPyramidLeague(league.id)}>جزئیات لیگ</button>)}
+          {tier.leagues.map((league) => <button key={league.id} className="secondary" disabled={!!busy} onClick={() => void viewPyramidLeague(league.id)}>مشاهده لیگ</button>)}
         </div>)}
         {pyramidLeagues?.promotionOffers.map((offer) => <div className="operation-row" key={offer.id}>
           <div><strong>پیشنهاد صعود به {pyramidLeagues.tiers.find((tier) => tier.tier === offer.targetTier)?.name ?? "سطح بالاتر"}</strong><small>رتبه {offer.finalPosition} · فصل {offer.season}</small></div>
