@@ -55,8 +55,15 @@ export function resolveMatchCheckpoint<TInstruction>(input: {
     || window.decisionDeadlineAt.getTime() < window.openedAt.getTime()) {
     throw new Error("INVALID_MATCH_CHECKPOINT_WINDOW");
   }
-  if (now.getTime() < window.nextSegmentAt.getTime()) throw new Error("MATCH_CHECKPOINT_SEGMENT_NOT_DUE");
   const cutoff = Math.min(window.decisionDeadlineAt.getTime(), window.nextSegmentAt.getTime());
+  const bothManagersResponded = [window.homeClubId, window.awayClubId].every((clubId) =>
+    input.decisions.some((decision) => decision.clubId === clubId
+      && decision.submittedAt.getTime() >= window.openedAt.getTime()
+      && decision.submittedAt.getTime() <= cutoff
+      && decision.submittedAt.getTime() <= now.getTime()));
+  if (now.getTime() < window.nextSegmentAt.getTime() && !bothManagersResponded) {
+    throw new Error("MATCH_CHECKPOINT_SEGMENT_NOT_DUE");
+  }
   const resolveFor = (
     clubId: string,
     fallbackInstruction: TInstruction | null,
