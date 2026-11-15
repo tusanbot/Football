@@ -4,7 +4,8 @@ import test from "node:test";
 import { prisma } from "../src/db.js";
 import {
   createFriendlyMatch, createLeague, getLeague, joinLeague, listClubMatches,
-  simulateScheduledMatch, startLeague, submitMatchCheckpointDecision, claimDueMatchRuntimes, releaseMatchRuntimeLease,
+  simulateScheduledMatch, startLeague, submitMatchCheckpointDecision, claimDueMatchRuntimes,
+  releaseMatchRuntimeLease, processDueMatchRuntimes,
 } from "../src/game/match-service.js";
 
 const positions = ["GK","RB","CB","CB","LB","CDM","CM","CAM","RW","ST","LW"] as const;
@@ -233,4 +234,84 @@ test("checkpoint decisions persist idempotently and runtime leases recover after
   if(userIds.length){await prisma.ledgerTransaction.deleteMany({where:{userId:{in:userIds}}});
    await prisma.wallet.deleteMany({where:{userId:{in:userIds}}});await prisma.user.deleteMany({where:{id:{in:userIds}}});}
  }
+});
+
+
+test("durable match worker advances checkpoints, resumes on two early decisions and settles once", async (t) => {
+  if (!process.env.DATABASE_URL) {
+    t.skip("DATABASE_URL is only configured in the ephemeral PostgreSQL CI job.");
+    return;
+  }
+  const suffix = randomUUID().replaceAll("-", "");
+  const clubs: Array<{ userId: string; clubId: string }> = [];
+  try {
+    clubs.push(await makeClub(suffix, 40), await makeClub(suffix, 41));
+    const kickoff = new Date(Date.now() - 120_000);
+    const created = await createFriendlyMatch(
+      clubs[0]!.userId, clubs[1]!.clubId, `runtime-${suffix}`, kickoff,
+    );
+    const firstTick = await processDueMatchRuntimes("test-runtime-worker", kickoff, 5);
+    assert.equal(firstTick.enqueued, 1);
+    assert.equal(firstTick.advanced, 1);
+    const halfTime = await prisma.matchTacticalCheckpoint.findUniqueOrThrow({
+      where: { matchId_checkpointKey: { matchId: created.match.id, checkpointKey: "minute-45" } },
+    });
+    assert.equal(halfTime.status, "OPEN");
+    const decisionTime = new Date(kickoff.getTime() + 7_000);
+    await submitMatchCheckpointDecision(
+      clubs[0]!.userId, created.match.id, "minute-45", `decision-home-${suffix}`,
+      { mentality: "ATTACKING", tempo: "FAST" }, decisionTime,
+    );
+    await submitMatchCheckpointDecision(
+      clubs[1]!.userId, created.match.id, "minute-45", `decision-away-${suffix}`,
+      { mentality: "DEFENSIVE", pressing: "LOW_BLOCK" }, decisionTime,
+    );
+    const resumed = await processDueMatchRuntimes(
+      "test-runtime-worker", new Date(kickoff.getTime() + 10_000), 5,
+    );
+    assert.equal(resumed.advanced, 1);
+    const minute60 = await prisma.matchTacticalCheckpoint.findUniqueOrThrow({
+      where: { matchId_checkpointKey: { matchId: created.match.id, checkpointKey: "minute-60" } },
+    });
+    assert.equal(minute60.status, "OPEN");
+    const minute75Tick = await processDueMatchRuntimes(
+      "test-runtime-worker", new Date(kickoff.getTime() + 70_000), 5,
+    );
+    assert.equal(minute75Tick.advanced, 1);
+    const fullTimeTick = await processDueMatchRuntimes(
+      "test-runtime-worker", new Date(kickoff.getTime() + 130_000), 5,
+    );
+    assert.equal(fullTimeTick.settled, 1);
+    const [match, runtime, checkpoints] = await Promise.all([
+      prisma.footballMatch.findUniqueOrThrow({ where: { id: created.match.id } }),
+      prisma.matchRuntime.findUniqueOrThrow({ where: { matchId: created.match.id } }),
+      prisma.matchTacticalCheckpoint.findMany({ where: { matchId: created.match.id }, orderBy: { minute: "asc" } }),
+    ]);
+    assert.equal(match.status, "COMPLETED");
+    assert.equal(runtime.status, "COMPLETED");
+    assert.equal(runtime.currentMinute, 90);
+    assert.deepEqual(checkpoints.map((item) => item.status), ["RESOLVED", "RESOLVED", "RESOLVED"]);
+    assert.equal(await prisma.matchEvent.count({ where: { matchId: match.id } }), match.homeScore! + match.awayScore!
+      + await prisma.matchEvent.count({ where: { matchId: match.id, type: "YELLOW_CARD" } }));
+    const replay = await simulateScheduledMatch(clubs[1]!.userId, match.id);
+    assert.equal(replay.replayed, true);
+    assert.equal(await prisma.ledgerTransaction.count({
+      where: { referenceType: "FOOTBALL_MATCH", referenceId: match.id },
+    }), 3);
+  } finally {
+    const clubIds = clubs.map((club) => club.clubId);
+    if (clubIds.length) {
+      await prisma.footballMatch.deleteMany({
+        where: { OR: [{ homeClubId: { in: clubIds } }, { awayClubId: { in: clubIds } }] },
+      });
+      await prisma.player.deleteMany({ where: { clubId: { in: clubIds } } });
+      await prisma.club.deleteMany({ where: { id: { in: clubIds } } });
+    }
+    const userIds = clubs.map((club) => club.userId);
+    if (userIds.length) {
+      await prisma.ledgerTransaction.deleteMany({ where: { userId: { in: userIds } } });
+      await prisma.wallet.deleteMany({ where: { userId: { in: userIds } } });
+      await prisma.user.deleteMany({ where: { id: { in: userIds } } });
+    }
+  }
 });
