@@ -92,7 +92,7 @@ async function api<T>(path: string, telegramId: number, method = "GET", body?: u
     throw new Error("پاسخ سرور بازی قابل خواندن نیست. لطفاً دوباره تلاش کنید.");
   }
   if (!response.ok) {
-    const range = data.details?.minimumWeeklyWage ? ` (acceptable weekly wage: ${cash(data.details.minimumWeeklyWage)}–${cash(data.details.maximumWeeklyWage ?? data.details.minimumWeeklyWage)} Cash)` : "";
+    const range = data.details?.minimumWeeklyWage ? ` (دستمزد هفتگی مجاز: ${cash(data.details.minimumWeeklyWage)} تا ${cash(data.details.maximumWeeklyWage ?? data.details.minimumWeeklyWage)} کش)` : "";
     throw new Error(formatApiError(data.error ?? `HTTP_${response.status}`) + range);
   }
   return data;
