@@ -23,3 +23,5 @@ export * from "./match-rules.js";
 export * from "./match-checkpoints.js";
 export * from "./match-runtime.js";
 export * from "./match-segments.js";
+
+export * from "./league-pyramid.js";
