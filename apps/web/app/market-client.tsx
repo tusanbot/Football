@@ -44,6 +44,16 @@ type PublicClubProfile = {
   leagues: Array<{ id: string; season: number; tierName: string; groupNumber: number; finalPosition: number | null; awards: Array<{ awardName: string }> }>;
 };
 
+
+type PublicPlayerRecordMetric = "goals" | "assists" | "appearances" | "rating";
+type PublicPlayerRecord = {
+  rank: number; playerId: string; playerName: string; position: string; overall: number;
+  clubName: string; appearances: number; goals: number; assists: number; minutesPlayed: number;
+  averageRating: number; value: number;
+};
+type PublicPlayerRecords = {
+  metric: PublicPlayerRecordMetric; minimumAppearances: number; records: PublicPlayerRecord[];
+};
 type ClubComparison = {
   clubs: Array<{
     id: string; name: string; level: number; reputation: number; logoUrl: string | null;
@@ -141,6 +151,9 @@ export default function MarketPage() {
   const [comparisonFirst, setComparisonFirst] = useState("");
   const [comparisonSecond, setComparisonSecond] = useState("");
   const [clubComparison, setClubComparison] = useState<ClubComparison | null>(null);
+  const [recordMetric, setRecordMetric] = useState<PublicPlayerRecordMetric>("goals");
+  const [playerRecords, setPlayerRecords] = useState<PublicPlayerRecords | null>(null);
+
 
   const [logoBusy, setLogoBusy] = useState(false);
   const [challengeShareUrl, setChallengeShareUrl] = useState("");
@@ -191,7 +204,7 @@ export default function MarketPage() {
   const [busy, setBusy] = useState("");
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
-  const [tab, setTab] = useState<"market" | "club" | "operations" | "lineup" | "development" | "matches" | "groups" | "special" | "clubs">("market");
+  const [tab, setTab] = useState<"market" | "club" | "operations" | "lineup" | "development" | "matches" | "groups" | "special" | "clubs" | "records">("market");
 
   const headers = useMemo(() => ({ "content-type": "application/json", "x-telegram-init-data": initData }), [initData]);
 
@@ -220,8 +233,10 @@ export default function MarketPage() {
       fetch(API + "/v1/competitions", { headers }),
       fetch(API + "/v1/groups/mine", { headers }),
       fetch(API + "/v1/pyramid-leagues", { headers }),
+      fetch(API + "/v1/players/records?metric=goals&limit=20"),
     ]);
-    const [p, w, m, own, s, l, d, o, matchResponse, opponentResponse, leagueResponse, groupResponse, pyramidResponse] = requests;
+    const [p, w, m, own, s, l, d, o, matchResponse, opponentResponse, leagueResponse, groupResponse, pyramidResponse, recordsResponse] = requests;
+    if (recordsResponse.ok) setPlayerRecords(await recordsResponse.json());
     if (p.ok) setPlayers((await p.json()).players);
     if (o.ok) { const clubOperations = (await o.json()).club as ClubOperations; setOperations(clubOperations); setTicketPriceInput(clubOperations.ticketPrice); }
     if (matchResponse.ok) { const data = await matchResponse.json(); setMatches(data.matches ?? []); setClubCompetitions(data.competitions ?? []); }
@@ -332,6 +347,19 @@ export default function MarketPage() {
   }
 
 
+
+  async function loadPlayerRecords(metric: PublicPlayerRecordMetric) {
+    setBusy("player-records"); setError("");
+    try {
+      const response = await fetch(API + "/v1/players/records?metric=" + metric + "&limit=20");
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error ?? "دریافت رکوردهای بازیکنان ناموفق بود.");
+      setPlayerRecords(data as PublicPlayerRecords);
+      setRecordMetric(metric);
+    } catch (e) { setError(e instanceof Error ? e.message : "خطای نامشخص"); }
+    finally { setBusy(""); }
+  }
+
   async function comparePublicClubs() {
     if (!comparisonFirst || !comparisonSecond || comparisonFirst === comparisonSecond) {
       setError("برای مقایسه، دو باشگاه متفاوت انتخاب کنید.");
@@ -431,9 +459,34 @@ export default function MarketPage() {
       <button className={tab === "groups" ? "active" : ""} onClick={() => setTab("groups")}>گروه‌ها و جوایز</button>
       <button className={tab === "special" ? "active" : ""} onClick={() => setTab("special")}>ستاره‌های ویژه</button>
       <button className={tab === "clubs" ? "active" : ""} onClick={() => setTab("clubs")}>باشگاه‌ها و افتخارات</button>
+      <button className={tab === "records" ? "active" : ""} onClick={() => setTab("records")}>رکوردهای بازیکنان</button>
     </nav>
     {message && <div className="notice success">{message}</div>}{error && <div className="notice error">{error}</div>}
 
+
+    {tab === "records" && <section className="club-market">
+      <div className="market-card">
+        <h2>تالار رکوردهای تاریخی بازیکنان</h2>
+        <p>آمار تجمیعی تمام مسابقات تکمیل‌شده؛ رکوردها با انتقال بازیکن به باشگاه دیگر از بین نمی‌روند.</p>
+        <div className="market-tabs">
+          <button className={recordMetric === "goals" ? "active" : ""} disabled={busy === "player-records"} onClick={() => void loadPlayerRecords("goals")}>بهترین گلزنان</button>
+          <button className={recordMetric === "assists" ? "active" : ""} disabled={busy === "player-records"} onClick={() => void loadPlayerRecords("assists")}>بهترین پاسورها</button>
+          <button className={recordMetric === "appearances" ? "active" : ""} disabled={busy === "player-records"} onClick={() => void loadPlayerRecords("appearances")}>بیشترین بازی</button>
+          <button className={recordMetric === "rating" ? "active" : ""} disabled={busy === "player-records"} onClick={() => void loadPlayerRecords("rating")}>بالاترین نمره</button>
+        </div>
+        {busy === "player-records" && <p className="muted">در حال دریافت جدول رکوردها…</p>}
+        {playerRecords && <>
+          <div className="operation-row"><strong>{({ goals: "رتبه‌بندی گلزنان", assists: "رتبه‌بندی پاس گل", appearances: "رتبه‌بندی تعداد بازی", rating: "رتبه‌بندی میانگین نمره" } as const)[recordMetric]}</strong><small>{recordMetric === "rating" ? "حداقل ۳ حضور برای ورود به رتبه‌بندی" : "بر اساس تمام بازی‌های تکمیل‌شده"}</small></div>
+          {playerRecords.records.map((record) => <div className="operation-row" key={record.playerId}>
+            <div><strong>{record.rank}. {record.playerName}</strong><small>{record.clubName} · {record.position} · OVR {record.overall}</small>
+              <small>{record.appearances} بازی · {record.goals} گل · {record.assists} پاس گل · {record.minutesPlayed} دقیقه · میانگین نمره {record.averageRating.toFixed(2)}</small>
+            </div>
+            <strong>{recordMetric === "rating" ? record.value.toFixed(2) : record.value.toLocaleString("fa-IR")}</strong>
+          </div>)}
+          {playerRecords.records.length === 0 && <p className="muted">هنوز آمار کافی از مسابقات تکمیل‌شده برای این جدول ثبت نشده است.</p>}
+        </>}
+      </div>
+    </section>}
     {tab === "clubs" && <section className="club-market">
       <div className="market-card">
         <h2>تالار افتخارات باشگاه‌ها</h2>

@@ -20,7 +20,7 @@ test("every private keyboard button resolves to a registered no-argument command
   const expected = [
     "club", "wallet", "players", "lineup", "development", "operations",
     "finance", "scout", "opponents", "matches", "fallback", "leagues", "market",
-    "special", "help", "menu",
+    "special", "help", "records", "menu",
   ];
   const actual = PRIVATE_MENU_ROWS.flat().map((item) => resolvePrivateMenuCommand(item.label));
   assert.deepEqual(actual, expected);
@@ -76,7 +76,7 @@ test("administrative and ranking replies remain persistent", () => {
     assert.equal(isPersistentGroupReply(command, "عملیات انجام شد"), true, command);
   }
   assert.ok(PERSISTENT_GROUP_COMMANDS.has("group-league-table"));
-  for (const text of ["League table", "Top ranking", "جدول نهایی", "رتبه‌بندی گروه‌ها"]) {
+  for (const text of ["League table", "Top ranking", "جدول نهایی", "رتبه‌بندی گروه‌ها", "رتبه‌بندی بهترین گلزنان تاریخ", "رتبه‌بندی بالاترین میانگین نمره"]) {
     assert.equal(isPersistentGroupReply(undefined, text), true, text);
   }
 });
