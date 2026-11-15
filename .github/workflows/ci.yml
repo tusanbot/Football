@@ -68,3 +68,5 @@ jobs:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/football_empire
       - name: Build
         run: pnpm build
+        env:
+          NEXT_PUBLIC_API_URL: https://api.example.invalid
