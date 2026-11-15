@@ -52,7 +52,7 @@ export function validateMatchRules(value: unknown): MatchRules {
     yellowCardSuspensionMatches: Number(input.yellowCardSuspensionMatches),
     penaltiesOnDraw: input.penaltiesOnDraw as boolean,
   };
-  if (!Number.isInteger(rules.maxSubstitutions) || rules.maxSubstitutions < 0 || rules.maxSubstitutions > 7
+  if (!Number.isInteger(rules.maxSubstitutions) || rules.maxSubstitutions < 0 || rules.maxSubstitutions > 5
     || !Number.isInteger(rules.maxInPlayWindows) || rules.maxInPlayWindows < 0 || rules.maxInPlayWindows > 3
     || rules.maxInPlayWindows > rules.maxSubstitutions
     || !Number.isInteger(rules.redCardSuspensionMatches) || rules.redCardSuspensionMatches < 0 || rules.redCardSuspensionMatches > 5
@@ -104,7 +104,7 @@ export function applyMatchSubstitutions(input: {
   if (!input.checkpointId.trim()) throw new Error("MATCH_SUBSTITUTION_CHECKPOINT_ID_REQUIRED");
   if (!Number.isInteger(rules.maxSubstitutions) || rules.maxSubstitutions < 0
     || !Number.isInteger(rules.maxInPlayWindows) || rules.maxInPlayWindows < 0
-    || rules.maxSubstitutions > 7 || rules.maxInPlayWindows > 3
+    || rules.maxSubstitutions > 5 || rules.maxInPlayWindows > 3
     || rules.maxInPlayWindows > rules.maxSubstitutions) throw new Error("INVALID_MATCH_SUBSTITUTION_RULES");
   if (!changes.length) throw new Error("MATCH_SUBSTITUTION_EMPTY");
   if (state.usedCheckpointIds.includes(input.checkpointId)) throw new Error("MATCH_SUBSTITUTION_CHECKPOINT_ALREADY_USED");
