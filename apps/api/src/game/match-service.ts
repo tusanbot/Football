@@ -530,6 +530,8 @@ export async function simulateScheduledMatch(userId: string, matchId: string, no
     const awaySide = toSide(away);
     const generated = simulateFootballMatch({ seed: match.seed, home: homeSide, away: awaySide });
     const runtimeEvents = runtimeState?.segment.events;
+    const runtimePlayerStats = new Map((runtimeState?.segment.playerStats ?? [])
+      .map((item) => [item.playerId, item]));
     const result = isRuntimeSettlement && runtimeState
       ? {
           ...generated,
@@ -539,9 +541,7 @@ export async function simulateScheduledMatch(userId: string, matchId: string, no
           homeExpectedGoals: runtimeState.segment.home.expectedGoals,
           awayExpectedGoals: runtimeState.segment.away.expectedGoals,
           performances: generated.performances.map((line) => {
-            const segmentStats = new Map((runtimeState.segment.playerStats ?? [])
-              .map((item) => [item.playerId, item]));
-            const stats = segmentStats.get(line.playerId);
+            const stats = runtimePlayerStats.get(line.playerId);
             const goals = (runtimeEvents ?? []).filter((event) => event.type === "GOAL" && event.playerId === line.playerId).length;
             const assists = (runtimeEvents ?? []).filter((event) => event.type === "GOAL" && event.relatedPlayerId === line.playerId).length;
             const yellowCards = (runtimeEvents ?? []).filter((event) => event.type === "YELLOW_CARD" && event.playerId === line.playerId).length;
