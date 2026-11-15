@@ -122,7 +122,7 @@ export default function MatchCenter(){
      <div style={{marginTop:14}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}><strong>تعویض‌ها ({usedSubstitutions+subs.length}/۵)</strong><button type="button" className="secondary" onClick={addSub} disabled={subs.length>=remainingSubstitutions}>افزودن تعویض</button></div>
       {subs.map((sub,index)=><div className="match-tactics-grid" key={index} style={{marginTop:8}}>
        <select aria-label="بازیکن خارج‌شونده" style={selectStyle} value={sub.outgoingPlayerId} onChange={e=>updateSub(index,"outgoingPlayerId",e.target.value)}><option value="">بازیکن خارج‌شونده</option>{starters.map(p=><option key={p.id} value={p.id}>{p.name} · {p.position}</option>)}</select>
-       <select aria-label="بازیکن واردشونده" style={selectStyle} value={sub.incomingPlayerId} onChange={e=>updateSub(index,"incomingPlayerId",e.target.value)}><option value="">بازیکن واردشونده</option>{bench.map(p=><option key={p.id} value={p.id}>{p.firstName} {p.lastName} · {p.position}</option>)}</select>
+       <select aria-label="بازیکن واردشونده" style={selectStyle} value={sub.incomingPlayerId} onChange={e=>updateSub(index,"incomingPlayerId",e.target.value)}><option value="">بازیکن واردشونده</option>{bench.map(p=><option key={p.id} value={p.id}>{p.name} · {p.position}</option>)}</select>
       </div>)}
      </div>
      <button style={{...buttonStyle,width:"100%",marginTop:15}} disabled={busy==="decision"||(clubId!==activeMatch.homeClub.id&&clubId!==activeMatch.awayClub.id)} onClick={()=>void submitDecision()}>{busy==="decision"?"در حال ثبت…":"ثبت تصمیم تاکتیکی"}</button>
