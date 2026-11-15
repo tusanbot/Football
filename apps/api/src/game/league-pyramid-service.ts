@@ -144,6 +144,7 @@ export async function listPyramidLeagues(userId: string) {
       };
     }),
     currentLeagueId: currentEntry?.leagueId ?? null,
+    promotionOffers: promotionOffers.map((offer) => ({ id: offer.id, fromTier: offer.league.tier, targetTier: offer.targetTier, season: offer.league.season, finalPosition: offer.finalPosition })),
   };
 }
 
