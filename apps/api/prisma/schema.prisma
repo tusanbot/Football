@@ -1115,8 +1115,11 @@ model GiftCodeRedemption {
  redeemedAt DateTime @default(now())
  giftCode GiftCode @relation(fields:[giftCodeId], references:[id], onDelete:Restrict)
  user User @relation(fields:[userId], references:[id], onDelete:Restrict)
+ groupId String?
+ group TelegramGroup? @relation(fields:[groupId], references:[id], onDelete:SetNull)
  @@index([giftCodeId,userId])
  @@index([userId,redeemedAt])
+ @@index([groupId,redeemedAt])
 }
 model AdminAuditLog {
  id String @id @default(cuid())
