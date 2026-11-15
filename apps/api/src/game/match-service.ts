@@ -1,6 +1,11 @@
 import { randomUUID } from "node:crypto";
 import { Prisma } from "@prisma/client";
-import { calculateStadiumCapacity, simulateFootballMatch, simulatePenaltyShootout, type MatchSide, type MatchTactics, type MatchTacticalInstruction } from "@football/domain";
+import {
+  advanceMatchSegment, applyMatchSubstitutions, calculateStadiumCapacity, resolveMatchCheckpoint,
+  simulateFootballMatch, simulatePenaltyShootout,
+  type MatchSegmentState, type MatchSide, type MatchTactics, type MatchTacticalInstruction,
+  type MatchSubstitutionState,
+} from "@football/domain";
 import { prisma } from "../db.js";
 
 const DAY_MS = 86_400_000;
@@ -472,7 +477,14 @@ export async function simulateScheduledMatch(userId: string, matchId: string, no
         })),
       };
     }
-    if (match.status !== "SCHEDULED") throw new MatchServiceError("MATCH_NOT_SCHEDULED");
+    const runtime = await tx.matchRuntime.findUnique({ where: { matchId: match.id } });
+    const runtimeState = runtime?.simulationState as unknown as {
+      segment: MatchSegmentState;
+      substitutions: { home: MatchSubstitutionState; away: MatchSubstitutionState };
+    } | null;
+    const isRuntimeSettlement = match.status === "IN_PROGRESS" && runtime?.status === "RUNNING"
+      && runtime.currentMinute === 90 && runtimeState?.segment.currentMinute === 90;
+    if (match.status !== "SCHEDULED" && !isRuntimeSettlement) throw new MatchServiceError("MATCH_NOT_SCHEDULED");
     if (match.simulationVersion !== 1) throw new MatchServiceError("UNSUPPORTED_SIMULATION_VERSION");
     const competition = match.competitionId
       ? await tx.competition.findUnique({ where: { id: match.competitionId }, select: { format: true } })
@@ -480,7 +492,23 @@ export async function simulateScheduledMatch(userId: string, matchId: string, no
     if (match.scheduledAt > now) throw new MatchServiceError("MATCH_NOT_DUE", { scheduledAt: match.scheduledAt.toISOString() });
     const homeSide = toSide(home);
     const awaySide = toSide(away);
-    const result = simulateFootballMatch({ seed: match.seed, home: homeSide, away: awaySide });
+    const generated = simulateFootballMatch({ seed: match.seed, home: homeSide, away: awaySide });
+    const runtimeEvents = runtimeState?.segment.events;
+    const result = isRuntimeSettlement && runtimeState
+      ? {
+          ...generated,
+          homeScore: runtimeState.segment.home.score,
+          awayScore: runtimeState.segment.away.score,
+          events: runtimeEvents ?? [],
+          homeExpectedGoals: runtimeState.segment.home.expectedGoals,
+          awayExpectedGoals: runtimeState.segment.away.expectedGoals,
+          performances: generated.performances.map((line) => {
+            const goals = (runtimeEvents ?? []).filter((event) => event.type === "GOAL" && event.playerId === line.playerId).length;
+            const assists = (runtimeEvents ?? []).filter((event) => event.type === "GOAL" && event.relatedPlayerId === line.playerId).length;
+            return { ...line, goals, assists, shots: Math.max(line.shots, goals) };
+          }),
+        }
+      : generated;
     const penalties = competition?.format === "CUP" && result.homeScore === result.awayScore
       ? simulatePenaltyShootout({ seed: match.seed, home: homeSide, away: awaySide })
       : null;
@@ -488,7 +516,7 @@ export async function simulateScheduledMatch(userId: string, matchId: string, no
       : result.awayScore > result.homeScore ? away.id
         : penalties ? (penalties.winner === "HOME" ? home.id : away.id) : null;
     const claimed = await tx.footballMatch.updateMany({
-      where: { id: match.id, status: "SCHEDULED" },
+      where: { id: match.id, status: isRuntimeSettlement ? "IN_PROGRESS" : "SCHEDULED" },
       data: {
         status: "COMPLETED", startedAt: now, completedAt: now,
         homeScore: result.homeScore, awayScore: result.awayScore, homePenalties: penalties?.homePenalties ?? null,
@@ -498,6 +526,12 @@ export async function simulateScheduledMatch(userId: string, matchId: string, no
       },
     });
     if (claimed.count !== 1) throw new MatchServiceError("MATCH_ALREADY_SIMULATED");
+    if (isRuntimeSettlement && runtime) {
+      await tx.matchRuntime.updateMany({
+        where: { id: runtime.id, status: "RUNNING", currentMinute: 90 },
+        data: { status: "COMPLETED", completedAt: now, nextActionAt: null, leaseOwner: null, leaseToken: null, leaseExpiresAt: null },
+      });
+    }
     await tx.matchEvent.createMany({ data: result.events.map((event) => ({
       matchId: match.id, sequence: event.sequence, minute: event.minute, type: event.type,
       teamId: event.teamId, playerId: event.playerId, relatedPlayerId: event.relatedPlayerId ?? null, detail: event.detail,
