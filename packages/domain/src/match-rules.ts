@@ -12,6 +12,7 @@ export type MatchSubstitutionRules = {
 
 export type MatchRules = MatchSubstitutionRules & {
   injuriesEnabled: boolean;
+  injuryDurationDays: number;
   redCardSuspensionMatches: number;
   yellowCardsToSuspend: number;
   yellowCardSuspensionMatches: number;
@@ -22,6 +23,7 @@ export const DEFAULT_MATCH_RULES: Readonly<MatchRules> = Object.freeze({
   maxSubstitutions: 5,
   maxInPlayWindows: 3,
   injuriesEnabled: true,
+  injuryDurationDays: 5,
   redCardSuspensionMatches: 1,
   yellowCardsToSuspend: 3,
   yellowCardSuspensionMatches: 1,
@@ -44,6 +46,7 @@ export function validateMatchRules(value: unknown): MatchRules {
     maxSubstitutions: Number(input.maxSubstitutions),
     maxInPlayWindows: Number(input.maxInPlayWindows),
     injuriesEnabled: input.injuriesEnabled as boolean,
+    injuryDurationDays: Number(input.injuryDurationDays),
     redCardSuspensionMatches: Number(input.redCardSuspensionMatches),
     yellowCardsToSuspend: Number(input.yellowCardsToSuspend),
     yellowCardSuspensionMatches: Number(input.yellowCardSuspensionMatches),
@@ -55,6 +58,7 @@ export function validateMatchRules(value: unknown): MatchRules {
     || !Number.isInteger(rules.redCardSuspensionMatches) || rules.redCardSuspensionMatches < 0 || rules.redCardSuspensionMatches > 5
     || !Number.isInteger(rules.yellowCardsToSuspend) || rules.yellowCardsToSuspend < 0 || rules.yellowCardsToSuspend > 10
     || !Number.isInteger(rules.yellowCardSuspensionMatches) || rules.yellowCardSuspensionMatches < 0 || rules.yellowCardSuspensionMatches > 5
+    || !Number.isInteger(rules.injuryDurationDays) || rules.injuryDurationDays < 1 || rules.injuryDurationDays > 14
     || typeof rules.injuriesEnabled !== "boolean" || typeof rules.penaltiesOnDraw !== "boolean") {
     throw new Error("INVALID_MATCH_RULES");
   }
