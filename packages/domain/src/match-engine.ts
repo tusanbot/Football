@@ -1,4 +1,5 @@
 import type { PlayerAttributes, PlayerPosition } from "./players.js";
+import { DEFAULT_MATCH_RULES, type MatchRules } from "./match-rules.js";
 
 export type MatchTactics = {
   mentality: "DEFENSIVE" | "BALANCED" | "ATTACKING";
