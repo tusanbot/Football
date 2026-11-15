@@ -177,7 +177,7 @@ export class MarketEconomyRepository {
       if (!listing || listing.status !== "OPEN" || listing.sellerClubId !== input.sellerClubId ||
           listing.playerId !== input.playerId || listing.expiresAt <= at ||
           listing.askingPrice !== amountText) throw new MarketListingUnavailableError();
-      if (!buyerWallet || !sellerWallet) throw new EconomyWalletNotFoundError();
+      if (buyerWallet === null || sellerWallet === null) throw new EconomyWalletNotFoundError();
       if (buyerWallet.version >= MAX_VERSION || sellerWallet.version >= MAX_VERSION) throw batchError;
       const buyerBalance = fromD1Integer(buyerWallet.balance);
       const sellerBalance = fromD1Integer(sellerWallet.balance);
