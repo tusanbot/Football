@@ -212,7 +212,7 @@ export async function respondToPromotion(userId: string, offerId: string, accept
     if (!offer) throw new PyramidLeagueError("PROMOTION_OFFER_NOT_FOUND");
     if (offer.clubId !== club.id) throw new PyramidLeagueError("NOT_PROMOTION_OFFER_OWNER");
     if (offer.status !== "PENDING") throw new PyramidLeagueError("PROMOTION_OFFER_ALREADY_RESOLVED");
-    if (!accept && offer.expiresAt <= now) throw new PyramidLeagueError("PROMOTION_OFFER_EXPIRED");
+    if (offer.expiresAt <= now) throw new PyramidLeagueError("PROMOTION_OFFER_EXPIRED");
     const updated = await tx.leaguePromotionOffer.update({ where: { id: offerId }, data: { status: accept ? "ACCEPTED" : "DECLINED", resolvedAt: now } });
     const sourceTier = offer.league.tier;
     const season = offer.league.season + 1;
