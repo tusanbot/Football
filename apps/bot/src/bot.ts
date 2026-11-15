@@ -354,7 +354,7 @@ bot.command("redeem", async (ctx) => {
   }
 });
 
-const adminOnlyInPrivate = (ctx: Context) => ctx.chat.type === "private";
+const adminOnlyInPrivate = (ctx: Context) => ctx.chat?.type === "private";
 
 bot.command("admin", async (ctx) => {
   if (!ctx.from || !adminOnlyInPrivate(ctx)) return;
