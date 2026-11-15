@@ -2,6 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { requireTelegramUser } from "./auth/require-telegram-user.js";
 import { prisma } from "./db.js";
+import { consumeAllianceActionRateLimit } from "./groups/alliance-rate-limit.js";
 
 const MAX_LOGO_BYTES = 512 * 1024;
 const logoBody = z.object({
@@ -181,6 +182,7 @@ export function registerPublicClubRoutes(app: FastifyInstance) {
   app.put("/v1/club/logo", async (request, reply) => {
     const user = await requireTelegramUser(request);
     if (!user) return reply.code(401).send({ error: "UNAUTHENTICATED" });
+    if (!await consumeAllianceActionRateLimit({ telegramUserId: user.telegramId, telegramGroupId: "global", action: "club-logo-upload", limit: 5 })) return reply.code(429).send({ error: "CLUB_LOGO_RATE_LIMITED", retryAfterSeconds: 60 });
     const body = logoBody.safeParse(request.body);
     if (!body.success) return reply.code(400).send({ error: "INVALID_CLUB_LOGO" });
     const bytes = Buffer.from(body.data.base64, "base64");
@@ -201,6 +203,7 @@ export function registerPublicClubRoutes(app: FastifyInstance) {
   app.delete("/v1/club/logo", async (request, reply) => {
     const user = await requireTelegramUser(request);
     if (!user) return reply.code(401).send({ error: "UNAUTHENTICATED" });
+    if (!await consumeAllianceActionRateLimit({ telegramUserId: user.telegramId, telegramGroupId: "global", action: "club-logo-delete", limit: 5 })) return reply.code(429).send({ error: "CLUB_LOGO_RATE_LIMITED", retryAfterSeconds: 60 });
     const club = await prisma.club.update({
       where: { ownerId: user.id }, data: { logoData: null, logoMime: null }, select: { id: true },
     }).catch((error: unknown) => {
