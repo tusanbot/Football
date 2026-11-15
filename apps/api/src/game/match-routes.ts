@@ -5,10 +5,22 @@ import { requireTelegramUser } from "../auth/require-telegram-user.js";
 import { getMatchFallbackPlan, saveMatchFallbackPlan, MatchFallbackPlanError } from "./match-fallback-service.js";
 import {
   MatchServiceError, createFriendlyMatch, createLeague, getLeague, joinLeague,
-  listClubMatches, listMatchOpponents, listOpenLeagues, simulateScheduledMatch, startLeague, submitMatchCheckpointDecision,
+  listClubMatches, listMatchOpponents, listOpenLeagues, simulateScheduledMatch, startLeague, submitMatchCheckpointDecision, updateCompetitionRules,
 } from "./match-service.js";
 
 const keySchema = z.string().regex(/^[A-Za-z0-9:_-]{12,128}$/);
+const competitionRulesSchema = z.object({
+  maxSubstitutions: z.number().int().min(0).max(7),
+  maxInPlayWindows: z.number().int().min(0).max(5),
+  injuriesEnabled: z.boolean(),
+  redCardSuspensionMatches: z.number().int().min(0).max(5),
+  yellowCardsToSuspend: z.number().int().min(0).max(10),
+  yellowCardSuspensionMatches: z.number().int().min(0).max(5),
+  penaltiesOnDraw: z.boolean(),
+}).strict().refine((rules) => rules.maxInPlayWindows <= rules.maxSubstitutions
+  && !(rules.yellowCardsToSuspend === 0 && rules.yellowCardSuspensionMatches > 0), {
+  message: "INCONSISTENT_COMPETITION_RULES",
+});
 function sendMatchError(reply: FastifyReply, error: unknown) {
   if (typeof error === "object" && error !== null && "code" in error
     && (error.code === "P2034" || error.code === "P2002")) {
@@ -129,10 +141,19 @@ export function registerMatchRoutes(app: FastifyInstance) {
     if (!user) return reply.code(401).send({ error: "UNAUTHENTICATED" });
     const body = z.object({
       name: z.string().trim().min(3).max(40), maxTeams: z.number().int().min(4).max(10),
-      format: z.enum(["LEAGUE", "CUP"]).default("LEAGUE"), idempotencyKey: keySchema,
+      format: z.enum(["LEAGUE", "CUP"]).default("LEAGUE"), rules: competitionRulesSchema.optional(), idempotencyKey: keySchema,
     }).safeParse(request.body);
     if (!body.success) return reply.code(400).send({ error: "INVALID_COMPETITION" });
-    try { return await createLeague(user.id, body.data.name, body.data.maxTeams, body.data.idempotencyKey, body.data.format); }
+    try { return await createLeague(user.id, body.data.name, body.data.maxTeams, body.data.idempotencyKey, body.data.format, body.data.rules); }
+    catch (error) { return sendMatchError(reply, error); }
+  });
+  app.put("/v1/competitions/:id/rules", async (request, reply) => {
+    const user = await requireTelegramUser(request);
+    if (!user) return reply.code(401).send({ error: "UNAUTHENTICATED" });
+    const params = z.object({ id: z.string().min(1).max(64) }).safeParse(request.params);
+    const body = competitionRulesSchema.safeParse(request.body);
+    if (!params.success || !body.success) return reply.code(400).send({ error: "INVALID_COMPETITION_RULES" });
+    try { return await updateCompetitionRules(user.id, params.data.id, body.data); }
     catch (error) { return sendMatchError(reply, error); }
   });
   app.post("/v1/competitions/:id/join", async (request, reply) => {
