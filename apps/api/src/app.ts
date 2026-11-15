@@ -12,7 +12,7 @@ import { registerMatchNotificationRoutes } from "./game/match-notification-route
 import { registerGroupRoutes } from "./groups/group-routes.js";
 import { registerAllianceRoutes } from "./groups/alliance-routes.js";
 import { prisma } from "./db.js";
-import { parseAdminTelegramIds } from "./runtime-config.js";
+import { parseAdminTelegramIds, parseCorsOrigins } from "./runtime-config.js";
 import { registerAdminRoutes } from "./admin-routes.js";
 import { registerAdminLeagueRoutes } from "./admin-league-routes.js";
 import { registerGiftCodeRoutes } from "./gift-code-routes.js";
@@ -47,7 +47,7 @@ export function buildApp() {
   });
 
   void app.register(cors, {
-    origin: process.env.CORS_ORIGIN?.split(",").map((origin) => origin.trim()).filter(Boolean) ?? false,
+    origin: parseCorsOrigins(process.env.CORS_ORIGIN).length ? parseCorsOrigins(process.env.CORS_ORIGIN) : false,
     credentials: true,
   });
 
