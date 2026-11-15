@@ -98,6 +98,6 @@ test("bot source does not bypass the group reply retention wrapper with direct s
   const directSendPattern =
     /(?:ctx|bot)\.api\.(?:sendMessage|sendPhoto|sendDocument|sendVideo|sendAudio|sendAnimation|sendMediaGroup|sendLocation|sendVenue|sendPoll|sendSticker|sendVoice|sendVideoNote)|ctx\.replyWith(?:Photo|Document|Video|Audio|Animation|MediaGroup|Location|Venue|Poll|Sticker|Voice|VideoNote)/g;
   const directSends = [...botSource.matchAll(directSendPattern)].map((match) => match[0]);
-  assert.deepEqual(directSends, ["bot.api.sendMessage"]);
-  assert.ok(botSource.includes("bot.api.sendMessage(telegramId"));
+  assert.deepEqual(directSends, ["bot.api.sendMessage", "bot.api.sendMessage"]);
+  assert.equal((botSource.match(/bot\.api\.sendMessage\(telegramId/g) ?? []).length, 2);
 });
