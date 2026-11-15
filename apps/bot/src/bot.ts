@@ -31,6 +31,7 @@ if (webAppUrl) {
 }
 const bot = new Bot(token);
 let botTelegramId: number | undefined;
+const botRuntimeInstanceId = randomUUID();
 const backgroundTimers: NodeJS.Timeout[] = [];
 
 bot.use(async (ctx, next) => {
@@ -1847,7 +1848,6 @@ if (apiUrl && botApiSecret) {
 
 const apiReadiness = await fetch(new URL("/ready", apiUrl), { signal: AbortSignal.timeout(15_000) });
 if (!apiReadiness.ok) throw new Error("Football Empire API is not ready (HTTP " + apiReadiness.status + "). Start and verify the API before the Bot.");
-await bot.api.deleteWebhook({ drop_pending_updates: false });
 const botIdentity = await bot.api.getMe();
 const identityCheck = await fetch(new URL("/v1/bot/verify-identity", apiUrl), {
   method: "POST",
@@ -1856,12 +1856,42 @@ const identityCheck = await fetch(new URL("/v1/bot/verify-identity", apiUrl), {
   signal: AbortSignal.timeout(15_000),
 });
 if (!identityCheck.ok) throw new Error("The API and Bot Telegram tokens do not identify the same Bot (HTTP " + identityCheck.status + ").");
+const lease = await apiSystem<{ acquired: boolean }>("/v1/bot/runtime/lease", { instanceId: botRuntimeInstanceId, action: "acquire" });
+if (!lease.acquired) throw new Error("Another Football Empire Bot process already owns the Telegram polling lease.");
+await bot.api.deleteWebhook({ drop_pending_updates: false });
 botTelegramId = botIdentity.id;
 console.info("Football Empire Bot authenticated as @" + (botIdentity.username ?? botIdentity.id));
+let stopping = false;
 const stopBot = () => {
+  if (stopping) return;
+  stopping = true;
   for (const timer of backgroundTimers) clearInterval(timer);
   bot.stop();
+  void apiSystem("/v1/bot/runtime/lease", { instanceId: botRuntimeInstanceId, action: "release" })
+    .catch((error) => console.error("Could not release Bot runtime lease:", error));
 };
+const leaseTimer = setInterval(() => {
+  void apiSystem<{ acquired: boolean }>("/v1/bot/runtime/lease", { instanceId: botRuntimeInstanceId, action: "heartbeat" })
+    .then((result) => {
+      if (!result.acquired) {
+        console.error("Football Empire Bot lost its Telegram polling lease; stopping this process.");
+        stopBot();
+        process.exitCode = 1;
+      }
+    })
+    .catch((error) => {
+      console.error("Football Empire Bot could not renew its polling lease; stopping safely:", error);
+      stopBot();
+      process.exitCode = 1;
+    });
+}, 15_000);
+backgroundTimers.push(leaseTimer);
+leaseTimer.unref();
 process.once("SIGTERM", stopBot);
 process.once("SIGINT", stopBot);
-await bot.start({ allowed_updates: ["message", "edited_message", "callback_query", "chat_member", "my_chat_member"] });
+try {
+  await bot.start({ allowed_updates: ["message", "edited_message", "callback_query", "chat_member", "my_chat_member"] });
+} catch (error) {
+  stopBot();
+  throw error;
+}

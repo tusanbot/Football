@@ -1225,3 +1225,10 @@ model AdminGroupBroadcastDelivery {
   @@unique([broadcastId, telegramGroupId])
   @@index([deliveredAt, availableAt, deliveryLockedUntil])
 }
+
+model BotRuntimeLease {
+  id String @id
+  instanceId String
+  lockedUntil DateTime
+  updatedAt DateTime @updatedAt
+}
