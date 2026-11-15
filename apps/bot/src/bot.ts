@@ -445,6 +445,49 @@ bot.command("adminchallenge", async (ctx) => {
   }
 });
 
+bot.command("adminfinance", async (ctx) => {
+  if (!ctx.from || ctx.chat.type !== "private") return;
+  const days = Math.max(1, Math.min(365, Number(String(ctx.match ?? "30").trim()) || 30));
+  try {
+    const data = await api<{wallet:Array<{asset:string;direction:string;total:string;count:number}>;clubFinance:Array<{category:string;direction:string;total:string;count:number}>;groupPoints:Array<{source:string;total:string;count:number}>}>("/v1/admin/finance-summary?days="+days,ctx.from.id);
+    const rows = [
+      ...data.wallet.map(x=>"کیف پول · "+x.asset+" · "+x.direction+": "+x.total+" ("+x.count+")"),
+      ...data.clubFinance.map(x=>"باشگاه · "+x.category+" · "+x.direction+": "+x.total+" ("+x.count+")"),
+      ...data.groupPoints.map(x=>"امتیاز گروه · "+x.source+": "+x.total+" ("+x.count+")"),
+    ];
+    await ctx.reply(("گزارش مالی "+days+" روز اخیر\n\n"+(rows.join("\n")||"تراکنشی ثبت نشده است.")).slice(0,3900));
+  } catch(error) { await ctx.reply("گزارش مالی در دسترس نیست: "+(error instanceof Error?error.message:"خطای نامشخص")); }
+});
+
+bot.command("adminrole", async (ctx) => {
+  if (!ctx.from || ctx.chat.type !== "private") return;
+  const [operation, telegramId, role] = String(ctx.match ?? "").trim().split(/\s+/);
+  if (!telegramId || !["assign","revoke"].includes(operation ?? "") || (operation==="assign"&&!["football","economy","moderator"].includes(role ?? ""))) {
+    return ctx.reply("استفاده: /adminrole assign TELEGRAM_ID football|economy|moderator یا /adminrole revoke TELEGRAM_ID");
+  }
+  try {
+    await api("/v1/admin/actions",ctx.from.id,"POST",{
+      action:operation==="assign"?"set-admin-role":"revoke-admin-role",
+      adminTelegramId:telegramId,...(operation==="assign"?{adminRole:role}:{}),idempotencyKey:randomUUID(),
+    });
+    await ctx.reply(operation==="assign"?"نقش مدیر ثبت شد.":"دسترسی مدیر لغو شد.");
+  } catch(error) { await ctx.reply("تغییر نقش ناموفق بود: "+(error instanceof Error?error.message:"خطای نامشخص")); }
+});
+
+bot.command("adminsetting", async (ctx) => {
+  if (!ctx.from || ctx.chat.type !== "private") return;
+  const input=String(ctx.match ?? "").trim();
+  const split=input.indexOf(" ");
+  if(split<1)return ctx.reply('استفاده: /adminsetting KEY JSON_VALUE\nمثال: /adminsetting economy.dailyReward 100');
+  const settingKey=input.slice(0,split);
+  let settingValue:unknown;
+  try { settingValue=JSON.parse(input.slice(split+1)); } catch { return ctx.reply("مقدار باید JSON معتبر باشد."); }
+  try {
+    await api("/v1/admin/actions",ctx.from.id,"POST",{action:"set-game-setting",settingKey,settingValue,idempotencyKey:randomUUID()});
+    await ctx.reply("تنظیم بازی ذخیره شد.");
+  } catch(error) { await ctx.reply("ذخیره تنظیم ناموفق بود: "+(error instanceof Error?error.message:"خطای نامشخص")); }
+});
+
 bot.command("adminhelp", async (ctx) => {
   if (!ctx.from || !adminOnlyInPrivate(ctx)) return;
   await ctx.reply(
