@@ -26,6 +26,10 @@ Connect both Workers to repository `tusanbot/Football`, branch `feat/cloudflare-
 | Worker name | `football-empire-web-dev` | `football-empire-api-dev` |
 | Build command | `pnpm build:worker` | `pnpm check:worker` |
 | Local preview | `pnpm preview:worker` | `pnpm dev` |
+| Deploy command | `echo "Deployment disabled until approved"` | `echo "Deployment disabled until approved"` |
+| Non-production branch deploy | `echo "Preview deployment disabled until approved"` | `echo "Preview deployment disabled until approved"` |
+
+**Important:** Cloudflare Workers Builds defaults its deploy command to `npx wrangler deploy`. Set the safe `echo` commands above in Settings → Builds for both Workers; otherwise a connected Git push may deploy automatically. Keep the connected branch set to `feat/cloudflare-worker-runtime`. Do not enable automatic preview deployment yet.
 
 Do not run Wrangler from the monorepo root. Each Worker needs its own root directory.
 
@@ -61,11 +65,22 @@ Required secrets:
 
 Required variables:
 
-- `CORS_ORIGIN`: exact comma-separated HTTPS origins allowed to call the API; include the Web Worker origin.
+- `CORS_ORIGIN`: exact comma-separated origins allowed to call the API; use HTTPS for staging/production and only localhost HTTP origins for local development. Include the Web Worker origin.
 - `GAME_ADMIN_TELEGRAM_IDS`: comma-separated numeric Telegram administrator IDs.
 - `ENVIRONMENT`: use `development` for initial staging validation.
 
-Create a Cloudflare Hyperdrive configuration pointing at the existing **development PostgreSQL database**, then attach it with binding name `HYPERDRIVE`. Hyperdrive is preferred for connection pooling. Without it, set `DATABASE_URL` as a Worker secret. Never commit database credentials or put them in Wrangler `vars`.
+Create a Cloudflare Hyperdrive configuration pointing at the existing **development PostgreSQL database**. Add its generated ID to `cloudflare/api/wrangler.jsonc` as the `HYPERDRIVE` binding:
+
+```json
+"hyperdrive": [
+  {
+    "binding": "HYPERDRIVE",
+    "id": "YOUR_DEVELOPMENT_HYPERDRIVE_ID"
+  }
+]
+```
+
+Hyperdrive is preferred because it pools database connections across Worker requests. If you do not use Hyperdrive, set `DATABASE_URL` as a Worker secret instead. Never commit database credentials or put them in Wrangler `vars`. The D1 binding named `DB` is not used by this PostgreSQL compatibility runtime.
 
 For local development, copy `cloudflare/api/.dev.vars.example` to `cloudflare/api/.dev.vars` and replace placeholders with local development values. The real `.dev.vars` file is Git-ignored. The API Worker uses local port `8787`; the OpenNext Worker preview uses `8788`. For a fully functional local Mini App/API loop, run the API Worker and the ordinary Next.js dev server (port `3000`) with `NEXT_PUBLIC_API_URL=http://localhost:8787`. The production OpenNext build requires an HTTPS API origin, so use the deployed staging API Worker origin when validating the Cloudflare Mini App build.
 
