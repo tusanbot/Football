@@ -322,6 +322,15 @@ export async function listClubMatches(userId: string) {
       include: {
         homeClub: { select: { id: true, name: true } }, awayClub: { select: { id: true, name: true } },
         events: { orderBy: { sequence: "asc" } },
+        runtime: { select: { status: true, currentMinute: true, nextActionAt: true, completedAt: true } },
+        checkpoints: {
+          orderBy: { minute: "asc" },
+          select: {
+            checkpointKey: true, kind: true, minute: true, status: true,
+            openedAt: true, decisionDeadlineAt: true, nextSegmentAt: true, resolvedAt: true,
+            decisions: { select: { clubId: true, submittedAt: true } },
+          },
+        },
       }, orderBy: { scheduledAt: "desc" }, take: 50,
     }),
     prisma.competition.findMany({
@@ -338,6 +347,20 @@ export async function listClubMatches(userId: string) {
   return {
     matches: matches.map((match) => ({
       id: match.id, type: match.type, status: match.status, simulationVersion: match.simulationVersion, scheduledAt: match.scheduledAt.toISOString(),
+      runtime: match.runtime ? {
+        status: match.runtime.status, currentMinute: match.runtime.currentMinute,
+        nextActionAt: match.runtime.nextActionAt?.toISOString() ?? null,
+        completedAt: match.runtime.completedAt?.toISOString() ?? null,
+      } : null,
+      checkpoints: match.checkpoints.map((checkpoint) => ({
+        checkpointKey: checkpoint.checkpointKey, kind: checkpoint.kind, minute: checkpoint.minute,
+        status: checkpoint.status, openedAt: checkpoint.openedAt.toISOString(),
+        decisionDeadlineAt: checkpoint.decisionDeadlineAt.toISOString(),
+        nextSegmentAt: checkpoint.nextSegmentAt.toISOString(),
+        resolvedAt: checkpoint.resolvedAt?.toISOString() ?? null,
+        homeDecisionSubmitted: checkpoint.decisions.some((decision) => decision.clubId === match.homeClubId),
+        awayDecisionSubmitted: checkpoint.decisions.some((decision) => decision.clubId === match.awayClubId),
+      })),
       homeClub: match.homeClub, awayClub: match.awayClub, homeScore: match.homeScore, awayScore: match.awayScore,
       attendance: match.attendance, ticketRevenue: match.ticketRevenue.toString(), round: match.round,
       homePenalties: match.homePenalties, awayPenalties: match.awayPenalties, winnerClubId: match.winnerClubId,
