@@ -468,7 +468,7 @@ bot.command("admingroup", async (ctx) => {
       action: operation === "suspend" ? "suspend-group" : "restore-group",
       targetId, reason: reasonParts.join(" ") || "Telegram admin command", idempotencyKey: randomUUID(),
     });
-    await ctx.reply("وضعیت گروه با موفقیت به‌روزرسانی شد.");
+    await ctx.reply(operation === "restore" ? "تعلیق گروه برداشته شد؛ مدیر گروه باید برای بررسی مجدد تعداد اعضا و دسترسی ربات، دستور /group-check را در همان گروه اجرا کند." : "گروه تعلیق شد و دسترسی‌های آن غیرفعال شدند.");
   } catch (error) {
     await ctx.reply("عملیات انجام نشد: " + (error instanceof Error ? error.message : "خطای نامشخص"));
   }
