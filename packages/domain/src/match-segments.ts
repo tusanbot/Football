@@ -105,15 +105,15 @@ export function advanceMatchSegment(input: {
   const duration = toMinute - fromMinute;
   const homeAttack = effectiveAttack(home);
   const awayAttack = effectiveAttack(away);
-  const homeChance = clamp((0.018 + (homeAttack - effectiveAttack(away) * 0.82) / 420) * duration / 45, 0.025, 0.42);
-  const awayChance = clamp((0.016 + (awayAttack - effectiveAttack(home) * 0.82) / 430) * duration / 45, 0.02, 0.4);
+  const homeChance = clamp(0.9 + (homeAttack - effectiveAttack(away)) / 80, 0.25, 1.8) * duration / 45;
+  const awayChance = clamp(0.85 + (awayAttack - effectiveAttack(home)) / 85, 0.2, 1.7) * duration / 45;
   const events: MatchEvent[] = [];
   let sequence = state.nextSequence;
   const addEvent = (event: Omit<MatchEvent, "sequence">) => {
     events.push({ ...event, sequence: sequence++ });
   };
   const scoreSide = (side: MatchSide, chance: number) => {
-    const expectedGoals = chance * 1.35;
+    const expectedGoals = chance;
     const goals = Math.floor(expectedGoals) + (random() < expectedGoals % 1 ? 1 : 0);
     for (let index = 0; index < goals; index++) {
       const candidates = side.players.filter((player) => isAttacker(player.position));
