@@ -565,10 +565,11 @@ export async function simulateScheduledMatch(userId: string, matchId: string, no
     });
     if (claimed.count !== 1) throw new MatchServiceError("MATCH_ALREADY_SIMULATED");
     if (isRuntimeSettlement && runtime) {
-      await tx.matchRuntime.updateMany({
+      const runtimeCompleted = await tx.matchRuntime.updateMany({
         where: { id: runtime.id, status: "RUNNING", currentMinute: 90 },
         data: { status: "COMPLETED", completedAt: now, nextActionAt: null, leaseOwner: null, leaseToken: null, leaseExpiresAt: null },
       });
+      if (runtimeCompleted.count !== 1) throw new MatchServiceError("MATCH_RUNTIME_CONCURRENT_MODIFICATION");
     }
     await tx.matchEvent.createMany({ data: result.events.map((event) => ({
       matchId: match.id, sequence: event.sequence, minute: event.minute, type: event.type,
