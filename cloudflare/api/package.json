@@ -3,6 +3,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "typecheck": "tsc --noEmit -p tsconfig.json"
+    "dev": "pnpm dlx wrangler@4.68.0 dev --local --config wrangler.jsonc",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "pnpm dlx tsx@4.19.3 --test test/*.test.ts",
+    "db:migrate:local": "pnpm dlx wrangler@4.68.0 d1 migrations apply football-empire-dev --local --config wrangler.jsonc"
   }
 }

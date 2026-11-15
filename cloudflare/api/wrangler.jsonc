@@ -1,18 +1,18 @@
 {
-  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "$schema": "node_modules/wrangler/config-schema.json",
   "name": "football-empire-api-dev",
   "main": "src/index.ts",
   "compatibility_date": "2026-11-15",
+  "workers_dev": true,
+  "preview_urls": false,
   "observability": {
     "enabled": true
   },
-  "workers_dev": true,
-  "preview_urls": false,
   "d1_databases": [
     {
       "binding": "DB",
       "database_name": "football-empire-dev",
-      "database_id": "REPLACE_WITH_DEVELOPMENT_D1_DATABASE_ID",
+      "database_id": "00000000-0000-0000-0000-000000000001",
       "migrations_dir": "migrations"
     }
   ]
