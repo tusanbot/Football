@@ -23,7 +23,7 @@ A Telegram-first football management MMO. Telegram Bot, Telegram Mini App and Te
 
 ## Implemented foundation
 
-- Fastify API, Telegram Mini App `initData` HMAC validation and Telegram bot-to-API shared-secret authentication.
+- Fastify API with Telegram Mini App initData HMAC verification, short-lived signed API sessions (12-hour expiry), Bot-to-API shared-secret authentication, and database-backed rate limits for sensitive operations.
 - Shared Telegram account provisioning service used by both Mini App `initData` and authenticated Bot onboarding (`/start`); creates the primary club, Cash/Gold wallets, starter ledger grants and 18-player squad atomically.
 - Generated starter squad, automatic strongest-available 4-3-3 starting XI, and authenticated squad/wallet/profile APIs.
 - Server-validated starting XI management with 4-3-3, 4-4-2, 3-5-2 and 4-2-3-1 formations, tactical presets, ownership/position validation and optimistic version checks.
@@ -46,9 +46,19 @@ A Telegram-first football management MMO. Telegram Bot, Telegram Mini App and Te
 - Transfer market for generated players: create/cancel listings, expiry handling, atomic purchase, player ownership transfer and buyer/seller ledger entries.
 - Persian RTL Mini App: browse listings, sell owned players, manage own listings, view the special-player catalog, configure starting XI/formation/tactics, and manage player training, fitness, morale, injuries, contracts and payroll, schedule friendlies, use the live match center for score/timeline/checkpoint decisions and substitutions, create/join leagues and knockout cups, and inspect standings, brackets and match reports.
 - Telegram bot commands: `/start` (Bot-only account/club creation), `/club`, `/wallet`, `/rename`, `/players`, `/lineup`, `/setlineup`, `/development`, `/train PLAYER_ID FOCUS INTENSITY`, `/renew PLAYER_ID DAYS WEEKLY_WAGE`, `/operations`, `/finance`, `/upgrade`, `/ticket-price`, `/scout`, `/recruit`, `/sponsor`, `/coach-upgrade`, `/hire-coach`, `/opponents`, `/friendly`, `/matches`, `/play`, `/league`, `/cup`, `/leagues`, `/joinleague`, `/tactic`, `/sub`, `/startleague`, `/startcup`, `/table`, `/market`, `/sell PLAYER_ID PRICE`, `/buy LISTING_ID`, `/special`, and `/pack`.
-- Both clients use the same authenticated API; the bot does not implement game/economy rules.
+- Telegram group operations: verified group registration and membership synchronization, member-threshold checks, daily/game activity points, group treasury and personal reward balances, group shop, challenges, local leagues, and alliance competitions.
+- National seven-tier league pyramid with eight-team league creation, application queues, promotion/relegation offers, opt-out and replacement handling, season awards, and durable Bot notices.
+- Semi-active match runtime with persisted checkpoints, tactical decisions, fallback plans, five-substitution limit including half-time, suspensions, match notifications and retryable delivery queues.
+- Central admin API and Mini App panel for scoped roles, game settings, players, clubs, groups, competitions, moderation, gifts, wallet/group ledger adjustments, finance reports, awards, audit logs and durable broadcasts.
+- Durable group-message deletion queue (60-second default), with exceptions for persistent group replies; durable retry queues for user and group notifications.
+- Telegram polling is protected by a PostgreSQL lease: only one Bot process per database may own polling at a time; the lease is renewed every 15 seconds and expires automatically after process loss.
+- Both clients use the same authenticated API; the Bot does not implement game/economy rules.
 
-The project is still an early development foundation, not a production-ready game. The club-operations foundation now includes facilities, academy, coach hiring/progression, sponsor income, maintenance, ticket-price settings and financial statements. The initial match engine, friendly lifecycle, round-robin leagues, single-elimination cups for four/eight clubs with penalty shootouts, and matchday gate receipts are now implemented. Two-leg cups, promotion/relegation, full season administration, manager-configured substitution plans, advanced match commentary, complete group competitions, admin controls, and comprehensive economy/security/load testing remain in development.
+## Delivery status
+
+The core gameplay, economy, match lifecycle, league pyramid, group competitions, administration and Bot/Mini App integration are implemented on the development branch. This is still a development release, not a production launch declaration: CI verifies schema migration, seed integrity, TypeScript, automated tests and production builds, but it cannot verify a real BotFather token, Telegram group permissions, live Telegram delivery, production database backups, or behavior under production traffic.
+
+The remaining release gates are operational: configure real secrets and HTTPS origins, apply migrations to the intended database, grant the Bot administrator rights in each participating group, run live end-to-end checks through both Telegram clients, validate backup/restore, and complete production load/monitoring checks.
 
 ## Runtime configuration
 
@@ -64,7 +74,9 @@ Set these values for the web app:
 - `NEXT_PUBLIC_API_URL` — public HTTPS API base URL used by the Mini App.
 - `CORS_ORIGIN` — comma-separated allowed web origins for the API.
 
-The Mini App authenticates with Telegram's signed `initData`. Bot requests use the shared `BOT_API_SECRET` plus the Telegram sender ID; keep the secret server-side and use HTTPS between services in production. The Bot's private `/start` command provisions the same account/club through `/v1/auth/bot`; it does not require the user to open the Mini App.
+The Mini App exchanges fresh Telegram-signed initData at POST /v1/auth/telegram. The API verifies the HMAC and timestamp (five-minute maximum age), provisions the account if needed, and returns a signed bearer session that expires after 12 hours. Web clients keep that session in memory and send it as Authorization: Bearer; the Bot API secret is never sent to the browser. If the initial Telegram data has expired, the user must reopen the Mini App from Telegram to obtain fresh initData.
+
+Bot-to-API requests use BOT_API_SECRET plus the Telegram sender ID; keep the secret server-side and use HTTPS between services in production. The same secret signs Mini App sessions, so rotating it invalidates existing sessions. The Bot's private /start command provisions the same account/club through /v1/auth/bot; it does not require the user to open the Mini App. The Bot runs in long-polling mode and deliberately removes any configured webhook after its database polling lease is acquired. Run one Bot process per database; a second process is rejected until the active lease is released or expires.
 
 ## Database setup
 
@@ -83,12 +95,17 @@ The seed is safe to rerun: it upserts catalog records by stable slug. Run migrat
 5. Generate Prisma Client: `pnpm db:generate`.
 6. Start services: `pnpm dev`.
 
-## Remaining development sequence
+## Pre-production checklist
 
-1. Complete club facilities, academy, coach progression, sponsorship, and revenue/expense statements.
-2. Match simulation, fixtures, leagues, tournaments, and group challenges.
-3. Complete remaining Bot/Mini App parity and group operations.
-4. Security, economy simulation, concurrency, and load testing before any production release.
+1. Set unique production values for DATABASE_URL, TELEGRAM_BOT_TOKEN, BOT_API_SECRET, CORS_ORIGIN, GAME_ADMIN_TELEGRAM_IDS, FOOTBALL_API_URL, NEXT_PUBLIC_API_URL and TELEGRAM_WEB_APP_URL. Production web/API origins must use HTTPS.
+2. Apply migrations once to the intended database with pnpm db:migrate:deploy, then run pnpm --filter @football/api db:seed:special.
+3. Start the API and confirm GET /ready returns HTTP 200 before starting the Bot.
+4. Start exactly one Bot process for that database. It verifies the Bot token against the API, acquires the database polling lease, switches Telegram to long polling, and renews the lease. Do not configure a webhook for this polling deployment.
+5. Open the Mini App through Telegram and test onboarding, wallet, player management, match checkpoints/fallback, competitions, group membership, gifts and admin permissions. Test Bot commands and Mini App actions against the same test accounts.
+6. Verify Bot administrator rights in every group, including the ability to query member status/count and delete the Bot's own temporary messages.
+7. Verify backup restoration, structured logs/alerts, queue retry behavior and load/concurrency limits before production traffic.
+
+Do not treat a successful CI run as evidence that Telegram credentials, live group permissions, external networking, production secrets or deployment are configured.
 
 
 ## Seasonal player awards archive
