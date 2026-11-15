@@ -3,10 +3,13 @@ import { buildApp } from "./app.js";
 import { processDueMatchRuntimes } from "./game/match-service.js";
 import { processDuePromotionOffers } from "./game/league-pyramid-service.js";
 import { prisma } from "./db.js";
-const required = ["DATABASE_URL", "TELEGRAM_BOT_TOKEN", "BOT_API_SECRET", "CORS_ORIGIN"] as const;
+const required = ["DATABASE_URL", "TELEGRAM_BOT_TOKEN", "BOT_API_SECRET", "CORS_ORIGIN", "GAME_ADMIN_TELEGRAM_IDS"] as const;
 const missing = required.filter((key) => !process.env[key]?.trim());
 if (missing.length) throw new Error("Missing required runtime configuration: " + missing.join(", "));
-if ((process.env.BOT_API_SECRET ?? "").length < 32) throw new Error("BOT_API_SECRET must contain at least 32 characters.");
+if ((process.env.BOT_API_SECRET ?? "").length < 32 || /^(replace-with|change-me|your-)/i.test(process.env.BOT_API_SECRET ?? "")) throw new Error("BOT_API_SECRET must be a unique random secret of at least 32 characters; replace the example value.");
+if (!/^\\d{5,}:[A-Za-z0-9_-]{20,}$/.test(process.env.TELEGRAM_BOT_TOKEN ?? "")) throw new Error("TELEGRAM_BOT_TOKEN does not look like a valid BotFather token.");
+const adminIds = (process.env.GAME_ADMIN_TELEGRAM_IDS ?? "").split(",").map((id) => id.trim()).filter(Boolean);
+if (!adminIds.length || adminIds.some((id) => !/^\\d{1,20}$/.test(id))) throw new Error("GAME_ADMIN_TELEGRAM_IDS must contain at least one numeric Telegram user ID.");
 if (!(process.env.DATABASE_URL?.startsWith("postgres://") || process.env.DATABASE_URL?.startsWith("postgresql://"))) throw new Error("DATABASE_URL must use PostgreSQL.");
 const corsOrigins = (process.env.CORS_ORIGIN ?? "").split(",").map((origin) => origin.trim()).filter(Boolean);
 for (const origin of corsOrigins) {

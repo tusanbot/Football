@@ -14,7 +14,7 @@ const webAppUrl = process.env.TELEGRAM_WEB_APP_URL;
 const apiUrl = process.env.FOOTBALL_API_URL;
 const botApiSecret = process.env.BOT_API_SECRET;
 if (!apiUrl) throw new Error("FOOTBALL_API_URL is required to start the production Bot.");
-if (!botApiSecret || botApiSecret.length < 32) throw new Error("BOT_API_SECRET must contain at least 32 characters.");
+if (!botApiSecret || botApiSecret.length < 32 || /^(replace-with|change-me|your-)/i.test(botApiSecret)) throw new Error("BOT_API_SECRET must be a unique random secret of at least 32 characters.");
 let apiEndpoint: URL;
 try { apiEndpoint = new URL(apiUrl); } catch { throw new Error("FOOTBALL_API_URL must be a valid absolute URL."); }
 if (!["http:", "https:"].includes(apiEndpoint.protocol)) throw new Error("FOOTBALL_API_URL must use HTTP or HTTPS.");
