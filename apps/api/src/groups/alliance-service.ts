@@ -14,7 +14,7 @@ export class AllianceServiceError extends Error {
   constructor(readonly code: string) { super(code); this.name = "AllianceServiceError"; }
 }
 
-async function manager(tx: Prisma.TransactionClient, telegramId: string, telegramGroupId: string, _requireManager = true) {
+async function manager(tx: Prisma.TransactionClient, telegramId: string, telegramGroupId: string, requireManager = true) {
   const user = await tx.user.findUnique({ where: { telegramId }, select: { id: true, club: { select: { id: true, name: true } } } });
   if (!user) throw new AllianceServiceError("ACCOUNT_NOT_FOUND");
   if (!user.club) throw new AllianceServiceError("CLUB_NOT_FOUND");
@@ -22,6 +22,7 @@ async function manager(tx: Prisma.TransactionClient, telegramId: string, telegra
   if (!group) throw new AllianceServiceError("GROUP_NOT_REGISTERED");
   if (!group.isActive) throw new AllianceServiceError("GROUP_INACTIVE");
   if (!group.memberships.length) throw new AllianceServiceError("NOT_GROUP_MEMBER");
+  if (requireManager && group.memberships[0]!.role === "MEMBER") throw new AllianceServiceError("GROUP_MANAGER_REQUIRED");
   return { user, group };
 }
 
