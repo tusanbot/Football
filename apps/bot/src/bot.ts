@@ -240,6 +240,21 @@ bot.command("start", async (ctx) => {
       ...(ctx.from.username ? { username: ctx.from.username } : {}),
     });
 
+    const startPayload = String(ctx.match ?? "").trim();
+    if (startPayload.startsWith("challenge_")) {
+      const tokenValue = startPayload.slice("challenge_".length);
+      try {
+        const accepted = await api<{ match: { id: string; scheduledAt: string } }>(
+          `/v1/friendly-challenges/${encodeURIComponent(tokenValue)}/accept`, ctx.from.id, "POST", {},
+        );
+        await ctx.reply("چالش دوستانه پذیرفته شد. مسابقه با شناسه " + accepted.match.id
+          + " ثبت شد و تا " + new Date(accepted.match.scheduledAt).toLocaleString("fa-IR") + " آغاز می‌شود.");
+        return;
+      } catch (error) {
+        await ctx.reply("پذیرش چالش ناموفق بود: " + (error instanceof Error ? error.message : "خطای نامشخص"));
+      }
+    }
+
     const cashBalance = account.wallets.find((wallet) => wallet.asset === "CASH")?.balance ?? "0";
     const goldBalance = account.wallets.find((wallet) => wallet.asset === "GOLD")?.balance ?? "0";
     const keyboard = privateMenuKeyboard();
@@ -265,7 +280,7 @@ bot.command("menu", async (ctx) => {
 });
 
 bot.command("help", async (ctx) => ctx.reply(
-  "Football Empire commands:\n/menu — show the private Reply Keyboard again\n/club — club profile\n/wallet — Cash and Gold balances\n/rename NEW NAME — rename your club\n/players — your active squad\n/lineup — view starting XI and tactics\n/setlineup FORMATION ID1 ... ID11 — set your XI\n/development — player development overview\n/train PLAYER_ID FOCUS INTENSITY — train a player\n/renew PLAYER_ID DAYS WEEKLY_WAGE — renew a contract\n/operations — facilities, academy, sponsors and finance\n/finance [DAYS] — income and expense statement\n/upgrade stadium|training|academy — upgrade a facility\n/ticket-price PRICE — set stadium ticket price\n/scout — find academy prospects\n/recruit PROSPECT_ID — sign an academy prospect\n/sponsor OFFER_ID — sign a sponsor\n/coach-upgrade — develop your coach\n/hire-coach balanced|youth|performance — hire a coach\n/opponents — clubs available for friendlies\n/friendly CLUB_ID — schedule a friendly\n/matches — fixtures, live status and quick tactical buttons\n/tactic MATCH_ID minute-45 mentality=ATTACKING pressing=HIGH_PRESS tempo=FAST passingStyle=DIRECT formation=4-3-3\n/sub MATCH_ID minute-45 OUT_ID IN_ID [OUT_ID IN_ID ...] — make up to five substitutions\n/play MATCH_ID — simulate a due match\n/league NAME [4-10] — create a league\n/cup NAME [4|8] [legs=1|2] — create a single- or two-legged knockout cup\n/leagues — open leagues\n/joinleague ID — join a league\n/startleague ID — start your league\n/startcup ID — start your cup\n/table ID — league table or cup bracket\n/competitionrules ID [subs=5 windows=3 injuries=on injurydays=5 red=1 yellow=3 yellowban=1 penalties=on] — configure competition rules before kickoff\n/group-register — register this Telegram group (admins only)\n/group-join — join this group with your club\n/group — show group status and treasury\n/group-activity — earn one daily group point\n/group-shop — reward shop\n/group-buy ITEM [USER_ID] — purchase reward\n/group-challenges — list challenges\n/group-challenge TITLE|START_ISO|END_ISO|POINTS — create challenge\n/group-challenge-join ID — join challenge\n/group-challenge-complete ID USER_ID — settle challenge\n/group-check — refresh member threshold\n/group-league NAME [4-10] — create local league\n/group-league-join ID — join local league\n/group-league-start ID — start local league\n/group-league-table ID — standings\n/alliance — alliance status and invitations\n/alliance-create NAME — create an alliance\n/alliance-invite GROUP_ID — invite a group\n/alliance-contribute AMOUNT — contribute group points to alliance treasury\n/alliance-accept ID / /alliance-decline ID — respond to invite\n/alliance-championship NAME|TEAMS — cross-group tournament\n/alliance-championship-join ID / alliance-championship-start ID\n/alliance-season-start [DAYS] / alliance-season-close\n/alliance-season-review SEASON_ID approve|reject — flagged prize review (authorized reviewer)\n/market — open transfer listings\n/sell PLAYER_ID PRICE — list a generated player\n/buy LISTING_ID — buy a listed player\n/special — view special players and pack prices\n/pack epic|legendary|icon — acquire a special player\n\nSpecial players are not tradeable in the regular market.",
+  "Football Empire commands:\n/menu — show the private Reply Keyboard again\n/club — club profile\n/wallet — Cash and Gold balances\n/rename NEW NAME — rename your club\n/players — your active squad\n/lineup — view starting XI and tactics\n/setlineup FORMATION ID1 ... ID11 — set your XI\n/development — player development overview\n/train PLAYER_ID FOCUS INTENSITY — train a player\n/renew PLAYER_ID DAYS WEEKLY_WAGE — renew a contract\n/operations — facilities, academy, sponsors and finance\n/finance [DAYS] — income and expense statement\n/upgrade stadium|training|academy — upgrade a facility\n/ticket-price PRICE — set stadium ticket price\n/scout — find academy prospects\n/recruit PROSPECT_ID — sign an academy prospect\n/sponsor OFFER_ID — sign a sponsor\n/coach-upgrade — develop your coach\n/hire-coach balanced|youth|performance — hire a coach\n/opponents — clubs available for friendlies\n/friendly CLUB_ID — schedule a friendly\n/challenge — create a shareable friendly challenge (3 free + 2 Gold/day)\n/acceptchallenge TOKEN — accept a shared challenge\n/matches — fixtures, live status and quick tactical buttons\n/tactic MATCH_ID minute-45 mentality=ATTACKING pressing=HIGH_PRESS tempo=FAST passingStyle=DIRECT formation=4-3-3\n/sub MATCH_ID minute-45 OUT_ID IN_ID [OUT_ID IN_ID ...] — make up to five substitutions\n/play MATCH_ID — simulate a due match\n/league NAME [4-10] — create a league\n/cup NAME [4|8] [legs=1|2] — create a single- or two-legged knockout cup\n/leagues — open leagues\n/joinleague ID — join a league\n/startleague ID — start your league\n/startcup ID — start your cup\n/table ID — league table or cup bracket\n/pyramidleagues — national league pyramid\n/leagueapply — apply for the base league\n/promotion OFFER_ID accept|decline — respond to promotion\n/leaguenotices — view promotion and league notices\n/competitionrules ID [subs=5 windows=3 injuries=on injurydays=5 red=1 yellow=3 yellowban=1 penalties=on] — configure competition rules before kickoff\n/group-register — register this Telegram group (admins only)\n/group-join — join this group with your club\n/group — show group status and treasury\n/group-activity — earn one daily group point\n/group-shop — reward shop\n/group-buy ITEM [USER_ID] — purchase reward\n/group-challenges — list challenges\n/group-challenge TITLE|START_ISO|END_ISO|POINTS — create challenge\n/group-challenge-join ID — join challenge\n/group-challenge-complete ID USER_ID — settle challenge\n/group-check — refresh member threshold\n/group-league NAME [4-10] — create local league\n/group-league-join ID — join local league\n/group-league-start ID — start local league\n/group-league-table ID — standings\n/alliance — alliance status and invitations\n/alliance-create NAME — create an alliance\n/alliance-invite GROUP_ID — invite a group\n/alliance-contribute AMOUNT — contribute group points to alliance treasury\n/alliance-accept ID / /alliance-decline ID — respond to invite\n/alliance-championship NAME|TEAMS — cross-group tournament\n/alliance-championship-join ID / alliance-championship-start ID\n/alliance-season-start [DAYS] / alliance-season-close\n/alliance-season-review SEASON_ID approve|reject — flagged prize review (authorized reviewer)\n/market — open transfer listings\n/sell PLAYER_ID PRICE — list a generated player\n/buy LISTING_ID — buy a listed player\n/special — view special players and pack prices\n/pack epic|legendary|icon — acquire a special player\n\nSpecial players are not tradeable in the regular market.",
 ));
 
 bot.command("group-cleanup-test", async (ctx) => {
@@ -727,6 +742,75 @@ bot.command("friendly", async (ctx) => {
     });
     await ctx.reply(`Friendly scheduled. Match ID: ${result.match.id}\nKickoff: ${new Date(result.match.scheduledAt).toLocaleString("en-US")}\nUse /play ${result.match.id} when kickoff is due.`);
   } catch (error) { await ctx.reply(`Could not schedule friendly: ${error instanceof Error ? error.message : "unknown error"}`); }
+});
+
+
+bot.command("challenge", async (ctx) => {
+  if (!ctx.from) return;
+  try {
+    const result = await api<{ challenge: { token: string; expiresAt: string }; asset: string; goldCost: string; shareUrl: string | null }>(
+      "/v1/friendly-challenges", ctx.from.id, "POST", {},
+    );
+    const invite = result.shareUrl ?? ("کد دعوت: " + result.challenge.token + "\nدستور پذیرش: /acceptchallenge " + result.challenge.token);
+    const message = "چالش دوستانه ایجاد شد.\nهزینه: " + (result.asset === "FREE" ? "رایگان" : result.asset === "GOLD" ? result.goldCost + " گلد" : "اعتبار خریداری‌شده")
+      + "\nاعتبار تا: " + new Date(result.challenge.expiresAt).toLocaleString("fa-IR") + "\n\n" + invite;
+    const sent = await ctx.reply(message);
+    if (ctx.chat.type === "group" || ctx.chat.type === "supergroup") await scheduleGroupReplyDeletion(ctx.chat.id, sent.message_id);
+  } catch (error) {
+    await ctx.reply("ایجاد چالش ناموفق بود: " + (error instanceof Error ? error.message : "خطای نامشخص"));
+  }
+});
+
+bot.command("acceptchallenge", async (ctx) => {
+  if (!ctx.from) return;
+  const tokenValue = String(ctx.match ?? "").trim().split(/\\s+/)[0];
+  if (!tokenValue) return ctx.reply("روش استفاده: /acceptchallenge TOKEN");
+  try {
+    const result = await api<{ match: { id: string; scheduledAt: string } }>(
+      `/v1/friendly-challenges/${encodeURIComponent(tokenValue)}/accept`, ctx.from.id, "POST", {},
+    );
+    await ctx.reply("چالش پذیرفته شد. مسابقه " + result.match.id + " در " + new Date(result.match.scheduledAt).toLocaleString("fa-IR") + " برنامه‌ریزی شد.");
+  } catch (error) { await ctx.reply("پذیرش چالش ناموفق بود: " + (error instanceof Error ? error.message : "خطای نامشخص")); }
+});
+
+bot.command("pyramidleagues", async (ctx) => {
+  if (!ctx.from || ctx.chat.type !== "private") return;
+  try {
+    const result = await api<{ season: number; tiers: Array<{ tier: number; name: string; waitingTeams: number; leagues: Array<{ id: string; name: string; status: string; teams: number; isMyLeague: boolean }>; myApplication: string | null }> }>("/v1/pyramid-leagues", ctx.from.id);
+    const lines = result.tiers.map((tier) => tier.name + " · صف انتظار " + tier.waitingTeams + "/8"
+      + (tier.myApplication ? " · درخواست شما: " + tier.myApplication : "")
+      + (tier.leagues.length ? "\\n" + tier.leagues.map((league) => "  " + league.name + " · " + league.teams + "/8 تیم" + (league.isMyLeague ? " · لیگ شما" : "") + " · " + league.status + " · " + league.id).join("\\n") : ""));
+    await ctx.reply("هرم لیگ‌های سراسری · فصل " + result.season + "\\n\\n" + lines.join("\\n\\n") + "\\n\\nبرای ورود به لیگ پایه: /leagueapply");
+  } catch (error) { await ctx.reply("دریافت لیگ‌ها ناموفق بود: " + (error instanceof Error ? error.message : "خطای نامشخص")); }
+});
+
+bot.command("leagueapply", async (ctx) => {
+  if (!ctx.from || ctx.chat.type !== "private") return;
+  try {
+    const result = await api<{ status: string; waitingTeams: number; requiredTeams: number; leagueId?: string | null; tierName?: string; fixturesCreated?: number }>("/v1/pyramid-leagues/apply", ctx.from.id, "POST", { tier: 1 });
+    await ctx.reply(result.status === "ASSIGNED"
+      ? "درخواست شما پذیرفته شد و لیگ پایه با ۸ تیم تشکیل شد. مسابقات: " + (result.fixturesCreated ?? 0)
+      : "درخواست ورود به لیگ پایه ثبت شد. " + result.waitingTeams + " تیم از ۸ تیم لازم در صف هستند. لیگ تا تکمیل ظرفیت شروع نمی‌شود.");
+  } catch (error) { await ctx.reply("ثبت درخواست لیگ ناموفق بود: " + (error instanceof Error ? error.message : "خطای نامشخص")); }
+});
+
+bot.command("promotion", async (ctx) => {
+  if (!ctx.from || ctx.chat.type !== "private") return;
+  const [offerId, decision] = String(ctx.match ?? "").trim().split(/\\s+/);
+  if (!offerId || !["accept", "decline"].includes(decision ?? "")) return ctx.reply("روش استفاده: /promotion OFFER_ID accept|decline");
+  try {
+    const result = await api<{ accepted: boolean; replacementClubId?: string | null }>("/v1/pyramid-leagues/promotions/" + encodeURIComponent(offerId) + "/respond", ctx.from.id, "POST", { accept: decision === "accept" });
+    await ctx.reply(result.accepted ? "صعود شما تأیید شد و در صف سطح بالاتر قرار گرفتید." : "انصراف ثبت شد. تیم بعدی جدول برای جایگزینی مطلع می‌شود.");
+  } catch (error) { await ctx.reply("ثبت پاسخ صعود ناموفق بود: " + (error instanceof Error ? error.message : "خطای نامشخص")); }
+});
+
+bot.command("leaguenotices", async (ctx) => {
+  if (!ctx.from || ctx.chat.type !== "private") return;
+  try {
+    const result = await api<{ notices: Array<{ id: string; title: string; body: string; createdAt: string }> }>("/v1/league-notices", ctx.from.id);
+    await ctx.reply("اعلان‌های لیگ:\\n" + (result.notices.map((notice) => "• " + notice.title + "\\n" + notice.body).join("\\n\\n") || "اعلان خوانده‌نشده‌ای ندارید."));
+    await api("/v1/league-notices/read", ctx.from.id, "POST", {});
+  } catch (error) { await ctx.reply("دریافت اعلان‌ها ناموفق بود: " + (error instanceof Error ? error.message : "خطای نامشخص")); }
 });
 
 bot.command("matches", async (ctx) => {
