@@ -77,3 +77,18 @@ test("invalid checkpoint windows are rejected", () => {
     fallback: { home: "plan", away: "plan" }, aiDefaults: { home: "ai", away: "ai" },
   }), /INVALID_MATCH_CHECKPOINT_WINDOW/);
 });
+
+test("checkpoint resumes immediately when both managers decide before the segment boundary", () => {
+  const decisions: MatchCheckpointDecision<string>[] = [
+    { id: "home-early", clubId: "home", submittedAt: at(5), instruction: "home-choice" },
+    { id: "away-early", clubId: "away", submittedAt: at(8), instruction: "away-choice" },
+  ];
+  const result = resolveMatchCheckpoint({
+    window, now: at(10), decisions,
+    fallback: { home: "home-plan", away: "away-plan" },
+    aiDefaults: { home: "home-ai", away: "away-ai" },
+  });
+  assert.equal(result.home.instruction, "home-choice");
+  assert.equal(result.away.instruction, "away-choice");
+  assert.equal(result.resolvedAt.getTime(), at(10).getTime());
+});
