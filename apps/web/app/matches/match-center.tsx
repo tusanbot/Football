@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { CSSProperties } from "react";
+import { createTelegramSession } from "../../lib/telegram-session.js";
 
 type Player = { id:string; firstName:string; lastName:string; position:string; overall:number; lineupSlot:number|null; status?:string };
 type MatchEvent = { minute:number; type:string; detail:string; playerName:string; relatedPlayerName:string|null };
@@ -22,6 +23,7 @@ const buttonStyle:CSSProperties={border:0,borderRadius:9,padding:"11px 15px",bac
 
 export default function MatchCenter(){
  const [initData,setInitData]=useState("");
+ const [sessionToken,setSessionToken]=useState("");
  const [clubId,setClubId]=useState("");
  const [matches,setMatches]=useState<Match[]>([]);
  const [players,setPlayers]=useState<Player[]>([]);
@@ -35,11 +37,9 @@ export default function MatchCenter(){
  const [tempo,setTempo]=useState("NORMAL");
  const [passingStyle,setPassingStyle]=useState("MIXED");
  const [subs,setSubs]=useState<Array<{outgoingPlayerId:string;incomingPlayerId:string}>>([]);
- const headers=useMemo(()=>({"content-type":"application/json","x-telegram-init-data":initData}),[initData]);
+ const headers=useMemo(()=>({"content-type":"application/json",...(sessionToken?{authorization:"Bearer "+sessionToken}:{})}),[sessionToken]);
  const load=useCallback(async()=>{
-  if(!initData)return;
-  const auth=await fetch(API+"/v1/auth/telegram",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({initData})});
-  if(!auth.ok)throw new Error("احراز هویت تلگرام ناموفق بود.");
+  if(!sessionToken)return;
   const [meResponse,matchResponse,playerResponse]=await Promise.all([
    fetch(API+"/v1/me",{headers}),fetch(API+"/v1/matches",{headers}),fetch(API+"/v1/club/players",{headers})
   ]);
@@ -47,9 +47,10 @@ export default function MatchCenter(){
   const me=await meResponse.json();const matchData=await matchResponse.json();
   setClubId(me.club?.id??"");setMatches(matchData.matches??[]);
   if(playerResponse.ok)setPlayers((await playerResponse.json()).players??[]);
- },[headers,initData]);
+ },[headers,sessionToken]);
  useEffect(()=>{setInitData(window.Telegram?.WebApp?.initData??"");window.Telegram?.WebApp?.ready?.();window.Telegram?.WebApp?.expand?.();},[]);
- useEffect(()=>{if(!initData)return;let alive=true;const refresh=()=>load().catch(e=>{if(alive)setError(e instanceof Error?e.message:"خطای ارتباط");});void refresh();const timer=setInterval(()=>void refresh(),5000);return()=>{alive=false;clearInterval(timer);};},[initData,load]);
+ useEffect(()=>{if(!initData)return;let active=true;void createTelegramSession(API,initData).then(token=>{if(active)setSessionToken(token);}).catch(e=>{if(active)setError(e instanceof Error?e.message:"احراز هویت ناموفق بود.");});return()=>{active=false;};},[initData]);
+ useEffect(()=>{if(!sessionToken)return;let alive=true;const refresh=()=>load().catch(e=>{if(alive)setError(e instanceof Error?e.message:"خطای ارتباط");});void refresh();const timer=setInterval(()=>void refresh(),5000);return()=>{alive=false;clearInterval(timer);};},[sessionToken,load]);
  const activeMatch=matches.find(m=>m.id===selected)??matches.find(m=>m.checkpoints.some(c=>c.status==="OPEN"))??matches[0];
  const openCheckpoint=activeMatch?.checkpoints.find(c=>c.status==="OPEN");
  const activePlayers=players.filter(p=>p.status==="ACTIVE");

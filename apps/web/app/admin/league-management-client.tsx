@@ -1,6 +1,7 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
 import type { CSSProperties } from "react";
+import { createTelegramSession } from "../../lib/telegram-session.js";
 declare global { interface Window { Telegram?: { WebApp?: { initData?: string; ready?: () => void; expand?: () => void } } } }
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
@@ -29,6 +30,7 @@ const button: React.CSSProperties = { border: 0, borderRadius: 7, padding: "8px 
 const date = (value: string | null) => value ? new Date(value).toLocaleString("fa-IR") : "—";
 export default function LeagueManagementClient() {
   const [init, setInit] = useState("");
+  const [sessionToken, setSessionToken] = useState("");
   const [data, setData] = useState<Payload>({ leagues: [], queues: [], offers: [], applicationCounts: {} });
   const [report, setReport] = useState<ReportPayload | null>(null);
   const [tab, setTab] = useState<"management" | "reports">("management");
@@ -45,11 +47,19 @@ export default function LeagueManagementClient() {
     window.Telegram?.WebApp?.ready?.();
     window.Telegram?.WebApp?.expand?.();
   }, []);
+  useEffect(() => {
+    if (!init) return;
+    let active = true;
+    void createTelegramSession(API, init)
+      .then((token) => { if (active) setSessionToken(token); })
+      .catch((error) => { if (active) setMessage(error instanceof Error ? error.message : "احراز هویت ناموفق بود."); });
+    return () => { active = false; };
+  }, [init]);
 
   const request = useCallback(async (path: string, options: RequestInit = {}) => {
     const response = await fetch(API + path, {
       ...options,
-      headers: { "content-type": "application/json", "x-telegram-init-data": init, ...options.headers },
+      headers: { "content-type": "application/json", ...(sessionToken ? { authorization: "Bearer " + sessionToken } : {}), ...options.headers },
     });
     const body = await response.json() as Payload & { error?: string };
     if (!response.ok) throw new Error(body.error ?? "REQUEST_FAILED");
@@ -73,10 +83,10 @@ export default function LeagueManagementClient() {
     } finally {
       setBusy(false);
     }
-  }, [init, request, season, tier, status, query, tab]);
+  }, [sessionToken, request, season, tier, status, query, tab]);
 
   const loadReports = useCallback(async () => {
-    if (!init || tab !== "reports") return;
+    if (!sessionToken || tab !== "reports") return;
     setBusy(true);
     try {
       const params = new URLSearchParams();
@@ -92,7 +102,7 @@ export default function LeagueManagementClient() {
     } finally {
       setBusy(false);
     }
-  }, [init, request, season, tier, query, tab]);
+  }, [sessionToken, request, season, tier, query, tab]);
 
   useEffect(() => { void load(); }, [load]);
   useEffect(() => { void loadReports(); }, [loadReports]);

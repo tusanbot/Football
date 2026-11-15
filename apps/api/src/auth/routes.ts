@@ -2,6 +2,8 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { provisionTelegramAccount } from "./account-provisioning-service.js";
 import { verifyTelegramInitData } from "./telegram-init-data.js";
+import { createTelegramSessionToken } from "./telegram-session.js";
+import { consumeAllianceActionRateLimit } from "../groups/alliance-rate-limit.js";
 
 const requestSchema = z.object({ initData: z.string().min(1).max(8192) });
 
@@ -16,6 +18,9 @@ export function registerTelegramAuthRoutes(app: FastifyInstance) {
     try { verified = verifyTelegramInitData(parsed.data.initData, botToken); }
     catch { return reply.code(401).send({ error: "INVALID_TELEGRAM_INIT_DATA" }); }
 
+    if (!process.env.BOT_API_SECRET || process.env.BOT_API_SECRET.length < 32) return reply.code(503).send({ error: "SESSION_SIGNING_NOT_CONFIGURED" });
+    if (!await consumeAllianceActionRateLimit({ telegramUserId: String(verified.user.id), telegramGroupId: "global", action: "telegram-session", limit: 30 })) return reply.code(429).send({ error: "TELEGRAM_AUTH_RATE_LIMITED", retryAfterSeconds: 60 });
+
     const displayName = [verified.user.first_name, verified.user.last_name].filter(Boolean).join(" ");
     try {
       const user = await provisionTelegramAccount({
@@ -24,7 +29,10 @@ export function registerTelegramAuthRoutes(app: FastifyInstance) {
         displayName,
         firstName: verified.user.first_name,
       });
+      const session = createTelegramSessionToken(user.telegramId, process.env.BOT_API_SECRET);
       return reply.code(200).send({
+        sessionToken: session.token,
+        sessionExpiresAt: session.expiresAt,
         user: { id: user.id, telegramId: user.telegramId, displayName: user.displayName },
         club: user.club,
         wallets: user.wallets.map((wallet) => ({ asset: wallet.asset, balance: wallet.balance.toString() })),

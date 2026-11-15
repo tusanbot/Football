@@ -2,6 +2,7 @@ import { timingSafeEqual } from "node:crypto";
 import type { FastifyRequest } from "fastify";
 import { prisma } from "../db.js";
 import { verifyTelegramInitData } from "./telegram-init-data.js";
+import { verifyTelegramSessionToken } from "./telegram-session.js";
 
 function safeSecretMatch(received: string, expected: string) {
   const a = Buffer.from(received);
@@ -19,6 +20,17 @@ export async function requireTelegramUser(request: FastifyRequest) {
       where: { telegramId: telegramUserId },
       select: { id: true, telegramId: true, username: true, displayName: true, createdAt: true, isSuspended: true },
     }).then((account) => account?.isSuspended ? null : account);
+  }
+
+  const authorization = request.headers.authorization;
+  if (botSecret && typeof authorization === "string" && authorization.startsWith("Bearer ")) {
+    const claims = verifyTelegramSessionToken(authorization.slice(7), botSecret);
+    if (claims) {
+      return prisma.user.findUnique({
+        where: { telegramId: claims.telegramId },
+        select: { id: true, telegramId: true, username: true, displayName: true, createdAt: true, isSuspended: true },
+      }).then((account) => account?.isSuspended ? null : account);
+    }
   }
 
   const rawInitData = request.headers["x-telegram-init-data"];

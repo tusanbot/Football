@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { createTelegramSession } from "../lib/telegram-session.js";
 
 type Player = { id: string; firstName: string; lastName: string; nationality: string; age: number; position: string; overall: number; potential: number; marketValue?: string; wage: string; attributes?: Record<string, number>; status?: string; fitness?: number; morale?: number; contractDays?: number; injuryUntil?: string | null; minimumWeeklyWage?: string; maximumWeeklyWage?: string; trainingFocus?: string; lineupSlot?: number | null };
 type Listing = { id: string; askingPrice: string; status?: string; expiresAt: string; createdAt: string; player: Player; sellerClub?: { name: string } };
@@ -130,6 +131,7 @@ const financeCategoryLabel: Record<string, string> = {
 
 export default function MarketPage() {
   const [initData, setInitData] = useState("");
+  const [sessionToken, setSessionToken] = useState("");
   const [players, setPlayers] = useState<Player[]>([]);
   const [listings, setListings] = useState<Listing[]>([]);
   const [mine, setMine] = useState<Listing[]>([]);
@@ -206,19 +208,10 @@ export default function MarketPage() {
   const [error, setError] = useState("");
   const [tab, setTab] = useState<"market" | "club" | "operations" | "lineup" | "development" | "matches" | "groups" | "special" | "clubs" | "records">("market");
 
-  const headers = useMemo(() => ({ "content-type": "application/json", "x-telegram-init-data": initData }), [initData]);
+  const headers = useMemo(() => ({ "content-type": "application/json", ...(sessionToken ? { authorization: "Bearer " + sessionToken } : {}) }), [sessionToken]);
 
   const load = useCallback(async () => {
-    if (!initData) return;
-    const authResponse = await fetch(API + "/v1/auth/telegram", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ initData }),
-    });
-    if (!authResponse.ok) {
-      const authError = await authResponse.json().catch(() => ({}));
-      throw new Error(authError.error ?? "احراز هویت تلگرام ناموفق بود.");
-    }
+    if (!sessionToken) return;
     const requests = await Promise.all([
       fetch(API + "/v1/club/players", { headers }),
       fetch(API + "/v1/wallet", { headers }),
@@ -300,7 +293,7 @@ export default function MarketPage() {
       setTactics(currentLineup.tactics);
       setSelectedLineupIds([...currentLineup.players].sort((a, b) => a.lineupSlot - b.lineupSlot).map((player) => player.id));
     }
-  }, [headers, initData, selectedGroupTelegramId]);
+  }, [headers, sessionToken, selectedGroupTelegramId]);
 
   useEffect(() => {
     const data = window.Telegram?.WebApp?.initData ?? "";
@@ -308,6 +301,14 @@ export default function MarketPage() {
     window.Telegram?.WebApp?.ready?.();
     window.Telegram?.WebApp?.expand?.();
   }, []);
+  useEffect(() => {
+    if (!initData) return;
+    let active = true;
+    void createTelegramSession(API, initData)
+      .then((token) => { if (active) setSessionToken(token); })
+      .catch((error) => { if (active) setError(error instanceof Error ? error.message : "احراز هویت ناموفق بود."); });
+    return () => { active = false; };
+  }, [initData]);
   useEffect(() => { void load().catch(() => setError("ارتباط با سرور بازی برقرار نشد.")); }, [load]);
 
   async function action(key: string, path: string, method = "POST", body?: unknown) {
