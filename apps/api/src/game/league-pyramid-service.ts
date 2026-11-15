@@ -103,7 +103,7 @@ export async function applyForPyramidLeague(userId: string, tier: number, now = 
 export async function listPyramidLeagues(userId: string) {
   const club = await ownedClub(userId);
   const season = new Date().getUTCFullYear();
-  const [leagues, applications, currentEntry] = await Promise.all([
+  const [leagues, applications, currentEntry, promotionOffers] = await Promise.all([
     prisma.pyramidLeague.findMany({
       where: { season }, include: {
         competition: { select: { id: true, name: true, status: true, startsAt: true, completedAt: true } },
