@@ -5,7 +5,7 @@ import { requireTelegramUser } from "../auth/require-telegram-user.js";
 import { getMatchFallbackPlan, saveMatchFallbackPlan, MatchFallbackPlanError } from "./match-fallback-service.js";
 import {
   MatchServiceError, createFriendlyMatch, createLeague, getLeague, joinLeague,
-  listClubMatches, listMatchOpponents, listOpenLeagues, simulateScheduledMatch, startLeague, submitMatchCheckpointDecision, updateCompetitionRules,
+  listClubMatches, listMatchOpponents, listOpenLeagues, startLeague, submitMatchCheckpointDecision, updateCompetitionRules,
 } from "./match-service.js";
 import {
   PyramidLeagueError, acceptFriendlyChallenge, applyForPyramidLeague, createFriendlyChallenge,
@@ -109,8 +109,9 @@ export function registerMatchRoutes(app: FastifyInstance) {
     if (!user) return reply.code(401).send({ error: "UNAUTHENTICATED" });
     const params = z.object({ id: z.string().min(1).max(64) }).safeParse(request.params);
     if (!params.success) return reply.code(400).send({ error: "INVALID_MATCH_ID" });
-    try { return { result: await simulateScheduledMatch(user.id, params.data.id) }; }
-    catch (error) { return sendMatchError(reply, error); }
+    // Keep the legacy endpoint fail-closed: user-triggered one-shot simulation
+    // bypasses persisted checkpoints, substitutions and the automatic runtime.
+    return reply.code(409).send({ error: "MATCH_RUNTIME_AUTOMATIC" });
   });
 
   app.post("/v1/matches/:id/checkpoints/:checkpointKey/decisions", async (request, reply) => {
