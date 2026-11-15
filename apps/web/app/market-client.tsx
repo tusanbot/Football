@@ -25,7 +25,7 @@ type MatchRecord = {
   homeScore: number | null; awayScore: number | null; homePenalties: number | null; awayPenalties: number | null; winnerClubId: string | null; attendance: number; ticketRevenue: string;
   events: Array<{ minute: number; type: string; detail: string; playerId: string; playerName: string; relatedPlayerName: string | null }>;
 };
-type MatchRulesForm = { maxSubstitutions:number; maxInPlayWindows:number; injuriesEnabled:boolean; redCardSuspensionMatches:number; yellowCardsToSuspend:number; yellowCardSuspensionMatches:number; penaltiesOnDraw:boolean };
+type MatchRulesForm = { maxSubstitutions:number; maxInPlayWindows:number; injuriesEnabled:boolean; injuryDurationDays:number; redCardSuspensionMatches:number; yellowCardsToSuspend:number; yellowCardSuspensionMatches:number; penaltiesOnDraw:boolean };
 type OpenLeague = { id: string; name: string; season: number; format: string; status: string; maxTeams: number; teams: number; joined: boolean; isCreator: boolean; creator: string; rules:MatchRulesForm };
 type ClubCompetition = { id: string; name: string; season: number; format: string; status: string };
 type LeagueDetails = {
@@ -115,7 +115,7 @@ export default function MarketPage() {
   const [leagueName, setLeagueName] = useState("");
   const [leagueCapacity, setLeagueCapacity] = useState("8");
   const [competitionFormat, setCompetitionFormat] = useState("LEAGUE");
-  const [competitionRules, setCompetitionRules] = useState<MatchRulesForm>({maxSubstitutions:5,maxInPlayWindows:3,injuriesEnabled:true,redCardSuspensionMatches:1,yellowCardsToSuspend:3,yellowCardSuspensionMatches:1,penaltiesOnDraw:false});
+  const [competitionRules, setCompetitionRules] = useState<MatchRulesForm>({maxSubstitutions:5,maxInPlayWindows:3,injuriesEnabled:true,injuryDurationDays:5,redCardSuspensionMatches:1,yellowCardsToSuspend:3,yellowCardSuspensionMatches:1,penaltiesOnDraw:false});
   const [editingRulesFor, setEditingRulesFor] = useState("");
   const [coach, setCoach] = useState<{ name: string; level: number; trainingSkill: number; recoverySkill: number; medicalSkill: number; weeklySalary: string } | null>(null);
   const [trainingGroundLevel, setTrainingGroundLevel] = useState(1);
@@ -525,7 +525,7 @@ export default function MarketPage() {
           <div>
             <strong>{match.homeClub.name} {match.homeScore ?? "–"} : {match.awayScore ?? "–"} {match.awayClub.name}{match.homePenalties !== null ? ` (پنالتی ${match.homePenalties}-${match.awayPenalties})` : ""}</strong>
             <small>{match.type === "CUP" ? "جام حذفی" : match.type === "LEAGUE" ? "لیگ" : "دوستانه"} · {match.status === "COMPLETED" ? "پایان‌یافته" : match.status === "SCHEDULED" ? "برنامه‌ریزی‌شده" : "لغوشده"} · {new Date(match.scheduledAt).toLocaleString("fa-IR")}</small>
-            <small>قوانین: {match.rules.maxSubstitutions} تعویض · {match.rules.maxInPlayWindows} پنجره · محرومیت قرمز {match.rules.redCardSuspensionMatches} بازی · مصدومیت {match.rules.injuriesEnabled ? "فعال" : "غیرفعال"}</small>
+            <small>قوانین: {match.rules.maxSubstitutions} تعویض · {match.rules.maxInPlayWindows} پنجره · محرومیت قرمز {match.rules.redCardSuspensionMatches} بازی · مصدومیت {match.rules.injuriesEnabled ? match.rules.injuryDurationDays + " روز" : "غیرفعال"}</small>
             {match.status === "COMPLETED" && <small>تماشاگر: {money(match.attendance)} · درآمد بلیت: {money(match.ticketRevenue)} Cash</small>}
             {match.events.slice(0, 8).map((event, index) => <small key={match.id + "-event-" + index}>{event.minute} دقیقه · {matchEventLabel[event.type] ?? event.type} · {event.playerName}{event.relatedPlayerName ? (event.type === "SUBSTITUTION" ? " (ورود: " : " (پاس گل: ") + event.relatedPlayerName + ")" : ""}</small>)}
           </div>
@@ -547,10 +547,11 @@ export default function MarketPage() {
           <label>محرومیت کارت زرد (بازی)<input type="number" min="0" max="5" value={competitionRules.yellowCardSuspensionMatches} onChange={e=>setCompetitionRules(r=>({...r,yellowCardSuspensionMatches:Number(e.target.value)}))}/></label>
         </div>
         <label className="check-row"><input type="checkbox" checked={competitionRules.injuriesEnabled} onChange={e=>setCompetitionRules(r=>({...r,injuriesEnabled:e.target.checked}))}/> فعال بودن مصدومیت‌ها</label>
+        <label>مدت دوران مصدومیت (روز)<input type="number" min="1" max="14" value={competitionRules.injuryDurationDays} onChange={e=>setCompetitionRules(r=>({...r,injuryDurationDays:Number(e.target.value)}))} disabled={!competitionRules.injuriesEnabled}/></label>
         {competitionFormat === "CUP" && <label className="check-row"><input type="checkbox" checked={competitionRules.penaltiesOnDraw} onChange={e=>setCompetitionRules(r=>({...r,penaltiesOnDraw:e.target.checked}))}/> تعیین برنده با ضربات پنالتی در تساوی</label>}
         {editingRulesFor && <p className="muted">در حال ویرایش قوانین رقابت انتخاب‌شده؛ پس از شروع مسابقات امکان تغییر قوانین وجود ندارد.</p>}
         <div className="operation-row">
-          <button disabled={!!busy || (editingRulesFor ? false : leagueName.trim().length < 3) || competitionRules.maxSubstitutions<0 || competitionRules.maxSubstitutions>7 || competitionRules.maxInPlayWindows<0 || competitionRules.maxInPlayWindows>3 || competitionRules.redCardSuspensionMatches<0 || competitionRules.redCardSuspensionMatches>5 || competitionRules.yellowCardsToSuspend<0 || competitionRules.yellowCardsToSuspend>10 || competitionRules.yellowCardSuspensionMatches<0 || competitionRules.yellowCardSuspensionMatches>5 || competitionRules.maxInPlayWindows>competitionRules.maxSubstitutions || (competitionRules.yellowCardsToSuspend===0 && competitionRules.yellowCardSuspensionMatches>0)} onClick={() => void (editingRulesFor
+          <button disabled={!!busy || (editingRulesFor ? false : leagueName.trim().length < 3) || competitionRules.maxSubstitutions<0 || competitionRules.maxSubstitutions>7 || competitionRules.maxInPlayWindows<0 || competitionRules.maxInPlayWindows>3 || competitionRules.injuryDurationDays<1 || competitionRules.injuryDurationDays>14 || competitionRules.redCardSuspensionMatches<0 || competitionRules.redCardSuspensionMatches>5 || competitionRules.yellowCardsToSuspend<0 || competitionRules.yellowCardsToSuspend>10 || competitionRules.yellowCardSuspensionMatches<0 || competitionRules.yellowCardSuspensionMatches>5 || competitionRules.maxInPlayWindows>competitionRules.maxSubstitutions || (competitionRules.yellowCardsToSuspend===0 && competitionRules.yellowCardSuspensionMatches>0)} onClick={() => void (editingRulesFor
             ? action("save-competition-rules","/v1/competitions/"+editingRulesFor+"/rules","PUT",competitionRules).then(()=>setEditingRulesFor(""))
             : action("create-league", "/v1/competitions", "POST", { name: leagueName.trim(), maxTeams: Number(leagueCapacity), format: competitionFormat, rules:competitionRules, idempotencyKey: "mini-league-" + crypto.randomUUID() }))}>{editingRulesFor ? "ذخیره قوانین" : "ایجاد رقابت"}</button>
           {editingRulesFor && <button className="secondary" onClick={()=>setEditingRulesFor("")}>انصراف</button>}
