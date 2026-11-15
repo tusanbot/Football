@@ -333,6 +333,27 @@ bot.command("start", async (ctx) => {
   }
 });
 
+bot.command("redeem", async (ctx) => {
+  if (!ctx.from) return;
+  const code = String(ctx.match ?? "").trim();
+  if (!code) return ctx.reply("استفاده: /redeem CODE\nبرای کدهای امتیاز گروه، دستور را داخل همان گروه اجرا کنید.");
+  const telegramGroupId = ctx.chat.type === "group" || ctx.chat.type === "supergroup" ? String(ctx.chat.id) : undefined;
+  try {
+    const result = await api<{ reward: { cash: string; gold: string; groupPoints: string }; replayed?: boolean }>(
+      "/v1/gift-codes/redeem", ctx.from.id, "POST",
+      { code, idempotencyKey: randomUUID(), ...(telegramGroupId ? { telegramGroupId } : {}) },
+    );
+    const rewards = [
+      BigInt(result.reward.cash) > 0n ? "Cash: " + cash(result.reward.cash) : "",
+      BigInt(result.reward.gold) > 0n ? "Gold: " + result.reward.gold : "",
+      BigInt(result.reward.groupPoints) > 0n ? "امتیاز خزانه گروه: " + result.reward.groupPoints : "",
+    ].filter(Boolean);
+    await ctx.reply((result.replayed ? "این کد قبلاً ثبت شده بود.\n" : "کد هدیه با موفقیت اعمال شد.\n") + rewards.join("\n"));
+  } catch (error) {
+    await ctx.reply("اعمال کد هدیه ناموفق بود: " + (error instanceof Error ? error.message : "خطای نامشخص"));
+  }
+});
+
 bot.command("menu", async (ctx) => {
   if (ctx.chat.type !== "private") return;
   await ctx.reply("منوی اصلی Football Empire آماده است. برای عملیات دارای ورودی، از /help راهنمای دستورها را ببینید.", {
