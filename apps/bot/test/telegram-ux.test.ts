@@ -8,6 +8,7 @@ import {
   TRANSIENT_GROUP_COMMANDS,
   isPersistentGroupReply,
   resolvePrivateMenuCommand,
+  formatApiError,
 } from "../src/telegram-ux.js";
 
 const botSource = await readFile(new URL("../src/bot.ts", import.meta.url), "utf8");
@@ -142,4 +143,11 @@ test("Persian help documents the non-administrative game commands", () => {
   for (const command of documented) {
     assert.ok(botSource.includes("/" + command), "Persian /help is missing /" + command);
   }
+});
+
+test("common game API failures are presented in Persian without exposing internals", () => {
+  assert.match(formatApiError("INSUFFICIENT_CASH"), /موجودی کش/);
+  assert.match(formatApiError("GROUP_MANAGER_REQUIRED"), /مدیران/);
+  assert.match(formatApiError("CONCURRENT_MODIFICATION"), /هم‌زمان/);
+  assert.match(formatApiError("UNRECOGNIZED_CODE"), /کد خطا/);
 });
