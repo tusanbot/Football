@@ -11,7 +11,7 @@ import {
 const keySchema = z.string().regex(/^[A-Za-z0-9:_-]{12,128}$/);
 const competitionRulesSchema = z.object({
   maxSubstitutions: z.number().int().min(0).max(7),
-  maxInPlayWindows: z.number().int().min(0).max(5),
+  maxInPlayWindows: z.number().int().min(0).max(3),
   injuriesEnabled: z.boolean(),
   redCardSuspensionMatches: z.number().int().min(0).max(5),
   yellowCardsToSuspend: z.number().int().min(0).max(10),
