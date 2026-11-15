@@ -937,8 +937,8 @@ bot.command("cup", async (ctx) => {
     const result = await api<{ competition: { id: string; name: string; maxTeams: number; cupLegs:number }; replayed: boolean }>("/v1/competitions", ctx.from.id, "POST", {
       name, maxTeams, format: "CUP", cupLegs, idempotencyKey: "bot-cup-" + ctx.from.id + "-" + ctx.update.update_id,
     });
-    await ctx.reply("Knockout cup created: " + result.competition.name + "\\nID: " + result.competition.id
-      + "\\nBracket: " + result.competition.maxTeams + " clubs · "
+    await ctx.reply("Knockout cup created: " + result.competition.name + "\nID: " + result.competition.id
+      + "\nBracket: " + result.competition.maxTeams + " clubs · "
       + (result.competition.cupLegs === 2 ? "two-legged ties" : "single-match ties")
       + ". Fill all places before starting.");
   } catch (error) { await ctx.reply("Could not create cup: " + (error instanceof Error ? error.message : "unknown error")); }
