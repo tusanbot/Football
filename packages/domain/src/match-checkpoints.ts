@@ -57,7 +57,11 @@ export function resolveMatchCheckpoint<TInstruction>(input: {
   }
   if (now.getTime() < window.nextSegmentAt.getTime()) throw new Error("MATCH_CHECKPOINT_SEGMENT_NOT_DUE");
   const cutoff = Math.min(window.decisionDeadlineAt.getTime(), window.nextSegmentAt.getTime());
-  const resolveFor = (clubId: string, fallback: TInstruction | null, aiDefault: TInstruction) => {
+  const resolveFor = (
+    clubId: string,
+    fallbackInstruction: TInstruction | null,
+    aiDefaultInstruction: TInstruction,
+  ): ResolvedMatchCheckpointInstruction<TInstruction> => {
     const timely = input.decisions
       .filter((decision) => decision.clubId === clubId
         && decision.submittedAt.getTime() >= window.openedAt.getTime()
@@ -65,8 +69,10 @@ export function resolveMatchCheckpoint<TInstruction>(input: {
         && decision.submittedAt.getTime() <= now.getTime())
       .sort((a, b) => b.submittedAt.getTime() - a.submittedAt.getTime() || a.id.localeCompare(b.id))[0];
     if (timely) return { clubId, source: "MANAGER" as const, instruction: timely.instruction, decisionId: timely.id };
-    if (fallback !== null) return { clubId, source: "PREMATCH_PLAN" as const, instruction: fallback, decisionId: null };
-    return { clubId, source: "AI" as const, instruction: aiDefault, decisionId: null };
+    if (fallbackInstruction !== null) {
+      return { clubId, source: "PREMATCH_PLAN", instruction: fallbackInstruction, decisionId: null };
+    }
+    return { clubId, source: "AI", instruction: aiDefaultInstruction, decisionId: null };
   };
   return {
     checkpointId: window.checkpointId, checkpoint: window.checkpoint, resolvedAt: now,
