@@ -248,7 +248,6 @@ model Club {
   awayMatches FootballMatch[] @relation("MatchAwayClub")
   competitionEntries CompetitionEntry[]
   matchPerformances PlayerMatchPerformance[]
-  seasonAwards SeasonPlayerAward[]
   matchTacticalDecisions MatchTacticalDecision[]
   pyramidLeagueEntries PyramidLeagueEntry[]
   pyramidLeagueApplications PyramidLeagueApplication[]
@@ -291,6 +290,7 @@ model Player {
   trainingLogs    PlayerTrainingLog[]
   contractRenewals PlayerContractRenewal[]
   matchPerformances PlayerMatchPerformance[]
+  seasonAwards SeasonPlayerAward[]
 
   @@index([clubId, status])
   @@index([clubId, position])
