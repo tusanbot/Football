@@ -404,6 +404,10 @@ export async function listClubMatches(userId: string) {
       runtime: match.runtime ? (() => {
         const simulation = match.runtime.simulationState as unknown as {
           segment?: { home?: { side?: MatchSide }; away?: { side?: MatchSide } };
+          substitutions?: {
+            home?: { substitutionsUsed?: number };
+            away?: { substitutionsUsed?: number };
+          };
         } | null;
         const kickoff = match.runtime.kickoffSnapshot as unknown as { home?: MatchSide; away?: MatchSide } | null;
         const home = simulation?.segment?.home?.side ?? kickoff?.home;
@@ -412,9 +416,12 @@ export async function listClubMatches(userId: string) {
           status: match.runtime.status, currentMinute: match.runtime.currentMinute,
           nextActionAt: match.runtime.nextActionAt?.toISOString() ?? null,
           completedAt: match.runtime.completedAt?.toISOString() ?? null,
+          mySubstitutionsUsed: Number(match.homeClubId === club.id
+            ? simulation?.substitutions?.home?.substitutionsUsed ?? 0
+            : simulation?.substitutions?.away?.substitutionsUsed ?? 0),
           lineups: home && away ? {
-            home: { formation: home.formation, players: home.players.map(({ id, name, position, overall }) => ({ id, name, position, overall })), bench: (home.bench ?? []).map(({ id, name, position, overall }) => ({ id, name, position, overall })) },
-            away: { formation: away.formation, players: away.players.map(({ id, name, position, overall }) => ({ id, name, position, overall })), bench: (away.bench ?? []).map(({ id, name, position, overall }) => ({ id, name, position, overall })) },
+            home: { formation: home.formation, tactics: home.tactics, players: home.players.map(({ id, name, position, overall }) => ({ id, name, position, overall })), bench: (home.bench ?? []).map(({ id, name, position, overall }) => ({ id, name, position, overall })) },
+            away: { formation: away.formation, tactics: away.tactics, players: away.players.map(({ id, name, position, overall }) => ({ id, name, position, overall })), bench: (away.bench ?? []).map(({ id, name, position, overall }) => ({ id, name, position, overall })) },
           } : null,
         };
       })() : null,
