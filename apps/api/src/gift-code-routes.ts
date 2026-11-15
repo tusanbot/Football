@@ -22,6 +22,21 @@ export function registerGiftCodeRoutes(app: FastifyInstance) {
     }
     const code = body.data.code.toUpperCase();
     try {
+      const priorRedemption = await prisma.giftCodeRedemption.findUnique({
+        where: { idempotencyKey: body.data.idempotencyKey },
+        include: { giftCode: { select: { code: true } }, group: { select: { telegramId: true } } },
+      });
+      if (priorRedemption) {
+        if (priorRedemption.userId !== user.id || priorRedemption.giftCode.code !== code
+          || priorRedemption.group?.telegramId !== (body.data.telegramGroupId ?? null)) {
+          return reply.code(409).send({ error: "IDEMPOTENCY_CONFLICT" });
+        }
+        return {
+          ok: true,
+          reward: { cash: priorRedemption.cashAmount.toString(), gold: priorRedemption.goldAmount.toString(), groupPoints: priorRedemption.groupPoints.toString() },
+          replayed: true,
+        };
+      }
       // Do network membership verification before opening the financial transaction.
       // The transaction re-checks persisted group membership and group state.
       const preflightGift = await prisma.giftCode.findUnique({ where: { code }, select: { rewardType: true } });
@@ -41,8 +56,22 @@ export function registerGiftCodeRoutes(app: FastifyInstance) {
       }
       return await prisma.$transaction(async (tx) => {
         const gift = await tx.giftCode.findUnique({ where: { code } });
+        if (!gift) throw new Error("GIFT_CODE_UNAVAILABLE");
+        const idempotencyKey = body.data.idempotencyKey;
+        const prior = await tx.giftCodeRedemption.findUnique({ where: { idempotencyKey } });
+        if (prior) {
+          if (prior.userId === user.id && prior.giftCodeId === gift.id
+            && prior.groupId === (body.data.telegramGroupId ? (await tx.telegramGroup.findUnique({ where: { telegramId: body.data.telegramGroupId }, select: { id: true } }))?.id ?? null : null)) {
+            return {
+              ok: true,
+              reward: { cash: prior.cashAmount.toString(), gold: prior.goldAmount.toString(), groupPoints: prior.groupPoints.toString() },
+              replayed: true,
+            };
+          }
+          throw new Error("IDEMPOTENCY_CONFLICT");
+        }
         const now = new Date();
-        if (!gift || !gift.active || gift.startsAt > now || (gift.expiresAt && gift.expiresAt <= now)) {
+        if (!gift.active || gift.startsAt > now || (gift.expiresAt && gift.expiresAt <= now)) {
           throw new Error("GIFT_CODE_UNAVAILABLE");
         }
 
@@ -59,20 +88,6 @@ export function registerGiftCodeRoutes(app: FastifyInstance) {
             select: { id: true },
           });
           if (!membership) throw new Error("GIFT_CODE_GROUP_MEMBERSHIP_REQUIRED");
-        }
-
-        const idempotencyKey = body.data.idempotencyKey;
-        const prior = await tx.giftCodeRedemption.findUnique({ where: { idempotencyKey } });
-        if (prior) {
-          if (prior.userId === user.id && prior.giftCodeId === gift.id
-            && prior.groupId === (group?.id ?? null)) {
-            return {
-              ok: true,
-              reward: { cash: prior.cashAmount.toString(), gold: prior.goldAmount.toString(), groupPoints: prior.groupPoints.toString() },
-              replayed: true,
-            };
-          }
-          throw new Error("IDEMPOTENCY_CONFLICT");
         }
 
         const used = await tx.giftCodeRedemption.count({ where: { giftCodeId: gift.id, userId: user.id } });
