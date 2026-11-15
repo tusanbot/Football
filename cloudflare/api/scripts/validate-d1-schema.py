@@ -17,9 +17,13 @@ connection.executescript(schema_sql)
 tables = connection.execute(
     "SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'"
 ).fetchone()[0]
-expected = report["totals"]["models"]
+expected = report["totals"]["models"] + 1  # includes fe_schema_migrations
 if tables != expected:
     raise SystemExit(f"Expected {expected} tables, generated {tables}")
+
+migration_version = connection.execute("SELECT version FROM fe_schema_migrations WHERE version = '0002_game_schema'").fetchone()
+if migration_version is None:
+    raise SystemExit("Generated game schema migration did not register its version")
 
 foreign_key_errors = connection.execute("PRAGMA foreign_key_check").fetchall()
 if foreign_key_errors:
