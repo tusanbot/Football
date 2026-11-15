@@ -27,6 +27,20 @@ async function authenticateBot(request: FastifyRequest, reply: FastifyReply): Pr
   return telegramId;
 }
 
+const MANAGER_GROUP_ROUTES = new Set([
+  "/v1/groups/:telegramGroupId/challenges",
+  "/v1/groups/:telegramGroupId/challenges/:challengeId/cancel",
+  "/v1/groups/:telegramGroupId/challenges/:challengeId/complete",
+  "/v1/groups/:telegramGroupId/leagues",
+  "/v1/groups/:telegramGroupId/leagues/:competitionId/start",
+  "/v1/groups/:telegramGroupId/shop/purchase",
+  "/v1/groups/:telegramGroupId/check",
+]);
+
+export function requiresGroupManagerVerification(method: string, routeUrl: string | undefined): boolean {
+  return method === "POST" && MANAGER_GROUP_ROUTES.has(routeUrl ?? "");
+}
+
 async function authenticateGroupActor(request: FastifyRequest, reply: FastifyReply): Promise<string | null> {
   const expected = process.env.BOT_API_SECRET;
   const received = request.headers["x-football-bot-secret"];
@@ -54,15 +68,7 @@ async function authenticateGroupActor(request: FastifyRequest, reply: FastifyRep
   if (groupId && /^-?\d{5,20}$/.test(groupId)) {
     try {
       // Mini App membership rows can become stale after a member leaves a group.
-      const managerRoutes = new Set([
-        "/v1/groups/:telegramGroupId/challenges",
-        "/v1/groups/:telegramGroupId/challenges/:challengeId/cancel",
-        "/v1/groups/:telegramGroupId/challenges/:challengeId/complete",
-        "/v1/groups/:telegramGroupId/leagues",
-        "/v1/groups/:telegramGroupId/leagues/:competitionId/start",
-        "/v1/groups/:telegramGroupId/check",
-      ]);
-      const requireManager = request.method === "POST" && managerRoutes.has(request.routeOptions.url ?? "");
+      const requireManager = requiresGroupManagerVerification(request.method, request.routeOptions.url);
       await verifyTelegramGroupActor({ telegramGroupId: groupId, telegramUserId: user.telegramId, requireManager });
     } catch (error) {
       if (error instanceof TelegramGroupAuthorizationError) {

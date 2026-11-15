@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { buildApp } from "../src/app.js";
+import { requiresGroupManagerVerification } from "../src/groups/group-routes.js";
 
 test("group endpoints require the authenticated Bot channel", async (t) => {
   const previous = process.env.BOT_API_SECRET;
@@ -165,31 +166,18 @@ test("system group membership synchronization accepts numeric Telegram IDs", asy
   assert.deepEqual(response.json(), { updated: false });
 });
 
-test("system group membership synchronization accepts numeric Telegram IDs", async (t) => {
-  if (!process.env.DATABASE_URL) {
-    t.skip("DATABASE_URL is only configured in the ephemeral PostgreSQL CI job.");
-    return;
+test("Mini App verifies live Telegram manager status for every manager-only group action", () => {
+  for (const route of [
+    "/v1/groups/:telegramGroupId/challenges",
+    "/v1/groups/:telegramGroupId/challenges/:challengeId/cancel",
+    "/v1/groups/:telegramGroupId/challenges/:challengeId/complete",
+    "/v1/groups/:telegramGroupId/leagues",
+    "/v1/groups/:telegramGroupId/leagues/:competitionId/start",
+    "/v1/groups/:telegramGroupId/shop/purchase",
+    "/v1/groups/:telegramGroupId/check",
+  ]) {
+    assert.equal(requiresGroupManagerVerification("POST", route), true, route);
   }
-  const previous = process.env.BOT_API_SECRET;
-  process.env.BOT_API_SECRET = "group-test-secret";
-  const app = buildApp();
-  await app.ready();
-  t.after(async () => {
-    await app.close();
-    if (previous === undefined) delete process.env.BOT_API_SECRET;
-    else process.env.BOT_API_SECRET = previous;
-  });
-
-  const response = await app.inject({
-    method: "POST",
-    url: "/v1/groups/system/member-update",
-    headers: { "x-football-bot-secret": "group-test-secret" },
-    payload: {
-      telegramGroupId: "-1009876543210",
-      telegramUserId: "987654321",
-      isMember: false,
-    },
-  });
-  assert.equal(response.statusCode, 200);
-  assert.deepEqual(response.json(), { updated: false });
+  assert.equal(requiresGroupManagerVerification("POST", "/v1/groups/:telegramGroupId/leagues/:competitionId/join"), false);
+  assert.equal(requiresGroupManagerVerification("GET", "/v1/groups/:telegramGroupId/shop"), false);
 });
