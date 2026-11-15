@@ -20,3 +20,4 @@ export * from "./club-economy.js";
 
 export * from "./match-engine.js";
 export * from "./match-rules.js";
+export * from "./match-checkpoints.js";

@@ -9,20 +9,20 @@
 
 Football Empire matches are **not fully manual and not a single unattended roll of the dice**.
 
-The server simulates football in deterministic phases. At selected tactical checkpoints, each manager can make a bounded set of decisions. If a manager is offline or does not respond before the checkpoint deadline, the match continues using that club's saved pre-match plan and then safe AI defaults.
+The server simulates football in deterministic phases. At selected tactical checkpoints, each manager can submit a bounded set of decisions. If a manager is offline or does not respond, the match continues on its server-owned schedule using that club's saved pre-match plan and then safe AI defaults.
 
-The manager is the head coach: they prepare the team, choose the match plan, react at key moments, and review the result.
+**A manager response is never a prerequisite for match progression.** The response window runs alongside the match clock; it does not pause the match. A decision is applied only if it arrives before the next simulation segment begins and before its decision deadline.
 
-Both the Bot and Mini App must support the complete set of match operations.
+The manager is the head coach: they prepare the team, choose the match plan, react at key moments, and review the result. Both the Bot and Mini App must support the complete set of match operations.
 
 ## 2. Match lifecycle
 
 1. **PREPARATION** — starting XI, bench, formation, tactics, fallback plan.
 2. **SCHEDULED** — fixture and participant references stored.
-3. **KICKOFF** — server snapshots both clubs' eligible players and tactics.
+3. **KICKOFF** — server snapshots both clubs' eligible players, tactics, and deterministic seed.
 4. **SIMULATING** — deterministic simulation advances through persisted segments.
-5. **TACTICAL CHECKPOINT** — managers may submit decisions for their own clubs.
-6. **RESUME** — accepted decisions are applied; timeout uses fallback instructions.
+5. **TACTICAL CHECKPOINT** — a decision window opens while the match clock continues.
+6. **RESUME** — at the scheduled segment boundary, timely manager decisions are applied; otherwise fallback instructions or safe AI defaults are used.
 7. **COMPLETED** — result and all side effects are settled exactly once.
 8. **REPORT** — both clubs retrieve the same canonical report.
 
@@ -30,17 +30,23 @@ Matches never depend on users keeping the app open. A durable server worker resu
 
 ## 3. Match clock and decisions
 
-The football clock is 90 minutes plus stoppage time. Checkpoints occur at half-time, minute 60, and minute 75. Each checkpoint has a server-owned decision window, initially 60 seconds. The match resumes earlier if both managers have responded.
+Tactical checkpoints occur at half-time, minute 60, and minute 75. Each checkpoint has a server-owned decision deadline, initially 60 seconds after the checkpoint opens, but the next simulation segment has its own fixed start time.
 
-The manager may change formation, mentality, pressing, tempo, passing style, and make legal substitutions. The server validates all decisions atomically. A missed deadline applies the saved pre-match plan, then safe AI defaults.
+The segment starts at its scheduled time **even when neither manager has responded**. The server resolves each club independently:
+1. latest valid manager decision received before both the decision deadline and segment start;
+2. saved pre-match fallback plan;
+3. safe AI default.
+
+A decision arriving after the segment starts is rejected for that checkpoint and cannot retroactively alter simulated play. Managers may change formation, mentality, pressing, tempo, passing style, and make legal substitutions. All actions are validated atomically by the server.
+
+The Bot and Mini App display the same deadline and resolved state. Neither client runs a local countdown that can influence authoritative progression.
 
 ## 4. Substitution rules
 
 The default competition rules are:
-
 - **Maximum five players substituted per team over the entire match. Half-time substitutions count toward these five.**
 - **Maximum three in-play substitution windows. Half-time changes do not consume an in-play window, but they still consume the five-player substitution allowance.**
-- Multiple substitutions in the same checkpoint/window consume one in-play window, but each player entering counts toward the five-substitution limit.
+- Multiple substitutions in the same checkpoint/window consume one in-play window, but each player entering counts toward the five-player limit.
 - Forced injury substitutions also count toward the five-player limit and the in-play window allowance.
 - A player who has left the field cannot return; a substitute can enter only once.
 - A sent-off player cannot be substituted or return.
@@ -51,11 +57,11 @@ A whole substitution package is validated before any changes are applied. A fail
 
 ## 5. Offline and timeout behavior
 
-Each club stores a pre-match fallback plan. At a checkpoint, the latest valid manager decision wins; otherwise the saved plan is applied, then safe tactical AI. The AI respects player eligibility, the substitution allowance, in-play windows, and goalkeeper constraints. It cannot perform economic actions.
+A missing response never pauses or extends the match. At the next segment boundary, the server applies the saved pre-match plan; if no valid plan exists, it applies safe tactical AI. The AI respects player eligibility, the substitution allowance, in-play windows, and goalkeeper constraints. It cannot perform economic actions.
 
 ## 6. Authoritative architecture
 
-- **packages/domain:** deterministic simulation, substitution and competition rules; no transport or database dependencies.
+- **packages/domain:** deterministic simulation, checkpoint resolution, substitution and competition rules; no transport or database dependencies.
 - **apps/api:** authorization, match orchestration, deadlines, persistence, concurrency and settlement.
 - **apps/bot:** Telegram commands, callback decisions, notifications and reports.
 - **apps/web:** Mini App match center, timeline, tactical decisions and full report.
@@ -69,6 +75,8 @@ The existing FootballMatch, MatchEvent and PlayerMatchPerformance models are the
 
 Progression must use a durable lease-based worker. Each segment/checkpoint and its events/state transition are committed transactionally. Expired leases recover after crashes. Idempotency prevents duplicate events, substitutions, rewards, fitness loss and table updates.
 
+Checkpoint decision records must be append-only or versioned. A manager's latest valid decision before the segment boundary wins; late decisions cannot mutate a resolved checkpoint.
+
 ## 8. Competition formats
 
 - **Friendly:** one match.
@@ -80,9 +88,9 @@ Two-leg cups, promotion/relegation and advanced season scheduling are later exte
 
 ## 9. Delivery sequence
 
-1. Domain foundation: deterministic segment simulation and shared rule validation.
+1. Domain foundation: deterministic segment simulation, non-blocking checkpoint resolution and shared rule validation.
 2. Persistence/state machine: lifecycle, checkpoint and decision schema.
-3. API orchestration: durable worker, deadlines, idempotency and concurrency.
+3. API orchestration: durable worker, independent match clock, deadlines, idempotency and concurrency.
 4. Bot experience: callbacks, notifications, timeout/fallback and reports.
 5. Mini App experience: same decisions and match center.
 6. Competition integration and end-to-end parity tests.
@@ -91,11 +99,12 @@ Do not migrate a live database or deploy the Bot/API without separate explicit a
 
 ## 10. Acceptance criteria
 
-- Matches progress while both managers are offline.
-- Managers can affect matches before kickoff and at bounded checkpoints.
+- Matches progress on their server-owned schedule even if both managers are offline.
+- Checkpoint resolution never waits for a manager response.
+- Managers can affect a segment only by submitting a valid decision before its start boundary.
+- A missing decision resolves through pre-match fallback and then AI defaults.
 - Identical actions exist in Bot and Mini App.
-- Invalid or duplicate actions cannot alter match state.
-- Checkpoint timeout resolves with fallback behavior.
+- Invalid, late or duplicate actions cannot alter resolved match state.
 - Worker restarts neither lose nor duplicate progression.
 - All substitution rules, including the five-player total and three in-play windows, are enforced.
 - Completed reports are immutable and historical matches remain readable.
