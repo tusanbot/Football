@@ -535,8 +535,10 @@ export async function simulateScheduledMatch(userId: string, matchId: string, no
             const wasStarter = [...homeSide.players, ...awaySide.players].some((player) => player.id === line.playerId);
             const minutesPlayed = Math.max(0, exitedAt - (wasStarter ? 0 : enteredAt));
             const fraction = minutesPlayed / 90;
+            const yellowCards = (runtimeEvents ?? []).filter((event) => event.type === "YELLOW_CARD" && event.playerId === line.playerId).length;
+            const redCards = (runtimeEvents ?? []).filter((event) => event.type === "RED_CARD" && event.playerId === line.playerId).length;
             return {
-              ...line, minutesPlayed, goals, assists,
+              ...line, minutesPlayed, goals, assists, yellowCards, redCards,
               shots: Math.max(goals, Math.round(line.shots * fraction)),
               passes: Math.round(line.passes * fraction),
               tackles: Math.round(line.tackles * fraction),
