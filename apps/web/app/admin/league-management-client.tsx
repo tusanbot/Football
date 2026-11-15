@@ -212,7 +212,7 @@ export default function LeagueManagementClient() {
           <div style={{ display: "flex", flexWrap: "wrap", gap: 8, justifyContent: "space-between", alignItems: "center" }}>
             <div><strong>{league.name}</strong><div style={{ color: "#aebbd0", fontSize: 13, marginTop: 5 }}>سطح {league.tier} · فصل {league.season} · گروه {league.groupNumber} · {league.teams.length}/۸ تیم · {league.matchCount} مسابقه · {league.status}</div></div>
             <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-              {league.status !== "COMPLETED" && league.status !== "CANCELLED" && <button style={button} onClick={() => void act("league-status", league.id, { status: league.status === "ACTIVE" ? "CANCELLED" : "ACTIVE", reason: "تغییر وضعیت توسط مدیر" })}>{league.status === "ACTIVE" ? "لغو لیگ" : "فعال‌سازی"}</button>}
+              {league.status === "ACTIVE" && <button style={button} onClick={() => void act("league-status", league.id, { status: "CANCELLED", reason: "لغو توسط مدیر" })}>لغو لیگ</button>}{league.status === "REGISTRATION" && <span style={{ color: "#aebbd0", fontSize: 12 }}>شروع خودکار پس از تکمیل ظرفیت ۸ تیم</span>}
               <button style={{ ...button, background: "#46566c" }} onClick={() => setExpanded(expanded === league.id ? null : league.id)}>{expanded === league.id ? "بستن جزئیات" : "جزئیات"}</button>
             </div>
           </div>
