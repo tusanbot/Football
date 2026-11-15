@@ -165,6 +165,12 @@ enum PromotionOfferStatus {
   REPLACED
 }
 
+enum ChallengeChargeAsset {
+  FREE
+  GOLD
+  PURCHASED
+}
+
 enum FriendlyChallengeStatus {
   OPEN
   ACCEPTED
@@ -589,6 +595,9 @@ model FriendlyChallenge {
   creatorUserId String
   creatorClubId String
   groupId String?
+  idempotencyKey String? @unique
+  chargeAsset ChallengeChargeAsset @default(FREE)
+  goldCost BigInt @default(0)
   status FriendlyChallengeStatus @default(OPEN)
   matchId String? @unique
   expiresAt DateTime
