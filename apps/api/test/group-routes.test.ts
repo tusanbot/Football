@@ -45,13 +45,24 @@ test("group registration validates Telegram group identity and role", async (t) 
 
 test("group registration refuses groups below the ten-member threshold", async (t) => {
   const previous = process.env.BOT_API_SECRET;
+  const previousToken = process.env.TELEGRAM_BOT_TOKEN;
+  const previousFetch = globalThis.fetch;
   process.env.BOT_API_SECRET = "group-test-secret";
+  process.env.TELEGRAM_BOT_TOKEN = "123456:test-token";
+  globalThis.fetch = async (_input, init) => {
+    const payload = JSON.parse(String(init?.body ?? "{}")) as { user_id: number };
+    const status = payload.user_id === 123456 ? "administrator" : "creator";
+    return new Response(JSON.stringify({ ok: true, result: { status } }), { status: 200 });
+  };
   const app = buildApp();
   await app.ready();
   t.after(async () => {
     await app.close();
+    globalThis.fetch = previousFetch;
     if (previous === undefined) delete process.env.BOT_API_SECRET;
     else process.env.BOT_API_SECRET = previous;
+    if (previousToken === undefined) delete process.env.TELEGRAM_BOT_TOKEN;
+    else process.env.TELEGRAM_BOT_TOKEN = previousToken;
   });
 
   const response = await app.inject({
