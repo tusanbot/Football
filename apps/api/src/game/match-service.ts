@@ -863,14 +863,12 @@ export async function simulateScheduledMatch(userId: string, matchId: string, no
         where: { competitionId: settlement.competitionId, status: "SCHEDULED" },
       });
       if (remaining === 0) {
-        const completed = await prisma.competition.updateMany({
+        await prisma.competition.updateMany({
           where: { id: settlement.competitionId, status: "ACTIVE" },
           data: { status: "COMPLETED", completedAt: now },
         });
-        if (completed.count > 0) {
-          const pyramid = await import("./league-pyramid-service.js");
-          await pyramid.processPyramidLeagueCompletion(settlement.competitionId, now);
-        }
+        const pyramid = await import("./league-pyramid-service.js");
+        await pyramid.processPyramidLeagueCompletion(settlement.competitionId, now);
       }
     } else if (competition?.format === "CUP") {
       const fixture = await prisma.footballMatch.findUnique({
