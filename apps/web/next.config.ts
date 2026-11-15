@@ -1,5 +1,13 @@
 import type { NextConfig } from "next";
 
+if (process.env.NODE_ENV === "production") {
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL;
+  if (!apiUrl) throw new Error("NEXT_PUBLIC_API_URL is required for a production Web build.");
+  let parsedApiUrl: URL;
+  try { parsedApiUrl = new URL(apiUrl); } catch { throw new Error("NEXT_PUBLIC_API_URL must be an absolute HTTPS URL."); }
+  if (parsedApiUrl.protocol !== "https:") throw new Error("NEXT_PUBLIC_API_URL must use HTTPS in production.");
+}
+
 const securityHeaders = [
   { key: "X-Content-Type-Options", value: "nosniff" },
   { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
