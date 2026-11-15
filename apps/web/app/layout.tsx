@@ -4,8 +4,8 @@ import Script from "next/script";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Football Empire · Transfer Market",
-  description: "Manage your club and trade generated players.",
+  title: "Football Empire | مدیریت باشگاه فوتبال",
+  description: "مدیریت باشگاه، بازیکنان، مسابقات و لیگ‌ها در Football Empire.",
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
