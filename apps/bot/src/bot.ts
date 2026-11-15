@@ -71,17 +71,26 @@ type ApiListing = { id: string; askingPrice: string; player: ApiPlayer; sellerCl
 
 async function api<T>(path: string, telegramId: number, method = "GET", body?: unknown): Promise<T> {
   if (!apiUrl || !botApiSecret) throw new Error("Bot API is not configured. Set FOOTBALL_API_URL and BOT_API_SECRET.");
-  const response = await fetch(new URL(path, apiUrl), {
-    method,
-    headers: {
-      "content-type": "application/json",
-      "x-football-bot-secret": botApiSecret,
-      "x-telegram-user-id": String(telegramId),
-    },
-    ...(body ? { body: JSON.stringify(body) } : {}),
-    signal: AbortSignal.timeout(15_000),
-  });
-  const data = await response.json() as T & { error?: string; details?: Record<string, string> };
+  let response: Response;
+  try {
+    response = await fetch(new URL(path, apiUrl), {
+      method,
+      headers: {
+        "content-type": "application/json",
+        "x-football-bot-secret": botApiSecret,
+        "x-telegram-user-id": String(telegramId),
+      },
+      ...(body ? { body: JSON.stringify(body) } : {}),
+      signal: AbortSignal.timeout(15_000),
+    });
+  } catch {
+    throw new Error("ارتباط با سرور بازی برقرار نشد یا مهلت پاسخ به پایان رسید. لطفاً دوباره تلاش کنید.");
+  }
+  const data = await response.json().catch(() => null) as (T & { error?: string; details?: Record<string, string> }) | null;
+  if (!data) {
+    if (!response.ok) throw new Error(formatApiError(`HTTP_${response.status}`));
+    throw new Error("پاسخ سرور بازی قابل خواندن نیست. لطفاً دوباره تلاش کنید.");
+  }
   if (!response.ok) {
     const range = data.details?.minimumWeeklyWage ? ` (acceptable weekly wage: ${cash(data.details.minimumWeeklyWage)}–${cash(data.details.maximumWeeklyWage ?? data.details.minimumWeeklyWage)} Cash)` : "";
     throw new Error(formatApiError(data.error ?? `HTTP_${response.status}`) + range);
@@ -92,8 +101,17 @@ async function api<T>(path: string, telegramId: number, method = "GET", body?: u
 
 async function publicApi<T>(path: string): Promise<T> {
   if (!apiUrl) throw new Error("FOOTBALL_API_URL is not configured.");
-  const response = await fetch(new URL(path, apiUrl), { signal: AbortSignal.timeout(15_000) });
-  const data = await response.json() as T & { error?: string };
+  let response: Response;
+  try {
+    response = await fetch(new URL(path, apiUrl), { signal: AbortSignal.timeout(15_000) });
+  } catch {
+    throw new Error("ارتباط با سرور بازی برقرار نشد یا مهلت پاسخ به پایان رسید. لطفاً دوباره تلاش کنید.");
+  }
+  const data = await response.json().catch(() => null) as (T & { error?: string }) | null;
+  if (!data) {
+    if (!response.ok) throw new Error(formatApiError(`HTTP_${response.status}`));
+    throw new Error("پاسخ سرور بازی قابل خواندن نیست. لطفاً دوباره تلاش کنید.");
+  }
   if (!response.ok) throw new Error(formatApiError(data.error ?? `HTTP_${response.status}`));
   return data;
 }
