@@ -75,7 +75,8 @@ Create a Cloudflare Hyperdrive configuration pointing at the existing **developm
 "hyperdrive": [
   {
     "binding": "HYPERDRIVE",
-    "id": "YOUR_DEVELOPMENT_HYPERDRIVE_ID"
+    "id": "YOUR_DEVELOPMENT_HYPERDRIVE_ID",
+    "localConnectionString": "postgresql://postgres:postgres@127.0.0.1:5432/football_empire"
   }
 ]
 ```
