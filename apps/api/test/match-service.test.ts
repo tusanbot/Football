@@ -340,6 +340,15 @@ test("durable match worker advances checkpoints, resumes on two early decisions 
     assert.equal(redCardPerformance.redCards, 1);
     const injuredPlayer = await prisma.player.findUniqueOrThrow({ where: { id: injuryEvent.playerId } });
     assert.equal(injuredPlayer.status, "INJURED");
+    const sentOffPlayer = await prisma.player.findUniqueOrThrow({ where: { id: redCardEvent.playerId } });
+    assert.equal(sentOffPlayer.suspensionMatchesRemaining, 1);
+    const nextFixture = await createFriendlyMatch(
+      clubs[0]!.userId, clubs[1]!.clubId, `after-red-card-${suffix}`,
+      new Date(Date.now() - 1_000),
+    );
+    await simulateScheduledMatch(clubs[0]!.userId, nextFixture.match.id);
+    const servedSuspension = await prisma.player.findUniqueOrThrow({ where: { id: redCardEvent.playerId } });
+    assert.equal(servedSuspension.suspensionMatchesRemaining, 0);
     const replay = await simulateScheduledMatch(clubs[1]!.userId, match.id);
     assert.equal(replay.replayed, true);
     assert.equal(await prisma.ledgerTransaction.count({
