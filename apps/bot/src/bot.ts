@@ -1,5 +1,6 @@
 import "dotenv/config";
 import { randomUUID } from "node:crypto";
+import { readResponseWithinLimit } from "./telegram-file.js";
 import { Bot, InlineKeyboard, Keyboard, type Context } from "grammy";
 import {
   GROUP_REPLY_DELETE_DELAY_MS,
@@ -110,10 +111,13 @@ async function saveTelegramClubLogo(ctx: Context, fileId: string, mimeType: stri
     if (!telegramFile.file_path) throw new Error("TELEGRAM_FILE_PATH_MISSING");
     const downloaded = await fetch("https://api.telegram.org/file/bot" + token + "/" + telegramFile.file_path, { signal: AbortSignal.timeout(15_000) });
     if (!downloaded.ok) throw new Error("TELEGRAM_FILE_DOWNLOAD_FAILED");
-    const contentLength = Number(downloaded.headers.get("content-length") ?? 0);
-    if (contentLength > 512 * 1024) throw new Error("LOGO_TOO_LARGE");
-    const bytes = Buffer.from(await downloaded.arrayBuffer());
-    if (bytes.length > 512 * 1024) throw new Error("LOGO_TOO_LARGE");
+    let bytes: Buffer;
+    try {
+      bytes = Buffer.from(await readResponseWithinLimit(downloaded, 512 * 1024));
+    } catch (error) {
+      if (error instanceof Error && error.message === "FILE_TOO_LARGE") throw new Error("LOGO_TOO_LARGE");
+      throw error;
+    }
     await api("/v1/club/logo", ctx.from.id, "PUT", { mimeType, base64: bytes.toString("base64") });
     await ctx.reply("لوگوی باشگاه با موفقیت به‌روزرسانی شد.");
   } catch (error) {

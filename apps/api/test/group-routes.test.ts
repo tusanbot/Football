@@ -135,3 +135,61 @@ test("alliance security review requires Telegram authentication", async t => {
   });
   assert.equal(response.statusCode, 401);
 });
+
+test("system group membership synchronization accepts numeric Telegram IDs", async (t) => {
+  if (!process.env.DATABASE_URL) {
+    t.skip("DATABASE_URL is only configured in the ephemeral PostgreSQL CI job.");
+    return;
+  }
+  const previous = process.env.BOT_API_SECRET;
+  process.env.BOT_API_SECRET = "group-test-secret";
+  const app = buildApp();
+  await app.ready();
+  t.after(async () => {
+    await app.close();
+    if (previous === undefined) delete process.env.BOT_API_SECRET;
+    else process.env.BOT_API_SECRET = previous;
+  });
+
+  const response = await app.inject({
+    method: "POST",
+    url: "/v1/groups/system/member-update",
+    headers: { "x-football-bot-secret": "group-test-secret" },
+    payload: {
+      telegramGroupId: "-1009876543210",
+      telegramUserId: "987654321",
+      isMember: false,
+    },
+  });
+  assert.equal(response.statusCode, 200);
+  assert.deepEqual(response.json(), { updated: false });
+});
+
+test("system group membership synchronization accepts numeric Telegram IDs", async (t) => {
+  if (!process.env.DATABASE_URL) {
+    t.skip("DATABASE_URL is only configured in the ephemeral PostgreSQL CI job.");
+    return;
+  }
+  const previous = process.env.BOT_API_SECRET;
+  process.env.BOT_API_SECRET = "group-test-secret";
+  const app = buildApp();
+  await app.ready();
+  t.after(async () => {
+    await app.close();
+    if (previous === undefined) delete process.env.BOT_API_SECRET;
+    else process.env.BOT_API_SECRET = previous;
+  });
+
+  const response = await app.inject({
+    method: "POST",
+    url: "/v1/groups/system/member-update",
+    headers: { "x-football-bot-secret": "group-test-secret" },
+    payload: {
+      telegramGroupId: "-1009876543210",
+      telegramUserId: "987654321",
+      isMember: false,
+    },
+  });
+  assert.equal(response.statusCode, 200);
+  assert.deepEqual(response.json(), { updated: false });
+});
