@@ -406,7 +406,8 @@ export async function createFriendlyChallenge(
   if (goldCost <= 0n) throw new PyramidLeagueError("INVALID_CHALLENGE_PRICE");
   const club = await ownedClub(userId);
   const day = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
-  return prisma.$transaction(async (tx) => {
+  try {
+    return await prisma.$transaction(async (tx) => {
     let groupId: string | null = null;
     if (groupTelegramId) {
       const group = await tx.telegramGroup.findUnique({
@@ -495,7 +496,30 @@ export async function createFriendlyChallenge(
       },
       replayed: false,
     };
-  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+  } catch (error) {
+    const existing = await prisma.friendlyChallenge.findUnique({ where: { idempotencyKey } });
+    if (existing) {
+      const expectedGroup = groupTelegramId
+        ? await prisma.telegramGroup.findUnique({ where: { telegramId: groupTelegramId }, select: { id: true } })
+        : null;
+      const expectedGroupId = expectedGroup?.id ?? null;
+      if (existing.creatorUserId !== userId || existing.creatorClubId !== club.id || existing.groupId !== expectedGroupId) {
+        throw new PyramidLeagueError("IDEMPOTENCY_CONFLICT");
+      }
+      const usage = await prisma.challengeDailyUsage.findUnique({ where: { userId_usageDate: { userId, usageDate: day } } });
+      return {
+        challenge: existing, asset: existing.chargeAsset, goldCost: existing.goldCost.toString(),
+        remaining: {
+          free: Math.max(0, 3 - (usage?.freeUsed ?? 0)),
+          gold: Math.max(0, 2 - (usage?.goldUsed ?? 0)),
+          purchased: usage?.purchasedCredits ?? 0,
+        },
+        replayed: true,
+      };
+    }
+    throw error;
+  }
 }
 export async function acceptFriendlyChallenge(userId: string, token: string, now = new Date()) {
   const opponent = await ownedClub(userId);
