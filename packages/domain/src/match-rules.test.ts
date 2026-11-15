@@ -72,6 +72,32 @@ test("the five-substitution cap includes half-time and later substitutions", () 
   }), /MATCH_SUBSTITUTION_LIMIT_REACHED/);
 });
 
+test("exactly five substitutions are allowed when three happen at half-time", () => {
+  let current = applyMatchSubstitutions({
+    state: state(),
+    changes: [
+      { outgoingPlayerId: "p1", incomingPlayerId: "b1" },
+      { outgoingPlayerId: "p9", incomingPlayerId: "b4" },
+      { outgoingPlayerId: "p6", incomingPlayerId: "b3" },
+    ],
+    checkpoint: "HALF_TIME", checkpointId: "ht-five", source: "MANAGER",
+  }).state;
+  current = applyMatchSubstitutions({
+    state: current,
+    changes: [
+      { outgoingPlayerId: "p2", incomingPlayerId: "b2" },
+      { outgoingPlayerId: "p10", incomingPlayerId: "b5" },
+    ],
+    checkpoint: "MINUTE_60", checkpointId: "m60-five", source: "MANAGER",
+  }).state;
+  assert.equal(current.substitutionsUsed, 5);
+  assert.throws(() => applyMatchSubstitutions({
+    state: current,
+    changes: [{ outgoingPlayerId: "p4", incomingPlayerId: "b0" }],
+    checkpoint: "MINUTE_75", checkpointId: "m75-over-five", source: "MANAGER",
+  }), /MATCH_SUBSTITUTION_LIMIT_REACHED/);
+});
+
 test("the three in-play windows are independent from the five-player limit", () => {
   let current = state();
   const substitutions = [
