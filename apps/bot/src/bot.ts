@@ -490,6 +490,24 @@ bot.command("adminchallenge", async (ctx) => {
   }
 });
 
+bot.command("adminseason", async (ctx) => {
+  if (!ctx.from || !adminOnlyInPrivate(ctx)) return;
+  const [operation,seasonId,decision]=String(ctx.match??"").trim().split(/\s+/);
+  if(operation==="close"&&seasonId){
+    try{
+      const result=await api<{reviewStatus:string;prize?:string;replayed:boolean}>("/v1/admin/actions",ctx.from.id,"POST",{action:"close-alliance-season",targetId:seasonId,idempotencyKey:randomUUID()});
+      return ctx.reply("فصل اتحاد بسته شد. وضعیت بررسی: "+result.reviewStatus+" · جایزه پرداخت‌شده: "+(result.prize??"0")+(result.reviewStatus==="FLAGGED"?"\nجایزه تا بررسی امنیتی مسدود است.":""));
+    }catch(error){return ctx.reply("بستن فصل ناموفق بود: "+(error instanceof Error?error.message:"خطای نامشخص"));}
+  }
+  if(operation==="review"&&seasonId&&["approve","reject"].includes(decision??"")){
+    try{
+      const result=await api<{reviewStatus:string;prize:string;replayed:boolean}>("/v1/admin/actions",ctx.from.id,"POST",{action:"review-alliance-season",targetId:seasonId,review:decision==="approve"?"APPROVED":"REJECTED",idempotencyKey:randomUUID()});
+      return ctx.reply("بررسی فصل ثبت شد. وضعیت: "+result.reviewStatus+" · جایزه: "+result.prize);
+    }catch(error){return ctx.reply("بررسی فصل ناموفق بود: "+(error instanceof Error?error.message:"خطای نامشخص"));}
+  }
+  await ctx.reply("استفاده: /adminseason close SEASON_ID یا /adminseason review SEASON_ID approve|reject");
+});
+
 bot.command("adminleague", async (ctx) => {
   if (!ctx.from || !adminOnlyInPrivate(ctx)) return;
   const [operation,targetId,status]=String(ctx.match??"").trim().split(/\s+/);
@@ -668,6 +686,7 @@ bot.command("adminhelp", async (ctx) => {
     "/adminbroadcast users|groups TEXT — ارسال پیام مدیریتی\n" +
     "/adminaward set|remove ... — مدیریت جوایز رسمی فصل\n" +
     "/adminleague status ID STATUS — مدیریت وضعیت مسابقه\n" +
+    "/adminseason close|review SEASON_ID ... — چرخه فصل اتحاد و جوایز\n" +
     "/admingift create|toggle ... — مدیریت کدهای هدیه\n" +
     "/adminitem create|update|toggle ... — مدیریت آیتم‌ها\n" +
     "/adminupdate player|club|match ID JSON — ویرایش اطلاعات\n\n" +
