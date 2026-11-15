@@ -41,7 +41,7 @@ const body=z.object({idempotencyKey:z.string().min(12).max(128)}).safeParse(req.
 if(!params.success||!body.success)return reply.code(400).send({error:"INVALID_BROADCAST_RETRY"});
 try{
 const result=await prisma.$transaction(async tx=>{
-const updated=await tx.leagueNotice.updateMany({where:{referenceId:params.data.id,kind:"ADMIN_BROADCAST",deliveredAt:null,deliveryAttempts:{gte:8}},data:{deliveryAttempts:0,deliveryClaimToken:null,deliveryLockedUntil:null,deliveryLastError:null}});
+const updated=await tx.leagueNotice.updateMany({where:{referenceId:params.data.id,kind:"ADMIN_BROADCAST",deliveredAt:null,readAt:null,deliveryAttempts:{gte:8}},data:{deliveryAttempts:0,deliveryClaimToken:null,deliveryLockedUntil:null,deliveryLastError:null}});
 if(!updated.count)throw new Error("NO_FAILED_DELIVERIES");
 await tx.adminAuditLog.create({data:{actorTelegramId:actor.telegramId,action:"retry-user-broadcast",targetType:"user-broadcast",targetId:params.data.id,idempotencyKey:"admin-user-broadcast-retry:"+body.data.idempotencyKey,metadata:{retried:updated.count}}});
 return{retried:updated.count};
@@ -65,7 +65,7 @@ prisma.adminAuditLog.findMany({where:{action:"broadcast",targetType:"broadcast"}
 const refs=userAudits.map(x=>x.targetId).filter((x):x is string=>Boolean(x));
 const [userTotals,userDelivered,userFailed]=refs.length?await Promise.all([
 prisma.leagueNotice.groupBy({by:["referenceId"],where:{kind:"ADMIN_BROADCAST",referenceId:{in:refs}},_count:{_all:true}}),
-prisma.leagueNotice.groupBy({by:["referenceId"],where:{kind:"ADMIN_BROADCAST",referenceId:{in:refs},deliveredAt:{not:null}},_count:{_all:true}}),
+prisma.leagueNotice.groupBy({by:["referenceId"],where:{kind:"ADMIN_BROADCAST",referenceId:{in:refs},OR:[{deliveredAt:{not:null}},{readAt:{not:null}}]},_count:{_all:true}}),
 prisma.leagueNotice.groupBy({by:["referenceId"],where:{kind:"ADMIN_BROADCAST",referenceId:{in:refs},deliveredAt:null,deliveryAttempts:{gte:8}},_count:{_all:true}}),
 ]):[[],[],[]];
 const totalMap=new Map(userTotals.map(x=>[x.referenceId??"",x._count._all]));
