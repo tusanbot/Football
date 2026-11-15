@@ -204,6 +204,8 @@ test("league completion awards the top three, relegates two and replaces decline
     });
     const completion = await processPyramidLeagueCompletion(competition.id, now);
     assert.equal(completion.processed, true);
+    const completionReplay = await processPyramidLeagueCompletion(competition.id, now);
+    assert.equal(completionReplay.processed, false);
     assert.equal(await prisma.leagueAward.count({ where: { leagueId: league.id } }), 3);
     assert.equal(await prisma.leaguePromotionOffer.count({ where: { leagueId: league.id, status: "PENDING" } }), 2);
     assert.equal(await prisma.pyramidLeagueEntry.count({ where: { leagueId: league.id, finalPosition: { in: [7, 8] } } }), 2);
