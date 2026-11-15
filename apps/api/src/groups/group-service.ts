@@ -47,7 +47,8 @@ export async function registerTelegramGroup(input: { telegramUserId: string; tel
 }
 
 export async function joinTelegramGroup(input: { telegramUserId: string; telegramGroupId: string; memberCount: number }) {
-  const minimumMembers = await getIntegerSetting(prisma as unknown as Prisma.TransactionClient, "groups.minimumMembers", MIN_TELEGRAM_MEMBERS, 5, 1000);
+  const minimumSetting = await prisma.gameSetting.findUnique({ where: { key: "groups.minimumMembers" }, select: { value: true } });
+  const minimumMembers = settingInteger(minimumSetting?.value, MIN_TELEGRAM_MEMBERS, 5, 1000);
   if (input.memberCount < minimumMembers) {
     await prisma.telegramGroup.updateMany({ where: { telegramId: input.telegramGroupId }, data: { memberCount: input.memberCount, isActive: false, lastMemberCountCheckAt: new Date() } });
     throw new GroupServiceError("GROUP_MINIMUM_MEMBERS_REQUIRED");
