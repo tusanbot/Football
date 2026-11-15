@@ -90,3 +90,9 @@ export function limitTelegramMessage(text: string, maxLength = 3900): string {
   if (!Number.isSafeInteger(maxLength) || maxLength < 1) throw new Error("INVALID_TELEGRAM_MESSAGE_LIMIT");
   return text.length <= maxLength ? text : text.slice(0, maxLength - 1) + "…";
 }
+
+export function assertLongPollingWebhookClear(webhookUrl: string | undefined): void {
+  if (typeof webhookUrl === "string" && webhookUrl.trim().length > 0) {
+    throw new Error("TELEGRAM_WEBHOOK_CONFIGURED: remove the webhook explicitly after confirming the Bot should use long polling.");
+  }
+}
