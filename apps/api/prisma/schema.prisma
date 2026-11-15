@@ -547,6 +547,7 @@ model LeaguePromotionOffer {
   finalPosition Int
   status PromotionOfferStatus @default(PENDING)
   offeredAt DateTime @default(now())
+  expiresAt DateTime
   resolvedAt DateTime?
   league PyramidLeague @relation(fields: [leagueId], references: [id], onDelete: Cascade)
   club Club @relation(fields: [clubId], references: [id], onDelete: Cascade)
