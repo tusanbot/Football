@@ -315,6 +315,18 @@ test("durable match worker advances checkpoints, resumes on two early decisions 
     assert.equal(match.status, "COMPLETED");
     assert.equal(runtime.status, "COMPLETED");
     assert.equal(runtime.currentMinute, 90);
+    const finalRuntimeState = runtime.simulationState as {
+      segment: { playerStats: Array<{ playerId:string; minutesPlayed:number; shots:number; passes:number; tackles:number; fitnessLoss:number }> };
+    };
+    const sampleStats = finalRuntimeState.segment.playerStats.find((item) => item.minutesPlayed > 20)!;
+    const samplePerformance = await prisma.playerMatchPerformance.findFirstOrThrow({
+      where: { matchId: match.id, playerId: sampleStats.playerId },
+    });
+    assert.equal(samplePerformance.minutesPlayed, sampleStats.minutesPlayed);
+    assert.equal(samplePerformance.shots, sampleStats.shots);
+    assert.equal(samplePerformance.passes, sampleStats.passes);
+    assert.equal(samplePerformance.tackles, sampleStats.tackles);
+    assert.equal(samplePerformance.fitnessLoss, sampleStats.fitnessLoss);
     assert.deepEqual(checkpoints.map((item) => item.status), ["RESOLVED", "RESOLVED", "RESOLVED"]);
     const minute60Resolution = checkpoints[1]!.resolution as { home: { source: string }; away: { source: string } };
     const minute75Resolution = checkpoints[2]!.resolution as { home: { source: string }; away: { source: string } };
