@@ -150,6 +150,69 @@ export async function listPyramidLeagues(userId: string) {
   };
 }
 
+export async function getPyramidLeagueClubHistory(userId: string) {
+  const club = await ownedClub(userId);
+  const entries = await prisma.pyramidLeagueEntry.findMany({
+    where: { clubId: club.id, league: { competition: { status: "COMPLETED" } } },
+    orderBy: { joinedAt: "desc" },
+    take: 100,
+    include: {
+      league: {
+        include: {
+          competition: { select: { name: true, completedAt: true } },
+          awards: { where: { clubId: club.id }, select: { placement: true, awardName: true, awardType: true } },
+          promotionOffers: { where: { clubId: club.id }, select: { targetTier: true, finalPosition: true, status: true, offeredAt: true, resolvedAt: true } },
+        },
+      },
+    },
+  });
+  const completed = entries.filter((entry) => entry.finalPosition !== null);
+  const acceptedPromotions = entries.flatMap((entry) => entry.league.promotionOffers
+    .filter((offer) => offer.status === "ACCEPTED")
+    .map((offer) => ({ season: entry.league.season, tier: entry.league.tier, tierName: leagueTier(entry.league.tier).name,
+      position: offer.finalPosition, targetTier: offer.targetTier, status: offer.status, date: offer.resolvedAt?.toISOString() ?? offer.offeredAt.toISOString() })));
+  const relegations = completed.filter((entry) => entry.league.tier > 1 && entry.finalPosition! >= 7)
+    .map((entry) => ({ season: entry.league.season, tier: entry.league.tier, tierName: leagueTier(entry.league.tier).name,
+      position: entry.finalPosition!, targetTier: entry.league.tier - 1, status: "RELEGATED" }));
+  const byTier = new Map<number, { tier: number; tierName: string; appearances: number; championships: number; podiums: number; promotions: number; relegations: number }>();
+  for (const entry of completed) {
+    const tier = entry.league.tier;
+    const row = byTier.get(tier) ?? { tier, tierName: leagueTier(tier).name, appearances: 0, championships: 0, podiums: 0, promotions: 0, relegations: 0 };
+    row.appearances += 1;
+    if (entry.finalPosition === 1) row.championships += 1;
+    if (entry.finalPosition! <= 3) row.podiums += 1;
+    if (tier > 1 && entry.finalPosition! >= 7) row.relegations += 1;
+    row.promotions += entry.league.promotionOffers.filter((offer) => offer.status === "ACCEPTED").length;
+    byTier.set(tier, row);
+  }
+  return {
+    club: { id: club.id, name: club.name },
+    stats: {
+      seasons: new Set(completed.map((entry) => entry.league.season)).size,
+      appearances: completed.length,
+      championships: completed.filter((entry) => entry.finalPosition === 1).length,
+      podiums: completed.filter((entry) => entry.finalPosition! <= 3).length,
+      promotions: acceptedPromotions.length,
+      relegations: relegations.length,
+    },
+    tiers: [...byTier.values()].sort((a, b) => a.tier - b.tier),
+    movements: [
+      ...acceptedPromotions.map((item) => ({ ...item, movement: "PROMOTION" as const })),
+      ...relegations.map((item) => ({ ...item, movement: "RELEGATION" as const })),
+    ].sort((a, b) => b.season - a.season || a.tier - b.tier || a.position - b.position),
+    leagues: entries.map((entry) => ({
+      id: entry.leagueId, name: entry.league.competition.name, season: entry.league.season,
+      tier: entry.league.tier, tierName: leagueTier(entry.league.tier).name, groupNumber: entry.league.groupNumber,
+      finalPosition: entry.finalPosition, completedAt: entry.league.competition.completedAt?.toISOString() ?? null,
+      awards: entry.league.awards,
+      promotionOffers: entry.league.promotionOffers.map((offer) => ({
+        targetTier: offer.targetTier, finalPosition: offer.finalPosition, status: offer.status,
+        offeredAt: offer.offeredAt.toISOString(), resolvedAt: offer.resolvedAt?.toISOString() ?? null,
+      })),
+    })),
+  };
+}
+
 export async function getPyramidLeagueDetails(userId: string, leagueId: string) {
   await ownedClub(userId);
   const league = await prisma.pyramidLeague.findUnique({

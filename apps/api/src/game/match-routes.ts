@@ -9,7 +9,7 @@ import {
 } from "./match-service.js";
 import {
   PyramidLeagueError, acceptFriendlyChallenge, applyForPyramidLeague, createFriendlyChallenge,
-  getFriendlyChallengeInfo, getPyramidLeagueDetails, listLeagueNotices, listPyramidLeagues,
+  getFriendlyChallengeInfo, getPyramidLeagueClubHistory, getPyramidLeagueDetails, listLeagueNotices, listPyramidLeagues,
   markLeagueNoticesRead, respondToPromotion,
 } from "./league-pyramid-service.js";
 
@@ -204,6 +204,12 @@ export function registerMatchRoutes(app: FastifyInstance) {
     const body = z.object({ tier: z.number().int().min(1).max(7) }).strict().safeParse(request.body);
     if (!body.success) return reply.code(400).send({ error: "INVALID_PYRAMID_LEAGUE_APPLICATION" });
     try { return await applyForPyramidLeague(user.id, body.data.tier); }
+    catch (error) { return sendMatchError(reply, error); }
+  });
+  app.get("/v1/pyramid-leagues/history", async (request, reply) => {
+    const user = await requireTelegramUser(request);
+    if (!user) return reply.code(401).send({ error: "UNAUTHENTICATED" });
+    try { return await getPyramidLeagueClubHistory(user.id); }
     catch (error) { return sendMatchError(reply, error); }
   });
   app.get("/v1/pyramid-leagues/:id", async (request, reply) => {

@@ -819,6 +819,35 @@ bot.command("pyramidleagues", async (ctx) => {
   } catch (error) { await ctx.reply("دریافت لیگ‌ها ناموفق بود: " + (error instanceof Error ? error.message : "خطای نامشخص")); }
 });
 
+bot.command("leaguehistory", async (ctx) => {
+  if (!ctx.from || ctx.chat.type !== "private") return;
+  try {
+    const result = await api<{
+      club: { name: string };
+      stats: { seasons: number; appearances: number; championships: number; podiums: number; promotions: number; relegations: number };
+      tiers: Array<{ tierName: string; appearances: number; championships: number; podiums: number; promotions: number; relegations: number }>;
+      movements: Array<{ season: number; tierName: string; position: number; movement: string; targetTier?: number }>;
+      leagues: Array<{ name: string; season: number; tierName: string; groupNumber: number; finalPosition: number | null; awards: Array<{ awardName: string }> }>;
+    }>("/v1/pyramid-leagues/history", ctx.from.id);
+    const s = result.stats;
+    const tiers = result.tiers.map((row) => row.tierName + ": " + row.appearances + " حضور، " + row.championships + " قهرمانی، " + row.podiums + " سکو، " + row.promotions + " صعود، " + row.relegations + " سقوط");
+    const movements = result.movements.slice(0, 20).map((row) =>
+      "فصل " + row.season + " · " + row.tierName + " · رتبه " + row.position + " · " +
+      (row.movement === "PROMOTION" ? "صعود به سطح " + row.targetTier : "سقوط به سطح پایین‌تر"));
+    const history = result.leagues.slice(0, 20).map((row) =>
+      "فصل " + row.season + " · " + row.tierName + " · گروه " + row.groupNumber +
+      " · رتبه " + (row.finalPosition ?? "ثبت‌نشده") +
+      (row.awards.length ? " · " + row.awards.map((award) => award.awardName).join("، ") : ""));
+    await ctx.reply("افتخارات و تاریخچه باشگاه " + result.club.name +
+      "\n\nفصل‌های حضور: " + s.seasons + " · حضور در لیگ‌ها: " + s.appearances +
+      "\nقهرمانی: " + s.championships + " · سکو: " + s.podiums +
+      "\nصعود: " + s.promotions + " · سقوط: " + s.relegations +
+      "\n\nعملکرد در سطوح:\n" + (tiers.join("\n") || "هنوز سابقه‌ای ثبت نشده است.") +
+      "\n\nتاریخچه صعود و سقوط:\n" + (movements.join("\n") || "حرکتی ثبت نشده است.") +
+      "\n\nفصل‌های گذشته:\n" + (history.join("\n") || "هنوز فصل تکمیل‌شده‌ای ندارید."));
+  } catch (error) { await ctx.reply("دریافت افتخارات باشگاه ناموفق بود: " + (error instanceof Error ? error.message : "خطای نامشخص")); }
+});
+
 bot.command("pyramidtable", async (ctx) => {
   if (!ctx.from || ctx.chat.type !== "private") return;
   const id = String(ctx.match ?? "").trim().split(/\s+/)[0];

@@ -35,6 +35,13 @@ type PyramidLeagueOverview = {
   promotionOffers:Array<{id:string;fromTier:number;targetTier:number;season:number;finalPosition:number}>;
   history:Array<{id:string;tier:number;tierName:string;season:number;groupNumber:number;name:string;status:string;teams:number}>;
 };
+type PyramidClubHistory = {
+  club: { id: string; name: string };
+  stats: { seasons: number; appearances: number; championships: number; podiums: number; promotions: number; relegations: number };
+  tiers: Array<{ tier: number; tierName: string; appearances: number; championships: number; podiums: number; promotions: number; relegations: number }>;
+  movements: Array<{ season: number; tier: number; tierName: string; position: number; targetTier?: number; movement: "PROMOTION" | "RELEGATION"; status?: string }>;
+  leagues: Array<{ id: string; name: string; season: number; tier: number; tierName: string; groupNumber: number; finalPosition: number | null; completedAt: string | null; awards: Array<{ placement: number; awardName: string; awardType: string }>; promotionOffers: Array<{ targetTier: number; finalPosition: number; status: string; offeredAt: string; resolvedAt: string | null }> }>;
+};
 type PyramidLeagueDetails = {
   league:{id:string;tier:number;tierName:string;season:number;groupNumber:number;name:string;status:string;startsAt:string|null};
   standings:Array<{clubId:string;clubName:string;points:number;goalDifference:number;goalsFor:number;goalsAgainst:number;played:number;won:number;drawn:number;lost:number;position:number}>;
@@ -112,6 +119,7 @@ export default function MarketPage() {
   const [leagueDetail, setLeagueDetail] = useState<LeagueDetails | null>(null);
   const [pyramidLeagues, setPyramidLeagues] = useState<PyramidLeagueOverview | null>(null);
   const [pyramidDetail, setPyramidDetail] = useState<PyramidLeagueDetails | null>(null);
+  const [pyramidClubHistory, setPyramidClubHistory] = useState<PyramidClubHistory | null>(null);
   const [challengeShareUrl, setChallengeShareUrl] = useState("");
   const [groups, setGroups] = useState<Array<{telegramGroupId:string;title:string;role:string;memberCount:number;isActive:boolean;points:string}>>([]);
   const [selectedGroupTelegramId, setSelectedGroupTelegramId] = useState("");
@@ -197,6 +205,8 @@ export default function MarketPage() {
     if (opponentResponse.ok) setOpponents((await opponentResponse.json()).opponents ?? []);
     if (leagueResponse.ok) setOpenLeagues((await leagueResponse.json()).competitions ?? []);
     if (pyramidResponse.ok) setPyramidLeagues(await pyramidResponse.json());
+    const clubHistoryResponse = await fetch(API + "/v1/pyramid-leagues/history", { headers });
+    if (clubHistoryResponse.ok) setPyramidClubHistory(await clubHistoryResponse.json());
     if (groupResponse.ok) {
       const groupData = await groupResponse.json();
       const nextGroups = groupData.groups ?? [];
@@ -579,6 +589,36 @@ export default function MarketPage() {
           <button className="secondary" disabled={!!busy} onClick={() => void action("promotion-decline-"+offer.id, "/v1/pyramid-leagues/promotions/"+offer.id+"/respond", "POST", {accept:false})}>انصراف</button>
         </div>)}
       </div>
+      {pyramidClubHistory && <div className="market-card">
+        <h2>افتخارات و تاریخچه باشگاه {pyramidClubHistory.club.name}</h2>
+        <div className="development-stats">
+          <div><span>فصل‌های حضور</span><strong>{pyramidClubHistory.stats.seasons}</strong></div>
+          <div><span>حضور در لیگ‌ها</span><strong>{pyramidClubHistory.stats.appearances}</strong></div>
+          <div><span>قهرمانی</span><strong>{pyramidClubHistory.stats.championships}</strong></div>
+          <div><span>سکو</span><strong>{pyramidClubHistory.stats.podiums}</strong></div>
+          <div><span>صعود</span><strong>{pyramidClubHistory.stats.promotions}</strong></div>
+          <div><span>سقوط</span><strong>{pyramidClubHistory.stats.relegations}</strong></div>
+        </div>
+        <h3>عملکرد در هر سطح</h3>
+        {pyramidClubHistory.tiers.length === 0 ? <p className="muted">هنوز فصل تکمیل‌شده‌ای برای باشگاه ثبت نشده است.</p> : pyramidClubHistory.tiers.map((tier) => <div className="operation-row" key={tier.tier}>
+          <div><strong>{tier.tierName}</strong><small>{tier.appearances} حضور · {tier.championships} قهرمانی · {tier.podiums} سکو</small></div>
+          <small>{tier.promotions} صعود · {tier.relegations} سقوط</small>
+        </div>)}
+        <h3>سوابق صعود و سقوط</h3>
+        {pyramidClubHistory.movements.length === 0 ? <p className="muted">هنوز صعود یا سقوطی ثبت نشده است.</p> : pyramidClubHistory.movements.map((movement, index) => <div className="operation-row" key={movement.movement + "-" + movement.season + "-" + movement.tier + "-" + index}>
+          <div><strong>{movement.movement === "PROMOTION" ? "صعود" : "سقوط"} · فصل {movement.season}</strong><small>{movement.tierName} · رتبه {movement.position}{movement.targetTier ? " · سطح مقصد " + movement.targetTier : ""}</small></div>
+          <strong>{movement.movement === "PROMOTION" ? "تأییدشده" : "قطعی"}</strong>
+        </div>)}
+        <h3>آرشیو فصل‌ها و جام‌ها</h3>
+        {pyramidClubHistory.leagues.map((league) => <div className="operation-row" key={league.id}>
+          <div><strong>فصل {league.season} · {league.tierName} · گروه {league.groupNumber}</strong><small>رتبه {league.finalPosition ?? "—"} · {league.name}</small>
+            {league.awards.map((award) => <small key={award.awardType}>{award.awardName}</small>)}
+            {league.promotionOffers.map((offer, index) => <small key={offer.status + "-" + index}>پیشنهاد صعود: {offer.status === "ACCEPTED" ? "پذیرفته‌شده" : offer.status === "DECLINED" ? "ردشده" : offer.status === "REPLACED" ? "جایگزین‌شده" : "در انتظار"} · سطح {offer.targetTier}</small>)}
+          </div>
+          <button className="secondary" disabled={!!busy} onClick={() => void viewPyramidLeague(league.id)}>جدول و آمار فصل</button>
+        </div>)}
+        <button className="secondary" disabled={!!busy} onClick={() => void load()}>به‌روزرسانی افتخارات</button>
+      </div>}
       {pyramidDetail && <div className="market-card">
         <h2>{pyramidDetail.league.name} · {pyramidDetail.league.tierName}</h2>
         <p>فصل {pyramidDetail.league.season} · وضعیت {pyramidDetail.league.status}</p>

@@ -14,13 +14,14 @@ test("match and competition endpoints require Telegram authentication", async (t
     app.inject({ method: "GET", url: "/v1/competitions" }),
     app.inject({ method: "POST", url: "/v1/competitions", payload: {} }),
     app.inject({ method: "GET", url: "/v1/pyramid-leagues" }),
+    app.inject({ method: "GET", url: "/v1/pyramid-leagues/history" }),
     app.inject({ method: "POST", url: "/v1/pyramid-leagues/apply", payload: { tier: 1 } }),
     app.inject({ method: "GET", url: "/v1/league-notices" }),
     app.inject({ method: "POST", url: "/v1/friendly-challenges", payload: {} }),
     app.inject({ method: "GET", url: "/v1/friendly-challenges/abcdefghijklmnop" }),
   ];
   const responses = await Promise.all(requests);
-  assert.deepEqual(responses.map((response) => response.statusCode), [401, 401, 401, 401, 401, 401, 401, 401, 401, 401, 401]);
+  assert.deepEqual(responses.map((response) => response.statusCode), [401, 401, 401, 401, 401, 401, 401, 401, 401, 401, 401, 401]);
 });
 
 test("fallback-plan endpoints require Telegram authentication", async (t) => {
