@@ -282,8 +282,12 @@ test("two-legged knockout cup waits for both legs and advances on aggregate scor
     assert.equal(details.matches.length, 6);
     assert.ok(details.matches.every((match) => match.status === "COMPLETED"));
     const finalTie = details.matches.filter((match) => match.round === 2);
-    assert.ok(finalTie.find((match) => match.leg === 2)?.winnerClubId);
-    assert.equal(finalTie.find((match) => match.leg === 1)?.winnerClubId, null);
+    const finalFirstLeg = finalTie.find((match) => match.leg === 1)!;
+    const finalSecondLeg = finalTie.find((match) => match.leg === 2)!;
+    assert.ok(finalSecondLeg.winnerClubId);
+    assert.equal(finalFirstLeg.winnerClubId, null);
+    assert.equal(finalSecondLeg.aggregateHomeScore, finalSecondLeg.homeScore! + finalFirstLeg.awayScore!);
+    assert.equal(finalSecondLeg.aggregateAwayScore, finalSecondLeg.awayScore! + finalFirstLeg.homeScore!);
   } finally {
     const clubIds = clubs.map((club) => club.clubId);
     if (clubIds.length) {
