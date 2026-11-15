@@ -82,7 +82,9 @@ The API Worker exposes the existing Fastify routes for Telegram auth, Bot auth, 
 
 ### Background game processing
 
-A one-minute Cron Trigger runs the existing due-match and promotion processors. This replaces the Node server's five-second in-process polling loop. Verify that this cadence satisfies match timing in staging. If not, move match progression to durable Queue/Workflow/Alarm orchestration before cutover.
+A SQLite-backed Durable Object named `MatchCoordinator` owns a persistent alarm and runs due match progression at the next scheduled action time (the current match engine uses five-second checkpoints). API write requests wake the coordinator so newly scheduled fixtures are discovered immediately. The coordinator re-arms itself for the earliest active runtime or future fixture, and stops when there is no pending work.
+
+A one-minute Cron Trigger remains as a recovery/fallback path and processes promotion offers. If the Durable Object binding is unavailable, the Cron Trigger also runs the match processor, but that fallback has a slower cadence and is not the intended live configuration.
 
 ## D1 migration track
 

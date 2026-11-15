@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import worker from "../src/index.js";
+import worker, { MatchCoordinator } from "../src/index.js";
 
 const pending: Promise<unknown>[] = [];
 const context = { waitUntil(promise: Promise<unknown>) { pending.push(promise); } };
@@ -12,6 +12,19 @@ const configuredEnv = {
   GAME_ADMIN_TELEGRAM_IDS: "123456789",
   ENVIRONMENT: "development",
 };
+
+test("match coordinator schedules its first durable alarm", async () => {
+  let alarmAt = 0;
+  const coordinator = new MatchCoordinator({
+    storage: {
+      async setAlarm(value: number) { alarmAt = value; },
+      async deleteAlarm() { alarmAt = 0; },
+    },
+  }, {});
+  const response = await coordinator.fetch(new Request("https://coordinator.internal/ensure", { method: "POST" }));
+  assert.equal(response.status, 200);
+  assert.ok(alarmAt > Date.now());
+});
 
 test("health endpoint works without database configuration", async () => {
   const response = await worker.fetch(new Request("https://api.example.test/health"), {}, context);

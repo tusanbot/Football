@@ -1,10 +1,21 @@
 import { Buffer } from "node:buffer";
 import { buildApp } from "../../../apps/api/src/app.js";
-import { createPrismaClient, withPrismaClient } from "../../../apps/api/src/db.js";
+import { createPrismaClient, prisma, withPrismaClient } from "../../../apps/api/src/db.js";
 import { processDueMatchRuntimes } from "../../../apps/api/src/game/match-service.js";
 import { processDuePromotionOffers } from "../../../apps/api/src/game/league-pyramid-service.js";
 
+interface MatchCoordinatorNamespace {
+  idFromName(name: string): unknown;
+  get(id: unknown): { fetch(input: string, init?: RequestInit): Promise<Response> };
+}
+interface MatchCoordinatorState {
+  storage: {
+    setAlarm(scheduledTime: number): Promise<void>;
+    deleteAlarm(): Promise<void>;
+  };
+}
 interface Env {
+  MATCH_COORDINATOR?: MatchCoordinatorNamespace;
   DATABASE_URL?: string;
   HYPERDRIVE?: { connectionString: string };
   TELEGRAM_BOT_TOKEN?: string;
@@ -109,6 +120,65 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
     if (!cleanupScheduled) await client.$disconnect().catch(() => undefined);
   }
 }
+export class MatchCoordinator {
+  constructor(private readonly state: MatchCoordinatorState, private readonly env: Env) {}
+
+  async fetch(request: Request): Promise<Response> {
+    const url = new URL(request.url);
+    if (request.method !== "POST" || url.pathname !== "/ensure") return json({ error: "NOT_FOUND" }, 404);
+    await this.state.storage.setAlarm(Date.now() + 1_000);
+    return json({ scheduled: true });
+  }
+
+  async alarm(): Promise<void> {
+    const missing = missingConfig(this.env);
+    if (missing.length) {
+      console.error("Match coordinator paused; missing configuration:", missing);
+      await this.state.storage.deleteAlarm();
+      return;
+    }
+
+    const client = createPrismaClient(dbUrl(this.env) ?? undefined, 1);
+    let nextAlarm: number | null = null;
+    try {
+      await withPrismaClient(client, async () => {
+        const now = new Date();
+        await processDueMatchRuntimes("cloudflare-match-coordinator", now, 10);
+        const [runtime, futureFixture, overdueFixture] = await Promise.all([
+          prisma.matchRuntime.findFirst({
+            where: { status: { in: ["QUEUED", "RUNNING", "AWAITING_CHECKPOINT"] } },
+            orderBy: { nextActionAt: "asc" },
+            select: { nextActionAt: true, leaseExpiresAt: true },
+          }),
+          prisma.footballMatch.findFirst({
+            where: { status: "SCHEDULED", scheduledAt: { gt: now }, runtime: { is: null } },
+            orderBy: { scheduledAt: "asc" },
+            select: { scheduledAt: true },
+          }),
+          prisma.footballMatch.findFirst({
+            where: { status: "SCHEDULED", scheduledAt: { lte: now }, runtime: { is: null } },
+            orderBy: { scheduledAt: "asc" },
+            select: { id: true },
+          }),
+        ]);
+        const candidates: number[] = [];
+        if (runtime) candidates.push(Math.max(runtime.nextActionAt.getTime(), runtime.leaseExpiresAt?.getTime() ?? 0));
+        if (futureFixture) candidates.push(futureFixture.scheduledAt.getTime());
+        if (overdueFixture) candidates.push(now.getTime() + 5_000);
+        nextAlarm = candidates.length ? Math.min(...candidates) : null;
+      });
+    } catch (error) {
+      console.error("Match coordinator tick failed", error);
+      nextAlarm = Date.now() + 10_000;
+    } finally {
+      await client.$disconnect();
+    }
+
+    if (nextAlarm === null) await this.state.storage.deleteAlarm();
+    else await this.state.storage.setAlarm(Math.max(Date.now() + 1_000, nextAlarm));
+  }
+}
+
 async function scheduledJobs(env: Env): Promise<void> {
   const missing = missingConfig(env);
   if (missing.length) { console.error("Scheduled game jobs skipped; missing configuration:", missing); return; }
@@ -117,10 +187,13 @@ async function scheduledJobs(env: Env): Promise<void> {
   try {
     await withPrismaClient(client, async () => {
       const now = new Date();
-      const matches = await processDueMatchRuntimes("cloudflare-api-scheduled", now, 10);
+      const matches = env.MATCH_COORDINATOR
+        ? null
+        : await processDueMatchRuntimes("cloudflare-api-scheduled-fallback", now, 10);
       const promotions = await processDuePromotionOffers(now, 50);
-      if (matches.advanced || matches.settled || matches.failed || promotions.accepted || promotions.completedLeagues) {
-        console.info("Cloudflare scheduled game tick", { ...matches, promotions });
+      if ((matches && (matches.advanced || matches.settled || matches.failed))
+        || promotions.accepted || promotions.completedLeagues) {
+        console.info("Cloudflare scheduled game tick", { matches, promotions });
       }
     });
   } finally { await client.$disconnect(); }
@@ -134,7 +207,16 @@ export default {
     if (request.method === "GET" && url.pathname === "/ready" && missingConfig(env).length) {
       return json({ status: "not_ready", service: "football-empire-cloudflare-api", missing: missingConfig(env) }, 503);
     }
-    return handleApi(request, env, ctx);
+    const response = await handleApi(request, env, ctx);
+    if (env.MATCH_COORDINATOR && ["POST", "PUT", "PATCH", "DELETE"].includes(request.method.toUpperCase())
+      && url.pathname.startsWith("/v1/")) {
+      const coordinator = env.MATCH_COORDINATOR.get(env.MATCH_COORDINATOR.idFromName("football-empire-match-runtime"));
+      ctx.waitUntil(coordinator.fetch("https://match-coordinator/ensure", { method: "POST" }).catch((error: unknown) => {
+        console.error("Could not schedule match coordinator alarm", error);
+        return new Response(null, { status: 503 });
+      }));
+    }
+    return response;
   },
   async scheduled(_controller: unknown, env: Env, ctx: ExecutionContext): Promise<void> {
     ctx.waitUntil(scheduledJobs(env).catch((error: unknown) => console.error("Cloudflare scheduled game jobs failed", error)));
