@@ -1,5 +1,43 @@
 export const GROUP_REPLY_DELETE_DELAY_MS = 60_000;
 
+const API_ERROR_MESSAGES: Record<string, string> = {
+  UNAUTHENTICATED: "نشست شما معتبر نیست؛ بازی را دوباره از داخل تلگرام باز کنید.",
+  PLAYER_ACCOUNT_SUSPENDED: "دسترسی این حساب به بازی تعلیق شده است.",
+  CLUB_NOT_FOUND: "باشگاهی برای حساب شما پیدا نشد.",
+  INSUFFICIENT_CASH: "موجودی کش باشگاه کافی نیست.",
+  INSUFFICIENT_FUNDS: "موجودی کیف پول کافی نیست.",
+  INSUFFICIENT_GOLD: "موجودی طلای شما کافی نیست.",
+  INSUFFICIENT_GROUP_POINTS: "امتیاز خزانه گروه کافی نیست.",
+  INSUFFICIENT_BALANCE: "موجودی برای این عملیات کافی نیست.",
+  GROUP_NOT_REGISTERED: "این گروه هنوز در بازی ثبت نشده است.",
+  GROUP_INACTIVE: "گروه در حال حاضر فعال نیست.",
+  GROUP_SUSPENDED: "دسترسی این گروه به بازی تعلیق شده است.",
+  GROUP_MANAGER_REQUIRED: "این عملیات فقط برای مدیران ثبت‌شده گروه مجاز است.",
+  NOT_GROUP_MEMBER: "ابتدا باید باشگاه خود را به این گروه متصل کنید.",
+  GROUP_MINIMUM_MEMBERS_REQUIRED: "تعداد اعضای گروه هنوز به حدنصاب لازم نرسیده است.",
+  COMPETITION_NOT_OPEN: "این رقابت در حال حاضر پذیرای ثبت‌نام نیست.",
+  COMPETITION_FULL: "ظرفیت این رقابت تکمیل شده است.",
+  LEAGUE_NEEDS_FOUR_TEAMS: "برای آغاز لیگ حداقل چهار تیم لازم است.",
+  ALL_TEAMS_NEED_VALID_LINEUPS: "همه تیم‌ها باید ترکیب معتبر داشته باشند.",
+  BOTH_CLUBS_NEED_VALID_LINEUPS: "هر دو باشگاه باید حداقل یازده بازیکن واجد شرایط داشته باشند.",
+  MATCH_NOT_DUE: "زمان شروع این مسابقه هنوز نرسیده است.",
+  MATCH_ALREADY_SIMULATED: "این مسابقه قبلاً اجرا شده است.",
+  MATCH_CHECKPOINT_CLOSED: "مهلت ثبت تصمیم تاکتیکی این وقفه به پایان رسیده است.",
+  IDEMPOTENCY_CONFLICT: "این درخواست با شناسه تکراری اما اطلاعات متفاوت ارسال شده است.",
+  DUPLICATE_OR_IDEMPOTENCY_CONFLICT: "این عملیات قبلاً ثبت شده یا شناسه درخواست تکراری است.",
+  CONCURRENT_MODIFICATION: "اطلاعات هم‌زمان تغییر کرده است؛ صفحه را تازه کنید و دوباره تلاش کنید.",
+  DAILY_CHALLENGE_LIMIT_REACHED: "سهمیه روزانه ساخت چالش تکمیل شده است.",
+  PROMOTION_OFFER_EXPIRED: "مهلت پاسخ به پیشنهاد صعود به پایان رسیده است.",
+  PROMOTION_OFFER_ALREADY_RESOLVED: "این پیشنهاد صعود قبلاً تعیین تکلیف شده است.",
+  TELEGRAM_GROUP_ACCESS_REVOKED: "عضویت شما در این گروه تأیید نشد.",
+  TELEGRAM_GROUP_MANAGER_REQUIRED: "برای این عملیات باید مدیر تلگرام گروه باشید.",
+  TELEGRAM_BOT_NOT_GROUP_ADMIN: "ربات باید در گروه مدیر باشد و دسترسی بررسی اعضا داشته باشد.",
+};
+
+export function formatApiError(code: string): string {
+  return API_ERROR_MESSAGES[code] ?? "درخواست انجام نشد. کد خطا: " + code;
+}
+
 // Every group command is classified explicitly. Unknown/future commands remain transient.
 export const PERSISTENT_GROUP_COMMANDS = new Set([
   "group-register", "group-check", "group-give", "group-challenges", "group-challenge",
