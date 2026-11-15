@@ -299,6 +299,12 @@ test("durable match worker advances checkpoints, resumes on two early decisions 
     assert.equal(runtime.status, "COMPLETED");
     assert.equal(runtime.currentMinute, 90);
     assert.deepEqual(checkpoints.map((item) => item.status), ["RESOLVED", "RESOLVED", "RESOLVED"]);
+    const minute60Resolution = checkpoints[1]!.resolution as { home: { source: string }; away: { source: string } };
+    const minute75Resolution = checkpoints[2]!.resolution as { home: { source: string }; away: { source: string } };
+    assert.equal(minute60Resolution.home.source, "PREMATCH_PLAN");
+    assert.equal(minute60Resolution.away.source, "PREMATCH_PLAN");
+    assert.equal(minute75Resolution.home.source, "PREMATCH_PLAN");
+    assert.equal(minute75Resolution.away.source, "PREMATCH_PLAN");
     assert.ok(await prisma.matchEvent.count({ where: { matchId: match.id, type: "SUBSTITUTION" } }) >= 1);
     assert.equal(await prisma.matchEvent.count({ where: { matchId: match.id } }),
       match.homeScore! + match.awayScore!
