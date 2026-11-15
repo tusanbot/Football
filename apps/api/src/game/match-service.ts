@@ -335,7 +335,7 @@ export async function getLeague(userId: string, competitionId: string) {
     })),
     matches: competition.matches.map((match) => ({
       id: match.id, round: match.round, scheduledAt: match.scheduledAt.toISOString(), status: match.status,
-      homeClub: match.homeClub, awayClub: match.awayClub, homeScore: match.homeScore, awayScore: match.awayScore, homePenalties: match.homePenalties, awayPenalties: match.awayPenalties, winnerClubId: match.winnerClubId,
+      homeClub: match.homeClub, awayClub: match.awayClub, homeScore: match.homeScore, awayScore: match.awayScore, rules: validateMatchRules(match.rulesSnapshot ?? defaultMatchRules(match.type)), homePenalties: match.homePenalties, awayPenalties: match.awayPenalties, winnerClubId: match.winnerClubId,
     })),
   };
 }
@@ -371,7 +371,7 @@ export async function listClubMatches(userId: string) {
   const playerNames = new Map(eventPlayers.map((player) => [player.id, player.firstName + " " + player.lastName]));
   return {
     matches: matches.map((match) => ({
-      id: match.id, type: match.type, status: match.status, simulationVersion: match.simulationVersion, scheduledAt: match.scheduledAt.toISOString(),
+      id: match.id, type: match.type, status: match.status, rules: validateMatchRules(match.rulesSnapshot ?? defaultMatchRules(match.type)), simulationVersion: match.simulationVersion, scheduledAt: match.scheduledAt.toISOString(),
       runtime: match.runtime ? (() => {
         const simulation = match.runtime.simulationState as unknown as {
           segment?: { home?: { side?: MatchSide }; away?: { side?: MatchSide } };
