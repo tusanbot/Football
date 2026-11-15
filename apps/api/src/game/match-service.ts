@@ -772,16 +772,15 @@ function applyRuntimeInstruction(
       error = cause instanceof Error ? cause.message : "INVALID_SUBSTITUTION_PACKAGE";
     }
   }
-  const { substitutions: _ignored, ...tactics } = instruction;
   return {
     side: {
       ...nextSide,
-      formation: tactics.formation ?? nextSide.formation,
+      formation: instruction.formation ?? nextSide.formation,
       tactics: {
-        mentality: tactics.mentality ?? nextSide.tactics.mentality,
-        pressing: tactics.pressing ?? nextSide.tactics.pressing,
-        tempo: tactics.tempo ?? nextSide.tactics.tempo,
-        passingStyle: tactics.passingStyle ?? nextSide.tactics.passingStyle,
+        mentality: instruction.mentality ?? nextSide.tactics.mentality,
+        pressing: instruction.pressing ?? nextSide.tactics.pressing,
+        tempo: instruction.tempo ?? nextSide.tactics.tempo,
+        passingStyle: instruction.passingStyle ?? nextSide.tactics.passingStyle,
       },
     },
     substitutions: nextSubstitutions,
@@ -856,7 +855,7 @@ async function processClaimedMatchRuntime(
       substitutionErrors: [],
     };
     await prisma.$transaction(async (tx) => {
-      await tx.matchRuntime.updateMany({
+      const runtimeUpdated = await tx.matchRuntime.updateMany({
         where: { id: runtime.id, stateVersion: runtime.stateVersion, leaseToken: runtime.leaseToken },
         data: {
           status: "AWAITING_CHECKPOINT", currentMinute: 45, stateVersion: { increment: 1 },
@@ -864,10 +863,12 @@ async function processClaimedMatchRuntime(
           nextActionAt: new Date(now.getTime() + 5_000), lastError: null,
         },
       });
-      await tx.footballMatch.updateMany({
+      if (runtimeUpdated.count !== 1) throw new MatchServiceError("MATCH_RUNTIME_CONCURRENT_MODIFICATION");
+      const matchUpdated = await tx.footballMatch.updateMany({
         where: { id: runtime.matchId, status: "SCHEDULED" },
         data: { status: "IN_PROGRESS", startedAt: runtime.match.startedAt ?? now },
       });
+      if (matchUpdated.count !== 1) throw new MatchServiceError("MATCH_NOT_SCHEDULED");
       await tx.matchTacticalCheckpoint.createMany({
         data: [{
           matchId: runtime.matchId, checkpointKey: "minute-45", kind: "HALF_TIME", minute: 45,
@@ -951,11 +952,12 @@ async function processClaimedMatchRuntime(
   };
   const isFullTime = nextMinute === 90;
   await prisma.$transaction(async (tx) => {
-    await tx.matchTacticalCheckpoint.updateMany({
+    const checkpointUpdated = await tx.matchTacticalCheckpoint.updateMany({
       where: { id: checkpoint.id, status: "OPEN" },
       data: { status: "RESOLVED", resolvedAt: now, resolution: jsonSafe(resolution) },
     });
-    await tx.matchRuntime.updateMany({
+    if (checkpointUpdated.count !== 1) throw new MatchServiceError("MATCH_CHECKPOINT_ALREADY_RESOLVED");
+    const runtimeUpdated = await tx.matchRuntime.updateMany({
       where: { id: runtime.id, stateVersion: runtime.stateVersion, leaseToken: runtime.leaseToken },
       data: {
         status: "RUNNING", currentMinute: nextMinute, stateVersion: { increment: 1 },
@@ -963,6 +965,7 @@ async function processClaimedMatchRuntime(
         lastError: null,
       },
     });
+    if (runtimeUpdated.count !== 1) throw new MatchServiceError("MATCH_RUNTIME_CONCURRENT_MODIFICATION");
     if (!isFullTime) {
       const nextKind = nextMinute === 60 ? "MINUTE_60" : "MINUTE_75";
       const nextAt = new Date(now.getTime() + 60_000);
