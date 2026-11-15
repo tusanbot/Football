@@ -22,7 +22,7 @@ test("starter wallet grants use centrally configured economy values", async (t) 
     assert.equal(account.wallets.find(wallet => wallet.asset === "CASH")?.balance, 12345n);
     assert.equal(account.wallets.find(wallet => wallet.asset === "GOLD")?.balance, 17n);
     const ledger = await prisma.ledgerTransaction.findMany({ where: { userId, referenceType: "STARTER_GRANT" }, orderBy: { asset: "asc" } });
-    assert.deepEqual(ledger.map(row => row.amount.toString()).sort(), ["17", "12345"]);
+    assert.deepEqual(ledger.map(row => row.amount.toString()).sort(), ["12345", "17"]);
   } finally {
     if (userId) {
       await prisma.club.deleteMany({ where: { ownerId: userId } });
