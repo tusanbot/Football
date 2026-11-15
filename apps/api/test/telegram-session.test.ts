@@ -26,5 +26,6 @@ test("rejects tampered, expired, malformed, and wrong-secret sessions", () => {
 
 test("rejects sessions with invalid Telegram IDs or weak signing secrets", () => {
   assert.throws(() => createTelegramSessionToken("not-numeric", secret), /INVALID_SESSION_CONFIGURATION/);
+  assert.throws(() => createTelegramSessionToken("0", secret), /INVALID_SESSION_CONFIGURATION/);
   assert.throws(() => createTelegramSessionToken("123456", "weak"), /INVALID_SESSION_CONFIGURATION/);
 });
