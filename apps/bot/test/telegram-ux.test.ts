@@ -62,6 +62,11 @@ test("every registered group command has an explicit transient or persistent cla
   assert.deepEqual([...classified].sort(), [...registeredGroupCommands].sort());
 });
 
+test("the manual group cleanup test command is explicitly transient", () => {
+  assert.ok(TRANSIENT_GROUP_COMMANDS.has("group-cleanup-test"));
+  assert.match(botSource, /bot\\.command\\("group-cleanup-test"/);
+});
+
 test("administrative and ranking replies remain persistent", () => {
   for (const command of [
     "group-register", "group-check", "group-give", "group-challenge",
