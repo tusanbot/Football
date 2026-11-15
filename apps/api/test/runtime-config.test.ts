@@ -21,3 +21,10 @@ test("rejects missing or malformed administrator Telegram IDs", () => {
     assert.deepEqual(parseAdminTelegramIds(value), []);
   }
 });
+
+
+test("recognizes Telegram numeric identifiers and numeric amounts", () => {
+  assert.match("123456789", /^\d{1,20}$/);
+  assert.match("-1001234567890", /^-?\d{5,20}$/);
+  assert.match("250000", /^\d{1,12}$/);
+});

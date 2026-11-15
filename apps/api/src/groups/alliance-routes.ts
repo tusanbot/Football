@@ -62,7 +62,7 @@ export function registerAllianceRoutes(app: FastifyInstance) {
   app.post("/v1/alliances/:telegramGroupId/treasury/contribute", async (request, reply) => {
     const id=await actor(request,reply); if(!id)return;
     const p=z.object({telegramGroupId:groupId}).safeParse(request.params);
-    const b=z.object({amount:z.string().regex(/^\\d{1,12}$/),idempotencyKey:key}).safeParse(request.body);
+    const b=z.object({amount:z.string().regex(/^\d{1,12}$/),idempotencyKey:key}).safeParse(request.body);
     if(!p.success||!b.success)return reply.code(400).send({error:"INVALID_TREASURY_CONTRIBUTION"});
     try{return await contributeAllianceTreasury({telegramUserId:id,...p.data,amount:BigInt(b.data.amount),idempotencyKey:b.data.idempotencyKey});}catch(e){return sendError(reply,e);}
   });
