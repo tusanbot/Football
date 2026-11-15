@@ -1825,27 +1825,6 @@ bot.on(["chat_member","my_chat_member"],async ctx=>{
  }catch(error){console.warn("Could not refresh Telegram group membership:",error instanceof Error?error.message:error);}
 });
 bot.catch((error) => console.error("Telegram bot error:", error));
-if (apiUrl && botApiSecret) {
-  const deletionQueueTimer = setInterval(() => { void pollGroupMessageDeletionQueue(); }, 5_000);
-  backgroundTimers.push(deletionQueueTimer);
-  const matchNotificationTimer = setInterval(() => { void pollMatchCheckpointNotifications(); }, 5_000);
-  backgroundTimers.push(matchNotificationTimer);
-  const leagueNoticeTimer = setInterval(() => { void pollLeagueNoticeQueue(); }, 10_000);
-  backgroundTimers.push(leagueNoticeTimer);
-  const adminGroupBroadcastTimer = setInterval(() => { void pollAdminGroupBroadcastQueue(); }, 5_000);
-  backgroundTimers.push(adminGroupBroadcastTimer);
-  matchNotificationTimer.unref();
-  leagueNoticeTimer.unref();
-  adminGroupBroadcastTimer.unref();
-  void pollLeagueNoticeQueue();
-  void pollAdminGroupBroadcastQueue();
-  void pollMatchCheckpointNotifications();
-  deletionQueueTimer.unref();
-  void pollGroupMessageDeletionQueue();
-} else {
-  console.warn("Durable group message deletion worker is disabled: configure FOOTBALL_API_URL and BOT_API_SECRET.");
-}
-
 const apiReadiness = await fetch(new URL("/ready", apiUrl), { signal: AbortSignal.timeout(15_000) });
 if (!apiReadiness.ok) throw new Error("Football Empire API is not ready (HTTP " + apiReadiness.status + "). Start and verify the API before the Bot.");
 const botIdentity = await bot.api.getMe();
@@ -1859,6 +1838,22 @@ if (!identityCheck.ok) throw new Error("The API and Bot Telegram tokens do not i
 const lease = await apiSystem<{ acquired: boolean }>("/v1/bot/runtime/lease", { instanceId: botRuntimeInstanceId, action: "acquire" });
 if (!lease.acquired) throw new Error("Another Football Empire Bot process already owns the Telegram polling lease.");
 await bot.api.deleteWebhook({ drop_pending_updates: false });
+const deletionQueueTimer = setInterval(() => { void pollGroupMessageDeletionQueue(); }, 5_000);
+backgroundTimers.push(deletionQueueTimer);
+const matchNotificationTimer = setInterval(() => { void pollMatchCheckpointNotifications(); }, 5_000);
+backgroundTimers.push(matchNotificationTimer);
+const leagueNoticeTimer = setInterval(() => { void pollLeagueNoticeQueue(); }, 10_000);
+backgroundTimers.push(leagueNoticeTimer);
+const adminGroupBroadcastTimer = setInterval(() => { void pollAdminGroupBroadcastQueue(); }, 5_000);
+backgroundTimers.push(adminGroupBroadcastTimer);
+matchNotificationTimer.unref();
+leagueNoticeTimer.unref();
+adminGroupBroadcastTimer.unref();
+void pollLeagueNoticeQueue();
+void pollAdminGroupBroadcastQueue();
+void pollMatchCheckpointNotifications();
+deletionQueueTimer.unref();
+void pollGroupMessageDeletionQueue();
 botTelegramId = botIdentity.id;
 console.info("Football Empire Bot authenticated as @" + (botIdentity.username ?? botIdentity.id));
 let stopping = false;
