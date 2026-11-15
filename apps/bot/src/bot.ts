@@ -490,6 +490,95 @@ bot.command("adminchallenge", async (ctx) => {
   }
 });
 
+bot.command("adminaward", async (ctx) => {
+  if (!ctx.from || !adminOnlyInPrivate(ctx)) return;
+  const input=String(ctx.match??"").trim(),space=input.indexOf(" ");
+  const operation=space<0?input:input.slice(0,space),rest=space<0?"":input.slice(space+1).trim();
+  try {
+    if(operation==="remove"&&rest){
+      await api("/v1/admin/actions",ctx.from.id,"POST",{action:"remove-season-player-award",targetId:rest,idempotencyKey:randomUUID()});
+      return ctx.reply("جایزه رسمی حذف شد.");
+    }
+    if(operation==="set"){
+      const [season,playerId,awardType,awardName,...reason]=rest.split("|").map(x=>x.trim());
+      const allowed=["TOP_SCORER","TOP_ASSISTS","PLAYER_OF_SEASON","TEAM_OF_SEASON","FAIR_PLAY","MOST_IMPROVED"];
+      if(!season||!playerId||!awardType||!awardName||!allowed.includes(awardType))return ctx.reply("استفاده: /adminaward set YEAR|PLAYER_ID|TYPE|AWARD_NAME|REASON");
+      await api("/v1/admin/actions",ctx.from.id,"POST",{action:"set-season-player-award",awardSeason:Number(season),awardPlayerId:playerId,awardType,awardName,awardReason:reason.join("|"),idempotencyKey:randomUUID()});
+      return ctx.reply("جایزه رسمی فصل ثبت شد.");
+    }
+    await ctx.reply("استفاده: /adminaward set YEAR|PLAYER_ID|TYPE|AWARD_NAME|REASON یا /adminaward remove AWARD_ID");
+  } catch(error){await ctx.reply("عملیات جایزه ناموفق بود: "+(error instanceof Error?error.message:"خطای نامشخص"));}
+});
+
+bot.command("admingift", async (ctx) => {
+  if (!ctx.from || !adminOnlyInPrivate(ctx)) return;
+  const input=String(ctx.match??"").trim(),space=input.indexOf(" ");
+  const operation=space<0?input:input.slice(0,space),rest=space<0?"":input.slice(space+1).trim();
+  try {
+    if(operation==="create"){
+      const [code,rewardType,cashAmount,goldAmount,groupPoints,maxRedemptions,perUserLimit,expiresAt]=rest.split("|").map(x=>x.trim());
+      if(!code||!rewardType||!maxRedemptions||!perUserLimit)return ctx.reply("استفاده: /admingift create CODE|WALLET یا GROUP_POINTS|CASH|GOLD|GROUP_POINTS|MAX|PER_USER|EXPIRES_ISO");
+      if(!["WALLET","GROUP_POINTS"].includes(rewardType))return ctx.reply("نوع پاداش باید WALLET یا GROUP_POINTS باشد.");
+      const result=await api<{targetId:string}>("/v1/admin/actions",ctx.from.id,"POST",{action:"create-gift-code",code,rewardType,cashAmount:cashAmount||"0",goldAmount:goldAmount||"0",groupPoints:groupPoints||"0",maxRedemptions:Number(maxRedemptions),perUserLimit:Number(perUserLimit),...(expiresAt?{expiresAt}:{}),idempotencyKey:randomUUID()});
+      return ctx.reply("کد هدیه ایجاد شد. شناسه: "+result.targetId);
+    }
+    if(operation==="toggle"){
+      const [id,state]=rest.split(/s+/);
+      if(!id||!["on","off"].includes(state??""))return ctx.reply("استفاده: /admingift toggle GIFT_ID on|off");
+      await api("/v1/admin/actions",ctx.from.id,"POST",{action:"toggle-gift-code",targetId:id,active:state==="on",idempotencyKey:randomUUID()});
+      return ctx.reply("وضعیت کد هدیه تغییر کرد.");
+    }
+    await ctx.reply("استفاده: /admingift create CODE|TYPE|CASH|GOLD|GROUP_POINTS|MAX|PER_USER|EXPIRES یا /admingift toggle ID on|off");
+  }catch(error){await ctx.reply("مدیریت کد هدیه ناموفق بود: "+(error instanceof Error?error.message:"خطای نامشخص"));}
+});
+
+bot.command("adminitem", async (ctx) => {
+  if (!ctx.from || !adminOnlyInPrivate(ctx)) return;
+  const input=String(ctx.match??"").trim(),space=input.indexOf(" ");
+  const operation=space<0?input:input.slice(0,space),rest=space<0?"":input.slice(space+1).trim();
+  try {
+    if(operation==="create"){
+      const [itemSlug,itemName,itemDescription,itemCost,itemScope]=rest.split("|").map(x=>x.trim());
+      if(!itemSlug||!itemName||!itemDescription||!itemCost||!["PERSONAL","GROUP"].includes(itemScope??""))return ctx.reply("استفاده: /adminitem create SLUG|NAME|DESCRIPTION|COST|PERSONAL یا GROUP");
+      const result=await api<{targetId:string}>("/v1/admin/actions",ctx.from.id,"POST",{action:"create-item",itemSlug,itemName,itemDescription,itemCost,itemScope,idempotencyKey:randomUUID()});
+      return ctx.reply("آیتم ایجاد شد. شناسه: "+result.targetId);
+    }
+    if(operation==="update"){
+      const [id,itemName,itemDescription,itemCost]=rest.split("|").map(x=>x.trim());
+      if(!id||(!itemName&&!itemDescription&&!itemCost))return ctx.reply("استفاده: /adminitem update ID|NAME|DESCRIPTION|COST");
+      await api("/v1/admin/actions",ctx.from.id,"POST",{action:"item-update",targetId:id,...(itemName?{itemName}:{}),...(itemDescription?{itemDescription}:{}),...(itemCost?{itemCost}:{}),idempotencyKey:randomUUID()});
+      return ctx.reply("آیتم به‌روزرسانی شد.");
+    }
+    if(operation==="toggle"){
+      const [id,state]=rest.split(/s+/);
+      if(!id||!["on","off"].includes(state??""))return ctx.reply("استفاده: /adminitem toggle ITEM_ID on|off");
+      await api("/v1/admin/actions",ctx.from.id,"POST",{action:"toggle-item",targetId:id,active:state==="on",idempotencyKey:randomUUID()});
+      return ctx.reply("وضعیت آیتم تغییر کرد.");
+    }
+    await ctx.reply("استفاده: /adminitem create|update|toggle ...");
+  }catch(error){await ctx.reply("مدیریت آیتم ناموفق بود: "+(error instanceof Error?error.message:"خطای نامشخص"));}
+});
+
+bot.command("adminupdate", async (ctx) => {
+  if (!ctx.from || !adminOnlyInPrivate(ctx)) return;
+  const input=String(ctx.match??"").trim();
+  const parts=input.split(/s+/);
+  const resource=parts.shift(),targetId=parts.shift(),json=parts.join(" ");
+  const actions:Record<string,{action:string;fields:string[]}>={
+    player:{action:"player-update",fields:["firstName","lastName","age","overall","potential","wage","contractDays","fitness","morale"]},
+    club:{action:"club-update",fields:["clubName","level","reputation","stadiumLevel","academyLevel","trainingGroundLevel","ticketPrice"]},
+    match:{action:"match-update",fields:["scheduledAt","homeScore","awayScore","matchStatus"]},
+  };
+  const config=resource?actions[resource]:undefined;
+  if(!config||!targetId||!json)return ctx.reply("استفاده: /adminupdate player|club|match ID {JSON}");
+  try{
+    const values=JSON.parse(json) as Record<string,unknown>;
+    if(!values||typeof values!=="object"||Array.isArray(values)||Object.keys(values).length===0||Object.keys(values).some(key=>!config.fields.includes(key)))return ctx.reply("فیلدهای مجاز: "+config.fields.join(", "));
+    await api("/v1/admin/actions",ctx.from.id,"POST",{action:config.action,targetId,...values,idempotencyKey:randomUUID()});
+    await ctx.reply("اطلاعات "+resource+" به‌روزرسانی شد.");
+  }catch(error){await ctx.reply("به‌روزرسانی ناموفق بود: "+(error instanceof Error?error.message:"JSON نامعتبر"));}
+});
+
 bot.command("adminbroadcast", async (ctx) => {
   if (!ctx.from || !adminOnlyInPrivate(ctx)) return;
   const input=String(ctx.match ?? "").trim();
@@ -566,7 +655,11 @@ bot.command("adminhelp", async (ctx) => {
     "/adminrole assign|revoke TELEGRAM_ID [ROLE] — مدیریت نقش مدیران\n" +
     "/adminsetting KEY JSON_VALUE — تنظیمات فعال بازی\n" +
     "/adminfinance [DAYS] — گزارش مالی و مغایرت‌گیری\n" +
-    "/adminbroadcast users|groups TEXT — ارسال پیام مدیریتی\n\n" +
+    "/adminbroadcast users|groups TEXT — ارسال پیام مدیریتی\n" +
+    "/adminaward set|remove ... — مدیریت جوایز رسمی فصل\n" +
+    "/admingift create|toggle ... — مدیریت کدهای هدیه\n" +
+    "/adminitem create|update|toggle ... — مدیریت آیتم‌ها\n" +
+    "/adminupdate player|club|match ID JSON — ویرایش اطلاعات\n\n" +
     "تمام درخواست‌ها در API با نقش و مجوز مدیر بررسی و در گزارش مدیریتی ثبت می‌شوند. این دستورات فقط در گفت‌وگوی خصوصی فعال‌اند."
   );
 });
