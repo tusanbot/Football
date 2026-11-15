@@ -26,6 +26,10 @@ test("starter wallet grants use centrally configured economy values", async (t) 
   } finally {
     if (userId) {
       await prisma.club.deleteMany({ where: { ownerId: userId } });
+      // Wallet and ledger rows deliberately restrict user deletion in production.
+      // Remove only this test account's financial records before deleting it.
+      await prisma.ledgerTransaction.deleteMany({ where: { userId } });
+      await prisma.wallet.deleteMany({ where: { userId } });
       await prisma.user.deleteMany({ where: { id: userId } });
     }
     for (const key of keys) {
