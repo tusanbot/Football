@@ -96,7 +96,8 @@ assert connection.execute('SELECT count(*) FROM "LedgerTransaction"').fetchone()
 atomic_wallet_delta("ledger-debit-2", "debit-2", "DEBIT", 20)
 assert wallet_state() == (130, 2)
 
-connection.execute('UPDATE "Wallet" SET "balance" = 9223372036854775806 WHERE "id" = "wallet-test-id"')
+connection.execute('UPDATE "Wallet" SET "balance" = ? WHERE "id" = ?', (9223372036854775806, "wallet-test-id"))
+connection.commit()
 try:
     atomic_wallet_delta("ledger-overflow", "overflow", "CREDIT", 2)
 except sqlite3.IntegrityError:
