@@ -299,11 +299,17 @@ export async function listLeagueNotices(userId: string) {
   return { notices };
 }
 
-export async function createFriendlyChallenge(userId: string, goldCost = 100n, now = new Date()) {
+export async function createFriendlyChallenge(userId: string, goldCost = 100n, now = new Date(), groupTelegramId?: string) {
   const club = await ownedClub(userId);
   const token = randomBytes(18).toString("base64url");
   const day = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
   return prisma.$transaction(async (tx) => {
+    let groupId: string | null = null;
+    if (groupTelegramId) {
+      const group = await tx.telegramGroup.findUnique({ where: { telegramId: groupTelegramId }, include: { memberships: { where: { userId }, select: { id: true } } } });
+      if (!group || group.memberships.length === 0) throw new PyramidLeagueError("GROUP_MEMBERSHIP_REQUIRED");
+      groupId = group.id;
+    }
     const usage = await tx.challengeDailyUsage.upsert({
       where: { userId_usageDate: { userId, usageDate: day } },
       create: { userId, usageDate: day }, update: {},
@@ -326,7 +332,7 @@ export async function createFriendlyChallenge(userId: string, goldCost = 100n, n
     } else {
       throw new PyramidLeagueError("DAILY_CHALLENGE_LIMIT_REACHED");
     }
-    const challenge = await tx.friendlyChallenge.create({ data: { token, creatorUserId: userId, creatorClubId: club.id, expiresAt: new Date(now.getTime() + 24 * 60 * 60_000) } });
+    const challenge = await tx.friendlyChallenge.create({ data: { token, creatorUserId: userId, creatorClubId: club.id, groupId, expiresAt: new Date(now.getTime() + 24 * 60 * 60_000) } });
     return { challenge, asset, goldCost: asset === "GOLD" ? goldCost.toString() : "0", remaining: { free: Math.max(0, 2 - usage.freeUsed) + (asset === "FREE" ? 0 : 0), gold: Math.max(0, 1 - usage.goldUsed), purchased: usage.purchasedCredits } };
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 }
@@ -334,10 +340,14 @@ export async function createFriendlyChallenge(userId: string, goldCost = 100n, n
 export async function acceptFriendlyChallenge(userId: string, token: string, now = new Date()) {
   const opponent = await ownedClub(userId);
   return prisma.$transaction(async (tx) => {
-    const challenge = await tx.friendlyChallenge.findUnique({ where: { token }, include: { club: { select: { id: true } } } });
+    const challenge = await tx.friendlyChallenge.findUnique({ where: { token }, include: { club: { select: { id: true } }, group: { select: { id: true } } } });
     if (!challenge) throw new PyramidLeagueError("FRIENDLY_CHALLENGE_NOT_FOUND");
     if (challenge.creatorUserId === userId) throw new PyramidLeagueError("CANNOT_ACCEPT_OWN_CHALLENGE");
     if (challenge.status !== "OPEN" || challenge.expiresAt <= now) throw new PyramidLeagueError("FRIENDLY_CHALLENGE_EXPIRED");
+    if (challenge.groupId) {
+      const membership = await tx.groupMembership.findUnique({ where: { groupId_userId: { groupId: challenge.groupId, userId } }, select: { id: true } });
+      if (!membership) throw new PyramidLeagueError("GROUP_MEMBERSHIP_REQUIRED");
+    }
     const match = await tx.footballMatch.create({
       data: {
         idempotencyKey: `challenge:${challenge.id}`, type: "FRIENDLY", homeClubId: challenge.creatorClubId,
@@ -363,14 +373,14 @@ export async function grantPurchasedChallengeCredits(userId: string, quantity: n
 
 export async function getFriendlyChallengeInfo(token: string) {
   const challenge = await prisma.friendlyChallenge.findUnique({
-    where: { token }, include: { club: { select: { name: true, level: true, reputation: true } } },
+    where: { token }, include: { club: { select: { name: true, level: true, reputation: true } }, group: { select: { title: true } } },
   });
   if (!challenge) throw new PyramidLeagueError("FRIENDLY_CHALLENGE_NOT_FOUND");
   if (challenge.status === "OPEN" && challenge.expiresAt <= new Date()) {
     await prisma.friendlyChallenge.updateMany({ where: { id: challenge.id, status: "OPEN" }, data: { status: "EXPIRED" } });
     throw new PyramidLeagueError("FRIENDLY_CHALLENGE_EXPIRED");
   }
-  return { id: challenge.id, token: challenge.token, status: challenge.status, expiresAt: challenge.expiresAt.toISOString(), creatorClub: challenge.club };
+  return { id: challenge.id, token: challenge.token, status: challenge.status, expiresAt: challenge.expiresAt.toISOString(), creatorClub: challenge.club, groupTitle: challenge.group?.title ?? null };
 }
 
 export async function markLeagueNoticesRead(userId: string) {
