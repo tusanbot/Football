@@ -124,3 +124,22 @@ test("onboarding and help copy are Persian-first", () => {
   assert.ok(botSource.includes("راهنمای Football Empire"));
   assert.ok(botSource.includes("برای بازگشت به منوی دکمه‌ای"));
 });
+
+
+test("Persian help documents the non-administrative game commands", () => {
+  const documented = [
+    "redeem", "group-register", "group-join", "group-activity", "group-shop", "group-buy",
+    "group-challenges", "group-challenge", "group-challenge-join", "group-challenge-complete",
+    "group-check", "group-league", "group-league-join", "group-league-start", "group-league-table",
+    "group-rewards", "group-treasury", "group-give", "group-challenge-cancel", "group-leagues",
+    "setlineup", "development", "operations", "ticket-price", "coach-upgrade", "hire-coach",
+    "acceptchallenge", "pyramidleagues", "leaguehistory", "pyramidtable", "leagueapply",
+    "promotion", "leaguenotices", "matches", "tactic", "sub", "fallback", "setfallback",
+    "competitionrules", "joinleague", "startleague", "startcup", "table",
+    "alliance-championship-join", "alliance-championship-start", "alliance-season-review",
+    "alliance-contribute", "setlogo", "seasonawards", "records", "clubcompare",
+  ];
+  for (const command of documented) {
+    assert.ok(botSource.includes("/" + command), "Persian /help is missing /" + command);
+  }
+});
