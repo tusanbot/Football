@@ -103,6 +103,135 @@ export function registerAdminLeagueRoutes(app: FastifyInstance) {
     };
   });
 
+
+  app.get("/v1/admin/pyramid-leagues/reports", async (request, reply) => {
+    const actor = await authorize(request, reply, "read");
+    if (!actor) return;
+    const parsed = z.object({
+      season: z.coerce.number().int().min(2020).max(2200).optional(),
+      tier: z.coerce.number().int().min(1).max(7).optional(),
+      q: z.string().trim().max(80).optional(),
+      limit: z.coerce.number().int().min(1).max(100).default(100),
+    }).safeParse(request.query);
+    if (!parsed.success) return reply.code(400).send({ error: "INVALID_QUERY" });
+    const { season, tier, q, limit } = parsed.data;
+    const leagueWhere = {
+      ...(season ? { season } : {}),
+      ...(tier ? { tier } : {}),
+      ...(q ? { OR: [
+        { competition: { is: { name: { contains: q, mode: "insensitive" as const } } } },
+        { entries: { some: { club: { is: { name: { contains: q, mode: "insensitive" as const } } } } } },
+      ] } : {}),
+    };
+    const [leagues, auditLogs, applicationCounts] = await Promise.all([
+      prisma.pyramidLeague.findMany({
+        where: leagueWhere,
+        take: 1000,
+        orderBy: [{ season: "desc" }, { tier: "asc" }, { groupNumber: "asc" }],
+        include: {
+          competition: { select: { name: true, status: true, completedAt: true, _count: { select: { matches: true } } } },
+          entries: { include: { club: { select: { id: true, name: true } } } },
+          awards: { include: { club: { select: { id: true, name: true } } }, orderBy: { placement: "asc" } },
+          promotionOffers: { include: { club: { select: { id: true, name: true } } }, orderBy: { offeredAt: "asc" } },
+        },
+      }),
+      prisma.adminAuditLog.findMany({
+        where: {
+          targetType: { in: ["pyramid-league", "league-application", "promotion-offer", "league-award"] },
+          ...(q ? { OR: [
+            { action: { contains: q, mode: "insensitive" as const } },
+            { targetId: { contains: q, mode: "insensitive" as const } },
+            { reason: { contains: q, mode: "insensitive" as const } },
+          ] } : {}),
+        },
+        take: limit,
+        orderBy: { createdAt: "desc" },
+      }),
+      prisma.pyramidLeagueApplication.groupBy({
+        by: ["status"],
+        where: { ...(season ? { season } : {}), ...(tier ? { tier } : {}) },
+        _count: { _all: true },
+      }),
+    ]);
+    const seasons = new Map<number, { season: number; leagues: number; completed: number; teams: number; matches: number; champions: number; promotions: number; relegations: number }>();
+    const clubs = new Map<string, { clubId: string; clubName: string; seasons: number; championships: number; podiums: number; promotions: number; relegations: number; leagueEntries: number }>();
+    const movements: Array<{ clubId: string; clubName: string; season: number; tier: number; groupNumber: number; position: number; movement: "PROMOTION" | "RELEGATION"; offerStatus?: string }> = [];
+    for (const league of leagues) {
+      let summary = seasons.get(league.season);
+      if (!summary) {
+        summary = { season: league.season, leagues: 0, completed: 0, teams: 0, matches: 0, champions: 0, promotions: 0, relegations: 0 };
+        seasons.set(league.season, summary);
+      }
+      summary.leagues += 1;
+      if (league.competition.status === "COMPLETED") {
+        summary.completed += 1;
+        summary.teams += league.entries.length;
+        summary.matches += league.competition._count.matches;
+      }
+      for (const entry of league.entries) {
+        let record = clubs.get(entry.clubId);
+        if (!record) {
+          record = { clubId: entry.clubId, clubName: entry.club.name, seasons: 0, championships: 0, podiums: 0, promotions: 0, relegations: 0, leagueEntries: 0 };
+          clubs.set(entry.clubId, record);
+        }
+        if (league.competition.status === "COMPLETED" && entry.finalPosition !== null) {
+          record.leagueEntries += 1;
+          record.seasons += 1;
+          if (entry.finalPosition === 1) {
+            record.championships += 1;
+            summary.champions += 1;
+          }
+          if (entry.finalPosition <= 3) record.podiums += 1;
+          if (league.tier > 1 && entry.finalPosition >= 7) {
+            record.relegations += 1;
+            summary.relegations += 1;
+            movements.push({ clubId: entry.clubId, clubName: entry.club.name, season: league.season, tier: league.tier, groupNumber: league.groupNumber, position: entry.finalPosition, movement: "RELEGATION" });
+          }
+        }
+      }
+      for (const offer of league.promotionOffers) {
+        if (offer.status === "ACCEPTED") {
+          const record = clubs.get(offer.clubId);
+          if (record) record.promotions += 1;
+          summary.promotions += 1;
+          movements.push({ clubId: offer.clubId, clubName: offer.club.name, season: league.season, tier: league.tier, groupNumber: league.groupNumber, position: offer.finalPosition, movement: "PROMOTION", offerStatus: offer.status });
+        }
+      }
+    }
+    const clubRankings = [...clubs.values()]
+      .sort((a, b) => b.championships - a.championships || b.podiums - a.podiums || b.promotions - a.promotions || a.relegations - b.relegations || a.clubName.localeCompare(b.clubName))
+      .slice(0, 50);
+    const leagueHistory = leagues.map((league) => ({
+      id: league.id, name: league.competition.name, season: league.season, tier: league.tier,
+      groupNumber: league.groupNumber, status: league.competition.status,
+      completedAt: league.competition.completedAt?.toISOString() ?? null,
+      champion: league.entries.find((entry) => entry.finalPosition === 1)?.club.name ?? null,
+      runnerUp: league.entries.find((entry) => entry.finalPosition === 2)?.club.name ?? null,
+      relegated: league.entries.filter((entry) => league.tier > 1 && entry.finalPosition !== null && entry.finalPosition >= 7).map((entry) => entry.club.name),
+      promotions: league.promotionOffers.map((offer) => ({ clubName: offer.club.name, position: offer.finalPosition, targetTier: offer.targetTier, status: offer.status })),
+      awards: league.awards.map((award) => ({ clubName: award.club.name, placement: award.placement, awardName: award.awardName })),
+    }));
+    return {
+      totals: {
+        leagues: leagues.length,
+        completedLeagues: leagues.filter((league) => league.competition.status === "COMPLETED").length,
+        seasons: seasons.size,
+        clubs: clubs.size,
+        promotions: movements.filter((movement) => movement.movement === "PROMOTION").length,
+        relegations: movements.filter((movement) => movement.movement === "RELEGATION").length,
+      },
+      seasons: [...seasons.values()].sort((a, b) => b.season - a.season),
+      clubRankings,
+      movements: movements.sort((a, b) => b.season - a.season || a.tier - b.tier || a.position - b.position).slice(0, 200),
+      leagueHistory,
+      auditLogs: auditLogs.map((log) => ({
+        id: log.id, actorTelegramId: log.actorTelegramId, action: log.action, targetType: log.targetType,
+        targetId: log.targetId, reason: log.reason, createdAt: log.createdAt.toISOString(),
+      })),
+      applicationCounts: Object.fromEntries(applicationCounts.map((row) => [row.status, row._count._all])),
+    };
+  });
+
   app.post("/v1/admin/pyramid-leagues/actions", async (request, reply) => {
     const actor = await authorize(request, reply, "competitions");
     if (!actor) return;

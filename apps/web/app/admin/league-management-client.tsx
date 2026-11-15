@@ -16,12 +16,22 @@ type League = {
 type Queue = { id: string; tier: number; season: number; appliedAt: string; club: { id: string; name: string }; user: { displayName: string | null; telegramId: string } };
 type Offer = { id: string; club: { id: string; name: string }; tier: number; season: number; groupNumber: number; leagueName: string; targetTier: number; finalPosition: number; status: string; offeredAt: string; expiresAt: string };
 type Payload = { leagues: League[]; queues: Queue[]; offers: Offer[]; applicationCounts: Record<string, number> };
+type ReportPayload = {
+  totals: { leagues: number; completedLeagues: number; seasons: number; clubs: number; promotions: number; relegations: number };
+  seasons: { season: number; leagues: number; completed: number; teams: number; matches: number; champions: number; promotions: number; relegations: number }[];
+  clubRankings: { clubId: string; clubName: string; seasons: number; championships: number; podiums: number; promotions: number; relegations: number; leagueEntries: number }[];
+  movements: { clubId: string; clubName: string; season: number; tier: number; groupNumber: number; position: number; movement: "PROMOTION" | "RELEGATION"; offerStatus?: string }[];
+  leagueHistory: { id: string; name: string; season: number; tier: number; groupNumber: number; status: string; completedAt: string | null; champion: string | null; runnerUp: string | null; relegated: string[]; promotions: { clubName: string; position: number; targetTier: number; status: string }[]; awards: { clubName: string; placement: number; awardName: string }[] }[];
+  auditLogs: { id: string; actorTelegramId: string; action: string; targetType: string; targetId: string; reason: string | null; createdAt: string }[];
+};
 const panel: CSSProperties = { background: "#1b293b", border: "1px solid #31445d", borderRadius: 12, padding: 14 };
 const button: React.CSSProperties = { border: 0, borderRadius: 7, padding: "8px 11px", color: "white", background: "#315b91", cursor: "pointer" };
 const date = (value: string | null) => value ? new Date(value).toLocaleString("fa-IR") : "—";
 export default function LeagueManagementClient() {
   const [init, setInit] = useState("");
   const [data, setData] = useState<Payload>({ leagues: [], queues: [], offers: [], applicationCounts: {} });
+  const [report, setReport] = useState<ReportPayload | null>(null);
+  const [tab, setTab] = useState<"management" | "reports">("management");
   const [season, setSeason] = useState(String(new Date().getUTCFullYear() + 1));
   const [tier, setTier] = useState("");
   const [status, setStatus] = useState("");
@@ -47,7 +57,7 @@ export default function LeagueManagementClient() {
   }, [init]);
 
   const load = useCallback(async () => {
-    if (!init) return;
+    if (!init || tab !== "management") return;
     setBusy(true);
     try {
       const params = new URLSearchParams();
@@ -63,9 +73,29 @@ export default function LeagueManagementClient() {
     } finally {
       setBusy(false);
     }
-  }, [init, request, season, tier, status, query]);
+  }, [init, request, season, tier, status, query, tab]);
+
+  const loadReports = useCallback(async () => {
+    if (!init || tab !== "reports") return;
+    setBusy(true);
+    try {
+      const params = new URLSearchParams();
+      if (season) params.set("season", season);
+      if (tier) params.set("tier", tier);
+      if (query.trim()) params.set("q", query.trim());
+      params.set("limit", "100");
+      const result = await request("/v1/admin/pyramid-leagues/reports?" + params.toString());
+      setReport(result as unknown as ReportPayload);
+      setMessage("");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "خطا در دریافت گزارش‌ها");
+    } finally {
+      setBusy(false);
+    }
+  }, [init, request, season, tier, query, tab]);
 
   useEffect(() => { void load(); }, [load]);
+  useEffect(() => { void loadReports(); }, [loadReports]);
 
   const act = async (action: string, targetId: string, extra: Record<string, string | number> = {}) => {
     try {
@@ -90,7 +120,11 @@ export default function LeagueManagementClient() {
         <span style={{ ...panel, padding: 8 }}>انصراف‌داده: {data.applicationCounts.WITHDRAWN ?? 0}</span>
       </div>
     </header>
-    <div style={{ ...panel, display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
+    <nav style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+      <button style={{ ...button, background: tab === "management" ? "#315b91" : "#46566c" }} onClick={() => setTab("management")}>مدیریت لیگ‌ها</button>
+      <button style={{ ...button, background: tab === "reports" ? "#315b91" : "#46566c" }} onClick={() => setTab("reports")}>گزارش‌ها و تاریخچه</button>
+    </nav>
+    {tab === "management" && <div style={{ ...panel, display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
       <input aria-label="فصل" value={season} onChange={e => setSeason(e.target.value)} placeholder="فصل" style={{ padding: 9, borderRadius: 7, width: 100 }} />
       <select aria-label="سطح لیگ" value={tier} onChange={e => setTier(e.target.value)} style={{ padding: 9, borderRadius: 7 }}>
         <option value="">همه سطوح</option>{Array.from({ length: 7 }, (_, i) => <option key={i + 1} value={String(i + 1)}>سطح {i + 1}</option>)}
@@ -101,9 +135,67 @@ export default function LeagueManagementClient() {
       <input aria-label="جست‌وجو" value={query} onChange={e => setQuery(e.target.value)} placeholder="نام لیگ یا باشگاه" style={{ flex: 1, minWidth: 150, padding: 9, borderRadius: 7 }} />
       <button style={button} onClick={() => void load()}>اعمال فیلتر</button>
       <button style={{ ...button, background: "#46566c" }} onClick={() => { setSeason(""); setTier(""); setStatus(""); setQuery(""); }}>پاک‌کردن فیلتر</button>
-    </div>
+    </div>}
+    {tab === "reports" && <div style={{ ...panel, display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
+      <input aria-label="فصل گزارش" value={season} onChange={e => setSeason(e.target.value)} placeholder="فصل" style={{ padding: 9, borderRadius: 7, width: 100 }} />
+      <select aria-label="سطح گزارش" value={tier} onChange={e => setTier(e.target.value)} style={{ padding: 9, borderRadius: 7 }}><option value="">همه سطوح</option>{Array.from({ length: 7 }, (_, i) => <option key={i + 1} value={String(i + 1)}>سطح {i + 1}</option>)}</select>
+      <input aria-label="جست‌وجوی گزارش" value={query} onChange={e => setQuery(e.target.value)} placeholder="نام لیگ یا باشگاه" style={{ flex: 1, minWidth: 150, padding: 9, borderRadius: 7 }} />
+      <button style={button} onClick={() => void loadReports()}>اعمال فیلتر گزارش</button>
+    </div>}
     {message && <p role="status" style={{ ...panel, background: "#432b34" }}>{message}</p>}
-    {busy ? <p>در حال دریافت اطلاعات…</p> : <>
+    {busy ? <p>در حال دریافت اطلاعات…</p> : tab === "reports" ? (report ? <div style={{ display: "grid", gap: 14 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(125px,1fr))", gap: 8 }}>
+        {[
+          ["لیگ‌ها", report.totals.leagues], ["پایان‌یافته", report.totals.completedLeagues],
+          ["فصل‌ها", report.totals.seasons], ["باشگاه‌ها", report.totals.clubs],
+          ["صعودهای قطعی", report.totals.promotions], ["سقوط‌ها", report.totals.relegations],
+        ].map(([label, value]) => <div key={String(label)} style={panel}><small style={{ color: "#aebbd0" }}>{label}</small><div style={{ fontSize: 23, fontWeight: 700, marginTop: 4 }}>{value}</div></div>)}
+      </div>
+      <article style={panel}>
+        <h3 style={{ marginTop: 0 }}>گزارش فصل‌ها</h3>
+        <div style={{ overflowX: "auto" }}><table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+          <thead><tr>{["فصل","لیگ‌ها","تکمیل‌شده","تیم‌ها","مسابقات","قهرمانان","صعود","سقوط"].map(x => <th key={x} style={{ textAlign: "right", padding: 7, borderBottom: "1px solid #40536d" }}>{x}</th>)}</tr></thead>
+          <tbody>{report.seasons.map(row => <tr key={row.season}>{[row.season,row.leagues,row.completed,row.teams,row.matches,row.champions,row.promotions,row.relegations].map((v,i)=><td key={i} style={{ padding: 7, borderBottom: "1px solid #31445d" }}>{v}</td>)}</tr>)}</tbody>
+        </table></div>
+        {!report.seasons.length && <p style={{ color: "#aebbd0" }}>اطلاعاتی برای این فیلترها ثبت نشده است.</p>}
+      </article>
+      <article style={panel}>
+        <h3 style={{ marginTop: 0 }}>رتبه‌بندی تاریخی باشگاه‌ها</h3>
+        <div style={{ overflowX: "auto" }}><table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+          <thead><tr>{["رتبه","باشگاه","قهرمانی","سکو","صعود","سقوط","حضور"].map(x=><th key={x} style={{ textAlign: "right", padding: 7, borderBottom: "1px solid #40536d" }}>{x}</th>)}</tr></thead>
+          <tbody>{report.clubRankings.map((row,index)=><tr key={row.clubId}>{[index+1,row.clubName,row.championships,row.podiums,row.promotions,row.relegations,row.leagueEntries].map((v,i)=><td key={i} style={{ padding: 7, borderBottom: "1px solid #31445d" }}>{v}</td>)}</tr>)}</tbody>
+        </table></div>
+        {!report.clubRankings.length && <p style={{ color: "#aebbd0" }}>هنوز سابقه‌ای برای رتبه‌بندی وجود ندارد.</p>}
+      </article>
+      <article style={panel}>
+        <h3 style={{ marginTop: 0 }}>تاریخچه صعود و سقوط</h3>
+        {report.movements.map((item,index)=><div key={item.clubId+"-"+item.season+"-"+item.tier+"-"+index} style={{ padding: "8px 0", borderBottom: "1px solid #31445d", display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "space-between" }}>
+          <strong>{item.clubName}</strong><span>{item.movement === "PROMOTION" ? "صعود" : "سقوط"} · فصل {item.season} · سطح {item.tier} · رتبه {item.position} · گروه {item.groupNumber}{item.offerStatus ? " · " + item.offerStatus : ""}</span>
+        </div>)}
+        {!report.movements.length && <p style={{ color: "#aebbd0" }}>رکورد صعود یا سقوطی ثبت نشده است.</p>}
+      </article>
+      <article style={panel}>
+        <h3 style={{ marginTop: 0 }}>آرشیو فصل‌ها و گروه‌ها</h3>
+        {report.leagueHistory.map(league=><details key={league.id} style={{ padding: "9px 0", borderBottom: "1px solid #31445d" }}>
+          <summary style={{ cursor: "pointer" }}>{league.name} · فصل {league.season} · سطح {league.tier} · گروه {league.groupNumber} · {league.status}</summary>
+          <div style={{ color: "#c2cede", fontSize: 13, marginTop: 8, display: "grid", gap: 5 }}>
+            <span>قهرمان: {league.champion ?? "—"} · نایب‌قهرمان: {league.runnerUp ?? "—"}</span>
+            <span>تیم‌های سقوط‌کرده: {league.relegated.join("، ") || "—"}</span>
+            <span>پیشنهادهای صعود: {league.promotions.map(x=>x.clubName+" ("+x.status+"، سطح "+x.targetTier+")").join("، ") || "—"}</span>
+            <span>جوایز: {league.awards.map(x=>x.placement+". "+x.awardName+" — "+x.clubName).join("، ") || "—"}</span>
+            <span>پایان فصل: {date(league.completedAt)}</span>
+          </div>
+        </details>)}
+      </article>
+      <article style={panel}>
+        <h3 style={{ marginTop: 0 }}>سوابق مدیریتی لیگ</h3>
+        {report.auditLogs.map(log=><div key={log.id} style={{ padding: "8px 0", borderBottom: "1px solid #31445d", fontSize: 13 }}>
+          <strong>{log.action}</strong> · {log.actorTelegramId} · {log.targetType} / {log.targetId}
+          <div style={{ color: "#aebbd0", marginTop: 4 }}>{log.reason ?? "بدون توضیح"} · {date(log.createdAt)}</div>
+        </div>)}
+        {!report.auditLogs.length && <p style={{ color: "#aebbd0" }}>سابقه مدیریتی برای این فیلتر ثبت نشده است.</p>}
+      </article>
+    </div> : <p style={{ color: "#aebbd0" }}>گزارشی برای نمایش وجود ندارد.</p>) : <>
       <div style={{ display: "grid", gap: 10 }}>
         <h3 style={{ marginBottom: 0 }}>لیگ‌ها ({data.leagues.length})</h3>
         {data.leagues.map(league => <article key={league.id} style={panel}>
