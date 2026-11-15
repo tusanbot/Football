@@ -12,7 +12,44 @@ app.get("/v1/admin/overview",async(req,reply)=>{if(!await authorize(req,reply))r
 app.get("/v1/admin/group-targets",async(req,reply)=>{const actor=await authorize(req,reply);if(!actor)return;if(actor.adminRole!=="superadmin")return reply.code(403).send({error:"SUPERADMIN_REQUIRED"});const groups=await prisma.telegramGroup.findMany({where:{isActive:true,isSuspended:false},select:{telegramId:true,title:true},orderBy:{createdAt:"asc"},take:5000});return{groups};});
 app.get("/v1/admin/roles",async(req,reply)=>{const actor=await authorize(req,reply);if(!actor)return;if(actor.adminRole!=="superadmin")return reply.code(403).send({error:"SUPERADMIN_REQUIRED"});return prisma.adminRoleAssignment.findMany({orderBy:{updatedAt:"desc"}});});
 app.get("/v1/admin/settings",async(req,reply)=>{const actor=await authorize(req,reply);if(!actor)return;if(actor.adminRole!=="superadmin")return reply.code(403).send({error:"SUPERADMIN_REQUIRED"});return prisma.gameSetting.findMany({orderBy:{key:"asc"}});});
-app.get("/v1/admin/finance-summary",async(req,reply)=>{if(!await authorize(req,reply,"economy"))return;const q=z.object({days:z.coerce.number().int().min(1).max(365).default(30)}).safeParse(req.query);if(!q.success)return reply.code(400).send({error:"INVALID_QUERY"});const from=new Date(Date.now()-q.data.days*86400000);const [wallet,clubFinance,groupPoints]=await Promise.all([prisma.ledgerTransaction.groupBy({by:["asset","direction"],where:{createdAt:{gte:from}},_sum:{amount:true},_count:{_all:true}}),prisma.clubFinanceEntry.groupBy({by:["category","direction"],where:{occurredAt:{gte:from}},_sum:{amount:true},_count:{_all:true}}),prisma.groupPointLedger.groupBy({by:["source"],where:{createdAt:{gte:from}},_sum:{amount:true},_count:{_all:true}})]);return{days:q.data.days,from:from.toISOString(),wallet:wallet.map(x=>({asset:x.asset,direction:x.direction,total:(x._sum.amount??0n).toString(),count:x._count._all})),clubFinance:clubFinance.map(x=>({category:x.category,direction:x.direction,total:(x._sum.amount??0n).toString(),count:x._count._all})),groupPoints:groupPoints.map(x=>({source:x.source,total:(x._sum.amount??0n).toString(),count:x._count._all}))};});
+app.get("/v1/admin/finance-summary",async(req,reply)=>{
+if(!await authorize(req,reply,"economy"))return;
+const q=z.object({days:z.coerce.number().int().min(1).max(365).default(30)}).safeParse(req.query);
+if(!q.success)return reply.code(400).send({error:"INVALID_QUERY"});
+const from=new Date(Date.now()-q.data.days*86400000);
+const [wallet,clubFinance,groupPoints,walletBalances,allWalletLedger,groupTreasury,allGroupLedger,arrears]=await Promise.all([
+prisma.ledgerTransaction.groupBy({by:["asset","direction"],where:{createdAt:{gte:from}},_sum:{amount:true},_count:{_all:true}}),
+prisma.clubFinanceEntry.groupBy({by:["category","direction"],where:{occurredAt:{gte:from}},_sum:{amount:true},_count:{_all:true}}),
+prisma.groupPointLedger.groupBy({by:["source"],where:{createdAt:{gte:from}},_sum:{amount:true},_count:{_all:true}}),
+prisma.wallet.groupBy({by:["asset"],_sum:{balance:true}}),
+prisma.ledgerTransaction.groupBy({by:["asset","direction"],_sum:{amount:true}}),
+prisma.telegramGroup.aggregate({_sum:{points:true}}),
+prisma.groupPointLedger.aggregate({_sum:{amount:true}}),
+prisma.club.aggregate({_sum:{operatingArrears:true}}),
+]);
+const assets=["CASH","GOLD"] as const;
+const walletReconciliation=assets.map(asset=>{
+const balance=walletBalances.find(x=>x.asset===asset)?._sum.balance??0n;
+const credits=allWalletLedger.find(x=>x.asset===asset&&x.direction==="CREDIT")?._sum.amount??0n;
+const debits=allWalletLedger.find(x=>x.asset===asset&&x.direction==="DEBIT")?._sum.amount??0n;
+const ledgerNet=credits-debits;
+return{asset,walletBalance:balance.toString(),ledgerNet:ledgerNet.toString(),difference:(balance-ledgerNet).toString()};
+});
+const groupBalance=groupTreasury._sum.points??0n;
+const groupLedgerNet=allGroupLedger._sum.amount??0n;
+const clubIncome=clubFinance.filter(x=>x.direction==="CREDIT").reduce((sum,x)=>sum+(x._sum.amount??0n),0n);
+const clubExpenses=clubFinance.filter(x=>x.direction==="DEBIT").reduce((sum,x)=>sum+(x._sum.amount??0n),0n);
+return{
+days:q.data.days,from:from.toISOString(),
+wallet:wallet.map(x=>({asset:x.asset,direction:x.direction,total:(x._sum.amount??0n).toString(),count:x._count._all})),
+clubFinance:clubFinance.map(x=>({category:x.category,direction:x.direction,total:(x._sum.amount??0n).toString(),count:x._count._all})),
+groupPoints:groupPoints.map(x=>({source:x.source,total:(x._sum.amount??0n).toString(),count:x._count._all})),
+walletReconciliation,
+groupReconciliation:[{treasuryBalance:groupBalance.toString(),ledgerNet:groupLedgerNet.toString(),difference:(groupBalance-groupLedgerNet).toString()}],
+clubFinanceSummary:[{metric:"income",total:clubIncome.toString()},{metric:"expenses",total:clubExpenses.toString()},{metric:"net",total:(clubIncome-clubExpenses).toString()}],
+clubArrearsTotal:(arrears._sum.operatingArrears??0n).toString(),
+};
+});
 app.get("/v1/admin/:resource",async(req,reply)=>{const p=z.object({resource:z.enum(["players","clubs","users","groups","challenges","leagues","items","gift-codes","alliances","matches","alliance-seasons","wallet-ledger","group-ledger","audit","season-awards"])}).safeParse(req.params),q=querySchema.safeParse(req.query);if(!p.success||!q.success)return reply.code(400).send({error:"INVALID_QUERY"});const readPermission:Record<string,AdminPermission>={players:"players",clubs:"clubs",matches:"matches",leagues:"competitions","alliance-seasons":"groups",alliances:"groups",groups:"groups",challenges:"groups",users:"moderation",items:"gifts","gift-codes":"gifts","wallet-ledger":"economy","group-ledger":"economy",audit:"moderation","season-awards":"players"};if(!await authorize(req,reply,readPermission[p.data.resource]))return;const {limit,q:term,season}=q.data;const contains={contains:term??"",mode:"insensitive" as const};switch(p.data.resource){
 case"clubs":return prisma.club.findMany({take:limit,...(term?{where:{OR:[{name:contains},{slug:contains},{owner:{is:{telegramId:{contains:term}}}}]}}:{}),orderBy:{createdAt:"desc"},include:{owner:{select:{telegramId:true,displayName:true}},_count:{select:{players:true,homeMatches:true,awayMatches:true}}}});
 case"alliance-seasons":return prisma.allianceSeason.findMany({take:limit,...(term?{where:{alliance:{is:{name:contains}}}}:{}),orderBy:{createdAt:"desc"},include:{alliance:{select:{name:true,status:true}}}});
