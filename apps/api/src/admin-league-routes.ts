@@ -272,8 +272,7 @@ export function registerAdminLeagueRoutes(app: FastifyInstance) {
           const league = await tx.pyramidLeague.findUnique({ where: { id: input.targetId }, include: { competition: { include: { _count: { select: { entries: true } } } } } });
           if (!league) throw new Error("TARGET_NOT_FOUND");
           if (league.competition.status === "COMPLETED") throw new Error("COMPLETED_LEAGUE_LOCKED");
-          await tx.competition.update({ where: { id: league.competitionId }, data: { status: input.status } });
-          targetType = "pyramid-league";
+          throw new Error("PYRAMID_LEAGUE_STATUS_MANAGED_AUTOMATICALLY");
         } else if (input.action === "withdraw-application") {
           const updated = await tx.pyramidLeagueApplication.updateMany({ where: { id: input.targetId, status: "QUEUED" }, data: { status: "WITHDRAWN" } });
           if (!updated.count) throw new Error("QUEUED_APPLICATION_NOT_FOUND");
