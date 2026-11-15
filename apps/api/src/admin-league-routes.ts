@@ -16,7 +16,7 @@ function roleFor(telegramId: string) {
   if (superAdmins.includes(telegramId)) return "superadmin";
   try {
     const roles = JSON.parse(process.env.GAME_ADMIN_ROLE_MAP ?? "{}") as Record<string, string>;
-    return roles[telegramId] && Object.hasOwn(ROLE_PERMISSIONS, roles[telegramId]!) ? roles[telegramId]! : null;
+    return roles[telegramId] && Object.prototype.hasOwnProperty.call(ROLE_PERMISSIONS, roles[telegramId]!) ? roles[telegramId]! : null;
   } catch {
     return null;
   }
