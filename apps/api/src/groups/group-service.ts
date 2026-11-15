@@ -67,11 +67,22 @@ export async function awardDailyGroupActivity(input: { telegramUserId: string; t
     const idempotencyKey = `group-daily-activity:${group.id}:${user.id}:${day}`;
     const existing = await tx.groupPointLedger.findUnique({ where: { idempotencyKey }, select: { id: true } });
     if (existing) return { awarded: false, replayed: true, points: group.points.toString(), award: "0" };
+    const [rewardSetting, capSetting] = await Promise.all([
+      tx.gameSetting.findUnique({ where: { key: "groups.dailyActivityPoints" }, select: { value: true } }),
+      tx.gameSetting.findUnique({ where: { key: "groups.dailyPointCap" }, select: { value: true } }),
+    ]);
+    const settingInteger = (value: unknown, fallback: number, maximum: number) => {
+      const parsed = typeof value === "number" ? value : typeof value === "string" ? Number(value) : NaN;
+      return Number.isSafeInteger(parsed) && parsed >= 0 && parsed <= maximum ? parsed : fallback;
+    };
+    const reward = BigInt(settingInteger(rewardSetting?.value, 1, 1000));
+    const dailyCap = settingInteger(capSetting?.value, GROUP_DAILY_POINT_CAP, 100_000);
     const earned = await earnedGroupPointsToday(tx, group.id, user.id);
-    if (earned >= BigInt(GROUP_DAILY_POINT_CAP)) return { awarded: false, replayed: false, capped: true, points: group.points.toString(), award: "0" };
-    await tx.groupPointLedger.create({ data: { idempotencyKey, groupId: group.id, userId: user.id, amount: 1n, source: "DAILY_ACTIVITY", description: "Daily member activity" } });
-    const updated = await tx.telegramGroup.update({ where: { id: group.id }, data: { points: { increment: 1n } }, select: { points: true } });
-    return { awarded: true, replayed: false, points: updated.points.toString(), award: "1", dailyCap: GROUP_DAILY_POINT_CAP };
+    if (earned >= BigInt(dailyCap)) return { awarded: false, replayed: false, capped: true, points: group.points.toString(), award: "0" };
+    if (reward === 0n) return { awarded: false, replayed: false, disabled: true, points: group.points.toString(), award: "0" };
+    await tx.groupPointLedger.create({ data: { idempotencyKey, groupId: group.id, userId: user.id, amount: reward, source: "DAILY_ACTIVITY", description: "Daily member activity" } });
+    const updated = await tx.telegramGroup.update({ where: { id: group.id }, data: { points: { increment: reward } }, select: { points: true } });
+    return { awarded: true, replayed: false, points: updated.points.toString(), award: reward.toString(), dailyCap };
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 }
 
