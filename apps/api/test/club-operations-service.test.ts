@@ -86,6 +86,11 @@ test("club facilities, academy, coach, sponsor income and finance ledger are tra
     const player = await prisma.player.findUniqueOrThrow({ where: { id: recruitedPlayerId } });
     assert.equal(player.age >= 16 && player.age <= 18, true);
     assert.equal(player.status, "ACTIVE");
+    const cashAfterRecruitment = (await prisma.wallet.findUniqueOrThrow({ where: { userId_asset: { userId, asset: "CASH" } } })).balance;
+    const replayedRecruitment = await recruitAcademyProspect(userId, scouting.prospects[0]!.id, `academy-recruit-${suffix}`, now);
+    assert.equal(replayedRecruitment.replayed, true);
+    assert.equal(replayedRecruitment.player?.id, recruited.player?.id);
+    assert.equal((await prisma.wallet.findUniqueOrThrow({ where: { userId_asset: { userId, asset: "CASH" } } })).balance, cashAfterRecruitment);
 
     const hired = await hireClubCoach(userId, "youth", `coach-hire-${suffix}`, now);
     assert.equal(hired.coach!.name, "Youth Development Coach");
