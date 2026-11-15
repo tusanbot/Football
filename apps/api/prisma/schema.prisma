@@ -126,6 +126,13 @@ enum CompetitionFormat {
   CUP
 }
 
+enum TelegramMessageDeletionStatus {
+  PENDING
+  PROCESSING
+  DELETED
+  FAILED
+}
+
 model User {
   id                 String              @id @default(cuid())
   telegramId         String              @unique
@@ -869,4 +876,25 @@ model AdminAuditLog {
  createdAt DateTime @default(now())
  @@index([actorTelegramId,createdAt])
  @@index([targetType,targetId,createdAt])
+}
+
+
+model TelegramMessageDeletion {
+  id             String                       @id @default(cuid())
+  telegramChatId BigInt
+  messageId      Int
+  deleteAt       DateTime
+  availableAt    DateTime
+  status         TelegramMessageDeletionStatus @default(PENDING)
+  attempts       Int                          @default(0)
+  lockedUntil    DateTime?
+  claimToken     String?
+  lastError      String?
+  deletedAt      DateTime?
+  createdAt      DateTime                     @default(now())
+  updatedAt      DateTime                     @updatedAt
+
+  @@unique([telegramChatId, messageId])
+  @@index([status, deleteAt, availableAt])
+  @@index([status, lockedUntil])
 }

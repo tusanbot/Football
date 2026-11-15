@@ -37,12 +37,7 @@ bot.use(async (ctx, next) => {
       value: async (...args: Parameters<typeof ctx.reply>) => {
         const sent = await originalReply(...args);
         if (!isPersistentGroupReply(command, String(args[0] ?? ""))) {
-          const timer = setTimeout(() => {
-            void ctx.api.deleteMessage(chatId, sent.message_id).catch((error: unknown) => {
-              console.debug("Transient group reply could not be deleted:", error instanceof Error ? error.message : error);
-            });
-          }, GROUP_REPLY_DELETE_DELAY_MS);
-          timer.unref();
+          await scheduleGroupReplyDeletion(chatId, sent.message_id);
         }
         return sent;
       },
@@ -79,11 +74,97 @@ async function awardGroupActivity(ctx: { chat: { type: string; id: number }; fro
  try{await api(`/v1/groups/${encodeURIComponent(String(ctx.chat.id))}/activity/award`,ctx.from.id,"POST",{activityType,referenceId});}
  catch(error){console.warn("Group activity reward skipped:",error instanceof Error?error.message:error);}
 }
-async function apiSystem(path:string,body:unknown):Promise<void>{
+async function apiSystem<T = unknown>(path:string,body:unknown):Promise<T>{
  if(!apiUrl||!botApiSecret)throw new Error("Bot API is not configured.");
  const response=await fetch(new URL(path,apiUrl),{method:"POST",headers:{"content-type":"application/json","x-football-bot-secret":botApiSecret},body:JSON.stringify(body)});
- if(!response.ok)throw new Error("System API failed ("+response.status+")");
+ const data=await response.json() as T & {error?:string};
+ if(!response.ok)throw new Error("System API failed ("+response.status+"): "+(data.error??"unknown error"));
+ return data as T;
 }
+
+async function scheduleGroupReplyDeletion(chatId: number, messageId: number) {
+  const deleteAt = new Date(Date.now() + GROUP_REPLY_DELETE_DELAY_MS);
+  try {
+    await apiSystem("/v1/bot/group-message-deletions", {
+      telegramChatId: String(chatId),
+      messageId,
+      deleteAt: deleteAt.toISOString(),
+    });
+  } catch (error) {
+    console.warn("Could not persist group message deletion; using in-memory fallback:", error instanceof Error ? error.message : error);
+    const delay = Math.max(0, deleteAt.getTime() - Date.now());
+    const timer = setTimeout(() => {
+      void bot.api.deleteMessage(chatId, messageId).catch((deleteError: unknown) => {
+        console.debug("Fallback group message deletion failed:", deleteError instanceof Error ? deleteError.message : deleteError);
+      });
+    }, delay);
+    timer.unref();
+  }
+}
+
+type TelegramMessageDeletionJob = {
+  id: string;
+  telegramChatId: string;
+  messageId: number;
+  claimToken: string;
+};
+
+function isTelegramMessageAlreadyGone(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return /message to delete not found|message not found/i.test(message);
+}
+
+let deletionWorkerBusy = false;
+async function pollGroupMessageDeletionQueue() {
+  if (deletionWorkerBusy || !apiUrl || !botApiSecret) return;
+  deletionWorkerBusy = true;
+  try {
+    const result = await apiSystem<{ jobs: TelegramMessageDeletionJob[] }>(
+      "/v1/bot/group-message-deletions/claim",
+      { limit: 25 },
+    );
+    for (const job of result.jobs) {
+      const chatId = Number(job.telegramChatId);
+      if (!Number.isSafeInteger(chatId)) {
+        await apiSystem("/v1/bot/group-message-deletions/" + encodeURIComponent(job.id) + "/fail", {
+          claimToken: job.claimToken,
+          error: "Telegram chat id is outside JavaScript's safe integer range",
+        });
+        continue;
+      }
+
+      try {
+        await bot.api.deleteMessage(chatId, job.messageId);
+      } catch (error) {
+        if (!isTelegramMessageAlreadyGone(error)) {
+          try {
+            await apiSystem("/v1/bot/group-message-deletions/" + encodeURIComponent(job.id) + "/fail", {
+              claimToken: job.claimToken,
+              error: error instanceof Error ? error.message.slice(0, 500) : String(error).slice(0, 500),
+            });
+          } catch (queueError) {
+            console.error("Could not reschedule failed group message deletion:", queueError);
+          }
+          continue;
+        }
+      }
+
+      try {
+        await apiSystem("/v1/bot/group-message-deletions/" + encodeURIComponent(job.id) + "/complete", {
+          claimToken: job.claimToken,
+        });
+      } catch (error) {
+        // The lease expires and the next worker will safely retry; deleting an absent message is idempotent here.
+        console.error("Could not acknowledge group message deletion:", error);
+      }
+    }
+  } catch (error) {
+    console.warn("Group message deletion queue poll failed:", error instanceof Error ? error.message : error);
+  } finally {
+    deletionWorkerBusy = false;
+  }
+}
+
 function privateMenuKeyboard() {
   const keyboard = new Keyboard();
   for (const row of PRIVATE_MENU_ROWS) {
@@ -140,6 +221,11 @@ bot.command("menu", async (ctx) => {
 bot.command("help", async (ctx) => ctx.reply(
   "Football Empire commands:\n/menu — show the private Reply Keyboard again\n/club — club profile\n/wallet — Cash and Gold balances\n/rename NEW NAME — rename your club\n/players — your active squad\n/lineup — view starting XI and tactics\n/setlineup FORMATION ID1 ... ID11 — set your XI\n/development — player development overview\n/train PLAYER_ID FOCUS INTENSITY — train a player\n/renew PLAYER_ID DAYS WEEKLY_WAGE — renew a contract\n/operations — facilities, academy, sponsors and finance\n/finance [DAYS] — income and expense statement\n/upgrade stadium|training|academy — upgrade a facility\n/ticket-price PRICE — set stadium ticket price\n/scout — find academy prospects\n/recruit PROSPECT_ID — sign an academy prospect\n/sponsor OFFER_ID — sign a sponsor\n/coach-upgrade — develop your coach\n/hire-coach balanced|youth|performance — hire a coach\n/opponents — clubs available for friendlies\n/friendly CLUB_ID — schedule a friendly\n/matches — your fixtures and results\n/play MATCH_ID — simulate a due match\n/league NAME [4-10] — create a league\n/cup NAME [4|8] — create a knockout cup\n/leagues — open leagues\n/joinleague ID — join a league\n/startleague ID — start your league\n/startcup ID — start your cup\n/table ID — league table or cup bracket\n/group-register — register this Telegram group (admins only)\n/group-join — join this group with your club\n/group — show group status and treasury\n/group-activity — earn one daily group point\n/group-shop — reward shop\n/group-buy ITEM [USER_ID] — purchase reward\n/group-challenges — list challenges\n/group-challenge TITLE|START_ISO|END_ISO|POINTS — create challenge\n/group-challenge-join ID — join challenge\n/group-challenge-complete ID USER_ID — settle challenge\n/group-check — refresh member threshold\n/group-league NAME [4-10] — create local league\n/group-league-join ID — join local league\n/group-league-start ID — start local league\n/group-league-table ID — standings\n/alliance — alliance status and invitations\n/alliance-create NAME — create an alliance\n/alliance-invite GROUP_ID — invite a group\n/alliance-contribute AMOUNT — contribute group points to alliance treasury\n/alliance-accept ID / /alliance-decline ID — respond to invite\n/alliance-championship NAME|TEAMS — cross-group tournament\n/alliance-championship-join ID / alliance-championship-start ID\n/alliance-season-start [DAYS] / alliance-season-close\n/alliance-season-review SEASON_ID approve|reject — flagged prize review (authorized reviewer)\n/market — open transfer listings\n/sell PLAYER_ID PRICE — list a generated player\n/buy LISTING_ID — buy a listed player\n/special — view special players and pack prices\n/pack epic|legendary|icon — acquire a special player\n\nSpecial players are not tradeable in the regular market.",
 ));
+
+bot.command("group-cleanup-test", async (ctx) => {
+  if (ctx.chat.type !== "group" && ctx.chat.type !== "supergroup") return;
+  await ctx.reply("پیام آزمایشی حذف خودکار Football Empire است. اگر صف حذف فعال باشد، این پیام حدود ۶۰ ثانیه دیگر حذف می‌شود.");
+});
 
 bot.command("group-register", async (ctx) => {
   if (!ctx.from) return;
@@ -800,4 +886,12 @@ bot.on(["chat_member","my_chat_member"],async ctx=>{
  catch(error){console.warn("Could not refresh Telegram group membership:",error instanceof Error?error.message:error);}
 });
 bot.catch((error) => console.error("Telegram bot error:", error));
+if (apiUrl && botApiSecret) {
+  const deletionQueueTimer = setInterval(() => { void pollGroupMessageDeletionQueue(); }, 5_000);
+  deletionQueueTimer.unref();
+  void pollGroupMessageDeletionQueue();
+} else {
+  console.warn("Durable group message deletion worker is disabled: configure FOOTBALL_API_URL and BOT_API_SECRET.");
+}
+
 await bot.start();

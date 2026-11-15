@@ -11,7 +11,7 @@ export const PERSISTENT_GROUP_COMMANDS = new Set([
 ]);
 
 export const TRANSIENT_GROUP_COMMANDS = new Set([
-  "group-join", "group", "group-activity", "group-shop", "group-buy",
+  "group-join", "group", "group-activity", "group-shop", "group-buy", "group-cleanup-test",
   "group-challenge-join", "group-league-join",
 ]);
 
