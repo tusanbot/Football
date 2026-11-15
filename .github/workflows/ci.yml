@@ -70,6 +70,14 @@ jobs:
         run: |
           node cloudflare/api/scripts/prisma-d1-schema.mjs
           python3 cloudflare/api/scripts/validate-d1-schema.py
+      - name: Capture generated D1 migration artifacts
+        run: |
+          echo "===D1_MIGRATION_SQL_BEGIN==="
+          cat cloudflare/api/migrations/0002_game_schema.sql
+          echo "===D1_MIGRATION_SQL_END==="
+          echo "===D1_INVENTORY_JSON_BEGIN==="
+          cat cloudflare/api/schema/prisma-d1-inventory.json
+          echo "===D1_INVENTORY_JSON_END==="
       - name: Test
         run: pnpm test
         env:
