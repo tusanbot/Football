@@ -832,10 +832,10 @@ bot.command("fallback", async (ctx) => {
       "/v1/matches/fallback-plan", ctx.from.id);
     const p=result.plan;
     await ctx.reply("برنامه جایگزین مسابقه شما" + (result.isCustom ? " · سفارشی" : " · پیش‌فرض تاکتیک باشگاه")
-      + "\\nآرایش: "+p.formation+"\\nذهنیت: "+p.mentality+"\\nپرس: "+p.pressing
-      +"\\nسرعت: "+p.tempo+"\\nپاس: "+p.passingStyle
-      +"\\nنسخه: "+result.version
-      +"\\nبرای تغییر: /setfallback formation=4-4-2 mentality=DEFENSIVE pressing=LOW_BLOCK tempo=SLOW passingStyle=SHORT");
+      + "\nآرایش: "+p.formation+"\nذهنیت: "+p.mentality+"\nپرس: "+p.pressing
+      +"\nسرعت: "+p.tempo+"\nپاس: "+p.passingStyle
+      +"\nنسخه: "+result.version
+      +"\nبرای تغییر: /setfallback formation=4-4-2 mentality=DEFENSIVE pressing=LOW_BLOCK tempo=SLOW passingStyle=SHORT");
   } catch (error) {
     await ctx.reply("دریافت برنامه جایگزین ناموفق بود: "+(error instanceof Error?error.message:"unknown error"));
   }
@@ -851,7 +851,7 @@ bot.command("setfallback", async (ctx) => {
     passingStyle:["SHORT","MIXED","DIRECT"],
   };
   const changes:Record<string,string>={};
-  for(const part of String(ctx.match??"").trim().split(/\\s+/).filter(Boolean)){
+  for(const part of String(ctx.match??"").trim().split(/\s+/).filter(Boolean)){
     const i=part.indexOf("=");
     if(i<1)return ctx.reply("هر تنظیم باید به شکل key=value باشد.");
     const key=part.slice(0,i),value=part.slice(i+1).toUpperCase();
