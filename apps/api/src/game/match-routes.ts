@@ -7,6 +7,11 @@ import {
   MatchServiceError, createFriendlyMatch, createLeague, getLeague, joinLeague,
   listClubMatches, listMatchOpponents, listOpenLeagues, simulateScheduledMatch, startLeague, submitMatchCheckpointDecision, updateCompetitionRules,
 } from "./match-service.js";
+import {
+  PyramidLeagueError, acceptFriendlyChallenge, applyForPyramidLeague, createFriendlyChallenge,
+  getFriendlyChallengeInfo, getPyramidLeagueDetails, listLeagueNotices, listPyramidLeagues,
+  markLeagueNoticesRead, respondToPromotion,
+} from "./league-pyramid-service.js";
 
 const keySchema = z.string().regex(/^[A-Za-z0-9:_-]{12,128}$/);
 const competitionRulesSchema = z.object({
@@ -26,6 +31,11 @@ function sendMatchError(reply: FastifyReply, error: unknown) {
   if (typeof error === "object" && error !== null && "code" in error
     && (error.code === "P2034" || error.code === "P2002")) {
     return reply.code(409).send({ error: "CONCURRENT_MODIFICATION" });
+  }
+  if (error instanceof PyramidLeagueError) {
+    const notFound = ["CLUB_NOT_FOUND", "PYRAMID_LEAGUE_NOT_FOUND", "FRIENDLY_CHALLENGE_NOT_FOUND", "PROMOTION_OFFER_NOT_FOUND"];
+    const conflicts = ["CLUB_ALREADY_IN_ACTIVE_PYRAMID_LEAGUE", "APPLICATION_ALREADY_WITHDRAWN", "PROMOTION_OFFER_ALREADY_RESOLVED", "FRIENDLY_CHALLENGE_EXPIRED", "CANNOT_ACCEPT_OWN_CHALLENGE", "NOT_PROMOTION_OFFER_OWNER", "NOT_PYRAMID_LEAGUE_MEMBER", "DAILY_CHALLENGE_LIMIT_REACHED", "INSUFFICIENT_GOLD", "CONCURRENT_MODIFICATION"];
+    return reply.code(notFound.includes(error.code) ? 404 : conflicts.includes(error.code) ? 409 : 400).send({ error: error.code });
   }
   if (error instanceof MatchFallbackPlanError) {
     const status = error.code === "CLUB_NOT_FOUND" ? 404 : error.code === "FALLBACK_PLAN_VERSION_CONFLICT" ? 409 : 400;
@@ -181,4 +191,72 @@ export function registerMatchRoutes(app: FastifyInstance) {
     try { return await getLeague(user.id, params.data.id); }
     catch (error) { return sendMatchError(reply, error); }
   });
+
+  app.get("/v1/pyramid-leagues", async (request, reply) => {
+    const user = await requireTelegramUser(request);
+    if (!user) return reply.code(401).send({ error: "UNAUTHENTICATED" });
+    try { return await listPyramidLeagues(user.id); }
+    catch (error) { return sendMatchError(reply, error); }
+  });
+  app.post("/v1/pyramid-leagues/apply", async (request, reply) => {
+    const user = await requireTelegramUser(request);
+    if (!user) return reply.code(401).send({ error: "UNAUTHENTICATED" });
+    const body = z.object({ tier: z.number().int().min(1).max(7) }).strict().safeParse(request.body);
+    if (!body.success) return reply.code(400).send({ error: "INVALID_PYRAMID_LEAGUE_APPLICATION" });
+    try { return await applyForPyramidLeague(user.id, body.data.tier); }
+    catch (error) { return sendMatchError(reply, error); }
+  });
+  app.get("/v1/pyramid-leagues/:id", async (request, reply) => {
+    const user = await requireTelegramUser(request);
+    if (!user) return reply.code(401).send({ error: "UNAUTHENTICATED" });
+    const params = z.object({ id: z.string().min(1).max(64) }).safeParse(request.params);
+    if (!params.success) return reply.code(400).send({ error: "INVALID_PYRAMID_LEAGUE_ID" });
+    try { return await getPyramidLeagueDetails(user.id, params.data.id); }
+    catch (error) { return sendMatchError(reply, error); }
+  });
+  app.post("/v1/pyramid-leagues/promotions/:offerId/respond", async (request, reply) => {
+    const user = await requireTelegramUser(request);
+    if (!user) return reply.code(401).send({ error: "UNAUTHENTICATED" });
+    const params = z.object({ offerId: z.string().min(1).max(64) }).safeParse(request.params);
+    const body = z.object({ accept: z.boolean() }).strict().safeParse(request.body);
+    if (!params.success || !body.success) return reply.code(400).send({ error: "INVALID_PROMOTION_RESPONSE" });
+    try { return await respondToPromotion(user.id, params.data.offerId, body.data.accept); }
+    catch (error) { return sendMatchError(reply, error); }
+  });
+  app.get("/v1/league-notices", async (request, reply) => {
+    const user = await requireTelegramUser(request);
+    if (!user) return reply.code(401).send({ error: "UNAUTHENTICATED" });
+    return await listLeagueNotices(user.id);
+  });
+  app.post("/v1/league-notices/read", async (request, reply) => {
+    const user = await requireTelegramUser(request);
+    if (!user) return reply.code(401).send({ error: "UNAUTHENTICATED" });
+    return await markLeagueNoticesRead(user.id);
+  });
+  app.post("/v1/friendly-challenges", async (request, reply) => {
+    const user = await requireTelegramUser(request);
+    if (!user) return reply.code(401).send({ error: "UNAUTHENTICATED" });
+    try {
+      const result = await createFriendlyChallenge(user.id);
+      const botUsername = process.env.TELEGRAM_BOT_USERNAME?.replace(/^@/, "");
+      return { ...result, shareUrl: botUsername ? `https://t.me/${botUsername}?start=challenge_${result.challenge.token}` : null };
+    } catch (error) { return sendMatchError(reply, error); }
+  });
+  app.get("/v1/friendly-challenges/:token", async (request, reply) => {
+    const user = await requireTelegramUser(request);
+    if (!user) return reply.code(401).send({ error: "UNAUTHENTICATED" });
+    const params = z.object({ token: z.string().min(10).max(100) }).safeParse(request.params);
+    if (!params.success) return reply.code(400).send({ error: "INVALID_FRIENDLY_CHALLENGE_TOKEN" });
+    try { return await getFriendlyChallengeInfo(params.data.token); }
+    catch (error) { return sendMatchError(reply, error); }
+  });
+  app.post("/v1/friendly-challenges/:token/accept", async (request, reply) => {
+    const user = await requireTelegramUser(request);
+    if (!user) return reply.code(401).send({ error: "UNAUTHENTICATED" });
+    const params = z.object({ token: z.string().min(10).max(100) }).safeParse(request.params);
+    if (!params.success) return reply.code(400).send({ error: "INVALID_FRIENDLY_CHALLENGE_TOKEN" });
+    try { return await acceptFriendlyChallenge(user.id, params.data.token); }
+    catch (error) { return sendMatchError(reply, error); }
+  });
+
 }
