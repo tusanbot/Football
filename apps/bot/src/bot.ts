@@ -791,7 +791,7 @@ bot.command("challenge", async (ctx) => {
 
 bot.command("acceptchallenge", async (ctx) => {
   if (!ctx.from) return;
-  const tokenValue = String(ctx.match ?? "").trim().split(/\\s+/)[0];
+  const tokenValue = String(ctx.match ?? "").trim().split(/\s+/)[0];
   if (!tokenValue) return ctx.reply("روش استفاده: /acceptchallenge TOKEN");
   try {
     const result = await api<{ match: { id: string; scheduledAt: string } }>(
@@ -819,7 +819,7 @@ bot.command("pyramidleagues", async (ctx) => {
 
 bot.command("pyramidtable", async (ctx) => {
   if (!ctx.from || ctx.chat.type !== "private") return;
-  const id = String(ctx.match ?? "").trim().split(/\\s+/)[0];
+  const id = String(ctx.match ?? "").trim().split(/\s+/)[0];
   if (!id) return ctx.reply("استفاده: /pyramidtable LEAGUE_ID");
   try {
     const result = await api<{
@@ -852,7 +852,7 @@ bot.command("leagueapply", async (ctx) => {
 
 bot.command("promotion", async (ctx) => {
   if (!ctx.from || ctx.chat.type !== "private") return;
-  const [offerId, decision] = String(ctx.match ?? "").trim().split(/\\s+/);
+  const [offerId, decision] = String(ctx.match ?? "").trim().split(/\s+/);
   if (!offerId || !["accept", "decline"].includes(decision ?? "")) return ctx.reply("روش استفاده: /promotion OFFER_ID accept|decline");
   try {
     const result = await api<{ accepted: boolean; replacementClubId?: string | null }>("/v1/pyramid-leagues/promotions/" + encodeURIComponent(offerId) + "/respond", ctx.from.id, "POST", { accept: decision === "accept" });
