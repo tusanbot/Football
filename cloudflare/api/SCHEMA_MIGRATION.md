@@ -74,3 +74,15 @@ The generated migration creates the private \`fe_write_guard\` table. The D1 wal
 D1 executes a batch sequentially as a transaction and rolls back the entire batch when a statement fails. The repository resolves a failed batch by checking for an existing idempotency key first, then classifying wallet-not-found, insufficient-funds, or overflow. It never performs an application-side read/modify/write balance update.
 
 The Python CI validator executes this exact SQL sequence against SQLite, including duplicate replay, insufficient debit, successful debit/credit and overflow cases. This is a local SQL-semantics test; a live D1 concurrency/load test is still required before production cutover.
+
+
+## Additional atomic economy repositories
+
+\`src/repositories/market-economy.ts\` adds two D1-native workflows:
+
+- **Player market transfer:** buyer debit and seller credit ledger entries, both wallet mutations, listing state transition, player club ownership change (with lineup slot cleared to avoid the destination club's unique lineup constraint), and buyer/seller club finance entries are submitted in one \`DB.batch()\`. Each required mutation is guarded by \`changes()\` and the CHECK-constrained \`fe_write_guard\`; any failed precondition aborts the whole batch.
+- **Group reward purchase:** an active reward grant is inserted only when the member balance covers its cost; the balance deduction and negative \`GroupPointLedger\` entry follow in the same batch. The same guard mechanism prevents partial grant/deduction/ledger state.
+
+Both operations use caller-supplied stable IDs and idempotency keys. Replays are verified against persisted records rather than blindly treated as success. Wallet amounts are decimal strings within signed 64-bit range; unsafe JavaScript Number inputs are rejected.
+
+The Worker still does not expose these repositories through public routes. The current tests validate repository statement composition and input invariants; SQLite end-to-end SQL tests and live D1 contention/load tests remain required before enabling traffic.

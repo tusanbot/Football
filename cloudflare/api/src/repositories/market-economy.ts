@@ -179,8 +179,11 @@ export class MarketEconomyRepository {
           listing.askingPrice !== amountText) throw new MarketListingUnavailableError();
       if (!buyerWallet || !sellerWallet) throw new EconomyWalletNotFoundError();
       if (buyerWallet.version >= MAX_VERSION || sellerWallet.version >= MAX_VERSION) throw batchError;
-      if (fromD1Integer(buyerWallet.balance) < amount) throw new EconomyInsufficientFundsError();
-      if (fromD1Integer(sellerWallet.balance) > MAX_INT64 - amount) throw new EconomyBalanceOverflowError();
+      const buyerBalance = fromD1Integer(buyerWallet.balance);
+      const sellerBalance = fromD1Integer(sellerWallet.balance);
+      if (buyerBalance === null || sellerBalance === null) throw new EconomyWalletNotFoundError();
+      if (buyerBalance < amount) throw new EconomyInsufficientFundsError();
+      if (sellerBalance > MAX_INT64 - amount) throw new EconomyBalanceOverflowError();
       throw batchError;
     }
   }
@@ -198,9 +201,14 @@ export class MarketEconomyRepository {
     ).bind(key).first<LedgerIdentity>();
   }
 
-  private async findWallet(clubId: string): Promise<{ balance: string; version: number } | null> {
+  private async findClubOwner(clubId: string): Promise<string | null> {
+    const row = await this.db.prepare('SELECT "ownerId" FROM "Club" WHERE "id" = ? LIMIT 1').bind(clubId).first<{ ownerId: string }>();
+    return row?.ownerId ?? null;
+  }
+
+  private async findWallet(clubId: string): Promise<{ userId: string; balance: string; version: number } | null> {
     return this.db.prepare(
-      'SELECT CAST(w."balance" AS TEXT) AS "balance", w."version" FROM "Wallet" w JOIN "Club" c ON c."ownerId" = w."userId" WHERE c."id" = ? AND w."asset" = \'CASH\' LIMIT 1'
+      'SELECT w."userId", CAST(w."balance" AS TEXT) AS "balance", w."version" FROM "Wallet" w JOIN "Club" c ON c."ownerId" = w."userId" WHERE c."id" = ? AND w."asset" = \'CASH\' LIMIT 1'
     ).bind(clubId).first();
   }
 
@@ -216,11 +224,10 @@ export class MarketEconomyRepository {
     ).bind(playerId, listingId).first();
   }
 
-  private matchesTransferLedger(row: LedgerIdentity, clubId: string, direction: string, amount: string, listingId: string): boolean {
-    return row.asset === "CASH" && row.direction === direction && row.amount === amount &&
+  private matchesTransferLedger(row: LedgerIdentity, expectedUserId: string, direction: string, amount: string, listingId: string): boolean {
+    return row.userId === expectedUserId && row.asset === "CASH" && row.direction === direction && row.amount === amount &&
       row.reason === (direction === "DEBIT" ? "PLAYER_MARKET_PURCHASE" : "PLAYER_MARKET_SALE") &&
-      row.referenceType === "PlayerMarketListing" && row.referenceId === listingId &&
-      row.userId !== "" && Boolean(clubId);
+      row.referenceType === "PlayerMarketListing" && row.referenceId === listingId;
   }
 }
 
@@ -286,11 +293,14 @@ export class GroupRewardRepository {
         throw new EconomyIdempotencyConflictError();
       }
       const [item, balance] = await Promise.all([
-        this.db.prepare('SELECT "active" FROM "GroupRewardItem" WHERE "id" = ? LIMIT 1').bind(input.itemId).first<{ active: number }>(),
+        this.db.prepare('SELECT "active", CAST("cost" AS TEXT) AS "cost" FROM "GroupRewardItem" WHERE "id" = ? LIMIT 1').bind(input.itemId).first<{ active: number; cost: string }>(),
         this.db.prepare('SELECT CAST("balance" AS TEXT) AS "balance" FROM "GroupMemberRewardBalance" WHERE "groupId" = ? AND "userId" = ? LIMIT 1').bind(input.groupId, input.grantedByUserId).first<{ balance: string }>(),
       ]).catch(() => [null, null] as const);
       if (!item || item.active !== 1) throw new GroupRewardUnavailableError();
       if (!balance) throw new GroupRewardInsufficientPointsError();
+      const available = fromD1Integer(balance.balance);
+      const cost = fromD1Integer(item.cost);
+      if (available === null || cost === null || available < cost) throw new GroupRewardInsufficientPointsError();
       throw batchError;
     }
   }
