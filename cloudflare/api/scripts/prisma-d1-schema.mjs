@@ -68,7 +68,7 @@ function parseField(line, modelNames, enumNames) {
 }
 
 function parseBlockDefinitions(source, kind) {
-  const expression = new RegExp("(^|\\n)\\s*" + kind + "\\s+([A-Za-z_]\\\\w*)\\\\s*\\\\{([\\\\s\\\\S]*?)\\\\n\\\\}", "g");
+  const expression = new RegExp("(^|\\n)\\s*" + kind + "\\s+([A-Za-z_]\\w*)\\s*\\{([\\s\\S]*?)\\n\\}", "g");
   const results = [];
   for (const match of source.matchAll(expression)) {
     results.push({ name: match[2], body: match[3] });
@@ -83,7 +83,7 @@ function parseModelAttributes(body) {
   for (const line of body.split(/\r?\n/)) {
     const match = line.trim().match(/^@@(index|unique|id)\s*\(\s*\[([^\]]+)\]/);
     if (!match) continue;
-    const item = { fields: splitList(match[2]) };
+    const item = { fields: splitList(match[2]).map((field) => field.replace(/\s*\(.*/, "").trim()) };
     if (match[1] === "index") indexes.push(item);
     else if (match[1] === "unique") uniques.push(item);
     else ids.push(item);
@@ -116,7 +116,7 @@ export function parsePrismaSchema(source) {
       name: block.name,
       tableName: map ? map[1] : block.name,
       fields,
-      relations: fields.filter((field) => field.isRelation && field.relation),
+      relations: fields.filter((field) => field.isRelation),
       columns: fields.filter((field) => field.isScalar),
       ...attrs
     };
@@ -182,6 +182,8 @@ function safeName(value) {
 }
 
 export function generateD1Schema(parsed, sourceHash) {
+  const unsupported = parsed.models.flatMap((model) => model.fields.filter((field) => !field.isScalar && !field.isRelation).map((field) => model.name + "." + field.name + ":" + field.rawType));
+  if (unsupported.length) throw new Error("Unsupported Prisma field types: " + unsupported.join(", "));
   const enums = parsed.enums;
   const modelByName = new Map(parsed.models.map((model) => [model.name, model]));
   const statements = [
@@ -289,6 +291,7 @@ export function buildInventory(parsed, sourceHash) {
       enums: Object.keys(parsed.enums).length,
       scalarColumns: allFields.length,
       relations: models.reduce((sum, model) => sum + model.relationFields, 0),
+      unsupportedFields: models.flatMap((model) => model.fields.filter((field) => !field.isScalar && !field.isRelation)).length,
       indexes: models.reduce((sum, model) => sum + model.indexes.length, 0),
       compoundUniqueConstraints: models.reduce((sum, model) => sum + model.uniqueConstraints.filter((item) => item.fields.length > 1).length, 0),
       bigIntColumns: allFields.filter((field) => field.prismaType.replace(/[?\[\]]/g, "") === "BigInt").length,
