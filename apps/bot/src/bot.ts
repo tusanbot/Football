@@ -1235,8 +1235,11 @@ bot.on(["chat_member","my_chat_member"],async ctx=>{
 bot.catch((error) => console.error("Telegram bot error:", error));
 if (apiUrl && botApiSecret) {
   const deletionQueueTimer = setInterval(() => { void pollGroupMessageDeletionQueue(); }, 5_000);
-  const matchNotificationTimer = setInterval(() => { void pollMatchCheckpointNotifications(); }, 5_000);\n  const leagueNoticeTimer = setInterval(() => { void pollLeagueNoticeQueue(); }, 10_000);
-  matchNotificationTimer.unref();\n  leagueNoticeTimer.unref();\n  void pollLeagueNoticeQueue();
+  const matchNotificationTimer = setInterval(() => { void pollMatchCheckpointNotifications(); }, 5_000);
+  const leagueNoticeTimer = setInterval(() => { void pollLeagueNoticeQueue(); }, 10_000);
+  matchNotificationTimer.unref();
+  leagueNoticeTimer.unref();
+  void pollLeagueNoticeQueue();
   void pollMatchCheckpointNotifications();
   deletionQueueTimer.unref();
   void pollGroupMessageDeletionQueue();
