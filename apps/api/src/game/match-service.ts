@@ -409,7 +409,7 @@ export async function listClubMatches(userId: string) {
         awayDecisionSubmitted: checkpoint.decisions.some((decision) => decision.clubId === match.awayClubId),
       })),
       homeClub: match.homeClub, awayClub: match.awayClub, homeScore: match.homeScore, awayScore: match.awayScore,
-      attendance: match.attendance, ticketRevenue: match.ticketRevenue.toString(), round: match.round,
+      attendance: match.attendance, ticketRevenue: match.ticketRevenue.toString(),
       homePenalties: match.homePenalties, awayPenalties: match.awayPenalties, winnerClubId: match.winnerClubId,
       events: match.events.map((event) => ({
         minute: event.minute, type: event.type, teamId: event.teamId, playerId: event.playerId,
