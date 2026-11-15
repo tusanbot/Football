@@ -43,7 +43,7 @@ Settings are persisted as JSON values in `GameSetting`, are editable only by sup
 
 ## Production startup checks
 
-The API process validates required environment variables, establishes a PostgreSQL connection, and runs a database ping before listening. Set `DATABASE_URL` (PostgreSQL), `TELEGRAM_BOT_TOKEN`, a random `BOT_API_SECRET` of at least 32 characters, and exact comma-separated `CORS_ORIGIN` values (HTTPS only in production). The Bot process requires `FOOTBALL_API_URL`, the same `BOT_API_SECRET`, and in production an HTTPS `TELEGRAM_WEB_APP_URL`. The API exposes `/health` for liveness and `/ready` for readiness; readiness checks required configuration and a live database connection. Never expose `BOT_API_SECRET` or `TELEGRAM_BOT_TOKEN` to browser code.
+The API process validates required environment variables, establishes a PostgreSQL connection, and runs a database ping before listening. Set `DATABASE_URL` (PostgreSQL), a valid `TELEGRAM_BOT_TOKEN`, a unique random `BOT_API_SECRET` of at least 32 characters, at least one numeric `GAME_ADMIN_TELEGRAM_IDS` super-admin ID, and exact comma-separated `CORS_ORIGIN` values (HTTPS only in production). The Bot process requires `FOOTBALL_API_URL`, the same `BOT_API_SECRET`, and in production an HTTPS `TELEGRAM_WEB_APP_URL`. The API exposes `/health` for liveness and `/ready` for readiness; readiness checks required configuration and a live database connection. Never expose `BOT_API_SECRET` or `TELEGRAM_BOT_TOKEN` to browser code.
 
 ## Final launch checklist
 
