@@ -4,7 +4,8 @@ import {
   advanceMatchSegment, applyMatchSubstitutions, calculateStadiumCapacity, resolveMatchCheckpoint,
   simulateFootballMatch, simulatePenaltyShootout,
   type MatchSegmentState, type MatchSide, type MatchTactics, type MatchTacticalInstruction,
-  type MatchSubstitutionState,
+  type MatchSubstitutionState, type MatchRules,
+  defaultMatchRules, validateMatchRules,
 } from "@football/domain";
 import { prisma } from "../db.js";
 
@@ -13,6 +14,9 @@ export class MatchServiceError extends Error {
   constructor(public readonly code: string, public readonly details?: Record<string, string>) {
     super(code); this.name = "MatchServiceError";
   }
+}
+function rulesForMatch(match: { type: "FRIENDLY" | "LEAGUE" | "CUP"; rulesSnapshot: Prisma.JsonValue | null }): MatchRules {
+  return validateMatchRules(match.rulesSnapshot ?? defaultMatchRules(match.type));
 }
 function keyValid(key: string) {
   if (!/^[A-Za-z0-9:_-]{12,128}$/.test(key)) throw new MatchServiceError("INVALID_IDEMPOTENCY_KEY");
@@ -141,30 +145,43 @@ export async function createFriendlyMatch(userId: string, opponentClubId: string
   const match = await prisma.footballMatch.create({
     data: {
       idempotencyKey, type: "FRIENDLY", homeClubId: own.id, awayClubId: opponentClubId,
-      scheduledAt, seed: idempotencyKey + ":" + randomUUID(),
+      scheduledAt, seed: idempotencyKey + ":" + randomUUID(), rulesSnapshot: defaultMatchRules("FRIENDLY"),
     },
   });
   return { match, replayed: false };
 }
-export async function createLeague(userId: string, name: string, maxTeams: number, idempotencyKey: string, format: "LEAGUE" | "CUP" = "LEAGUE") {
+export async function createLeague(userId: string, name: string, maxTeams: number, idempotencyKey: string, format: "LEAGUE" | "CUP" = "LEAGUE", inputRules?: MatchRules) {
   keyValid(idempotencyKey);
   if (format === "CUP" && ![4, 8].includes(maxTeams)) throw new MatchServiceError("CUP_SIZE_MUST_BE_FOUR_OR_EIGHT");
   if (format === "LEAGUE" && (maxTeams < 4 || maxTeams > 10)) throw new MatchServiceError("INVALID_LEAGUE_SIZE");
   const club = await getOwnedClub(userId);
+  const rules = validateMatchRules(inputRules ?? defaultMatchRules(format));
   const existing = await prisma.competition.findUnique({ where: { idempotencyKey } });
   if (existing) {
-    if (existing.createdByClubId !== club.id || existing.name !== name || existing.maxTeams !== maxTeams || existing.format !== format) {
+    if (existing.createdByClubId !== club.id || existing.name !== name || existing.maxTeams !== maxTeams || existing.format !== format || JSON.stringify(existing.rules ?? defaultMatchRules(format)) !== JSON.stringify(rules)) {
       throw new MatchServiceError("IDEMPOTENCY_CONFLICT");
     }
     return { competition: existing, replayed: true };
   }
   const competition = await prisma.competition.create({
     data: {
-      idempotencyKey, name, season: new Date().getUTCFullYear(), format, maxTeams, createdByClubId: club.id,
+      idempotencyKey, name, season: new Date().getUTCFullYear(), format, maxTeams, rules, createdByClubId: club.id,
       entries: { create: { clubId: club.id } },
     },
   });
   return { competition, replayed: false };
+}
+export async function updateCompetitionRules(userId: string, competitionId: string, input: MatchRules) {
+  const club = await getOwnedClub(userId);
+  const rules = validateMatchRules(input);
+  return prisma.$transaction(async (tx) => {
+    const competition = await tx.competition.findUnique({ where: { id: competitionId } });
+    if (!competition) throw new MatchServiceError("COMPETITION_NOT_FOUND");
+    if (competition.createdByClubId !== club.id) throw new MatchServiceError("ONLY_CREATOR_CAN_START");
+    if (competition.status !== "REGISTRATION") throw new MatchServiceError("COMPETITION_RULES_LOCKED");
+    await tx.competition.update({ where: { id: competitionId }, data: { rules } });
+    return { competitionId, rules };
+  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 }
 export async function joinLeague(userId: string, competitionId: string) {
   const club = await getOwnedClub(userId);
