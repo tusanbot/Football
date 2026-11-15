@@ -84,3 +84,9 @@ function normalizePrivateMenuText(value: string): string {
 export function resolvePrivateMenuCommand(messageText: string): string | undefined {
   return privateMenuCommands.get(normalizePrivateMenuText(messageText));
 }
+
+
+export function limitTelegramMessage(text: string, maxLength = 3900): string {
+  if (!Number.isSafeInteger(maxLength) || maxLength < 1) throw new Error("INVALID_TELEGRAM_MESSAGE_LIMIT");
+  return text.length <= maxLength ? text : text.slice(0, maxLength - 1) + "…";
+}
