@@ -246,7 +246,7 @@ test("durable match worker advances checkpoints, resumes on two early decisions 
   const clubs: Array<{ userId: string; clubId: string }> = [];
   try {
     clubs.push(await makeClub(suffix, 40), await makeClub(suffix, 41));
-    const kickoff = new Date(Date.now() - 120_000);
+    const kickoff = new Date(Date.now() - 30_000);
     const created = await createFriendlyMatch(
       clubs[0]!.userId, clubs[1]!.clubId, `runtime-${suffix}`, kickoff,
     );
