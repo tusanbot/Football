@@ -132,3 +132,38 @@ test("segmented red cards remove the dismissed player and weaken the next segmen
   });
   assert.equal(next.state.away.side.players.length, 10);
 });
+
+
+test("segmented player statistics track minutes and output across injury substitutions", () => {
+  const home = withBench(side("home", 75));
+  const away = withBench(side("away", 65));
+  const initial: MatchSegmentState = {
+    currentMinute: 0, nextSequence: 1,
+    home: { side: home, score: 0, expectedGoals: 0 },
+    away: { side: away, score: 0, expectedGoals: 0 },
+    events: [],
+  };
+  const first = advanceMatchSegment({
+    seed: "forced-match-seed-6", state: initial, toMinute: 45,
+    homeSubstitutions: substitutionsFor(home), awaySubstitutions: substitutionsFor(away),
+  });
+  const injury = first.events.find((event) => event.type === "INJURY" && event.teamId === "home")!;
+  const forced = first.events.find((event) =>
+    event.type === "SUBSTITUTION" && event.teamId === "home" && event.minute === injury.minute)!;
+  const firstStats = new Map((first.state.playerStats ?? []).map((item) => [item.playerId, item]));
+  assert.equal(firstStats.get(injury.playerId)?.minutesPlayed, injury.minute);
+  assert.equal(firstStats.get(forced.relatedPlayerId!)?.minutesPlayed, 45 - injury.minute);
+  const starter = home.players.find((player) => player.id !== injury.playerId && player.position !== "GK")!;
+  assert.equal(firstStats.get(starter.id)?.minutesPlayed, 45);
+  assert.ok((firstStats.get(starter.id)?.passes ?? 0) > 0);
+  assert.ok((firstStats.get(starter.id)?.fitnessLoss ?? 0) > 0);
+
+  const second = advanceMatchSegment({
+    seed: "forced-match-seed-6", state: first.state, toMinute: 60,
+    homeSubstitutions: first.homeSubstitutions, awaySubstitutions: first.awaySubstitutions,
+  });
+  const secondStats = new Map((second.state.playerStats ?? []).map((item) => [item.playerId, item]));
+  assert.equal(secondStats.get(starter.id)?.minutesPlayed, 60);
+  assert.equal(secondStats.get(injury.playerId)?.minutesPlayed, injury.minute);
+  assert.equal(secondStats.get(forced.relatedPlayerId!)?.minutesPlayed, 60 - injury.minute);
+});
