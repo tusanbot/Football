@@ -588,7 +588,7 @@ export async function simulateScheduledMatch(userId: string, matchId: string, no
     if (match.status !== "SCHEDULED" && !isRuntimeSettlement) throw new MatchServiceError("MATCH_NOT_SCHEDULED");
     if (match.simulationVersion !== 1) throw new MatchServiceError("UNSUPPORTED_SIMULATION_VERSION");
     const competition = match.competitionId
-      ? await tx.competition.findUnique({ where: { id: match.competitionId }, select: { format: true, rules: true } })
+      ? await tx.competition.findUnique({ where: { id: match.competitionId }, select: { format: true, rules: true, cupLegs: true } })
       : null;
     if (match.scheduledAt > now) throw new MatchServiceError("MATCH_NOT_DUE", { scheduledAt: match.scheduledAt.toISOString() });
     const matchRules = validateMatchRules(match.rulesSnapshot ?? competition?.rules ?? defaultMatchRules(match.type));
@@ -628,12 +628,34 @@ export async function simulateScheduledMatch(userId: string, matchId: string, no
           }),
         }
       : generated;
-    const penalties = matchRules.penaltiesOnDraw && result.homeScore === result.awayScore
+    const isTwoLegCup = competition?.format === "CUP" && competition.cupLegs === 2 && !!match.tieId;
+    let aggregateHomeScore = result.homeScore;
+    let aggregateAwayScore = result.awayScore;
+    if (isTwoLegCup && match.leg === 1) {
+      aggregateHomeScore = 0;
+      aggregateAwayScore = 0;
+    } else if (isTwoLegCup && match.leg === 2) {
+      const firstLeg = await tx.footballMatch.findFirst({
+        where: { competitionId: match.competitionId!, tieId: match.tieId!, leg: 1, status: "COMPLETED" },
+        select: { homeClubId: true, awayClubId: true, homeScore: true, awayScore: true },
+      });
+      if (!firstLeg || firstLeg.homeScore === null || firstLeg.awayScore === null) {
+        throw new MatchServiceError("CUP_FIRST_LEG_NOT_COMPLETED");
+      }
+      if (firstLeg.homeClubId !== match.awayClubId || firstLeg.awayClubId !== match.homeClubId) {
+        throw new MatchServiceError("CUP_LEG_TEAM_ORDER_INVALID");
+      }
+      aggregateHomeScore += firstLeg.awayScore;
+      aggregateAwayScore += firstLeg.homeScore;
+    }
+    const decidingTie = !isTwoLegCup || match.leg === 2;
+    const penalties = decidingTie && matchRules.penaltiesOnDraw && aggregateHomeScore === aggregateAwayScore
       ? simulatePenaltyShootout({ seed: match.seed, home: homeSide, away: awaySide })
       : null;
-    const winnerClubId = result.homeScore > result.awayScore ? home.id
-      : result.awayScore > result.homeScore ? away.id
-        : penalties ? (penalties.winner === "HOME" ? home.id : away.id) : null;
+    const winnerClubId = !decidingTie ? null
+      : aggregateHomeScore > aggregateAwayScore ? home.id
+        : aggregateAwayScore > aggregateHomeScore ? away.id
+          : penalties ? (penalties.winner === "HOME" ? home.id : away.id) : null;
     const claimed = await tx.footballMatch.updateMany({
       where: { id: match.id, status: isRuntimeSettlement ? "IN_PROGRESS" : "SCHEDULED" },
       data: {
