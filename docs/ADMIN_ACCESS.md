@@ -2,7 +2,7 @@
 
 The central admin API enforces permissions server-side. Keep the super-admin allowlist in `GAME_ADMIN_TELEGRAM_IDS`; those Telegram IDs always receive the `superadmin` role.
 
-For initial scoped administrators, `GAME_ADMIN_ROLE_MAP` can be set to a JSON object keyed by Telegram user ID. Supported roles:
+Every super-admin and scoped administrator must open the Bot and send `/start` once so their Telegram account is provisioned in the game database. For initial scoped administrators, `GAME_ADMIN_ROLE_MAP` can be set to a JSON object keyed by Telegram user ID. Supported roles:
 
 - `football`: players, clubs, matches and competitions
 - `economy`: wallet/group economy and gift codes
