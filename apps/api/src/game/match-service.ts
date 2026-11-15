@@ -857,7 +857,7 @@ async function processClaimedMatchRuntime(
       nextSegmentAt: checkpoint.nextSegmentAt,
       homeClubId: runtime.match.homeClubId, awayClubId: runtime.match.awayClubId,
     },
-    now: new Date(Math.max(now.getTime(), checkpoint.nextSegmentAt.getTime())),
+    now,
     decisions: decisions.map((decision) => ({
       id: decision.id, clubId: decision.clubId, submittedAt: decision.submittedAt,
       instruction: decision.instruction as unknown as MatchTacticalInstruction,
