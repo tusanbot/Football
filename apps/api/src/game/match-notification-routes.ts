@@ -21,12 +21,22 @@ export function registerMatchNotificationRoutes(app: FastifyInstance) {
     const parsed = z.object({ limit: z.number().int().min(1).max(100).default(25) }).safeParse(request.body ?? {});
     if (!parsed.success) return reply.code(400).send({ error: "INVALID_MATCH_NOTIFICATION_CLAIM" });
     const now = new Date();
+    const retryBefore = new Date(now.getTime() - 30_000);
     const notifications = await prisma.$transaction(async (tx) => {
       const checkpoints = await tx.matchTacticalCheckpoint.findMany({
         where: {
           status: "OPEN",
           decisionDeadlineAt: { gt: now },
-          OR: [{ homeBotNotifiedAt: null }, { awayBotNotifiedAt: null }],
+          OR: [
+            { homeBotNotifiedAt: null, OR: [
+              { homeBotNotificationClaimedAt: null },
+              { homeBotNotificationClaimedAt: { lt: retryBefore } },
+            ] },
+            { awayBotNotifiedAt: null, OR: [
+              { awayBotNotificationClaimedAt: null },
+              { awayBotNotificationClaimedAt: { lt: retryBefore } },
+            ] },
+          ],
         },
         include: {
           match: {
@@ -41,36 +51,100 @@ export function registerMatchNotificationRoutes(app: FastifyInstance) {
         orderBy: [{ openedAt: "asc" }, { minute: "asc" }],
         take: parsed.data.limit,
       });
-      const claimed: Array<{ checkpointId:string; matchId:string; checkpointKey:string; minute:number; deadlineAt:string; clubId:string; clubName:string; opponentName:string; telegramUserId:string; side:"HOME"|"AWAY" }> = [];
+      const claimed: Array<{
+        checkpointId: string; matchId: string; checkpointKey: string; minute: number;
+        deadlineAt: string; clubId: string; clubName: string; opponentName: string;
+        telegramUserId: string; side: "HOME" | "AWAY"; attempt: number;
+      }> = [];
       for (const checkpoint of checkpoints) {
         const match = checkpoint.match;
-        if (!checkpoint.homeBotNotifiedAt) {
-          const result = await tx.matchTacticalCheckpoint.updateMany({
+        const homeDecided = checkpoint.decisions.some((decision) => decision.clubId === match.homeClub.id);
+        if (!checkpoint.homeBotNotifiedAt && homeDecided) {
+          await tx.matchTacticalCheckpoint.updateMany({
             where: { id: checkpoint.id, status: "OPEN", homeBotNotifiedAt: null },
-            data: { homeBotNotifiedAt: now },
+            data: { homeBotNotifiedAt: now, homeBotNotificationClaimedAt: null },
           });
-          if (result.count === 1 && !checkpoint.decisions.some((decision) => decision.clubId === match.homeClub.id)) claimed.push({
+        } else if (!checkpoint.homeBotNotifiedAt) {
+          const result = await tx.matchTacticalCheckpoint.updateMany({
+            where: {
+              id: checkpoint.id, status: "OPEN", homeBotNotifiedAt: null,
+              OR: [
+                { homeBotNotificationClaimedAt: null },
+                { homeBotNotificationClaimedAt: { lt: retryBefore } },
+              ],
+            },
+            data: {
+              homeBotNotificationClaimedAt: now,
+              homeBotNotificationAttempts: { increment: 1 },
+            },
+          });
+          if (result.count === 1) claimed.push({
             checkpointId: checkpoint.id, matchId: match.id, checkpointKey: checkpoint.checkpointKey,
             minute: checkpoint.minute, deadlineAt: checkpoint.decisionDeadlineAt.toISOString(),
             clubId: match.homeClub.id, clubName: match.homeClub.name, opponentName: match.awayClub.name,
             telegramUserId: match.homeClub.owner.telegramId, side: "HOME",
+            attempt: checkpoint.homeBotNotificationAttempts + 1,
           });
         }
-        if (!checkpoint.awayBotNotifiedAt) {
-          const result = await tx.matchTacticalCheckpoint.updateMany({
+        const awayDecided = checkpoint.decisions.some((decision) => decision.clubId === match.awayClub.id);
+        if (!checkpoint.awayBotNotifiedAt && awayDecided) {
+          await tx.matchTacticalCheckpoint.updateMany({
             where: { id: checkpoint.id, status: "OPEN", awayBotNotifiedAt: null },
-            data: { awayBotNotifiedAt: now },
+            data: { awayBotNotifiedAt: now, awayBotNotificationClaimedAt: null },
           });
-          if (result.count === 1 && !checkpoint.decisions.some((decision) => decision.clubId === match.awayClub.id)) claimed.push({
+        } else if (!checkpoint.awayBotNotifiedAt) {
+          const result = await tx.matchTacticalCheckpoint.updateMany({
+            where: {
+              id: checkpoint.id, status: "OPEN", awayBotNotifiedAt: null,
+              OR: [
+                { awayBotNotificationClaimedAt: null },
+                { awayBotNotificationClaimedAt: { lt: retryBefore } },
+              ],
+            },
+            data: {
+              awayBotNotificationClaimedAt: now,
+              awayBotNotificationAttempts: { increment: 1 },
+            },
+          });
+          if (result.count === 1) claimed.push({
             checkpointId: checkpoint.id, matchId: match.id, checkpointKey: checkpoint.checkpointKey,
             minute: checkpoint.minute, deadlineAt: checkpoint.decisionDeadlineAt.toISOString(),
             clubId: match.awayClub.id, clubName: match.awayClub.name, opponentName: match.homeClub.name,
             telegramUserId: match.awayClub.owner.telegramId, side: "AWAY",
+            attempt: checkpoint.awayBotNotificationAttempts + 1,
           });
         }
       }
       return claimed;
     });
     return { notifications };
+  });
+
+  app.post("/v1/bot/match-checkpoints/ack", async (request, reply) => {
+    if (!authenticateSystemBot(request, reply)) return;
+    const parsed = z.object({
+      checkpointId: z.string().min(1).max(64),
+      side: z.enum(["HOME", "AWAY"]),
+      delivered: z.boolean(),
+      error: z.string().max(500).optional(),
+    }).strict().safeParse(request.body);
+    if (!parsed.success) return reply.code(400).send({ error: "INVALID_MATCH_NOTIFICATION_ACK" });
+    const { checkpointId, side, delivered, error } = parsed.data;
+    const now = new Date();
+    const result = side === "HOME"
+      ? await prisma.matchTacticalCheckpoint.updateMany({
+          where: { id: checkpointId, status: "OPEN", homeBotNotificationClaimedAt: { not: null } },
+          data: delivered
+            ? { homeBotNotifiedAt: now, homeBotNotificationClaimedAt: null, homeBotNotificationLastError: null }
+            : { homeBotNotificationLastError: error ?? "TELEGRAM_SEND_FAILED" },
+        })
+      : await prisma.matchTacticalCheckpoint.updateMany({
+          where: { id: checkpointId, status: "OPEN", awayBotNotificationClaimedAt: { not: null } },
+          data: delivered
+            ? { awayBotNotifiedAt: now, awayBotNotificationClaimedAt: null, awayBotNotificationLastError: null }
+            : { awayBotNotificationLastError: error ?? "TELEGRAM_SEND_FAILED" },
+        });
+    if (result.count !== 1) return reply.code(409).send({ error: "MATCH_NOTIFICATION_CLAIM_EXPIRED" });
+    return { acknowledged: true, delivered };
   });
 }
