@@ -35,7 +35,10 @@ All admin commands run in private chat and use the same server-side permission c
 - `/adminrole assign|revoke TELEGRAM_ID [ROLE]`
 - `/adminsetting KEY JSON_VALUE`
 - `/adminfinance [DAYS]`
-- `/adminbroadcast users|groups TEXT` (persistent queue with retries for group delivery)
+- `/adminbroadcast users|groups TEXT` (persistent queue with retries for user and group delivery)
+- `/adminaward set|remove ...`, `/adminleague status ...`
+- `/admingift create|toggle ...`, `/adminitem create|update|toggle ...`
+- `/adminupdate player|club|match ID JSON`
 
 ## Central settings and finance
 
