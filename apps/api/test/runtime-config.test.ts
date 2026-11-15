@@ -35,7 +35,7 @@ test("rejects wildcard, opaque, path-bearing and insecure production CORS origin
 });
 
 test("recognizes Telegram numeric identifiers and numeric amounts", () => {
-  assert.match("123456789", /^\\d{1,20}$/);
-  assert.match("-1001234567890", /^-?\\d{5,20}$/);
-  assert.match("250000", /^\\d{1,12}$/);
+  assert.match("123456789", /^\d{1,20}$/);
+  assert.match("-1001234567890", /^-?\d{5,20}$/);
+  assert.match("250000", /^\d{1,12}$/);
 });
