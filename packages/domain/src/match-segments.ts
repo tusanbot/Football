@@ -2,6 +2,8 @@ import type { MatchSide, MatchTactics, MatchEvent } from "./match-engine.js";
 import {
   applyMatchSubstitutions,
   type MatchSubstitutionState,
+  type MatchRules,
+  DEFAULT_MATCH_RULES,
 } from "./match-rules.js";
 
 export type MatchSegmentSideState = {
@@ -109,8 +111,10 @@ export function advanceMatchSegment(input: {
   awayInstruction?: MatchSegmentInstruction;
   homeSubstitutions?: MatchSubstitutionState;
   awaySubstitutions?: MatchSubstitutionState;
+  rules?: MatchRules;
 }): MatchSegmentResult {
   const { state, toMinute } = input;
+  const rules = input.rules ?? DEFAULT_MATCH_RULES;
   const fromMinute = state.currentMinute;
   const expectedNextMinute = fromMinute === 0 ? 45 : fromMinute === 45 ? 60 : fromMinute === 60 ? 75 : fromMinute === 75 ? 90 : null;
   if (expectedNextMinute === null || toMinute !== expectedNextMinute) {
@@ -176,7 +180,7 @@ export function advanceMatchSegment(input: {
         - side.coachMedicalSkill * 0.0007) * duration / 90,
       0.002, 0.18,
     );
-    if (outfield.length && random() < injuryChance) {
+    if (rules.injuriesEnabled && outfield.length && random() < injuryChance) {
       const player = choose(outfield, random);
       addEvent({
         minute: fromMinute + 1 + Math.floor(random() * duration),
@@ -255,6 +259,7 @@ export function advanceMatchSegment(input: {
             checkpoint: "INJURY",
             checkpointId,
             source: "FORCED_INJURY",
+            rules,
           });
           const players = new Map([...current.side.players, ...(current.side.bench ?? [])].map((player) => [player.id, player]));
           current.side = {
