@@ -350,3 +350,21 @@ export async function grantPurchasedChallengeCredits(userId: string, quantity: n
     update: { purchasedCredits: { increment: quantity } },
   });
 }
+
+
+export async function getFriendlyChallengeInfo(token: string) {
+  const challenge = await prisma.friendlyChallenge.findUnique({
+    where: { token }, include: { club: { select: { name: true, level: true, reputation: true } } },
+  });
+  if (!challenge) throw new PyramidLeagueError("FRIENDLY_CHALLENGE_NOT_FOUND");
+  if (challenge.status === "OPEN" && challenge.expiresAt <= new Date()) {
+    await prisma.friendlyChallenge.updateMany({ where: { id: challenge.id, status: "OPEN" }, data: { status: "EXPIRED" } });
+    throw new PyramidLeagueError("FRIENDLY_CHALLENGE_EXPIRED");
+  }
+  return { id: challenge.id, token: challenge.token, status: challenge.status, expiresAt: challenge.expiresAt.toISOString(), creatorClub: challenge.club };
+}
+
+export async function markLeagueNoticesRead(userId: string) {
+  const result = await prisma.leagueNotice.updateMany({ where: { userId, readAt: null }, data: { readAt: new Date() } });
+  return { markedRead: result.count };
+}
