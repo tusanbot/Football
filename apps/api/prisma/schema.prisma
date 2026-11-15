@@ -563,6 +563,11 @@ model LeagueNotice {
   referenceId String?
   createdAt DateTime @default(now())
   readAt DateTime?
+  deliveredAt DateTime?
+  deliveryAttempts Int @default(0)
+  deliveryClaimToken String?
+  deliveryLockedUntil DateTime?
+  deliveryLastError String?
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
   @@index([userId, readAt, createdAt])
 }
