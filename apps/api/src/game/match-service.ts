@@ -653,11 +653,29 @@ export async function simulateScheduledMatch(userId: string, matchId: string, no
     });
     const redCardEvents = result.events.filter((event) => event.type === "RED_CARD");
     const sentOffPlayerIds = [...new Set(redCardEvents.map((event) => event.playerId))];
-    if (sentOffPlayerIds.length) {
+    if (sentOffPlayerIds.length && matchRules.redCardSuspensionMatches > 0) {
       await tx.player.updateMany({
         where: { id: { in: sentOffPlayerIds }, status: "ACTIVE" },
-        data: { suspensionMatchesRemaining: 1 },
+        data: { suspensionMatchesRemaining: matchRules.redCardSuspensionMatches },
       });
+    }
+    if (match.competitionId && matchRules.yellowCardsToSuspend > 0 && matchRules.yellowCardSuspensionMatches > 0) {
+      const yellowCounts = new Map<string, number>();
+      for (const event of result.events.filter((item) => item.type === "YELLOW_CARD")) {
+        yellowCounts.set(event.playerId, (yellowCounts.get(event.playerId) ?? 0) + 1);
+      }
+      for (const [playerId, currentCount] of yellowCounts) {
+        const previousCount = await tx.matchEvent.count({
+          where: { playerId, type: "YELLOW_CARD", matchId: { not: match.id }, match: { competitionId: match.competitionId } },
+        });
+        const threshold = matchRules.yellowCardsToSuspend;
+        if (Math.floor((previousCount + currentCount) / threshold) > Math.floor(previousCount / threshold)) {
+          await tx.player.updateMany({
+            where: { id: playerId, status: "ACTIVE" },
+            data: { suspensionMatchesRemaining: { increment: matchRules.yellowCardSuspensionMatches } },
+          });
+        }
+      }
     }
     const lineupChangedClubIds = new Set([
       ...injuredClubIds,
