@@ -8,6 +8,7 @@ import { registerClubOperationsRoutes } from "./game/club-operations-routes.js";
 import { registerPlayerMarketRoutes } from "./players/market-routes.js";
 import { registerPlayerDevelopmentRoutes } from "./players/player-development-routes.js";
 import { registerMatchRoutes } from "./game/match-routes.js";
+import { registerMatchNotificationRoutes } from "./game/match-notification-routes.js";
 import { registerGroupRoutes } from "./groups/group-routes.js";
 import { registerAllianceRoutes } from "./groups/alliance-routes.js";
 import { prisma } from "./db.js";
@@ -55,6 +56,7 @@ export function buildApp() {
   registerPlayerMarketRoutes(app);
   registerPlayerDevelopmentRoutes(app);
   registerMatchRoutes(app);
+  registerMatchNotificationRoutes(app);
   registerGroupRoutes(app);
   registerAllianceRoutes(app);
   registerAdminRoutes(app);
