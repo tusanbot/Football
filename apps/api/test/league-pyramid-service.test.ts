@@ -216,6 +216,9 @@ test("league completion awards the top three, relegates two and replaces decline
     await respondToPromotion(clubs[0]!.userId, declined.id, false, new Date(now.getTime() + 60 * 60_000));
     const replacement = await prisma.leaguePromotionOffer.findFirstOrThrow({ where: { leagueId: league.id, clubId: clubs[2]!.clubId } });
     assert.equal(replacement.finalPosition, 3);
+    const declinedReplay = await respondToPromotion(clubs[0]!.userId, declined.id, false, new Date(now.getTime() + 2 * 60 * 60_000));
+    assert.equal(declinedReplay.replayed, true);
+    assert.equal("replacementOfferId" in declinedReplay ? declinedReplay.replacementOfferId : null, replacement.id);
     assert.equal(await prisma.leagueNotice.count({ where: { userId: { in: [clubs[0]!.userId, clubs[2]!.userId] }, kind: { in: ["PROMOTION_DECLINED", "PROMOTION_REPLACEMENT"] } } }), 2);
     await assert.rejects(
       respondToPromotion(clubs[1]!.userId, offers.find((offer) => offer.finalPosition === 2)!.id, true, new Date(now.getTime() + 25 * 60 * 60_000)),
@@ -223,6 +226,8 @@ test("league completion awards the top three, relegates two and replaces decline
     );
     const auto = await processDuePromotionOffers(new Date(now.getTime() + 27 * 60 * 60_000));
     assert.equal(auto.accepted, 2);
+    const acceptedReplay = await respondToPromotion(clubs[1]!.userId, offers.find((offer) => offer.finalPosition === 2)!.id, true, new Date(now.getTime() + 28 * 60 * 60_000));
+    assert.equal(acceptedReplay.replayed, true);
     assert.equal(await prisma.pyramidLeagueApplication.count({ where: { tier: 4, season: 2028, status: "QUEUED", clubId: { in: [clubs[1]!.clubId, clubs[2]!.clubId] } } }), 2);
     const promotedValue = await prisma.player.findFirstOrThrow({ where: { clubId: clubs[1]!.clubId }, select: { marketValue: true } });
     assert.ok(promotedValue.marketValue > 1000n);
