@@ -143,7 +143,7 @@ export function registerMatchRoutes(app: FastifyInstance) {
     const body = z.object({
       name: z.string().trim().min(3).max(40), maxTeams: z.number().int().min(4).max(10),
       format: z.enum(["LEAGUE", "CUP"]).default("LEAGUE"), cupLegs: z.number().int().min(1).max(2).default(1), rules: competitionRulesSchema.optional(), idempotencyKey: keySchema,
-    }).safeParse(request.body);
+    }).refine((value) => value.format === "CUP" || value.cupLegs === 1, { message: "INVALID_CUP_LEGS" }).safeParse(request.body);
     if (!body.success) return reply.code(400).send({ error: "INVALID_COMPETITION" });
     try { return await createLeague(user.id, body.data.name, body.data.maxTeams, body.data.idempotencyKey, body.data.format, body.data.rules, body.data.cupLegs); }
     catch (error) { return sendMatchError(reply, error); }
