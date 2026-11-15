@@ -64,10 +64,10 @@ export default function LeagueManagementClient() {
     const body = await response.json() as Payload & { error?: string };
     if (!response.ok) throw new Error(body.error ?? "REQUEST_FAILED");
     return body;
-  }, [init]);
+  }, [sessionToken]);
 
   const load = useCallback(async () => {
-    if (!init || tab !== "management") return;
+    if (!sessionToken || tab !== "management") return;
     setBusy(true);
     try {
       const params = new URLSearchParams();
