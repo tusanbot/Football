@@ -29,6 +29,7 @@ if (webAppUrl) {
   if (process.env.NODE_ENV === "production" && webAppEndpoint.protocol !== "https:") throw new Error("TELEGRAM_WEB_APP_URL must use HTTPS in production.");
 }
 const bot = new Bot(token);
+const backgroundTimers: NodeJS.Timeout[] = [];
 
 bot.use(async (ctx, next) => {
   if (ctx.chat?.type === "private" && ctx.message && "text" in ctx.message) {
@@ -1647,9 +1648,13 @@ bot.on(["chat_member","my_chat_member"],async ctx=>{
 bot.catch((error) => console.error("Telegram bot error:", error));
 if (apiUrl && botApiSecret) {
   const deletionQueueTimer = setInterval(() => { void pollGroupMessageDeletionQueue(); }, 5_000);
+  backgroundTimers.push(deletionQueueTimer);
   const matchNotificationTimer = setInterval(() => { void pollMatchCheckpointNotifications(); }, 5_000);
+  backgroundTimers.push(matchNotificationTimer);
   const leagueNoticeTimer = setInterval(() => { void pollLeagueNoticeQueue(); }, 10_000);
+  backgroundTimers.push(leagueNoticeTimer);
   const adminGroupBroadcastTimer = setInterval(() => { void pollAdminGroupBroadcastQueue(); }, 5_000);
+  backgroundTimers.push(adminGroupBroadcastTimer);
   matchNotificationTimer.unref();
   leagueNoticeTimer.unref();
   adminGroupBroadcastTimer.unref();
@@ -1664,4 +1669,10 @@ if (apiUrl && botApiSecret) {
 
 const botIdentity = await bot.api.getMe();
 console.info("Football Empire Bot authenticated as @" + (botIdentity.username ?? botIdentity.id));
+const stopBot = () => {
+  for (const timer of backgroundTimers) clearInterval(timer);
+  bot.stop();
+};
+process.once("SIGTERM", stopBot);
+process.once("SIGINT", stopBot);
 await bot.start();

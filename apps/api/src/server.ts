@@ -20,25 +20,39 @@ for (const origin of corsOrigins) {
   }
 }
 const port = Number(process.env.API_PORT ?? 4000);
+if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error("API_PORT must be an integer between 1 and 65535.");
 const host = process.env.API_HOST ?? "0.0.0.0";
 const app = buildApp();
+let matchWorker: NodeJS.Timeout | undefined;
+let workerTask: Promise<void> | null = null;
+let shuttingDown = false;
+async function shutdown(signal: string) {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  app.log.info({ signal }, "Football Empire API is shutting down");
+  if (matchWorker) clearInterval(matchWorker);
+  if (workerTask) await workerTask;
+  await app.close();
+}
+process.once("SIGTERM", () => { void shutdown("SIGTERM").catch((error) => { app.log.error(error); process.exitCode = 1; }); });
+process.once("SIGINT", () => { void shutdown("SIGINT").catch((error) => { app.log.error(error); process.exitCode = 1; }); });
 try {
   await prisma.$connect();
   await prisma.$queryRaw`SELECT 1`;
   await app.listen({ port, host });
   app.log.info({ host, port }, "Football Empire API is running");
   let workerRunning = false;
-  const matchWorker = setInterval(() => {
-    if (workerRunning) return;
+  matchWorker = setInterval(() => {
+    if (workerRunning || shuttingDown) return;
     workerRunning = true;
-    void processDueMatchRuntimes("api-match-worker", new Date(), 10)
+    workerTask = processDueMatchRuntimes("api-match-worker", new Date(), 10)
       .then(async (result) => {
         const promotions = await processDuePromotionOffers(new Date(), 50);
         if (result.advanced || result.settled || result.failed || promotions.accepted || promotions.completedLeagues) app.log.info({ ...result, promotions }, "Game worker tick");
       })
       .catch((error: unknown) => app.log.error({ error }, "Match runtime worker failed"))
-      .finally(() => { workerRunning = false; });
+      .finally(() => { workerRunning = false; workerTask = null; });
   }, 5_000);
   matchWorker.unref();
 }
-catch (error) { app.log.error(error); process.exit(1); }
+catch (error) { app.log.error(error); await prisma.$disconnect(); process.exit(1); }
