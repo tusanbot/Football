@@ -95,13 +95,20 @@ test("friendly challenge creation enforces three free and two Gold-funded daily 
   const club = await makePyramidClub(suffix, 0);
   try {
     const assets: string[] = [];
-    for (let index = 0; index < 5; index++) {
-      const result = await createFriendlyChallenge(club.userId, 100n, new Date("2026-11-15T12:00:00.000Z"));
+    const firstKey = "friendly-challenge-" + suffix + "-0";
+    const first = await createFriendlyChallenge(club.userId, 100n, new Date("2026-11-15T12:00:00.000Z"), undefined, firstKey);
+    assets.push(first.asset);
+    const firstReplay = await createFriendlyChallenge(club.userId, 100n, new Date("2026-11-15T12:00:00.000Z"), undefined, firstKey);
+    assert.equal(firstReplay.replayed, true);
+    assert.equal(firstReplay.challenge.id, first.challenge.id);
+    assert.equal(firstReplay.asset, first.asset);
+    for (let index = 1; index < 5; index++) {
+      const result = await createFriendlyChallenge(club.userId, 100n, new Date("2026-11-15T12:00:00.000Z"), undefined, "friendly-challenge-" + suffix + "-" + index);
       assets.push(result.asset);
     }
     assert.deepEqual(assets, ["FREE", "FREE", "FREE", "GOLD", "GOLD"]);
     await assert.rejects(
-      createFriendlyChallenge(club.userId, 100n, new Date("2026-11-15T12:00:00.000Z")),
+      createFriendlyChallenge(club.userId, 100n, new Date("2026-11-15T12:00:00.000Z"), undefined, "friendly-challenge-" + suffix + "-limit"),
       (error: unknown) => error instanceof Error && error.message === "DAILY_CHALLENGE_LIMIT_REACHED",
     );
     const wallet = await prisma.wallet.findUniqueOrThrow({ where: { userId_asset: { userId: club.userId, asset: "GOLD" } } });
@@ -132,11 +139,11 @@ test("group friendly challenges can only be accepted by another member of that T
   const creator = await makePyramidClub(suffix, 0);
   const opponent = await makePyramidClub(suffix, 1);
   const telegramGroupId = "-100" + BigInt("0x" + suffix.slice(0, 10)).toString();
-  const group = await prisma.telegramGroup.create({ data: { telegramId: telegramGroupId, title: "Pyramid Test Group" } });
+  const group = await prisma.telegramGroup.create({ data: { telegramId: telegramGroupId, title: "Pyramid Test Group", isActive: true } });
   let matchId: string | undefined;
   try {
     await prisma.groupMembership.create({ data: { groupId: group.id, userId: creator.userId, role: "MEMBER" } });
-    const invite = await createFriendlyChallenge(creator.userId, 100n, new Date("2026-11-15T12:00:00.000Z"), group.telegramId);
+    const invite = await createFriendlyChallenge(creator.userId, 100n, new Date("2026-11-15T12:00:00.000Z"), group.telegramId, "friendly-group-" + suffix);
     await assert.rejects(
       import("../src/game/league-pyramid-service.js").then((service) => service.acceptFriendlyChallenge(opponent.userId, invite.challenge.token, new Date("2026-11-15T13:00:00.000Z"))),
       (error: unknown) => error instanceof Error && error.message === "GROUP_MEMBERSHIP_REQUIRED",
