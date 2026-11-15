@@ -233,6 +233,7 @@ export async function startAllianceChampionship(i: { telegramUserId: string; tel
 export async function startAllianceSeason(i: { telegramUserId: string; telegramGroupId: string; durationDays?: number }) {
   return prisma.$transaction(async tx => {
     const durationDays = i.durationDays ?? await getAllianceSeasonDuration(tx);
+    if (!Number.isInteger(durationDays) || durationDays < 7 || durationDays > 90) throw new AllianceServiceError("INVALID_SEASON_DURATION");
     const { group } = await manager(tx, i.telegramUserId, i.telegramGroupId);
     const membership = await tx.allianceGroup.findUnique({ where: { groupId: group.id }, include: { alliance: { include: { seasons: { orderBy: { number: "desc" }, take: 1 } } } } });
     if (!membership || membership.role !== "FOUNDER") throw new AllianceServiceError("ALLIANCE_FOUNDER_REQUIRED");
@@ -241,7 +242,7 @@ export async function startAllianceSeason(i: { telegramUserId: string; telegramG
     if (active?.status === "ACTIVE") throw new AllianceServiceError("SEASON_ALREADY_ACTIVE");
     if (active?.reviewStatus === "FLAGGED") throw new AllianceServiceError("SEASON_REVIEW_REQUIRED");
     const number = (active?.number ?? 0) + 1;
-    const season = await tx.allianceSeason.create({ data: { allianceId: membership.allianceId, number, startsAt: new Date(), endsAt: new Date(Date.now() + i.durationDays * 86400000) } });
+    const season = await tx.allianceSeason.create({ data: { allianceId: membership.allianceId, number, startsAt: new Date(), endsAt: new Date(Date.now() + durationDays * 86400000) } });
     await audit(tx, { allianceId: membership.allianceId, actorTelegramId: i.telegramUserId, groupTelegramId: group.telegramId, action: "SEASON_STARTED", metadata: { seasonId: season.id, number, durationDays } });
     return { season, replayed: false };
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
