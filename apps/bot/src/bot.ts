@@ -944,25 +944,25 @@ bot.command("development", async (ctx) => {
       players: Array<{ id: string; firstName: string; lastName: string; overall: number; potential: number; age: number; fitness: number; morale: number; contractDays: number; status: string; minimumWeeklyWage: string; maximumWeeklyWage: string }>;
     } }>("/v1/club/development", ctx.from.id);
     const lines = result.club.players.slice(0, 15).map((p) =>
-      `• ${p.firstName} ${p.lastName} · OVR ${p.overall}/${p.potential} · Age ${p.age}\n  Fitness ${p.fitness} · Morale ${p.morale} · Contract ${p.contractDays}d · ${p.status}\n  Renew ${cash(p.minimumWeeklyWage)}–${cash(p.maximumWeeklyWage)} Cash/week\n  ID: ${p.id}`,
+      `• ${p.firstName} ${p.lastName} · قدرت ${p.overall}/${p.potential} · سن ${p.age}\n  آمادگی ${p.fitness} · روحیه ${p.morale} · قرارداد ${p.contractDays} روز · وضعیت ${p.status}\n  تمدید: ${cash(p.minimumWeeklyWage)} تا ${cash(p.maximumWeeklyWage)} کش در هفته\n  شناسه: ${p.id}`,
     );
     await ctx.reply(
       `Player development · Training ground Lv.${result.club.trainingGroundLevel}\nWeekly wage bill: ${cash(result.club.weeklyWageBill)} Cash · Arrears: ${cash(result.club.wageArrears)} Cash\nCoach: ${result.club.coach.name} (Lv.${result.club.coach.level})\nTraining ${result.club.coach.trainingSkill} · Recovery ${result.club.coach.recoverySkill} · Medical ${result.club.coach.medicalSkill} · Salary ${cash(result.club.coach.weeklySalary)} Cash/week\n\n` +
       (lines.join("\n\n") || "No players found.") +
       "\n\n/train PLAYER_ID BALANCED|SHOOTING|... LIGHT|NORMAL|INTENSE\n/renew PLAYER_ID 90|180|365 WEEKLY_WAGE",
     );
-  } catch (error) { await ctx.reply(`Could not load player development: ${error instanceof Error ? error.message : "unknown error"}`); }
+  } catch (error) { await ctx.reply(`دریافت وضعیت توسعه بازیکنان ناموفق بود: ${error instanceof Error ? error.message : "خطای نامشخص"}`); }
 });
 
 bot.command("train", async (ctx) => {
   if (!ctx.from) return;
-  if (ctx.chat.type !== "private") return ctx.reply("Use /train in a private chat.");
+  if (ctx.chat.type !== "private") return ctx.reply("دستور /train را در گفت‌وگوی خصوصی اجرا کنید.");
   const [playerId, focusRaw, intensityRaw] = String(ctx.match ?? "").trim().split(/\s+/);
   const focus = focusRaw?.toUpperCase();
   const intensity = intensityRaw?.toUpperCase();
   const focuses = ["BALANCED", "GOALKEEPING", "DEFENDING", "PASSING", "PLAYMAKING", "DRIBBLING", "SHOOTING", "PHYSICAL"];
   if (!playerId || !focus || !focuses.includes(focus) || !["LIGHT", "NORMAL", "INTENSE"].includes(intensity ?? "")) {
-    return ctx.reply("Usage: /train PLAYER_ID FOCUS INTENSITY\nFocus: BALANCED, GOALKEEPING, DEFENDING, PASSING, PLAYMAKING, DRIBBLING, SHOOTING, PHYSICAL\nIntensity: LIGHT, NORMAL, INTENSE");
+    return ctx.reply("روش استفاده: /train PLAYER_ID FOCUS INTENSITY\nتمرکز: BALANCED، GOALKEEPING، DEFENDING، PASSING، PLAYMAKING، DRIBBLING، SHOOTING، PHYSICAL\nشدت: LIGHT، NORMAL، INTENSE");
   }
   try {
     const result = await api<{ training: { overallBefore: number; overallAfter: number; fitnessBefore: number; fitnessAfter: number; injuryOccurred: boolean; injuryUntil: string | null; cashCost: string; replayed: boolean } }>(
@@ -971,33 +971,33 @@ bot.command("train", async (ctx) => {
     );
     const t = result.training;
     await ctx.reply(
-      `Training complete. OVR ${t.overallBefore} → ${t.overallAfter}; fitness ${t.fitnessBefore} → ${t.fitnessAfter}. Cost: ${cash(t.cashCost)} Cash.` +
-      (t.injuryOccurred ? `\nInjury: player unavailable until ${t.injuryUntil}.` : "") +
-      (t.replayed ? "\nThis was a repeated request." : ""),
+      `تمرین پایان یافت. قدرت: ${t.overallBefore} ← ${t.overallAfter} · آمادگی: ${t.fitnessBefore} ← ${t.fitnessAfter} · هزینه: ${cash(t.cashCost)} کش.` +
+      (t.injuryOccurred ? `\nمصدومیت: بازیکن تا ${t.injuryUntil} در دسترس نیست.` : "") +
+      (t.replayed ? "\nاین درخواست قبلاً ثبت شده بود." : ""),
     );
-  } catch (error) { await ctx.reply(`Training failed: ${error instanceof Error ? error.message : "unknown error"}`); }
+  } catch (error) { await ctx.reply(`تمرین ناموفق بود: ${error instanceof Error ? error.message : "خطای نامشخص"}`); }
 });
 
 bot.command("renew", async (ctx) => {
   if (!ctx.from) return;
-  if (ctx.chat.type !== "private") return ctx.reply("Use /renew in a private chat.");
+  if (ctx.chat.type !== "private") return ctx.reply("دستور /renew را در گفت‌وگوی خصوصی اجرا کنید.");
   const [playerId, daysRaw, wageRaw] = String(ctx.match ?? "").trim().split(/\s+/);
   const days = Number(daysRaw);
   if (!playerId || ![90, 180, 365].includes(days) || !wageRaw || !/^[1-9][0-9]{0,8}$/.test(wageRaw)) {
-    return ctx.reply("Usage: /renew PLAYER_ID 90|180|365 WEEKLY_WAGE\nUse /development to see the minimum acceptable weekly wage.");
+    return ctx.reply("روش استفاده: /renew PLAYER_ID 90|180|365 WEEKLY_WAGE\nحداقل دستمزد هفتگی قابل قبول را در /development ببینید.");
   }
   try {
     const result = await api<{ contract: { contractDays: number; weeklyWage: string; replayed: boolean } }>(
       `/v1/club/players/${encodeURIComponent(playerId)}/contract/renew`, ctx.from.id, "POST",
       { extensionDays: days, weeklyWage: wageRaw, idempotencyKey: `tg-renew-${ctx.from.id}-${ctx.update.update_id}` },
     );
-    await ctx.reply(`Contract renewed: ${result.contract.contractDays} days remaining · ${cash(result.contract.weeklyWage)} Cash/week.${result.contract.replayed ? " This was a repeated request." : ""}`);
-  } catch (error) { await ctx.reply(`Contract renewal failed: ${error instanceof Error ? error.message : "unknown error"}`); }
+    await ctx.reply(`قرارداد تمدید شد: ${result.contract.contractDays} روز باقی‌مانده · دستمزد هفتگی ${cash(result.contract.weeklyWage)} کش.${result.contract.replayed ? " این درخواست قبلاً ثبت شده بود." : ""}`);
+  } catch (error) { await ctx.reply(`تمدید قرارداد ناموفق بود: ${error instanceof Error ? error.message : "خطای نامشخص"}`); }
 });
 
 bot.command("operations", async (ctx) => {
   if (!ctx.from) return;
-  if (ctx.chat.type !== "private") return ctx.reply("Use /operations in a private chat.");
+  if (ctx.chat.type !== "private") return ctx.reply("دستور /operations را در گفت‌وگوی خصوصی اجرا کنید.");
   try {
     const result = await api<{ club: {
       stadiumLevel: number; stadiumCapacity: number; ticketPrice: string; trainingGroundLevel: number; academyLevel: number;
@@ -1012,50 +1012,50 @@ bot.command("operations", async (ctx) => {
     const prospects = club.prospects.map((p) => `• ${p.firstName} ${p.lastName} · ${p.age}y · ${p.position} · OVR ${p.overall}/POT ${p.potential} · ${cash(p.recruitmentCost)} Cash\n  ID: ${p.id}`);
     const sponsor = club.activeSponsor ? `${club.activeSponsor.partnerName} · ${club.activeSponsor.tier} · ${cash(club.activeSponsor.dailyIncome)} Cash/day` : "No active sponsor";
     await ctx.reply(
-      `Club facilities\nStadium Lv.${club.stadiumLevel} · ${club.stadiumCapacity} seats · Ticket ${cash(club.ticketPrice)} Cash\nTraining ground Lv.${club.trainingGroundLevel} · Academy Lv.${club.academyLevel}\nDaily maintenance: ${cash(club.dailyMaintenance)} Cash · Operating arrears: ${cash(club.operatingArrears)} Cash\nCoach: ${club.coach?.name ?? "None"} (Lv.${club.coach?.level ?? 0}) · Salary ${cash(club.coach?.weeklySalary ?? "0")} Cash/week\nSponsor: ${sponsor}\n\nAcademy prospects:\n${prospects.join("\n\n") || "No available prospects"}\n\n/upgrade stadium|training|academy\n/scout\n/recruit PROSPECT_ID\n/sponsor local-partner|regional-brand|national-network\n/coach-upgrade\n/hire-coach balanced|youth|performance`,
+      `امکانات باشگاه\nورزشگاه سطح ${club.stadiumLevel} · ظرفیت ${club.stadiumCapacity} نفر · بلیت ${cash(club.ticketPrice)} کش\nزمین تمرین سطح ${club.trainingGroundLevel} · آکادمی سطح ${club.academyLevel}\nهزینه نگهداری روزانه: ${cash(club.dailyMaintenance)} کش · معوقات عملیاتی: ${cash(club.operatingArrears)} کش\nمربی: ${club.coach?.name ?? "ندارد"} (سطح ${club.coach?.level ?? 0}) · دستمزد هفتگی ${cash(club.coach?.weeklySalary ?? "0")} کش\nحامی مالی: ${sponsor}\n\nاستعدادهای آکادمی:\n${prospects.join("\n\n") || "استعداد آماده‌ای وجود ندارد."}\n\n/upgrade stadium|training|academy\n/scout\n/recruit PROSPECT_ID\n/sponsor local-partner|regional-brand|national-network\n/coach-upgrade\n/hire-coach balanced|youth|performance`,
     );
-  } catch (error) { await ctx.reply(`Could not load club operations: ${error instanceof Error ? error.message : "unknown error"}`); }
+  } catch (error) { await ctx.reply(`دریافت امکانات باشگاه ناموفق بود: ${error instanceof Error ? error.message : "خطای نامشخص"}`); }
 });
 
 bot.command("finance", async (ctx) => {
   if (!ctx.from) return;
-  if (ctx.chat.type !== "private") return ctx.reply("Use /finance in a private chat.");
+  if (ctx.chat.type !== "private") return ctx.reply("دستور /finance را در گفت‌وگوی خصوصی اجرا کنید.");
   const daysRaw = String(ctx.match ?? "").trim();
   const days = daysRaw ? Number(daysRaw) : 30;
-  if (!Number.isInteger(days) || days < 1 || days > 90) return ctx.reply("Usage: /finance [DAYS 1-90]");
+  if (!Number.isInteger(days) || days < 1 || days > 90) return ctx.reply("روش استفاده: /finance [DAYS 1-90]");
   try {
     const result = await api<{ periodDays: number; income: string; expenses: string; net: string; operatingArrears: string; entries: Array<{ category: string; direction: string; amount: string; description: string; occurredAt: string }> }>(`/v1/club/finance?days=${days}`, ctx.from.id);
     const entries = result.entries.slice(0, 12).map((entry) =>
-      "• " + (entry.direction === "CREDIT" ? "+" : "−") + cash(entry.amount) + " Cash · " + entry.category + "\n  " + entry.description + " · " + new Date(entry.occurredAt).toLocaleDateString("en-US"),
+      "• " + (entry.direction === "CREDIT" ? "+" : "−") + cash(entry.amount) + " کش · " + entry.category + "\n  " + entry.description + " · " + new Date(entry.occurredAt).toLocaleDateString("fa-IR"),
     );
     const netLabel = result.net.startsWith("-") ? "زیان" : "سود";
     const netAmount = result.net.startsWith("-") ? result.net.slice(1) : result.net;
     await ctx.reply(
       "صورت‌حساب " + result.periodDays + " روز اخیر\nدرآمد: " + cash(result.income) + " Cash\nهزینه: " + cash(result.expenses) + " Cash\n" + netLabel + ": " + cash(netAmount) + " Cash\nمعوقات عملیاتی: " + cash(result.operatingArrears) + " Cash\n\nگردش‌های اخیر:\n" + (entries.join("\n\n") || "No finance entries"),
     );
-  } catch (error) { await ctx.reply("Could not load financial statement: " + (error instanceof Error ? error.message : "unknown error")); }
+  } catch (error) { await ctx.reply("دریافت صورت‌حساب مالی ناموفق بود: " + (error instanceof Error ? error.message : "خطای نامشخص")); }
 });
 bot.command("upgrade", async (ctx) => {
   if (!ctx.from) return;
-  if (ctx.chat.type !== "private") return ctx.reply("Use /upgrade in a private chat.");
+  if (ctx.chat.type !== "private") return ctx.reply("دستور /upgrade را در گفت‌وگوی خصوصی اجرا کنید.");
   const facility = String(ctx.match ?? "").trim().toLowerCase();
   const value = ({ stadium: "STADIUM", training: "TRAINING_GROUND", academy: "ACADEMY" } as const)[facility as "stadium" | "training" | "academy"];
-  if (!value) return ctx.reply("Usage: /upgrade stadium|training|academy");
+  if (!value) return ctx.reply("روش استفاده: /upgrade stadium|training|academy");
   try {
     const result = await api<{ upgrade: { level?: number; cost?: string; replayed: boolean } }>(
       `/v1/club/facilities/${value}/upgrade`, ctx.from.id, "POST",
       { idempotencyKey: `tg-upgrade-${ctx.from.id}-${ctx.update.update_id}` },
     );
-    await ctx.reply(result.upgrade.replayed ? "This upgrade request was already processed." : `${facility} upgraded to level ${result.upgrade.level}. Cost: ${cash(result.upgrade.cost ?? "0")} Cash.`);
-  } catch (error) { await ctx.reply(`Facility upgrade failed: ${error instanceof Error ? error.message : "unknown error"}`); }
+    await ctx.reply(result.upgrade.replayed ? "این درخواست ارتقا قبلاً پردازش شده است." : `${facility} به سطح ${result.upgrade.level} ارتقا یافت. هزینه: ${cash(result.upgrade.cost ?? "0")} کش.`);
+  } catch (error) { await ctx.reply(`ارتقای امکانات ناموفق بود: ${error instanceof Error ? error.message : "خطای نامشخص"}`); }
 });
 
 bot.command("ticket-price", async (ctx) => {
   if (!ctx.from) return;
-  if (ctx.chat.type !== "private") return ctx.reply("Use /ticket-price in a private chat.");
+  if (ctx.chat.type !== "private") return ctx.reply("دستور /ticket-price را در گفت‌وگوی خصوصی اجرا کنید.");
   const price = String(ctx.match ?? "").trim();
   if (!/^(?:[1-9][0-9]?|[1-4][0-9]{2}|500)$/.test(price) || Number(price) < 10) {
-    return ctx.reply("Usage: /ticket-price 10-500");
+    return ctx.reply("روش استفاده: /ticket-price 10-500");
   }
   try {
     const current = await api<{ club: { ticketPrice: string } }>("/v1/club/operations", ctx.from.id);
@@ -1063,20 +1063,20 @@ bot.command("ticket-price", async (ctx) => {
       "/v1/club/stadium/ticket-price", ctx.from.id, "PATCH",
       { ticketPrice: price, expectedTicketPrice: current.club.ticketPrice },
     );
-    await ctx.reply(`Stadium ticket price set to ${cash(result.ticketing.ticketPrice)} Cash.`);
-  } catch (error) { await ctx.reply(`Ticket price update failed: ${error instanceof Error ? error.message : "unknown error"}`); }
+    await ctx.reply(`قیمت بلیت ورزشگاه روی ${cash(result.ticketing.ticketPrice)} کش تنظیم شد.`);
+  } catch (error) { await ctx.reply(`تغییر قیمت بلیت ناموفق بود: ${error instanceof Error ? error.message : "خطای نامشخص"}`); }
 });
 
 bot.command("scout", async (ctx) => {
   if (!ctx.from) return;
-  if (ctx.chat.type !== "private") return ctx.reply("Use /scout in a private chat.");
+  if (ctx.chat.type !== "private") return ctx.reply("دستور /scout را در گفت‌وگوی خصوصی اجرا کنید.");
   try {
     const result = await api<{ scouting: { prospects: Array<{ id: string; firstName: string; lastName: string; age: number; position: string; overall: number; potential: number; recruitmentCost: string }>; scoutingCost?: string; replayed: boolean } }>(
       "/v1/club/academy/scout", ctx.from.id, "POST",
       { idempotencyKey: `tg-scout-${ctx.from.id}-${ctx.update.update_id}` },
     );
-    if (result.scouting.replayed) return ctx.reply("This scouting request was already processed.");
-    const lines = result.scouting.prospects.map((p) => `• ${p.firstName} ${p.lastName} · ${p.age}y · ${p.position} · OVR ${p.overall}/POT ${p.potential}\n  Cost ${cash(p.recruitmentCost)} Cash · ID ${p.id}`);
+    if (result.scouting.replayed) return ctx.reply("این درخواست استعدادیابی قبلاً پردازش شده است.");
+    const lines = result.scouting.prospects.map((p) => `• ${p.firstName} ${p.lastName} · سن ${p.age} · ${p.position} · قدرت ${p.overall}/پتانسیل ${p.potential}\n  هزینه جذب ${cash(p.recruitmentCost)} کش · شناسه ${p.id}`);
     await ctx.reply(`استعدادیابی انجام شد. هزینه: ${cash(result.scouting.scoutingCost ?? "0")} کش\n\n${lines.join("\n\n")}\n\nبرای جذب: /recruit PROSPECT_ID`);
   } catch (error) { await ctx.reply(`استعدادیابی آکادمی ناموفق بود: ${error instanceof Error ? error.message : "خطای نامشخص"}`); }
 });
