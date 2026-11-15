@@ -46,7 +46,7 @@ export function resolveMatchCheckpoint<TInstruction>(input: {
   now: Date;
   decisions: MatchCheckpointDecision<TInstruction>[];
   fallback: MatchCheckpointPlan<TInstruction>;
-  aiDefaults: MatchCheckpointPlan<TInstruction>;
+  aiDefaults: { home: TInstruction; away: TInstruction };
 }): MatchCheckpointResolution<TInstruction> {
   const { window, now } = input;
   if (!window.checkpointId.trim()) throw new Error("MATCH_CHECKPOINT_ID_REQUIRED");
