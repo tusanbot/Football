@@ -737,25 +737,30 @@ bot.command("help", async (ctx) => ctx.reply(
   "/development — وضعیت توسعه بازیکنان\n/train PLAYER_ID FOCUS INTENSITY — تمرین بازیکن\n/renew PLAYER_ID DAYS WEEKLY_WAGE — تمدید قرارداد\n" +
   "/operations — امکانات، آکادمی، مربی و حامی مالی\n/finance [DAYS] — گزارش درآمد و هزینه\n" +
   "/upgrade stadium|training|academy — ارتقای امکانات\n/ticket-price PRICE — تعیین قیمت بلیت\n/scout و /recruit — استعدادیابی و جذب بازیکن\n" +
-  "/sponsor OFFER_ID — عقد قرارداد حامی مالی\n/coach-upgrade و /hire-coach — مدیریت مربی\n\n" +
+  "/sponsor OFFER_ID — عقد قرارداد حامی مالی\n/coach-upgrade و /hire-coach — مدیریت مربی\n/setlogo — انتخاب یا فوروارد لوگوی باشگاه\n\n" +
   "⚽ مسابقات و لیگ‌ها\n" +
   "/opponents — فهرست حریفان\n/friendly CLUB_ID — زمان‌بندی بازی دوستانه\n/challenge — ساخت چالش دوستانه\n/acceptchallenge TOKEN — پذیرش چالش\n" +
   "/matches — مسابقات، گزارش زنده و تصمیم‌های تاکتیکی\n/tactic MATCH_ID minute-45 mentality=ATTACKING — تغییر تاکتیک در وقفه\n" +
   "/sub MATCH_ID minute-45 OUT_ID IN_ID — تعویض بازیکن؛ حداکثر ۵ تعویض در کل مسابقه\n/play MATCH_ID — اجرای مسابقه سررسیدشده\n" +
   "/league NAME [4-10] — ساخت لیگ\n/cup NAME [4|8] [legs=1|2] — ساخت جام حذفی یک‌مرحله‌ای یا رفت‌وبرگشت\n" +
   "/leagues و /joinleague ID — مشاهده و عضویت در لیگ‌ها\n/startleague ID و /startcup ID — آغاز رقابت\n/table ID — جدول یا براکت جام\n" +
-  "/pyramidleagues و /pyramidtable ID — هرم لیگ و جدول آن\n/leagueapply — درخواست حضور در لیگ پایه\n/promotion OFFER_ID accept|decline — پاسخ به پیشنهاد صعود\n/leaguenotices — اعلان‌های لیگ\n" +
-  "/competitionrules ID ... — تنظیم قوانین مسابقه پیش از شروع\n\n" +
+  "/pyramidleagues و /pyramidtable ID — هرم لیگ و جدول آن\n/leaguehistory — تاریخچه و افتخارات لیگ باشگاه\n/leagueapply — درخواست حضور در لیگ پایه\n" +
+  "/promotion OFFER_ID accept|decline — پاسخ به پیشنهاد صعود\n/leaguenotices — اعلان‌های لیگ\n/competitionrules ID ... — تنظیم قوانین مسابقه پیش از شروع\n" +
+  "/fallback — مشاهده برنامه تاکتیکی جایگزین\n/setfallback key=value — تنظیم تاکتیک جایگزین\n\n" +
   "👥 گروه‌ها و اتحادها\n" +
-  "/group-register — ثبت گروه (ویژه مدیران)\n/group-join — عضویت باشگاه در گروه\n/group و /group-activity — وضعیت گروه و امتیاز فعالیت روزانه\n" +
-  "/group-shop و /group-buy ITEM [USER_ID] — فروشگاه و دریافت جایزه\n/group-challenges — فهرست چالش‌ها\n" +
-  "/group-challenge TITLE|START_ISO|END_ISO|POINTS — ساخت چالش\n/group-challenge-join ID — عضویت در چالش\n/group-challenge-complete ID USER_ID — تسویه چالش\n" +
-  "/group-check — بررسی مجدد اعضا\n/group-league NAME [4-10] — ساخت لیگ گروهی\n/group-league-join ID و /group-league-start ID — عضویت و آغاز لیگ\n/group-league-table ID — جدول لیگ گروهی\n" +
+  "/group-register — ثبت گروه (ویژه مدیران)\n/group-join — اتصال باشگاه به گروه\n/group و /group-activity — وضعیت گروه و امتیاز فعالیت روزانه\n" +
+  "/group-shop و /group-buy ITEM [USER_ID] — فروشگاه و دریافت جایزه\n/group-rewards و /group-treasury — پاداش‌ها و خزانه گروه\n/group-give USER_ID ITEM_SLUG — هدیه به عضو گروه\n" +
+  "/group-challenges — فهرست چالش‌ها\n/group-challenge TITLE|START_ISO|END_ISO|POINTS — ساخت چالش\n/group-challenge-join ID — عضویت در چالش\n" +
+  "/group-challenge-complete ID USER_ID — تسویه چالش\n/group-challenge-cancel ID — لغو چالش\n/group-check — بررسی مجدد اعضا\n" +
+  "/group-league NAME [4-10] — ساخت لیگ گروهی\n/group-leagues — فهرست لیگ‌های گروه\n/group-league-join ID و /group-league-start ID — عضویت و آغاز لیگ\n/group-league-table ID — جدول لیگ گروهی\n" +
   "/alliance — وضعیت اتحاد\n/alliance-create NAME و /alliance-invite GROUP_ID — ساخت اتحاد و دعوت گروه\n/alliance-accept ID و /alliance-decline ID — پاسخ به دعوت\n" +
-  "/alliance-championship NAME|TEAMS — ساخت قهرمانی بین‌گروهی\n/alliance-contribute AMOUNT — واریز به خزانه اتحاد\n/alliance-season-start [DAYS] و /alliance-season-close — مدیریت فصل اتحاد\n/alliance-season-review SEASON_ID approve|reject — بررسی جایزه مشکوک (ویژه بازبین مجاز)\n\n" +
+  "/alliance-championship NAME|TEAMS — ساخت قهرمانی بین‌گروهی\n/alliance-championship-join ID و /alliance-championship-start ID — عضویت و آغاز قهرمانی\n" +
+  "/alliance-contribute AMOUNT — واریز به خزانه اتحاد\n/alliance-season-start [DAYS] و /alliance-season-close — مدیریت فصل اتحاد\n" +
+  "/alliance-season-review SEASON_ID approve|reject — بررسی جایزه مشکوک (ویژه بازبین مجاز)\n\n" +
   "🏆 بازار و آمار\n" +
   "/market — بازار نقل‌وانتقالات\n/sell PLAYER_ID PRICE و /buy LISTING_ID — فروش و خرید بازیکن\n" +
-  "/special و /pack epic|legendary|icon — بازیکنان ویژه و بسته‌های جذب\n/records [goals|assists|appearances|rating] — رکوردهای تاریخی\n/seasonawards [YEAR] — جوایز و تیم منتخب فصل\n" +
+  "/special و /pack epic|legendary|icon — بازیکنان ویژه و بسته‌های جذب\n/redeem CODE — استفاده از کد هدیه\n" +
+  "/records [goals|assists|appearances|rating] — رکوردهای تاریخی\n/seasonawards [YEAR] — جوایز و تیم منتخب فصل\n" +
   "/clubs و /clubprofile CLUB_ID — باشگاه‌های عمومی و پروفایل\n/clubcompare ID1 ID2 — مقایسه دو باشگاه\n\n" +
   "برای بازگشت به منوی دکمه‌ای، /menu را ارسال کنید. امکانات اصلی از ربات و مینی‌اپ در دسترس‌اند."
 ));
