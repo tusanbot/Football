@@ -626,22 +626,33 @@ export async function simulateScheduledMatch(userId: string, matchId: string, no
         });
       }
     }
-    if (injuredClubIds.size > 0) {
-      await tx.club.updateMany({ where: { id: { in: [...injuredClubIds] } }, data: { lineupVersion: { increment: 1 } } });
-    }
     // Existing suspensions are served by completing this fixture. New red cards
     // are then assigned a one-match suspension for the next eligible fixture.
+    const previouslySuspended = await tx.player.findMany({
+      where: { clubId: { in: [home.id, away.id] }, suspensionMatchesRemaining: { gt: 0 } },
+      select: { clubId: true },
+    });
     await tx.player.updateMany({
       where: { clubId: { in: [home.id, away.id] }, suspensionMatchesRemaining: { gt: 0 } },
       data: { suspensionMatchesRemaining: { decrement: 1 } },
     });
-    const sentOffPlayerIds = [...new Set(result.events
-      .filter((event) => event.type === "RED_CARD")
-      .map((event) => event.playerId))];
+    const redCardEvents = result.events.filter((event) => event.type === "RED_CARD");
+    const sentOffPlayerIds = [...new Set(redCardEvents.map((event) => event.playerId))];
     if (sentOffPlayerIds.length) {
       await tx.player.updateMany({
         where: { id: { in: sentOffPlayerIds }, status: "ACTIVE" },
         data: { suspensionMatchesRemaining: 1 },
+      });
+    }
+    const lineupChangedClubIds = new Set([
+      ...injuredClubIds,
+      ...previouslySuspended.map((player) => player.clubId),
+      ...redCardEvents.map((event) => event.teamId),
+    ]);
+    if (lineupChangedClubIds.size) {
+      await tx.club.updateMany({
+        where: { id: { in: [...lineupChangedClubIds] } },
+        data: { lineupVersion: { increment: 1 } },
       });
     }
     const homeReward = winnerClubId ? (winnerClubId === home.id ? 250n : 100n) : 150n;
