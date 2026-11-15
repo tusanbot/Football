@@ -280,6 +280,7 @@ export async function startLeague(userId: string, competitionId: string, now = n
     }
     await tx.footballMatch.createMany({ data: fixtures.map((fixture) => ({
       ...fixture, type: "LEAGUE", competitionId,
+      rulesSnapshot: validateMatchRules(competition.rules ?? defaultMatchRules("LEAGUE")),
     })) });
     const updated = await tx.competition.updateMany({
       where: { id: competitionId, status: "REGISTRATION" },
@@ -298,6 +299,7 @@ export async function listOpenLeagues(userId: string) {
   });
   return competitions.map((competition) => ({
     id: competition.id, name: competition.name, season: competition.season, format: competition.format,
+    rules: validateMatchRules(competition.rules ?? defaultMatchRules(competition.format)),
     status: competition.status, maxTeams: competition.maxTeams,
     teams: competition.entries.length,
     joined: competition.entries.some((entry) => entry.clubId === club.id),
@@ -320,7 +322,7 @@ export async function getLeague(userId: string, competitionId: string) {
     || (b.goalsFor - b.goalsAgainst) - (a.goalsFor - a.goalsAgainst)
     || b.goalsFor - a.goalsFor || a.club.name.localeCompare(b.club.name));
   return {
-    competition: { id: competition.id, name: competition.name, season: competition.season, format: competition.format, status: competition.status, startsAt: competition.startsAt?.toISOString() ?? null },
+    competition: { id: competition.id, name: competition.name, season: competition.season, format: competition.format, rules: validateMatchRules(competition.rules ?? defaultMatchRules(competition.format)), status: competition.status, startsAt: competition.startsAt?.toISOString() ?? null },
     standings: competition.entries.map((entry, index) => ({
       position: index + 1, clubId: entry.clubId, clubName: entry.club.name, played: entry.played,
       won: entry.won, drawn: entry.drawn, lost: entry.lost, goalsFor: entry.goalsFor,
@@ -540,7 +542,7 @@ export async function simulateScheduledMatch(userId: string, matchId: string, no
     if (match.status !== "SCHEDULED" && !isRuntimeSettlement) throw new MatchServiceError("MATCH_NOT_SCHEDULED");
     if (match.simulationVersion !== 1) throw new MatchServiceError("UNSUPPORTED_SIMULATION_VERSION");
     const competition = match.competitionId
-      ? await tx.competition.findUnique({ where: { id: match.competitionId }, select: { format: true } })
+      ? await tx.competition.findUnique({ where: { id: match.competitionId }, select: { format: true, rules: true } })
       : null;
     if (match.scheduledAt > now) throw new MatchServiceError("MATCH_NOT_DUE", { scheduledAt: match.scheduledAt.toISOString() });
     const homeSide = toSide(home);
@@ -579,7 +581,8 @@ export async function simulateScheduledMatch(userId: string, matchId: string, no
           }),
         }
       : generated;
-    const penalties = competition?.format === "CUP" && result.homeScore === result.awayScore
+    const matchRules = validateMatchRules(match.rulesSnapshot ?? competition?.rules ?? defaultMatchRules(match.type));
+    const penalties = matchRules.penaltiesOnDraw && result.homeScore === result.awayScore
       ? simulatePenaltyShootout({ seed: match.seed, home: homeSide, away: awaySide })
       : null;
     const winnerClubId = result.homeScore > result.awayScore ? home.id
@@ -798,6 +801,7 @@ function applyRuntimeInstruction(
   checkpoint: "HALF_TIME" | "MINUTE_60" | "MINUTE_75",
   checkpointId: string,
   source: "MANAGER" | "PREMATCH_PLAN" | "AI",
+  rules: MatchRules,
 ): { side: MatchSide; substitutions: MatchSubstitutionState; events: MatchSegmentState["events"]; error: string | null } {
   let nextSide = side;
   let nextSubstitutions = current;
@@ -811,6 +815,7 @@ function applyRuntimeInstruction(
         checkpoint,
         checkpointId,
         source,
+        rules,
       });
       const players = new Map([...(side.players), ...(side.bench ?? [])].map((player) => [player.id, player]));
       nextSide = {
@@ -923,6 +928,7 @@ async function processClaimedMatchRuntime(
       seed: runtime.match.seed, state: initial, toMinute: 45,
       homeSubstitutions: initialSubstitutions.home,
       awaySubstitutions: initialSubstitutions.away,
+      rules: rulesForMatch(runtime.match),
     });
     const checkpointAt = new Date(now.getTime() + 60_000);
     state = {
@@ -994,13 +1000,14 @@ async function processClaimedMatchRuntime(
     fallback: fallback ?? { home: null, away: null },
     aiDefaults: { home: {}, away: {} },
   });
+  const matchRules = rulesForMatch(runtime.match);
   const homeApplied = applyRuntimeInstruction(
     state.segment.home.side, state.substitutions.home, resolution.home.instruction,
-    checkpointName, checkpoint.checkpointKey, resolution.home.source,
+    checkpointName, checkpoint.checkpointKey, resolution.home.source, matchRules,
   );
   const awayApplied = applyRuntimeInstruction(
     state.segment.away.side, state.substitutions.away, resolution.away.instruction,
-    checkpointName, checkpoint.checkpointKey, resolution.away.source,
+    checkpointName, checkpoint.checkpointKey, resolution.away.source, matchRules,
   );
   const nextMinute = checkpoint.minute === 45 ? 60 : checkpoint.minute === 60 ? 75 : 90;
   const substitutionEvents = [...homeApplied.events, ...awayApplied.events].map((event, index) => ({
@@ -1018,6 +1025,7 @@ async function processClaimedMatchRuntime(
     toMinute: nextMinute,
     homeSubstitutions: homeApplied.substitutions,
     awaySubstitutions: awayApplied.substitutions,
+    rules: matchRules,
   });
   const nextState: RuntimeState = {
     segment: advanced.state,
