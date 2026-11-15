@@ -754,7 +754,9 @@ bot.command("group-join", async (ctx) => {
   if (ctx.chat.type !== "group" && ctx.chat.type !== "supergroup") return ctx.reply("Run /group-join inside a registered Telegram group.");
   try {
     const memberCount = await ctx.api.getChatMemberCount(ctx.chat.id);
-    if (memberCount < 10) return ctx.reply("This group currently has fewer than 10 Telegram members and is inactive.");
+    if (!botTelegramId) return ctx.reply("Bot identity is not initialized.");
+    const botMember = await ctx.api.getChatMember(ctx.chat.id, botTelegramId);
+    if (botMember.status !== "creator" && botMember.status !== "administrator") return ctx.reply("ربات باید مدیر گروه باشد تا عضویت گروه را بررسی کند.");
     const result = await api<{ membership: { group: { title: string }; role: string; registeredManagers: number; memberCount: number; alreadyJoined: boolean } }>("/v1/groups/join", ctx.from.id, "POST", { telegramGroupId: String(ctx.chat.id), memberCount });
     await ctx.reply(result.membership.alreadyJoined ? "Your club is already registered in " + result.membership.group.title + ". Role: " + result.membership.role + "." : "Your club joined " + result.membership.group.title + ". Registered club managers: " + result.membership.registeredManagers + ".");
   } catch (error) { await ctx.reply("Could not join this group: " + (error instanceof Error ? error.message : "unknown error")); }
