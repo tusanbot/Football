@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { prisma } from "../src/db.js";
+import { getMatchFallbackPlan, saveMatchFallbackPlan, MatchFallbackPlanError } from "../src/game/match-fallback-service.js";
 import {
   createFriendlyMatch, createLeague, getLeague, joinLeague, listClubMatches,
   simulateScheduledMatch, startLeague, submitMatchCheckpointDecision, claimDueMatchRuntimes,
@@ -315,6 +316,65 @@ test("durable match worker advances checkpoints, resumes on two early decisions 
     assert.equal(await prisma.ledgerTransaction.count({
       where: { referenceType: "FOOTBALL_MATCH", referenceId: match.id },
     }), 3);
+  } finally {
+    const clubIds = clubs.map((club) => club.clubId);
+    if (clubIds.length) {
+      await prisma.footballMatch.deleteMany({
+        where: { OR: [{ homeClubId: { in: clubIds } }, { awayClubId: { in: clubIds } }] },
+      });
+      await prisma.player.deleteMany({ where: { clubId: { in: clubIds } } });
+      await prisma.club.deleteMany({ where: { id: { in: clubIds } } });
+    }
+    const userIds = clubs.map((club) => club.userId);
+    if (userIds.length) {
+      await prisma.ledgerTransaction.deleteMany({ where: { userId: { in: userIds } } });
+      await prisma.wallet.deleteMany({ where: { userId: { in: userIds } } });
+      await prisma.user.deleteMany({ where: { id: { in: userIds } } });
+    }
+  }
+});
+
+
+test("club fallback plan is versioned and frozen into the kickoff runtime snapshot", async (t) => {
+  if (!process.env.DATABASE_URL) {
+    t.skip("DATABASE_URL is only configured in the ephemeral PostgreSQL CI job.");
+    return;
+  }
+  const suffix = randomUUID().replaceAll("-", "");
+  const clubs: Array<{ userId: string; clubId: string }> = [];
+  try {
+    clubs.push(await makeClub(suffix, 80), await makeClub(suffix, 81));
+    const initial = await getMatchFallbackPlan(clubs[0]!.userId);
+    assert.equal(initial.isCustom, false);
+    assert.equal(initial.version, 1);
+    const plan = {
+      formation: "4-4-2",
+      mentality: "DEFENSIVE" as const,
+      pressing: "LOW_BLOCK" as const,
+      tempo: "SLOW" as const,
+      passingStyle: "SHORT" as const,
+    };
+    const saved = await saveMatchFallbackPlan(clubs[0]!.userId, plan, initial.version);
+    assert.equal(saved.version, 2);
+    assert.equal(saved.isCustom, true);
+    await assert.rejects(
+      saveMatchFallbackPlan(clubs[0]!.userId, plan, initial.version),
+      (error: unknown) => error instanceof MatchFallbackPlanError
+        && error.code === "FALLBACK_PLAN_VERSION_CONFLICT",
+    );
+    const kickoff = new Date();
+    const created = await createFriendlyMatch(
+      clubs[0]!.userId, clubs[1]!.clubId, `fallback-runtime-${suffix}`,
+      new Date(kickoff.getTime() - 1_000),
+    );
+    const tick = await processDueMatchRuntimes("fallback-plan-test-worker", kickoff, 5);
+    assert.equal(tick.enqueued, 1);
+    assert.equal(tick.advanced, 1);
+    const runtime = await prisma.matchRuntime.findUniqueOrThrow({ where: { matchId: created.match.id } });
+    const snapshot = runtime.fallbackPlan as { home: Record<string, string>; away: Record<string, string> };
+    assert.deepEqual(snapshot.home, plan);
+    assert.equal(snapshot.away.formation, "4-3-3");
+    assert.equal(snapshot.away.mentality, "BALANCED");
   } finally {
     const clubIds = clubs.map((club) => club.clubId);
     if (clubIds.length) {
