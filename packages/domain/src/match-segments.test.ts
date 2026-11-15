@@ -52,3 +52,83 @@ test("segments must advance from supported boundaries and cannot run past full t
   const half = advanceMatchSegment({ seed: "x", state, toMinute: 45 }).state;
   assert.throws(() => advanceMatchSegment({ seed: "x", state: half, toMinute: 45 }), /INVALID_MATCH_SEGMENT_RANGE/);
 });
+
+
+function withBench(source: MatchSide): MatchSide {
+  const benchPositions = ["RB", "CB", "CM", "ST", "GK", "RW", "LB"] as const;
+  return {
+    ...source,
+    bench: benchPositions.map((position, index) => ({
+      id: source.clubId + "-bench-" + index,
+      name: "Bench " + index,
+      position,
+      overall: 70,
+      morale: 75,
+      fitness: 95,
+      attributes: { pace: 70, shooting: 70, passing: 70, dribbling: 70,
+        defending: 70, physical: 70, goalkeeping: position === "GK" ? 75 : 25 },
+    })),
+  };
+}
+function substitutionsFor(source: MatchSide) {
+  return {
+    onPitch: source.players.map(({ id, position }) => ({ id, position })),
+    bench: (source.bench ?? []).map(({ id, position }) => ({ id, position })),
+    substitutionsUsed: 0,
+    inPlayWindowsUsed: 0,
+    substitutedOutIds: [] as string[],
+    sentOffIds: [] as string[],
+    usedCheckpointIds: [] as string[],
+  };
+}
+
+test("segmented injuries create a forced legal substitution and consume one in-play window", () => {
+  const home = withBench(side("home", 75));
+  const away = side("away", 65);
+  const state: MatchSegmentState = {
+    currentMinute: 0, nextSequence: 1,
+    home: { side: home, score: 0, expectedGoals: 0 },
+    away: { side: away, score: 0, expectedGoals: 0 },
+    events: [],
+  };
+  const result = advanceMatchSegment({
+    seed: "forced-match-seed-6",
+    state,
+    toMinute: 45,
+    homeSubstitutions: substitutionsFor(home),
+    awaySubstitutions: substitutionsFor(away),
+  });
+  const injury = result.events.find((event) => event.type === "INJURY" && event.teamId === "home");
+  assert.ok(injury);
+  const forced = result.events.find((event) =>
+    event.type === "SUBSTITUTION" && event.teamId === "home" && event.minute === injury.minute);
+  assert.ok(forced);
+  assert.equal(result.homeSubstitutions.substitutionsUsed, 1);
+  assert.equal(result.homeSubstitutions.inPlayWindowsUsed, 1);
+  assert.ok(!result.state.home.side.players.some((player) => player.id === injury.playerId));
+  assert.ok(result.state.home.side.players.some((player) => player.id === forced.relatedPlayerId));
+});
+
+test("segmented red cards remove the dismissed player and weaken the next segment", () => {
+  const state = initialState();
+  const result = advanceMatchSegment({
+    seed: "forced-match-seed-28",
+    state,
+    toMinute: 45,
+    homeSubstitutions: substitutionsFor(state.home.side),
+    awaySubstitutions: substitutionsFor(state.away.side),
+  });
+  const redCard = result.events.find((event) => event.type === "RED_CARD" && event.teamId === "away");
+  assert.ok(redCard);
+  assert.equal(result.state.away.side.players.length, 10);
+  assert.ok(result.awaySubstitutions.sentOffIds.includes(redCard.playerId));
+  assert.ok(!result.awaySubstitutions.onPitch.some((player) => player.id === redCard.playerId));
+  const next = advanceMatchSegment({
+    seed: "forced-match-seed-28",
+    state: result.state,
+    toMinute: 60,
+    homeSubstitutions: result.homeSubstitutions,
+    awaySubstitutions: result.awaySubstitutions,
+  });
+  assert.equal(next.state.away.side.players.length, 10);
+});
