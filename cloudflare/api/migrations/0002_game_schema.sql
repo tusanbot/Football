@@ -907,4 +907,4 @@ CREATE INDEX IF NOT EXISTS ix_AdminGroupBroadcastDelivery_deliveredAt_availableA
 CREATE TABLE IF NOT EXISTS fe_write_guard (assertion INTEGER NOT NULL CHECK (assertion = 1));
 INSERT OR IGNORE INTO fe_schema_migrations (version) VALUES ('0002_game_schema');
 
--- Source schema SHA-256: a7669424c0d98e63406ab1f66ef757037e8445de989977433a1199cf85c8c2e1
+-- Source schema SHA-256: 0342a25eb7930fe3def78663c98359004e6efb3b7691c041216b96df7be805f7
