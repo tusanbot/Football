@@ -741,7 +741,7 @@ bot.command("help", async (ctx) => ctx.reply(
   "⚽ مسابقات و لیگ‌ها\n" +
   "/opponents — فهرست حریفان\n/friendly CLUB_ID — زمان‌بندی بازی دوستانه\n/challenge — ساخت چالش دوستانه\n/acceptchallenge TOKEN — پذیرش چالش\n" +
   "/matches — مسابقات، گزارش زنده و تصمیم‌های تاکتیکی\n/tactic MATCH_ID minute-45 mentality=ATTACKING — تغییر تاکتیک در وقفه\n" +
-  "/sub MATCH_ID minute-45 OUT_ID IN_ID — تعویض بازیکن؛ حداکثر ۵ تعویض در کل مسابقه\n/play MATCH_ID — اجرای مسابقه سررسیدشده\n" +
+  "/sub MATCH_ID minute-45 OUT_ID IN_ID — تعویض بازیکن؛ حداکثر ۵ تعویض در کل مسابقه\n/play — توضیح اجرای خودکار مسابقات\n" +
   "/league NAME [4-10] — ساخت لیگ\n/cup NAME [4|8] [legs=1|2] — ساخت جام حذفی یک‌مرحله‌ای یا رفت‌وبرگشت\n" +
   "/leagues و /joinleague ID — مشاهده و عضویت در لیگ‌ها\n/startleague ID و /startcup ID — آغاز رقابت\n/table ID — جدول یا براکت جام\n" +
   "/pyramidleagues و /pyramidtable ID — هرم لیگ و جدول آن\n/leaguehistory — تاریخچه و افتخارات لیگ باشگاه\n/leagueapply — درخواست حضور در لیگ پایه\n" +
@@ -1512,28 +1512,8 @@ bot.command("setfallback", async (ctx) => {
 
 bot.command("play", async (ctx) => {
   if (!ctx.from || ctx.chat.type !== "private") return;
-  const matchId = String(ctx.match ?? "").trim().split(/\s+/)[0];
-  if (!matchId) return ctx.reply("Usage: /play MATCH_ID");
-  try {
-    const result = await api<{ result: { replayed: boolean; homeClub?: string; awayClub?: string; homeScore: number | null; awayScore: number | null; homePenalties?: number | null; awayPenalties?: number | null; attendance?: number; ticketRevenue?: string; events?: Array<{ minute: number; type: string; detail: string; playerName?: string; relatedPlayerName?: string | null }> } }>(`/v1/matches/${encodeURIComponent(matchId)}/simulate`, ctx.from.id, "POST", {});
-    const match = result.result;
-    const eventLabels: Record<string, string> = {
-      GOAL: "گل", YELLOW_CARD: "کارت زرد", RED_CARD: "کارت قرمز",
-      INJURY: "مصدومیت", SUBSTITUTION: "تعویض",
-    };
-    const events = (match.events ?? []).slice(0, 24).map((event) => {
-      const label = eventLabels[event.type] ?? event.type;
-      const related = event.type === "SUBSTITUTION"
-        ? (event.relatedPlayerName ? " · ورود: " + event.relatedPlayerName : "")
-        : event.relatedPlayerName ? " · پاس گل: " + event.relatedPlayerName : "";
-      return `${event.minute}' · ${label} · ${event.playerName ?? "بازیکن"}${related}`;
-    });
-    await ctx.reply(
-      `${match.homeClub ?? "Home"} ${match.homeScore ?? 0} – ${match.awayScore ?? 0} ${match.awayClub ?? "Away"}${match.homePenalties !== null && match.homePenalties !== undefined ? " (pens " + match.homePenalties + "–" + match.awayPenalties + ")" : ""}\nAttendance: ${match.attendance ?? 0}\nGate revenue: ${cash(match.ticketRevenue ?? "0")} Cash\n${match.replayed ? "Already simulated; no rewards were repeated." : "Full-time."}\n\n${events.join("\n") || "No major events."}`,
-    );
-  } catch (error) { await ctx.reply(`Could not simulate match: ${error instanceof Error ? error.message : "unknown error"}`); }
+  await ctx.reply("مسابقات Football Empire به‌صورت خودکار اجرا می‌شوند و به شروع دستی نیاز ندارند. برای مشاهده وضعیت، دستور /matches را بزنید.");
 });
-
 bot.command("league", async (ctx) => {
   if (!ctx.from || ctx.chat.type !== "private") return;
   const parts = String(ctx.match ?? "").trim().split(/\s+/).filter(Boolean);
