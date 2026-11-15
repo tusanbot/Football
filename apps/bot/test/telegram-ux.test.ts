@@ -149,5 +149,6 @@ test("common game API failures are presented in Persian without exposing interna
   assert.match(formatApiError("INSUFFICIENT_CASH"), /موجودی کش/);
   assert.match(formatApiError("GROUP_MANAGER_REQUIRED"), /مدیران/);
   assert.match(formatApiError("CONCURRENT_MODIFICATION"), /هم‌زمان/);
+  assert.match(formatApiError("MATCH_RUNTIME_AUTOMATIC"), /خودکار/);
   assert.match(formatApiError("UNRECOGNIZED_CODE"), /کد خطا/);
 });
