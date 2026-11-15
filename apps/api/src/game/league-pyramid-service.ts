@@ -4,6 +4,22 @@ import { calculateLeaguePlayerValue, leagueTier, rankLeagueTeams } from "@footba
 import { prisma } from "../db.js";
 
 const DAY_MS = 86_400_000;
+
+async function withSerializableRetry<T>(operation: () => Promise<T>, maxAttempts = 3): Promise<T> {
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      return await operation();
+    } catch (error) {
+      const code = typeof error === "object" && error !== null && "code" in error
+        ? (error as { code?: unknown }).code
+        : undefined;
+      if (code !== "P2034" || attempt === maxAttempts) throw error;
+      await new Promise((resolve) => setTimeout(resolve, attempt * 15));
+    }
+  }
+  throw new Error("SERIALIZABLE_RETRY_EXHAUSTED");
+}
+
 const LEAGUE_RULES = {
   maxSubstitutions: 5, maxInPlayWindows: 3, injuriesEnabled: true, injuryDurationDays: 5,
   redCardSuspensionMatches: 1, yellowCardsToSuspend: 3, yellowCardSuspensionMatches: 1, penaltiesOnDraw: false,
@@ -318,7 +334,7 @@ export async function respondToPromotion(userId: string, offerId: string, accept
 }
 
 export async function processPyramidLeagueCompletion(competitionId: string, now = new Date()) {
-  return prisma.$transaction(async (tx) => {
+  return withSerializableRetry(() => prisma.$transaction(async (tx) => {
     const league = await tx.pyramidLeague.findUnique({
       where: { competitionId },
       include: { competition: { include: { entries: { include: { club: { select: { id: true, ownerId: true, name: true } } } } } } },
@@ -363,7 +379,7 @@ export async function processPyramidLeagueCompletion(competitionId: string, now 
       await assignQueueIfReady(tx, league.tier - 1, league.season + 1, now);
     }
     return { processed: true, leagueId: league.id, champion: ranked[0]!.clubId, runnerUp: ranked[1]!.clubId, thirdPlace: ranked[2]!.clubId };
-  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }));
 }
 
 export async function listLeagueNotices(userId: string) {
