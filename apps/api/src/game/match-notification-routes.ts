@@ -36,6 +36,7 @@ export function registerMatchNotificationRoutes(app: FastifyInstance) {
               awayClub: { select: { id: true, name: true, owner: { select: { telegramId: true } } } },
             },
           },
+          decisions: { select: { clubId: true } },
         },
         orderBy: [{ openedAt: "asc" }, { minute: "asc" }],
         take: parsed.data.limit,
@@ -48,7 +49,7 @@ export function registerMatchNotificationRoutes(app: FastifyInstance) {
             where: { id: checkpoint.id, status: "OPEN", homeBotNotifiedAt: null },
             data: { homeBotNotifiedAt: now },
           });
-          if (result.count === 1) claimed.push({
+          if (result.count === 1 && !checkpoint.decisions.some((decision) => decision.clubId === match.homeClub.id)) claimed.push({
             checkpointId: checkpoint.id, matchId: match.id, checkpointKey: checkpoint.checkpointKey,
             minute: checkpoint.minute, deadlineAt: checkpoint.decisionDeadlineAt.toISOString(),
             clubId: match.homeClub.id, clubName: match.homeClub.name, opponentName: match.awayClub.name,
@@ -60,7 +61,7 @@ export function registerMatchNotificationRoutes(app: FastifyInstance) {
             where: { id: checkpoint.id, status: "OPEN", awayBotNotifiedAt: null },
             data: { awayBotNotifiedAt: now },
           });
-          if (result.count === 1) claimed.push({
+          if (result.count === 1 && !checkpoint.decisions.some((decision) => decision.clubId === match.awayClub.id)) claimed.push({
             checkpointId: checkpoint.id, matchId: match.id, checkpointKey: checkpoint.checkpointKey,
             minute: checkpoint.minute, deadlineAt: checkpoint.decisionDeadlineAt.toISOString(),
             clubId: match.awayClub.id, clubName: match.awayClub.name, opponentName: match.homeClub.name,
