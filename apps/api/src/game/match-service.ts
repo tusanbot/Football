@@ -660,12 +660,12 @@ export async function simulateScheduledMatch(userId: string, matchId: string, no
         data: { suspensionMatchesRemaining: matchRules.redCardSuspensionMatches },
       });
     }
+    const yellowSuspendedClubIds = new Set<string>();
     if (match.competitionId && matchRules.yellowCardsToSuspend > 0 && matchRules.yellowCardSuspensionMatches > 0) {
       const yellowCounts = new Map<string, number>();
       for (const event of result.events.filter((item) => item.type === "YELLOW_CARD")) {
         yellowCounts.set(event.playerId, (yellowCounts.get(event.playerId) ?? 0) + 1);
       }
-      const yellowSuspendedClubIds = new Set<string>();
       for (const [playerId, currentCount] of yellowCounts) {
         if (sentOffPlayerIds.includes(playerId)) continue;
         const previousCount = await tx.matchEvent.count({
@@ -681,14 +681,12 @@ export async function simulateScheduledMatch(userId: string, matchId: string, no
           if (card) yellowSuspendedClubIds.add(card.teamId);
         }
       }
-      for (const clubId of yellowSuspendedClubIds) {
-        lineupChangedClubIds.add(clubId);
-      }
     }
     const lineupChangedClubIds = new Set([
       ...injuredClubIds,
       ...previouslySuspended.map((player) => player.clubId),
       ...redCardEvents.map((event) => event.teamId),
+      ...yellowSuspendedClubIds,
     ]);
     if (lineupChangedClubIds.size) {
       await tx.club.updateMany({
