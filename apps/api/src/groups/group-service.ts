@@ -42,7 +42,7 @@ export async function registerTelegramGroup(input: { telegramUserId: string; tel
       update: { role: input.role }, select: { role: true },
     });
     const registeredManagers = await tx.groupMembership.count({ where: { groupId: group.id } });
-    return { group, role: membership.role, registeredManagers, minimumMembers: MIN_TELEGRAM_MEMBERS };
+    return { group, role: membership.role, registeredManagers, minimumMembers };
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 }
 
