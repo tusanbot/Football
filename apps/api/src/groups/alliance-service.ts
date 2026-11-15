@@ -52,7 +52,7 @@ export async function createAlliance(i: { telegramUserId: string; telegramGroupI
     const { group } = await manager(tx, i.telegramUserId, i.telegramGroupId);
     const old = await tx.alliance.findUnique({ where: { slug: i.idempotencyKey } });
     if (old) {
-      if (old.createdByGroupId !== group.id) throw new AllianceServiceError("IDEMPOTENCY_CONFLICT");
+      if (old.createdByGroupId !== group.id || old.name !== i.name || old.description !== (i.description ?? "")) throw new AllianceServiceError("IDEMPOTENCY_CONFLICT");
       return { alliance: old, replayed: true };
     }
     const existing = await tx.allianceGroup.findUnique({ where: { groupId: group.id }, include: { alliance: true } });
@@ -95,8 +95,8 @@ export async function contributeAllianceTreasury(i: { telegramUserId: string; te
     const userIdForLedger = user.id;
     const old = await tx.allianceLedger.findUnique({ where: { idempotencyKey: i.idempotencyKey } });
     if (old) {
-      const priorGroupEntry = await tx.groupPointLedger.findUnique({ where: { idempotencyKey: "alliance-contribution:" + i.idempotencyKey }, select: { groupId: true } });
-      if (old.allianceId !== membership.allianceId || priorGroupEntry?.groupId !== group.id) throw new AllianceServiceError("IDEMPOTENCY_CONFLICT");
+      const priorGroupEntry = await tx.groupPointLedger.findUnique({ where: { idempotencyKey: "alliance-contribution:" + i.idempotencyKey }, select: { groupId: true, amount: true } });
+      if (old.allianceId !== membership.allianceId || old.amount !== i.amount || priorGroupEntry?.groupId !== group.id || priorGroupEntry.amount !== -i.amount) throw new AllianceServiceError("IDEMPOTENCY_CONFLICT");
       return { contributed: true, replayed: true, treasuryPoints: (await tx.alliance.findUniqueOrThrow({where:{id:membership.allianceId},select:{treasuryPoints:true}})).treasuryPoints.toString() };
     }
     const activeSeason = await tx.allianceSeason.findFirst({ where: { allianceId: membership.allianceId, status: "ACTIVE" } });
@@ -189,7 +189,7 @@ export async function createAllianceChampionship(i: { telegramUserId: string; te
     const clubId = user.club!.id;
     const existing = await tx.competition.findUnique({ where: { idempotencyKey: i.idempotencyKey } });
     if (existing) {
-      if (existing.allianceId !== membership.allianceId || existing.createdByClubId !== clubId) throw new AllianceServiceError("IDEMPOTENCY_CONFLICT");
+      if (existing.allianceId !== membership.allianceId || existing.createdByClubId !== clubId || existing.name !== i.name || existing.maxTeams !== i.maxTeams) throw new AllianceServiceError("IDEMPOTENCY_CONFLICT");
       return { competition: existing, replayed: true };
     }
     const season = await tx.allianceSeason.findFirst({ where: { allianceId: membership.allianceId, status: "ACTIVE" }, orderBy: { number: "desc" } });
