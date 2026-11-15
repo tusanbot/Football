@@ -33,15 +33,16 @@ const matchClubInclude = {
     orderBy: [{ lineupSlot: "asc" as const }, { overall: "desc" as const }],
     select: {
       id: true, firstName: true, lastName: true, position: true, overall: true, lineupSlot: true,
-      morale: true, fitness: true, attributes: true,
+      morale: true, fitness: true, attributes: true, suspensionMatchesRemaining: true,
     },
   },
 };
 type LoadedClub = Prisma.ClubGetPayload<{ include: typeof matchClubInclude }>;
 function toSide(club: LoadedClub): MatchSide {
-  const starters = club.players.filter((player) => player.lineupSlot !== null)
+  const eligiblePlayers = club.players.filter((player) => player.suspensionMatchesRemaining === 0);
+  const starters = eligiblePlayers.filter((player) => player.lineupSlot !== null)
     .sort((a, b) => (a.lineupSlot ?? 99) - (b.lineupSlot ?? 99));
-  const bench = club.players.filter((player) => player.lineupSlot === null)
+  const bench = eligiblePlayers.filter((player) => player.lineupSlot === null)
     .sort((a, b) => b.overall - a.overall || a.id.localeCompare(b.id));
   const selected = [...starters];
   if (!selected.some((player) => player.position === "GK")) {
@@ -627,6 +628,21 @@ export async function simulateScheduledMatch(userId: string, matchId: string, no
     }
     if (injuredClubIds.size > 0) {
       await tx.club.updateMany({ where: { id: { in: [...injuredClubIds] } }, data: { lineupVersion: { increment: 1 } } });
+    }
+    // Existing suspensions are served by completing this fixture. New red cards
+    // are then assigned a one-match suspension for the next eligible fixture.
+    await tx.player.updateMany({
+      where: { clubId: { in: [home.id, away.id] }, suspensionMatchesRemaining: { gt: 0 } },
+      data: { suspensionMatchesRemaining: { decrement: 1 } },
+    });
+    const sentOffPlayerIds = [...new Set(result.events
+      .filter((event) => event.type === "RED_CARD")
+      .map((event) => event.playerId))];
+    if (sentOffPlayerIds.length) {
+      await tx.player.updateMany({
+        where: { id: { in: sentOffPlayerIds }, status: "ACTIVE" },
+        data: { suspensionMatchesRemaining: 1 },
+      });
     }
     const homeReward = winnerClubId ? (winnerClubId === home.id ? 250n : 100n) : 150n;
     const awayReward = winnerClubId ? (winnerClubId === away.id ? 250n : 100n) : 150n;
