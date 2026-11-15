@@ -77,11 +77,11 @@ async function getApp(env: Env) {
   configureEnv(env);
   if (!appInstance) {
     appInstance = buildApp();
-    appInstance.addHook("onRequest", (request, reply, done) => {
+    appInstance.addHook("onRequest", (request, _reply, done) => {
       const rawContextId = request.headers["x-football-prisma-context"];
       const contextId = Array.isArray(rawContextId) ? rawContextId[0] : rawContextId;
       if (typeof contextId !== "string" || !enterWorkerPrismaRequest(contextId)) {
-        reply.code(500).send({ error: "PRISMA_REQUEST_CONTEXT_MISSING" });
+        done(new Error("PRISMA_REQUEST_CONTEXT_MISSING"));
         return;
       }
       done();
