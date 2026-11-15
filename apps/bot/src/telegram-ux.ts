@@ -32,6 +32,7 @@ export const PRIVATE_MENU_ROWS = [
   [{ label: "🏆 لیگ‌ها", command: "leagues" }, { label: "🛒 بازار نقل‌وانتقالات", command: "market" }],
   [{ label: "⭐ بازیکنان ویژه", command: "special" }, { label: "❔ راهنما", command: "help" }],
   [{ label: "🏆 رکوردهای بازیکنان", command: "records" }],
+  [{ label: "🏅 جوایز فصل", command: "seasonawards" }],
   [{ label: "⌂ منوی اصلی", command: "menu" }],
 ] as const;
 

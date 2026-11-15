@@ -89,3 +89,12 @@ The seed is safe to rerun: it upserts catalog records by stable slug. Run migrat
 2. Match simulation, fixtures, leagues, tournaments, and group challenges.
 3. Complete remaining Bot/Mini App parity and group operations.
 4. Security, economy simulation, concurrency, and load testing before any production release.
+
+
+## Seasonal player awards archive
+
+- Public API: `GET /v1/seasons/:season/awards` aggregates completed official competition matches for the requested season.
+- Seasonal awards include top scorer, top assist provider, player of the season (minimum appearances configurable from 1 to 38; default 3), and a 4-3-3 team of the season selected by average match rating.
+- Bot command: `/seasonawards [YEAR]`.
+- Mini App page: `/season-awards`.
+- The archive is derived from immutable completed-match performance records; no separate award payout or migration is required.

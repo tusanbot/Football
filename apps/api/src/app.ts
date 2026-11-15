@@ -19,6 +19,7 @@ import { registerTelegramMessageDeletionRoutes } from "./telegram-message-deleti
 import { registerLeagueNoticeRoutes } from "./league-notice-routes.js";
 import { registerPublicClubRoutes } from "./public-club-routes.js";
 import { registerPublicPlayerRecordRoutes } from "./players/public-record-routes.js";
+import { registerSeasonAwardRoutes } from "./game/season-award-routes.js";
 
 const healthResponse = z.object({
   status: z.literal("ok"),
@@ -70,6 +71,7 @@ export function buildApp() {
   registerLeagueNoticeRoutes(app);
   registerPublicClubRoutes(app);
   registerPublicPlayerRecordRoutes(app);
+  registerSeasonAwardRoutes(app);
 
   app.get("/v1", async () => ({
     name: "Football Empire API",

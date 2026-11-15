@@ -250,3 +250,11 @@ The earlier seed-verification command defect at commit `daa2b124a03c6d61169f897c
 - No merge to `main`, no production deployment, and no live Telegram webhook changes without explicit approval.
 - No use of the unrelated Tosan Supabase project as Football Empire storage.
 - No real database migration/seed until a dedicated Football Empire development database is explicitly configured and approved.
+
+
+## Follow-up completion — seasonal player awards archive
+
+- Added a season-scoped public archive derived only from completed official competition fixtures.
+- Added top scorer, top assist provider, player-of-season rating leader (minimum appearance threshold), and a 4-3-3 team of the season.
+- Exposed the archive in the Telegram Bot and a Persian RTL Mini App page.
+- Existing administration, gift-code, league-pyramid, group challenge, alliance, audit, and moderation foundations are present in this branch; the remaining operational release gates (scheduled workers, live Telegram webhook, production observability and load/security rehearsal) still require a dedicated runtime and approved environment.

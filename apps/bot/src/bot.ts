@@ -1332,6 +1332,24 @@ bot.on("message:document", async (ctx) => {
 });
 
 
+bot.command("seasonawards", async (ctx) => {
+  const raw = String(ctx.match ?? "").trim();
+  const season = raw ? Number(raw) : new Date().getUTCFullYear();
+  if (!Number.isInteger(season) || season < 2020 || season > 2200) return ctx.reply("استفاده: /seasonawards [YEAR]");
+  try {
+    const result = await publicApi<{ season:number; matches:number; awards:{topScorer:{playerName:string;clubName:string;goals:number}|null;topAssists:{playerName:string;clubName:string;assists:number}|null;playerOfSeason:{playerName:string;clubName:string;averageRating:number}|null;teamOfSeason:Array<{playerName:string;clubName:string;position:string;averageRating:number}>};leaders:{scorers:Array<{playerName:string;clubName:string;goals:number}>;assists:Array<{playerName:string;clubName:string;assists:number}>} }>(
+      "/v1/seasons/" + season + "/awards",
+    );
+    const line = (label:string, row:{playerName:string;clubName:string}|null, stat:string) => label + ": " + (row ? row.playerName + " · " + row.clubName + " · " + stat : "ثبت نشده");
+    const team = result.awards.teamOfSeason.map((p,i)=>(i+1)+". "+p.playerName+" · "+p.position+" · "+p.clubName+" · "+p.averageRating.toFixed(2));
+    await ctx.reply("آرشیو فصل "+result.season+" · "+result.matches+" مسابقه\n\n"+
+      line("بهترین گلزن",result.awards.topScorer,result.awards.topScorer?.goals+" گل")+"\n"+
+      line("بهترین پاسور",result.awards.topAssists,result.awards.topAssists?.assists+" پاس گل")+"\n"+
+      line("بازیکن فصل",result.awards.playerOfSeason,result.awards.playerOfSeason?.averageRating.toFixed(2)+" امتیاز")+
+      "\n\nتیم منتخب فصل ۴-۳-۳:\n"+(team.join("\n")||"اطلاعات کافی نیست"));
+  } catch(error) { await ctx.reply("دریافت آرشیو فصل ناموفق بود: "+(error instanceof Error?error.message:"خطای نامشخص")); }
+});
+
 bot.command("records", async (ctx) => {
   const requested = String(ctx.match ?? "").trim().toLowerCase().split(" ")[0] ?? "";
   const aliases: Record<string, "goals" | "assists" | "appearances" | "rating"> = {
