@@ -445,6 +445,33 @@ bot.command("adminchallenge", async (ctx) => {
   }
 });
 
+bot.command("adminbroadcast", async (ctx) => {
+  if (!ctx.from || !adminOnlyInPrivate(ctx)) return;
+  const input=String(ctx.match ?? "").trim();
+  const firstSpace=input.indexOf(" ");
+  if(firstSpace<1)return ctx.reply("استفاده: /adminbroadcast users|groups پیام شما");
+  const audience=input.slice(0,firstSpace);
+  const message=input.slice(firstSpace+1).trim();
+  if(!["users","groups"].includes(audience)||message.length<2)return ctx.reply("مخاطب باید users یا groups باشد و متن حداقل ۲ نویسه داشته باشد.");
+  try {
+    if(audience==="users"){
+      await api("/v1/admin/actions",ctx.from.id,"POST",{action:"broadcast-users",broadcastMessage:message,idempotencyKey:randomUUID()});
+      return ctx.reply("پیام در صف اعلان خصوصی کاربران قرار گرفت. ارسال توسط worker اعلان‌ها انجام می‌شود.");
+    }
+    await api("/v1/admin/actions",ctx.from.id,"POST",{action:"broadcast-groups",broadcastMessage:message,idempotencyKey:randomUUID()});
+    const result=await api<{groups:Array<{telegramId:string;title:string}>}>("/v1/admin/group-targets",ctx.from.id);
+    let sent=0,failed=0;
+    for(const group of result.groups){
+      try{await bot.api.sendMessage(Number(group.telegramId),message);sent++;}
+      catch{failed++;}
+      await new Promise(resolve=>setTimeout(resolve,45));
+    }
+    await ctx.reply("ارسال گروهی پایان یافت. موفق: "+sent+" · ناموفق: "+failed+" · کل گروه‌ها: "+result.groups.length);
+  } catch(error) {
+    await ctx.reply("ارسال پیام مدیریتی ناموفق بود: "+(error instanceof Error?error.message:"خطای نامشخص"));
+  }
+});
+
 bot.command("adminfinance", async (ctx) => {
   if (!ctx.from || ctx.chat.type !== "private") return;
   const days = Math.max(1, Math.min(365, Number(String(ctx.match ?? "30").trim()) || 30));
