@@ -53,10 +53,24 @@ async function authenticateGroupActor(request: FastifyRequest, reply: FastifyRep
       const groupId = (request.params as { telegramGroupId?: string }).telegramGroupId
         ?? (request.body as { telegramGroupId?: string } | null)?.telegramGroupId;
       if (groupId) {
+        if (requiresGroupManagerVerification(request.method, request.routeOptions.url)) {
+          try {
+            await verifyTelegramGroupActor({ telegramGroupId: groupId, telegramUserId: telegramId, requireManager: true });
+          } catch (error) {
+            if (error instanceof TelegramGroupAuthorizationError) {
+              const status = error.code === "TELEGRAM_BOT_TOKEN_NOT_CONFIGURED" ? 503
+                : error.code === "TELEGRAM_GROUP_CHECK_FAILED" ? 502 : 403;
+              reply.code(status).send({ error: error.code });
+              return null;
+            }
+            throw error;
+          }
+        }
         const group = await prisma.telegramGroup.findUnique({ where: { telegramId: groupId }, select: { isSuspended: true } });
         if (group?.isSuspended) { reply.code(403).send({ error: "TELEGRAM_GROUP_SUSPENDED" }); return null; }
       }
-      // Authenticated Bot updates originate from the actual Telegram group event.
+      // The Bot secret authenticates the transport; sensitive group actions still
+      // re-check the actor's current Telegram administrator status above.
       return telegramId;
     }
   }
