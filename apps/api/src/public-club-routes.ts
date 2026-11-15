@@ -48,10 +48,11 @@ function statsFor(entries: Array<{ finalPosition: number | null; league: { seaso
 function tierName(tier: number) { return ["", "سطح اول", "سطح دوم", "سطح سوم", "سطح چهارم", "سطح پنجم", "سطح ششم", "سطح هفتم"][tier] ?? "سطح " + tier; }
 
 const completedEntries = {
-  where: { league: { competition: { status: "COMPLETED" } } },
+  where: { finalPosition: { not: null } },
   include: {
     league: {
       include: {
+        competition: { select: { status: true } },
         awards: { select: { clubId: true, placement: true, awardName: true, awardType: true } },
         promotionOffers: { select: { clubId: true, status: true, targetTier: true, finalPosition: true, resolvedAt: true } },
       },
