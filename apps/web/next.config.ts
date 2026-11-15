@@ -5,7 +5,7 @@ if (process.env.NODE_ENV === "production") {
   if (!apiUrl) throw new Error("NEXT_PUBLIC_API_URL is required for a production Web build.");
   let parsedApiUrl: URL;
   try { parsedApiUrl = new URL(apiUrl); } catch { throw new Error("NEXT_PUBLIC_API_URL must be an absolute HTTPS URL."); }
-  if (parsedApiUrl.protocol !== "https:") throw new Error("NEXT_PUBLIC_API_URL must use HTTPS in production.");
+  if (parsedApiUrl.protocol !== "https:" || parsedApiUrl.origin !== apiUrl || parsedApiUrl.username || parsedApiUrl.password || parsedApiUrl.search || parsedApiUrl.hash) throw new Error("NEXT_PUBLIC_API_URL must be an HTTPS origin without credentials, path, query, or fragment.");
 }
 
 const securityHeaders = [

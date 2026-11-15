@@ -17,7 +17,7 @@ if (!apiUrl) throw new Error("FOOTBALL_API_URL is required to start the producti
 if (!botApiSecret || botApiSecret.length < 32 || /^(replace-with|change-me|your-)/i.test(botApiSecret)) throw new Error("BOT_API_SECRET must be a unique random secret of at least 32 characters.");
 let apiEndpoint: URL;
 try { apiEndpoint = new URL(apiUrl); } catch { throw new Error("FOOTBALL_API_URL must be a valid absolute URL."); }
-if (!["http:", "https:"].includes(apiEndpoint.protocol)) throw new Error("FOOTBALL_API_URL must use HTTP or HTTPS.");
+if (!["http:", "https:"].includes(apiEndpoint.protocol) || apiEndpoint.origin !== apiUrl || apiEndpoint.username || apiEndpoint.password || apiEndpoint.search || apiEndpoint.hash) throw new Error("FOOTBALL_API_URL must be an absolute HTTP(S) origin without credentials, path, query, or fragment.");
 if (process.env.NODE_ENV === "production" && apiEndpoint.protocol !== "https:"
   && !["localhost", "127.0.0.1", "::1"].includes(apiEndpoint.hostname)) {
   throw new Error("FOOTBALL_API_URL must use HTTPS outside localhost in production.");
@@ -26,7 +26,7 @@ if (process.env.NODE_ENV === "production" && !webAppUrl) throw new Error("TELEGR
 if (webAppUrl) {
   let webAppEndpoint: URL;
   try { webAppEndpoint = new URL(webAppUrl); } catch { throw new Error("TELEGRAM_WEB_APP_URL must be a valid absolute URL."); }
-  if (process.env.NODE_ENV === "production" && webAppEndpoint.protocol !== "https:") throw new Error("TELEGRAM_WEB_APP_URL must use HTTPS in production.");
+  if (webAppEndpoint.username || webAppEndpoint.password || webAppEndpoint.search || webAppEndpoint.hash || (process.env.NODE_ENV === "production" && webAppEndpoint.protocol !== "https:")) throw new Error("TELEGRAM_WEB_APP_URL must not contain credentials, query, or fragment and must use HTTPS in production.");
 }
 const bot = new Bot(token);
 let botTelegramId: number | undefined;
