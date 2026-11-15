@@ -147,3 +147,6 @@ button:disabled { opacity: .55; cursor: not-allowed; }
 .match-tactic-wide { grid-column: 1 / -1; }
 @media (max-width: 720px) { .match-center-grid { grid-template-columns: 1fr; } .match-center-entry { padding-inline: 13px; } }
 @media (max-width: 420px) { .match-tactics-grid { grid-template-columns: 1fr; } .match-tactic-wide { grid-column: auto; } }
+
+.match-lineup-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 14px; }
+@media (max-width: 520px) { .match-lineup-grid { grid-template-columns: 1fr; } }
