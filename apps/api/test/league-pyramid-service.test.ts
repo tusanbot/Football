@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { prisma } from "../src/db.js";
-import { applyForPyramidLeague, getPyramidLeagueDetails } from "../src/game/league-pyramid-service.js";
+import { applyForPyramidLeague, createFriendlyChallenge, getPyramidLeagueDetails } from "../src/game/league-pyramid-service.js";
 
 const positions = ["GK", "RB", "CB", "CB", "LB", "CDM", "CM", "CAM", "RW", "ST", "LW"] as const;
 
@@ -82,5 +82,42 @@ test("national pyramid waits for exactly eight applications before creating a le
       await prisma.wallet.deleteMany({ where: { userId: { in: userIds } } });
       await prisma.user.deleteMany({ where: { id: { in: userIds } } });
     }
+  }
+});
+
+
+test("friendly challenge creation enforces three free and two Gold-funded daily uses", async (t) => {
+  if (!process.env.DATABASE_URL) {
+    t.skip("DATABASE_URL is only configured in the ephemeral PostgreSQL CI job.");
+    return;
+  }
+  const suffix = randomUUID().replaceAll("-", "");
+  const club = await makePyramidClub(suffix, 0);
+  try {
+    const assets: string[] = [];
+    for (let index = 0; index < 5; index++) {
+      const result = await createFriendlyChallenge(club.userId, 100n, new Date("2026-11-15T12:00:00.000Z"));
+      assets.push(result.asset);
+    }
+    assert.deepEqual(assets, ["FREE", "FREE", "FREE", "GOLD", "GOLD"]);
+    await assert.rejects(
+      createFriendlyChallenge(club.userId, 100n, new Date("2026-11-15T12:00:00.000Z")),
+      (error: unknown) => error instanceof Error && error.message === "DAILY_CHALLENGE_LIMIT_REACHED",
+    );
+    const wallet = await prisma.wallet.findUniqueOrThrow({ where: { userId_asset: { userId: club.userId, asset: "GOLD" } } });
+    assert.equal(wallet.balance, 800n);
+    const usage = await prisma.challengeDailyUsage.findUniqueOrThrow({
+      where: { userId_usageDate: { userId: club.userId, usageDate: new Date("2026-11-15T00:00:00.000Z") } },
+    });
+    assert.equal(usage.freeUsed, 3);
+    assert.equal(usage.goldUsed, 2);
+  } finally {
+    await prisma.friendlyChallenge.deleteMany({ where: { creatorUserId: club.userId } });
+    await prisma.challengeDailyUsage.deleteMany({ where: { userId: club.userId } });
+    await prisma.ledgerTransaction.deleteMany({ where: { userId: club.userId } });
+    await prisma.player.deleteMany({ where: { clubId: club.clubId } });
+    await prisma.club.deleteMany({ where: { id: club.clubId } });
+    await prisma.wallet.deleteMany({ where: { userId: club.userId } });
+    await prisma.user.deleteMany({ where: { id: club.userId } });
   }
 });
