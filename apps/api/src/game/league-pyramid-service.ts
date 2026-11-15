@@ -75,10 +75,21 @@ async function createLeagueForEight(tx: Prisma.TransactionClient, tier: number, 
   return { leagueId: league.id, competitionId: competition.id, tier, tierName: level.name, season, groupNumber, teams: clubs.length, fixturesCreated: fixtures.length };
 }
 
+async function assignQueueIfReady(tx: Prisma.TransactionClient, tier: number, season: number, now: Date) {
+  const queue = await tx.pyramidLeagueApplication.findMany({
+    where: { tier, season, status: "QUEUED" },
+    orderBy: [{ appliedAt: "asc" }, { id: "asc" }], take: 8,
+    select: { id: true, clubId: true, userId: true },
+  });
+  if (queue.length < 8) return null;
+  return createLeagueForEight(tx, tier, season, queue, now);
+}
+
 export async function applyForPyramidLeague(userId: string, tier: number, now = new Date()) {
   const club = await ownedClub(userId);
   leagueTier(tier);
-  const season = now.getUTCFullYear();
+  if (tier !== 1) throw new PyramidLeagueError("DIRECT_TIER_ENTRY_NOT_ALLOWED");
+  const season = now.getUTCFullYear() + 1;
   return prisma.$transaction(async (tx) => {
     const existing = await tx.pyramidLeagueApplication.findUnique({ where: { clubId_tier_season: { clubId: club.id, tier, season } } });
     if (existing && existing.status !== "WITHDRAWN") {
@@ -88,21 +99,18 @@ export async function applyForPyramidLeague(userId: string, tier: number, now = 
     const current = await tx.pyramidLeagueEntry.findFirst({ where: { clubId: club.id, league: { competition: { status: "ACTIVE" } } } });
     if (current) throw new PyramidLeagueError("CLUB_ALREADY_IN_ACTIVE_PYRAMID_LEAGUE");
     const application = await tx.pyramidLeagueApplication.create({ data: { userId, clubId: club.id, tier, season } });
-    const queue = await tx.pyramidLeagueApplication.findMany({
-      where: { tier, season, status: "QUEUED" }, orderBy: [{ appliedAt: "asc" }, { id: "asc" }], take: 8,
-      select: { id: true, clubId: true, userId: true },
-    });
-    if (queue.length < 8) {
-      return { applied: true, replayed: false, status: "QUEUED", leagueId: null, waitingTeams: queue.length, requiredTeams: 8 };
+    const created = await assignQueueIfReady(tx, tier, season, now);
+    if (!created) {
+      const waitingTeams = await tx.pyramidLeagueApplication.count({ where: { tier, season, status: "QUEUED" } });
+      return { applied: true, replayed: false, status: "QUEUED", leagueId: null, waitingTeams, requiredTeams: 8 };
     }
-    const created = await createLeagueForEight(tx, tier, season, queue, now);
     return { applied: true, replayed: false, status: "ASSIGNED", ...created, waitingTeams: await tx.pyramidLeagueApplication.count({ where: { tier, season, status: "QUEUED" } }) };
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 }
 
 export async function listPyramidLeagues(userId: string) {
   const club = await ownedClub(userId);
-  const season = new Date().getUTCFullYear();
+  const season = new Date().getUTCFullYear() + 1;
   const [leagues, applications, currentEntry, promotionOffers] = await Promise.all([
     prisma.pyramidLeague.findMany({
       where: { season }, include: {
@@ -208,7 +216,8 @@ export async function respondToPromotion(userId: string, offerId: string, accept
       });
       await adjustPlayerValues(tx, club.id, sourceTier, offer.targetTier);
       await addNotice(tx, userId, "PROMOTION_ACCEPTED", "صعود تأیید شد", `تیم شما به ${leagueTier(offer.targetTier).name} صعود کرد و در صف تشکیل لیگ فصل ${season} قرار گرفت.`, offer.id);
-      return { offer: updated, accepted: true, targetTier: offer.targetTier, season };
+      const createdLeague = await assignQueueIfReady(tx, offer.targetTier, season, now);
+      return { offer: updated, accepted: true, targetTier: offer.targetTier, season, createdLeague };
     }
     await addNotice(tx, userId, "PROMOTION_DECLINED", "انصراف از صعود ثبت شد", "انصراف شما ثبت شد؛ تیم بعدی جدول برای دریافت سهمیه صعود بررسی می‌شود.", offer.id);
     const existingOffers = await tx.leaguePromotionOffer.findMany({ where: { leagueId: offer.leagueId }, select: { finalPosition: true, status: true, clubId: true } });
@@ -280,6 +289,7 @@ export async function processPyramidLeagueCompletion(competitionId: string, now 
         await adjustPlayerValues(tx, row.clubId, league.tier, league.tier - 1);
         await addNotice(tx, entry.club.ownerId, "RELEGATION", "سقوط به سطح پایین‌تر", `تیم شما در فصل بعد در ${leagueTier(league.tier - 1).name} حضور خواهد داشت.`, league.id);
       }
+      await assignQueueIfReady(tx, league.tier - 1, league.season + 1, now);
     }
     return { processed: true, leagueId: league.id, champion: ranked[0]!.clubId, runnerUp: ranked[1]!.clubId, thirdPlace: ranked[2]!.clubId };
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
