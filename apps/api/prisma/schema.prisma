@@ -189,6 +189,8 @@ model Club {
   pressing   String   @default("MID_BLOCK")
   tempo      String   @default("NORMAL")
   passingStyle String @default("MIXED")
+  matchFallbackPlan Json?
+  matchFallbackPlanVersion Int @default(1)
   lineupVersion Int   @default(0)
   trainingGroundLevel Int @default(1)
   lastDailyTickAt DateTime @default(now())
