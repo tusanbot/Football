@@ -131,7 +131,8 @@ test("group friendly challenges can only be accepted by another member of that T
   const suffix = randomUUID().replaceAll("-", "");
   const creator = await makePyramidClub(suffix, 0);
   const opponent = await makePyramidClub(suffix, 1);
-  const group = await prisma.telegramGroup.create({ data: { telegramId: "-100" + suffix.slice(0, 10), title: "Pyramid Test Group" } });
+  const telegramGroupId = "-100" + BigInt("0x" + suffix.slice(0, 10)).toString();
+  const group = await prisma.telegramGroup.create({ data: { telegramId: telegramGroupId, title: "Pyramid Test Group" } });
   let matchId: string | undefined;
   try {
     await prisma.groupMembership.create({ data: { groupId: group.id, userId: creator.userId, role: "MEMBER" } });
