@@ -16,10 +16,10 @@ test("group membership threshold, activity rewards and daily caps use central se
   const previous = await prisma.gameSetting.findMany({ where: { key: { in: keys } } });
   let userId: string | undefined, groupId: string | undefined;
   try {
-    await prisma.gameSetting.upsert({ where: { key: "groups.minimumMembers" }, create: { key: "groups.minimumMembers", value: 15 }, update: { value: 15 } });
-    await prisma.gameSetting.upsert({ where: { key: "groups.dailyPointCap" }, create: { key: "groups.dailyPointCap", value: 5 }, update: { value: 5 } });
-    await prisma.gameSetting.upsert({ where: { key: "groups.matchPlayedPoints" }, create: { key: "groups.matchPlayedPoints", value: 4 }, update: { value: 4 } });
-    await prisma.gameSetting.upsert({ where: { key: "groups.challengeJoinPoints" }, create: { key: "groups.challengeJoinPoints", value: 2 }, update: { value: 2 } });
+    await prisma.gameSetting.upsert({ where: { key: "groups.minimumMembers" }, create: { key: "groups.minimumMembers", value: 15, updatedByTelegramId: "test-admin" }, update: { value: 15 } });
+    await prisma.gameSetting.upsert({ where: { key: "groups.dailyPointCap" }, create: { key: "groups.dailyPointCap", value: 5, updatedByTelegramId: "test-admin" }, update: { value: 5 } });
+    await prisma.gameSetting.upsert({ where: { key: "groups.matchPlayedPoints" }, create: { key: "groups.matchPlayedPoints", value: 4, updatedByTelegramId: "test-admin" }, update: { value: 4 } });
+    await prisma.gameSetting.upsert({ where: { key: "groups.challengeJoinPoints" }, create: { key: "groups.challengeJoinPoints", value: 2, updatedByTelegramId: "test-admin" }, update: { value: 2 } });
     const user = await prisma.user.create({
       data: { telegramId: telegramUserId, displayName: "Group Settings Test", club: { create: { name: "Group Settings FC", slug: "group-settings-" + suffix } } },
     });
