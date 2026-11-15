@@ -399,22 +399,48 @@ export async function listLeagueNotices(userId: string) {
   return { notices };
 }
 
-export async function createFriendlyChallenge(userId: string, goldCost = 100n, now = new Date(), groupTelegramId?: string) {
+export async function createFriendlyChallenge(
+  userId: string, goldCost: bigint, now: Date, groupTelegramId: string | undefined, idempotencyKey: string,
+) {
+  if (!/^[A-Za-z0-9:_-]{12,128}$/.test(idempotencyKey)) throw new PyramidLeagueError("INVALID_IDEMPOTENCY_KEY");
+  if (goldCost <= 0n) throw new PyramidLeagueError("INVALID_CHALLENGE_PRICE");
   const club = await ownedClub(userId);
-  const token = randomBytes(18).toString("base64url");
   const day = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
   return prisma.$transaction(async (tx) => {
     let groupId: string | null = null;
     if (groupTelegramId) {
-      const group = await tx.telegramGroup.findUnique({ where: { telegramId: groupTelegramId }, include: { memberships: { where: { userId }, select: { id: true } } } });
+      const group = await tx.telegramGroup.findUnique({
+        where: { telegramId: groupTelegramId },
+        include: { memberships: { where: { userId }, select: { id: true } } },
+      });
       if (!group || group.memberships.length === 0) throw new PyramidLeagueError("GROUP_MEMBERSHIP_REQUIRED");
+      if (!group.isActive || group.isSuspended) throw new PyramidLeagueError("GROUP_INACTIVE");
       groupId = group.id;
     }
+
+    const existing = await tx.friendlyChallenge.findUnique({ where: { idempotencyKey } });
+    if (existing) {
+      if (existing.creatorUserId !== userId || existing.creatorClubId !== club.id || existing.groupId !== groupId) {
+        throw new PyramidLeagueError("IDEMPOTENCY_CONFLICT");
+      }
+      const usage = await tx.challengeDailyUsage.findUnique({ where: { userId_usageDate: { userId, usageDate: day } } });
+      return {
+        challenge: existing, asset: existing.chargeAsset, goldCost: existing.goldCost.toString(),
+        remaining: {
+          free: Math.max(0, 3 - (usage?.freeUsed ?? 0)),
+          gold: Math.max(0, 2 - (usage?.goldUsed ?? 0)),
+          purchased: usage?.purchasedCredits ?? 0,
+        },
+        replayed: true,
+      };
+    }
+
     const usage = await tx.challengeDailyUsage.upsert({
       where: { userId_usageDate: { userId, usageDate: day } },
       create: { userId, usageDate: day }, update: {},
     });
     let asset: "FREE" | "GOLD" | "PURCHASED";
+    let chargedGold = 0n;
     if (usage.freeUsed < 3) {
       asset = "FREE";
       await tx.challengeDailyUsage.update({ where: { id: usage.id }, data: { freeUsed: { increment: 1 } } });
@@ -422,9 +448,19 @@ export async function createFriendlyChallenge(userId: string, goldCost = 100n, n
       asset = "GOLD";
       const wallet = await tx.wallet.findUnique({ where: { userId_asset: { userId, asset: "GOLD" } } });
       if (!wallet || wallet.balance < goldCost) throw new PyramidLeagueError("INSUFFICIENT_GOLD");
-      const debited = await tx.wallet.updateMany({ where: { id: wallet.id, balance: wallet.balance, version: wallet.version }, data: { balance: { decrement: goldCost }, version: { increment: 1 } } });
+      const debited = await tx.wallet.updateMany({
+        where: { id: wallet.id, balance: wallet.balance, version: wallet.version },
+        data: { balance: { decrement: goldCost }, version: { increment: 1 } },
+      });
       if (debited.count !== 1) throw new PyramidLeagueError("CONCURRENT_MODIFICATION");
-      await tx.ledgerTransaction.create({ data: { idempotencyKey: `friendly-challenge:${userId}:${token}`, userId, asset: "GOLD", direction: "DEBIT", amount: goldCost, reason: "FRIENDLY_CHALLENGE_CREATE", referenceType: "FRIENDLY_CHALLENGE", referenceId: token } });
+      chargedGold = goldCost;
+      await tx.ledgerTransaction.create({
+        data: {
+          idempotencyKey: `friendly-challenge:${userId}:${idempotencyKey}`,
+          userId, asset: "GOLD", direction: "DEBIT", amount: goldCost,
+          reason: "FRIENDLY_CHALLENGE_CREATE", referenceType: "FRIENDLY_CHALLENGE", referenceId: idempotencyKey,
+        },
+      });
       await tx.challengeDailyUsage.update({ where: { id: usage.id }, data: { goldUsed: { increment: 1 } } });
     } else if (usage.purchasedCredits > 0) {
       asset = "PURCHASED";
@@ -432,11 +468,29 @@ export async function createFriendlyChallenge(userId: string, goldCost = 100n, n
     } else {
       throw new PyramidLeagueError("DAILY_CHALLENGE_LIMIT_REACHED");
     }
-    const challenge = await tx.friendlyChallenge.create({ data: { token, creatorUserId: userId, creatorClubId: club.id, groupId, expiresAt: new Date(now.getTime() + 24 * 60 * 60_000) } });
-    return { challenge, asset, goldCost: asset === "GOLD" ? goldCost.toString() : "0", remaining: { free: Math.max(0, 2 - usage.freeUsed) + (asset === "FREE" ? 0 : 0), gold: Math.max(0, 1 - usage.goldUsed), purchased: usage.purchasedCredits } };
+
+    const token = randomBytes(18).toString("base64url");
+    const challenge = await tx.friendlyChallenge.create({
+      data: {
+        token, idempotencyKey, chargeAsset: asset, goldCost: chargedGold,
+        creatorUserId: userId, creatorClubId: club.id, groupId,
+        expiresAt: new Date(now.getTime() + 24 * 60 * 60_000),
+      },
+    });
+    const updatedUsage = await tx.challengeDailyUsage.findUniqueOrThrow({
+      where: { userId_usageDate: { userId, usageDate: day } },
+    });
+    return {
+      challenge, asset, goldCost: chargedGold.toString(),
+      remaining: {
+        free: Math.max(0, 3 - updatedUsage.freeUsed),
+        gold: Math.max(0, 2 - updatedUsage.goldUsed),
+        purchased: updatedUsage.purchasedCredits,
+      },
+      replayed: false,
+    };
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 }
-
 export async function acceptFriendlyChallenge(userId: string, token: string, now = new Date()) {
   const opponent = await ownedClub(userId);
   return prisma.$transaction(async (tx) => {
