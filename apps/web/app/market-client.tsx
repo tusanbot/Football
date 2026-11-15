@@ -25,7 +25,8 @@ type MatchRecord = {
   homeScore: number | null; awayScore: number | null; homePenalties: number | null; awayPenalties: number | null; winnerClubId: string | null; attendance: number; ticketRevenue: string;
   events: Array<{ minute: number; type: string; detail: string; playerId: string; playerName: string; relatedPlayerName: string | null }>;
 };
-type OpenLeague = { id: string; name: string; season: number; format: string; status: string; maxTeams: number; teams: number; joined: boolean; isCreator: boolean; creator: string };
+type MatchRulesForm = { maxSubstitutions:number; maxInPlayWindows:number; injuriesEnabled:boolean; redCardSuspensionMatches:number; yellowCardsToSuspend:number; yellowCardSuspensionMatches:number; penaltiesOnDraw:boolean };
+type OpenLeague = { id: string; name: string; season: number; format: string; status: string; maxTeams: number; teams: number; joined: boolean; isCreator: boolean; creator: string; rules:MatchRulesForm };
 type ClubCompetition = { id: string; name: string; season: number; format: string; status: string };
 type LeagueDetails = {
   competition: { id: string; name: string; season: number; format: string; status: string; startsAt: string | null };
@@ -114,6 +115,8 @@ export default function MarketPage() {
   const [leagueName, setLeagueName] = useState("");
   const [leagueCapacity, setLeagueCapacity] = useState("8");
   const [competitionFormat, setCompetitionFormat] = useState("LEAGUE");
+  const [competitionRules, setCompetitionRules] = useState<MatchRulesForm>({maxSubstitutions:5,maxInPlayWindows:3,injuriesEnabled:true,redCardSuspensionMatches:1,yellowCardsToSuspend:3,yellowCardSuspensionMatches:1,penaltiesOnDraw:false});
+  const [editingRulesFor, setEditingRulesFor] = useState("");
   const [coach, setCoach] = useState<{ name: string; level: number; trainingSkill: number; recoverySkill: number; medicalSkill: number; weeklySalary: string } | null>(null);
   const [trainingGroundLevel, setTrainingGroundLevel] = useState(1);
   const [weeklyWageBill, setWeeklyWageBill] = useState("0");
@@ -534,12 +537,29 @@ export default function MarketPage() {
         <label>نام لیگ<input value={leagueName} maxLength={40} onChange={(event) => setLeagueName(event.target.value)} placeholder="مثلاً لیگ دوستان توسن"/></label>
         <label>نوع رقابت<select value={competitionFormat} onChange={(event) => { setCompetitionFormat(event.target.value); setLeagueCapacity(event.target.value === "CUP" ? "4" : "8"); }}><option value="LEAGUE">لیگ دوره‌ای</option><option value="CUP">جام حذفی</option></select></label>
         <label>تعداد باشگاه‌ها<select value={leagueCapacity} onChange={(event) => setLeagueCapacity(event.target.value)}>{(competitionFormat === "CUP" ? ["4", "8"] : ["4", "6", "8", "10"]).map((size) => <option key={size} value={size}>{size} باشگاه</option>)}</select></label>
-        <button disabled={!!busy || leagueName.trim().length < 3} onClick={() => void action("create-league", "/v1/competitions", "POST", { name: leagueName.trim(), maxTeams: Number(leagueCapacity), format: competitionFormat, idempotencyKey: "mini-league-" + crypto.randomUUID() })}>ایجاد رقابت</button>
+        <h3>قوانین اختصاصی رقابت</h3>
+        <div className="development-stats">
+          <label>سقف تعویض<input type="number" min="0" max="7" value={competitionRules.maxSubstitutions} onChange={e=>setCompetitionRules(r=>({...r,maxSubstitutions:Number(e.target.value),maxInPlayWindows:Math.min(r.maxInPlayWindows,Number(e.target.value))}))}/></label>
+          <label>پنجره تعویض حین بازی<input type="number" min="0" max="5" maxLength={1} value={competitionRules.maxInPlayWindows} onChange={e=>setCompetitionRules(r=>({...r,maxInPlayWindows:Number(e.target.value)}))}/></label>
+          <label>محرومیت کارت قرمز (بازی)<input type="number" min="0" max="5" value={competitionRules.redCardSuspensionMatches} onChange={e=>setCompetitionRules(r=>({...r,redCardSuspensionMatches:Number(e.target.value)}))}/></label>
+          <label>تعداد کارت زرد تا محرومیت<input type="number" min="0" max="10" value={competitionRules.yellowCardsToSuspend} onChange={e=>setCompetitionRules(r=>({...r,yellowCardsToSuspend:Number(e.target.value),yellowCardSuspensionMatches:Number(e.target.value)===0?0:r.yellowCardSuspensionMatches}))}/></label>
+          <label>محرومیت کارت زرد (بازی)<input type="number" min="0" max="5" value={competitionRules.yellowCardSuspensionMatches} onChange={e=>setCompetitionRules(r=>({...r,yellowCardSuspensionMatches:Number(e.target.value)}))}/></label>
+        </div>
+        <label className="check-row"><input type="checkbox" checked={competitionRules.injuriesEnabled} onChange={e=>setCompetitionRules(r=>({...r,injuriesEnabled:e.target.checked}))}/> فعال بودن مصدومیت‌ها</label>
+        {competitionFormat === "CUP" && <label className="check-row"><input type="checkbox" checked={competitionRules.penaltiesOnDraw} onChange={e=>setCompetitionRules(r=>({...r,penaltiesOnDraw:e.target.checked}))}/> تعیین برنده با ضربات پنالتی در تساوی</label>}
+        {editingRulesFor && <p className="muted">در حال ویرایش قوانین رقابت انتخاب‌شده؛ پس از شروع مسابقات امکان تغییر قوانین وجود ندارد.</p>}
+        <div className="operation-row">
+          <button disabled={!!busy || (editingRulesFor ? false : leagueName.trim().length < 3) || competitionRules.maxInPlayWindows>competitionRules.maxSubstitutions || (competitionRules.yellowCardsToSuspend===0 && competitionRules.yellowCardSuspensionMatches>0)} onClick={() => void (editingRulesFor
+            ? action("save-competition-rules","/v1/competitions/"+editingRulesFor+"/rules","PUT",competitionRules).then(()=>setEditingRulesFor(""))
+            : action("create-league", "/v1/competitions", "POST", { name: leagueName.trim(), maxTeams: Number(leagueCapacity), format: competitionFormat, rules:competitionRules, idempotencyKey: "mini-league-" + crypto.randomUUID() }))}>{editingRulesFor ? "ذخیره قوانین" : "ایجاد رقابت"}</button>
+          {editingRulesFor && <button className="secondary" onClick={()=>setEditingRulesFor("")}>انصراف</button>}
+        </div>
       </div>
       <div className="market-card">
         <h2>رقابت‌های در حال ثبت‌نام</h2>
         {openLeagues.length === 0 ? <p className="muted">لیگ بازی برای ثبت‌نام باز نیست.</p> : openLeagues.map((league) => <div className="operation-row" key={league.id}>
           <div><strong>{league.name}</strong><small>فصل {league.season} · {league.teams}/{league.maxTeams} باشگاه · سازنده: {league.creator}</small></div>
+          {league.isCreator && <button className="secondary" disabled={!!busy} onClick={()=>{setEditingRulesFor(league.id);setCompetitionFormat(league.format);setCompetitionRules(league.rules);setLeagueName(league.name);setLeagueCapacity(String(league.maxTeams));}}>قوانین</button>}
           {!league.joined ? <button className="secondary" disabled={!!busy || league.teams >= league.maxTeams} onClick={() => void action("join-" + league.id, "/v1/competitions/" + league.id + "/join", "POST", {})}>عضویت</button>
             : league.isCreator ? <button className="secondary" disabled={!!busy || (league.format === "CUP" ? league.teams !== league.maxTeams : league.teams < 4)} onClick={() => void action("start-" + league.id, "/v1/competitions/" + league.id + "/start", "POST", {})}>{league.format === "CUP" ? "شروع جام" : "شروع لیگ"}</button>
               : <span className="muted">عضو هستید</span>}
