@@ -313,7 +313,7 @@ export async function listOpenLeagues(userId: string) {
     orderBy: { createdAt: "desc" }, take: 30,
   });
   return competitions.map((competition) => ({
-    id: competition.id, name: competition.name, season: competition.season, format: competition.format,
+    id: competition.id, name: competition.name, season: competition.season, format: competition.format, cupLegs: competition.cupLegs,
     rules: validateMatchRules(competition.rules ?? defaultMatchRules(competition.format)),
     status: competition.status, maxTeams: competition.maxTeams,
     teams: competition.entries.length,
@@ -337,7 +337,7 @@ export async function getLeague(userId: string, competitionId: string) {
     || (b.goalsFor - b.goalsAgainst) - (a.goalsFor - a.goalsAgainst)
     || b.goalsFor - a.goalsFor || a.club.name.localeCompare(b.club.name));
   return {
-    competition: { id: competition.id, name: competition.name, season: competition.season, format: competition.format, rules: validateMatchRules(competition.rules ?? defaultMatchRules(competition.format)), status: competition.status, startsAt: competition.startsAt?.toISOString() ?? null },
+    competition: { id: competition.id, name: competition.name, season: competition.season, format: competition.format, cupLegs: competition.cupLegs, rules: validateMatchRules(competition.rules ?? defaultMatchRules(competition.format)), status: competition.status, startsAt: competition.startsAt?.toISOString() ?? null },
     standings: competition.entries.map((entry, index) => ({
       position: index + 1, clubId: entry.clubId, clubName: entry.club.name, played: entry.played,
       won: entry.won, drawn: entry.drawn, lost: entry.lost, goalsFor: entry.goalsFor,
@@ -370,7 +370,7 @@ export async function listClubMatches(userId: string) {
     }),
     prisma.competition.findMany({
       where: { entries: { some: { clubId: club.id } } },
-      select: { id: true, name: true, season: true, format: true, status: true }, orderBy: { createdAt: "desc" }, take: 20,
+      select: { id: true, name: true, season: true, format: true, cupLegs: true, status: true }, orderBy: { createdAt: "desc" }, take: 20,
     }),
   ]);
   const eventPlayerIds = [...new Set(matches.flatMap((match) => match.events.flatMap((event) =>
