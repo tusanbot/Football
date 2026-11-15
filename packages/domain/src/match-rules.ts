@@ -41,7 +41,7 @@ export function validateMatchRules(value: unknown): MatchRules {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw new Error("INVALID_MATCH_RULES");
   }
-  const input = value as Record<string, unknown>;
+  const input = { ...DEFAULT_MATCH_RULES, ...(value as Record<string, unknown>) };
   const rules: MatchRules = {
     maxSubstitutions: Number(input.maxSubstitutions),
     maxInPlayWindows: Number(input.maxInPlayWindows),
