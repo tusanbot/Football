@@ -74,6 +74,7 @@ async function api<T>(path: string, telegramId: number, method = "GET", body?: u
       "x-telegram-user-id": String(telegramId),
     },
     ...(body ? { body: JSON.stringify(body) } : {}),
+    signal: AbortSignal.timeout(15_000),
   });
   const data = await response.json() as T & { error?: string; details?: Record<string, string> };
   if (!response.ok) {
@@ -86,7 +87,7 @@ async function api<T>(path: string, telegramId: number, method = "GET", body?: u
 
 async function publicApi<T>(path: string): Promise<T> {
   if (!apiUrl) throw new Error("FOOTBALL_API_URL is not configured.");
-  const response = await fetch(new URL(path, apiUrl));
+  const response = await fetch(new URL(path, apiUrl), { signal: AbortSignal.timeout(15_000) });
   const data = await response.json() as T & { error?: string };
   if (!response.ok) throw new Error(data.error ?? "Public API request failed.");
   return data;
@@ -124,7 +125,7 @@ async function awardGroupActivity(ctx: { chat: { type: string; id: number }; fro
 }
 async function apiSystem<T = unknown>(path:string,body:unknown):Promise<T>{
  if(!apiUrl||!botApiSecret)throw new Error("Bot API is not configured.");
- const response=await fetch(new URL(path,apiUrl),{method:"POST",headers:{"content-type":"application/json","x-football-bot-secret":botApiSecret},body:JSON.stringify(body)});
+ const response=await fetch(new URL(path,apiUrl),{method:"POST",headers:{"content-type":"application/json","x-football-bot-secret":botApiSecret},body:JSON.stringify(body),signal:AbortSignal.timeout(15_000)});
  const data=await response.json() as T & {error?:string};
  if(!response.ok)throw new Error("System API failed ("+response.status+"): "+(data.error??"unknown error"));
  return data as T;
@@ -1661,4 +1662,6 @@ if (apiUrl && botApiSecret) {
   console.warn("Durable group message deletion worker is disabled: configure FOOTBALL_API_URL and BOT_API_SECRET.");
 }
 
+const botIdentity = await bot.api.getMe();
+console.info("Football Empire Bot authenticated as @" + (botIdentity.username ?? botIdentity.id));
 await bot.start();

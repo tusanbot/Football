@@ -35,6 +35,7 @@ All admin commands run in private chat and use the same server-side permission c
 - `/adminrole assign|revoke TELEGRAM_ID [ROLE]`
 - `/adminsetting KEY JSON_VALUE`
 - `/adminfinance [DAYS]`
+- `/adminbroadcast users|groups TEXT` (persistent queue with retries for group delivery)
 
 ## Central settings and finance
 
@@ -42,4 +43,15 @@ Settings are persisted as JSON values in `GameSetting`, are editable only by sup
 
 ## Production startup checks
 
-The API process validates required environment variables before listening. Set `DATABASE_URL` (PostgreSQL), `TELEGRAM_BOT_TOKEN`, a random `BOT_API_SECRET` of at least 32 characters, and exact comma-separated `CORS_ORIGIN` values (HTTPS only in production). The Bot process requires `FOOTBALL_API_URL`, the same `BOT_API_SECRET`, and in production an HTTPS `TELEGRAM_WEB_APP_URL`. The API exposes `/health` for liveness and `/ready` for readiness; readiness checks required configuration and a live database connection. Never expose `BOT_API_SECRET` or `TELEGRAM_BOT_TOKEN` to browser code.
+The API process validates required environment variables, establishes a PostgreSQL connection, and runs a database ping before listening. Set `DATABASE_URL` (PostgreSQL), `TELEGRAM_BOT_TOKEN`, a random `BOT_API_SECRET` of at least 32 characters, and exact comma-separated `CORS_ORIGIN` values (HTTPS only in production). The Bot process requires `FOOTBALL_API_URL`, the same `BOT_API_SECRET`, and in production an HTTPS `TELEGRAM_WEB_APP_URL`. The API exposes `/health` for liveness and `/ready` for readiness; readiness checks required configuration and a live database connection. Never expose `BOT_API_SECRET` or `TELEGRAM_BOT_TOKEN` to browser code.
+
+## Final launch checklist
+
+1. Provision PostgreSQL and apply migrations with `pnpm db:migrate:deploy`; generate Prisma Client with `pnpm db:generate`.
+2. Build all packages with `pnpm build`; run `pnpm test` and `pnpm typecheck` before release.
+3. Configure identical `BOT_API_SECRET` values for API and Bot; keep both Telegram secrets server-side only.
+4. Start API first and confirm `GET /health` returns 200 and `GET /ready` returns 200.
+5. Start the Bot process. It validates the API URL and secret and calls Telegram `getMe` before polling.
+6. Ensure the Bot is an administrator in every group where live membership checks, alliance workflows, or group broadcasts are required.
+7. Confirm the Mini App URL, Bot username, CORS origins, webhook/polling mode, and public API URL match the production domain. Back up PostgreSQL before every migration.
+8. Run a smoke test: Telegram login, account provisioning, club creation, match simulation/checkpoint, league registration, group join, group gift redemption, private notice delivery, group broadcast delivery, and admin audit log.

@@ -19,11 +19,24 @@ export function registerAdminGroupBroadcastRoutes(app: FastifyInstance) {
     const parsed = z.object({ limit: z.number().int().min(1).max(100).default(20) }).safeParse(request.body ?? {});
     if (!parsed.success) return reply.code(400).send({ error: "INVALID_BROADCAST_CLAIM" });
     const deliveries = await prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`
+        UPDATE "AdminGroupBroadcastDelivery" d
+        SET "deliveredAt" = NOW(), "deliveryLastError" = 'SKIPPED_GROUP_INACTIVE',
+            "deliveryClaimToken" = NULL, "deliveryLockedUntil" = NULL
+        WHERE d."deliveredAt" IS NULL
+          AND EXISTS (
+            SELECT 1 FROM "TelegramGroup" g
+            WHERE g."telegramId" = d."telegramGroupId"
+              AND (g."isActive" = false OR g."isSuspended" = true)
+          )
+      `;
       const due = await tx.$queryRaw<Array<{id:string;telegramGroupId:string;message:string}>>`
         SELECT d."id", d."telegramGroupId", b."message"
         FROM "AdminGroupBroadcastDelivery" d
         INNER JOIN "AdminGroupBroadcast" b ON b."id" = d."broadcastId"
-        WHERE d."deliveredAt" IS NULL
+        INNER JOIN "TelegramGroup" g ON g."telegramId" = d."telegramGroupId"
+        WHERE g."isActive" = true AND g."isSuspended" = false
+          AND d."deliveredAt" IS NULL
           AND d."deliveryAttempts" < 8
           AND d."availableAt" <= NOW()
           AND (d."deliveryLockedUntil" IS NULL OR d."deliveryLockedUntil" <= NOW())

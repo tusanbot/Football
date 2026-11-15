@@ -18,6 +18,23 @@ export function registerGiftCodeRoutes(app: FastifyInstance) {
 
     const code = body.data.code.toUpperCase();
     try {
+      // Do network membership verification before opening the financial transaction.
+      // The transaction re-checks persisted group membership and group state.
+      const preflightGift = await prisma.giftCode.findUnique({ where: { code }, select: { rewardType: true } });
+      if (preflightGift?.rewardType === "GROUP_POINTS") {
+        if (!body.data.telegramGroupId) throw new Error("GIFT_CODE_GROUP_REQUIRED");
+        const group = await prisma.telegramGroup.findUnique({
+          where: { telegramId: body.data.telegramGroupId },
+          select: { id: true, telegramId: true, isActive: true, isSuspended: true },
+        });
+        if (!group || !group.isActive || group.isSuspended) throw new Error("GIFT_CODE_GROUP_UNAVAILABLE");
+        const membership = await prisma.groupMembership.findUnique({
+          where: { groupId_userId: { groupId: group.id, userId: user.id } },
+          select: { id: true },
+        });
+        if (!membership) throw new Error("GIFT_CODE_GROUP_MEMBERSHIP_REQUIRED");
+        await verifyTelegramGroupActor({ telegramGroupId: group.telegramId, telegramUserId: user.telegramId });
+      }
       return await prisma.$transaction(async (tx) => {
         const gift = await tx.giftCode.findUnique({ where: { code } });
         const now = new Date();
@@ -38,12 +55,6 @@ export function registerGiftCodeRoutes(app: FastifyInstance) {
             select: { id: true },
           });
           if (!membership) throw new Error("GIFT_CODE_GROUP_MEMBERSHIP_REQUIRED");
-          // The persisted membership row may be stale after a user leaves Telegram.
-          // Re-check live membership (and bot admin access) before crediting group funds.
-          await verifyTelegramGroupActor({
-            telegramGroupId: group.telegramId,
-            telegramUserId: user.telegramId,
-          });
         }
 
         const idempotencyKey = body.data.idempotencyKey;
@@ -114,7 +125,7 @@ export function registerGiftCodeRoutes(app: FastifyInstance) {
       }, { isolationLevel: "Serializable" });
     } catch (error) {
       if (error instanceof TelegramGroupAuthorizationError) {
-        const status = error.code === "TELEGRAM_BOT_TOKEN_NOT_CONFIGURED" ? 503 : 403;
+        const status = error.code === "TELEGRAM_BOT_TOKEN_NOT_CONFIGURED" ? 503 : error.code === "TELEGRAM_GROUP_CHECK_FAILED" ? 502 : 403;
         return reply.code(status).send({ error: error.code });
       }
       if (error instanceof Error && (

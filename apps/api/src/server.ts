@@ -2,6 +2,7 @@ import "dotenv/config";
 import { buildApp } from "./app.js";
 import { processDueMatchRuntimes } from "./game/match-service.js";
 import { processDuePromotionOffers } from "./game/league-pyramid-service.js";
+import { prisma } from "./db.js";
 const required = ["DATABASE_URL", "TELEGRAM_BOT_TOKEN", "BOT_API_SECRET", "CORS_ORIGIN"] as const;
 const missing = required.filter((key) => !process.env[key]?.trim());
 if (missing.length) throw new Error("Missing required runtime configuration: " + missing.join(", "));
@@ -19,6 +20,8 @@ const port = Number(process.env.API_PORT ?? 4000);
 const host = process.env.API_HOST ?? "0.0.0.0";
 const app = buildApp();
 try {
+  await prisma.$connect();
+  await prisma.$queryRaw`SELECT 1`;
   await app.listen({ port, host });
   app.log.info({ host, port }, "Football Empire API is running");
   let workerRunning = false;
