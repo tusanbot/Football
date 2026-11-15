@@ -1349,8 +1349,8 @@ bot.command("clubprofile", async (ctx) => {
       "\nفصل‌ها: " + s.seasons + " · قهرمانی: " + s.championships + " · سکو: " + s.podiums +
       "\nصعود: " + s.promotions + " · سقوط: " + s.relegations +
       "\n\n" + profile.leagues.slice(0, 8).map((row) => "فصل " + row.season + " · " + row.tierName + " · گروه " + row.groupNumber + " · رتبه " + (row.finalPosition ?? "—") + (row.awards.length ? " · " + row.awards.map((award) => award.awardName).join("، ") : "")).join("\n");
-    if (profile.club.logoUrl && apiUrl) await ctx.replyWithPhoto(new URL(profile.club.logoUrl, apiUrl).toString(), { caption: caption.slice(0, 1024) });
-    else await ctx.reply(caption || "پروفایل باشگاه خالی است.");
+    const logoLink = profile.club.logoUrl && apiUrl ? "\n\nلوگوی باشگاه: " + new URL(profile.club.logoUrl, apiUrl).toString() : "";
+    await ctx.reply((caption + logoLink).slice(0, 4096) || "پروفایل باشگاه خالی است.");
   } catch (error) { await ctx.reply("دریافت پروفایل باشگاه ناموفق بود: " + (error instanceof Error ? error.message : "خطای نامشخص")); }
 });
 
