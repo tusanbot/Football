@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -316,6 +316,7 @@ export function convertPrismaSchema(source) {
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const source = readFileSync(SCHEMA_PATH, "utf8");
   const converted = convertPrismaSchema(source);
+  mkdirSync(OUTPUT_DIR, { recursive: true });
   writeFileSync(resolve(OUTPUT_DIR, "prisma-d1-inventory.json"), JSON.stringify(converted.inventory, null, 2) + "\n");
   writeFileSync(MIGRATION_PATH, converted.sql);
   console.log(JSON.stringify(converted.inventory.totals, null, 2));
