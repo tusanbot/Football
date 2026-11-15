@@ -1198,3 +1198,30 @@ model SeasonPlayerAward {
   @@index([season, awardType])
   @@index([playerId, season])
 }
+
+
+model AdminGroupBroadcast {
+  id String @id @default(cuid())
+  idempotencyKey String @unique
+  message String @db.Text
+  createdByTelegramId String
+  createdAt DateTime @default(now())
+  deliveries AdminGroupBroadcastDelivery[]
+}
+
+model AdminGroupBroadcastDelivery {
+  id String @id @default(cuid())
+  broadcastId String
+  telegramGroupId String
+  groupTitle String
+  deliveryAttempts Int @default(0)
+  availableAt DateTime @default(now())
+  deliveryClaimToken String?
+  deliveryLockedUntil DateTime?
+  deliveredAt DateTime?
+  deliveryLastError String?
+  createdAt DateTime @default(now())
+  broadcast AdminGroupBroadcast @relation(fields: [broadcastId], references: [id], onDelete: Cascade)
+  @@unique([broadcastId, telegramGroupId])
+  @@index([deliveredAt, availableAt, deliveryLockedUntil])
+}

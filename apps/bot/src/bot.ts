@@ -153,6 +153,31 @@ async function scheduleGroupReplyDeletion(chatId: number, messageId: number) {
 
 type LeagueNoticeDelivery = { id: string; telegramId: string; title: string; body: string; claimToken: string };
 let leagueNoticeWorkerBusy = false;
+async function pollAdminGroupBroadcastQueue() {
+  if (!apiUrl || !botApiSecret) return;
+  try {
+    const result = await apiSystem<{ deliveries: Array<{ id: string; telegramGroupId: string; message: string; claimToken: string }> }>("/v1/bot/admin-group-broadcasts/claim", { limit: 20 });
+    for (const delivery of result.deliveries) {
+      try {
+        await bot.api.sendMessage(Number(delivery.telegramGroupId), delivery.message);
+        await apiSystem("/v1/bot/admin-group-broadcasts/" + delivery.id + "/complete", { claimToken: delivery.claimToken });
+      } catch (error) {
+        try {
+          await apiSystem("/v1/bot/admin-group-broadcasts/" + delivery.id + "/fail", {
+            claimToken: delivery.claimToken,
+            error: error instanceof Error ? error.message.slice(0, 500) : "Telegram delivery failed",
+          });
+        } catch (ackError) {
+          console.error("Could not reschedule admin group broadcast:", ackError);
+        }
+      }
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+  } catch (error) {
+    console.error("Admin group broadcast worker failed:", error);
+  }
+}
+
 async function pollLeagueNoticeQueue() {
   if (leagueNoticeWorkerBusy || !apiUrl || !botApiSecret) return;
   leagueNoticeWorkerBusy = true;
@@ -474,14 +499,7 @@ bot.command("adminbroadcast", async (ctx) => {
       return ctx.reply("پیام در صف اعلان خصوصی کاربران قرار گرفت. ارسال توسط worker اعلان‌ها انجام می‌شود.");
     }
     await api("/v1/admin/actions",ctx.from.id,"POST",{action:"broadcast-groups",broadcastMessage:message,idempotencyKey:randomUUID()});
-    const result=await api<{groups:Array<{telegramId:string;title:string}>}>("/v1/admin/group-targets",ctx.from.id);
-    let sent=0,failed=0;
-    for(const group of result.groups){
-      try{await bot.api.sendMessage(Number(group.telegramId),message);sent++;}
-      catch{failed++;}
-      await new Promise(resolve=>setTimeout(resolve,45));
-    }
-    await ctx.reply("ارسال گروهی پایان یافت. موفق: "+sent+" · ناموفق: "+failed+" · کل گروه‌ها: "+result.groups.length);
+    await ctx.reply("پیام در صف پایدار ارسال گروهی قرار گرفت. ارسال به‌صورت مرحله‌ای انجام می‌شود و در صورت خطا دوباره تلاش خواهد شد.");
   } catch(error) {
     await ctx.reply("ارسال پیام مدیریتی ناموفق بود: "+(error instanceof Error?error.message:"خطای نامشخص"));
   }
@@ -1630,9 +1648,12 @@ if (apiUrl && botApiSecret) {
   const deletionQueueTimer = setInterval(() => { void pollGroupMessageDeletionQueue(); }, 5_000);
   const matchNotificationTimer = setInterval(() => { void pollMatchCheckpointNotifications(); }, 5_000);
   const leagueNoticeTimer = setInterval(() => { void pollLeagueNoticeQueue(); }, 10_000);
+  const adminGroupBroadcastTimer = setInterval(() => { void pollAdminGroupBroadcastQueue(); }, 5_000);
   matchNotificationTimer.unref();
   leagueNoticeTimer.unref();
+  adminGroupBroadcastTimer.unref();
   void pollLeagueNoticeQueue();
+  void pollAdminGroupBroadcastQueue();
   void pollMatchCheckpointNotifications();
   deletionQueueTimer.unref();
   void pollGroupMessageDeletionQueue();
