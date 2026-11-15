@@ -1,6 +1,14 @@
 import { Buffer } from "node:buffer";
 import { buildApp } from "../../../apps/api/src/app.js";
-import { createPrismaClient, prisma, requireRequestScopedPrisma, withPrismaClient } from "../../../apps/api/src/db.js";
+import {
+  createPrismaClient,
+  enterWorkerPrismaRequest,
+  prisma,
+  registerWorkerPrismaRequest,
+  releaseWorkerPrismaRequest,
+  requireRequestScopedPrisma,
+  withPrismaClient,
+} from "../../../apps/api/src/db.js";
 import { processDueMatchRuntimes } from "../../../apps/api/src/game/match-service.js";
 import { processDuePromotionOffers } from "../../../apps/api/src/game/league-pyramid-service.js";
 import { isValidTelegramBotToken, parseAdminTelegramIds, parseCorsOrigins } from "../../../apps/api/src/runtime-config.js";
@@ -67,7 +75,18 @@ function configureEnv(env: Env): void {
 let appInstance: ReturnType<typeof buildApp> | undefined;
 async function getApp(env: Env) {
   configureEnv(env);
-  appInstance ??= buildApp();
+  if (!appInstance) {
+    appInstance = buildApp();
+    appInstance.addHook("onRequest", (request, reply, done) => {
+      const rawContextId = request.headers["x-football-prisma-context"];
+      const contextId = Array.isArray(rawContextId) ? rawContextId[0] : rawContextId;
+      if (typeof contextId !== "string" || !enterWorkerPrismaRequest(contextId)) {
+        reply.code(500).send({ error: "PRISMA_REQUEST_CONTEXT_MISSING" });
+        return;
+      }
+      done();
+    });
+  }
   await appInstance.ready();
   return appInstance;
 }
@@ -115,9 +134,11 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
   delete headers["content-length"];
   delete headers["transfer-encoding"];
   const client = createPrismaClient(dbUrl(env) ?? undefined, 1);
+  const requestContextId = registerWorkerPrismaRequest(client);
   let cleanupScheduled = false;
   try {
     const app = await getApp(env);
+    headers["x-football-prisma-context"] = requestContextId;
     const result = await withPrismaClient(client, () => app.inject({
       method: request.method as never,
       url: url.pathname + url.search,
@@ -132,6 +153,7 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
     console.error("Cloudflare API request failed", error);
     return json({ error: "INTERNAL_SERVER_ERROR" }, 500);
   } finally {
+    releaseWorkerPrismaRequest(requestContextId);
     if (!cleanupScheduled) await client.$disconnect().catch(() => undefined);
   }
 }

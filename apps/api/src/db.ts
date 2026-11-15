@@ -1,4 +1,5 @@
 import { AsyncLocalStorage } from "node:async_hooks";
+import { randomUUID } from "node:crypto";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@prisma/client";
 import { Pool } from "pg";
@@ -17,6 +18,22 @@ let requestScopeRequired = false;
 
 export function requireRequestScopedPrisma(): void {
   requestScopeRequired = true;
+}
+
+const workerRequestClients = new Map<string, PrismaClient>();
+export function registerWorkerPrismaRequest(client: PrismaClient): string {
+  const requestId = randomUUID();
+  workerRequestClients.set(requestId, client);
+  return requestId;
+}
+export function enterWorkerPrismaRequest(requestId: string): boolean {
+  const client = workerRequestClients.get(requestId);
+  if (!client) return false;
+  requestPrisma.enterWith(client);
+  return true;
+}
+export function releaseWorkerPrismaRequest(requestId: string): void {
+  workerRequestClients.delete(requestId);
 }
 
 function currentPrisma(): PrismaClient {
