@@ -2,6 +2,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
 import { prisma } from "./db.js";
 import { requireTelegramUser } from "./auth/require-telegram-user.js";
+import { TelegramGroupAuthorizationError, verifyTelegramGroupActor } from "./groups/telegram-group-authorization.js";
 
 export function registerGiftCodeRoutes(app: FastifyInstance) {
   app.post("/v1/gift-codes/redeem", async (req: FastifyRequest, reply: FastifyReply) => {
@@ -37,6 +38,12 @@ export function registerGiftCodeRoutes(app: FastifyInstance) {
             select: { id: true },
           });
           if (!membership) throw new Error("GIFT_CODE_GROUP_MEMBERSHIP_REQUIRED");
+          // The persisted membership row may be stale after a user leaves Telegram.
+          // Re-check live membership (and bot admin access) before crediting group funds.
+          await verifyTelegramGroupActor({
+            telegramGroupId: group.telegramId,
+            telegramUserId: user.telegramId,
+          });
         }
 
         const idempotencyKey = body.data.idempotencyKey;
@@ -106,6 +113,10 @@ export function registerGiftCodeRoutes(app: FastifyInstance) {
         };
       }, { isolationLevel: "Serializable" });
     } catch (error) {
+      if (error instanceof TelegramGroupAuthorizationError) {
+        const status = error.code === "TELEGRAM_BOT_TOKEN_NOT_CONFIGURED" ? 503 : 403;
+        return reply.code(status).send({ error: error.code });
+      }
       if (error instanceof Error && (
         error.message.startsWith("GIFT_CODE_") || error.message === "IDEMPOTENCY_CONFLICT"
       )) return reply.code(409).send({ error: error.message });

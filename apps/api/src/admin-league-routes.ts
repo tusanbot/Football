@@ -14,9 +14,22 @@ const ROLE_PERMISSIONS: Record<string, Permission[]> = {
 async function roleFor(telegramId: string) {
   const superAdmins = (process.env.GAME_ADMIN_TELEGRAM_IDS ?? "").split(",").map((value) => value.trim()).filter(Boolean);
   if (superAdmins.includes(telegramId)) return "superadmin";
+  // Database assignments are authoritative, including inactive rows that revoke
+  // an environment-provisioned scoped role. Keep this in sync with admin-routes.
+  const assigned = await prisma.adminRoleAssignment.findUnique({
+    where: { telegramId },
+    select: { role: true, active: true },
+  });
+  if (assigned) {
+    return assigned.active && Object.prototype.hasOwnProperty.call(ROLE_PERMISSIONS, assigned.role)
+      ? assigned.role
+      : null;
+  }
   try {
     const roles = JSON.parse(process.env.GAME_ADMIN_ROLE_MAP ?? "{}") as Record<string, string>;
-    return roles[telegramId] && Object.prototype.hasOwnProperty.call(ROLE_PERMISSIONS, roles[telegramId]!) ? roles[telegramId]! : null;
+    return roles[telegramId] && Object.prototype.hasOwnProperty.call(ROLE_PERMISSIONS, roles[telegramId]!)
+      ? roles[telegramId]!
+      : null;
   } catch {
     return null;
   }
