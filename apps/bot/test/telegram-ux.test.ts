@@ -20,7 +20,7 @@ test("every private keyboard button resolves to a registered no-argument command
   const expected = [
     "club", "wallet", "players", "lineup", "development", "operations",
     "finance", "scout", "opponents", "matches", "fallback", "leagues", "market",
-    "special", "help", "records", "menu",
+    "special", "help", "records", "seasonawards", "menu",
   ];
   const actual = PRIVATE_MENU_ROWS.flat().map((item) => resolvePrivateMenuCommand(item.label));
   assert.deepEqual(actual, expected);
