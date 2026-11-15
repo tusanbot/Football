@@ -505,7 +505,21 @@ export async function simulateScheduledMatch(userId: string, matchId: string, no
           performances: generated.performances.map((line) => {
             const goals = (runtimeEvents ?? []).filter((event) => event.type === "GOAL" && event.playerId === line.playerId).length;
             const assists = (runtimeEvents ?? []).filter((event) => event.type === "GOAL" && event.relatedPlayerId === line.playerId).length;
-            return { ...line, goals, assists, shots: Math.max(line.shots, goals) };
+            const enteredAt = (runtimeEvents ?? []).filter((event) => event.type === "SUBSTITUTION" && event.relatedPlayerId === line.playerId)
+              .reduce((minute, event) => Math.min(minute, event.minute), 90);
+            const exitedAt = (runtimeEvents ?? []).filter((event) => event.type === "SUBSTITUTION" && event.playerId === line.playerId)
+              .reduce((minute, event) => Math.min(minute, event.minute), 90);
+            const wasStarter = [...homeSide.players, ...awaySide.players].some((player) => player.id === line.playerId);
+            const minutesPlayed = Math.max(0, exitedAt - (wasStarter ? 0 : enteredAt));
+            const originalMinutes = Math.max(1, line.minutesPlayed);
+            const fraction = minutesPlayed / originalMinutes;
+            return {
+              ...line, minutesPlayed, goals, assists,
+              shots: Math.max(goals, Math.round(line.shots * fraction)),
+              passes: Math.round(line.passes * fraction),
+              tackles: Math.round(line.tackles * fraction),
+              fitnessLoss: Math.round(line.fitnessLoss * fraction),
+            };
           }),
         }
       : generated;
@@ -762,18 +776,22 @@ export async function enqueueDueMatchRuntimes(now = new Date(), limit = 50) {
   });
   let created = 0;
   for (const fixture of fixtures) {
-    const home = toSide(fixture.homeClub);
-    const away = toSide(fixture.awayClub);
-    const result = await prisma.matchRuntime.createMany({
-      data: [{
-        matchId: fixture.id, status: "QUEUED", currentMinute: 0,
-        nextActionAt: fixture.scheduledAt,
-        kickoffSnapshot: jsonSafe({ home, away }),
-        fallbackPlan: jsonSafe({ home: null, away: null }),
-      }],
-      skipDuplicates: true,
-    });
-    created += result.count;
+    try {
+      const home = toSide(fixture.homeClub);
+      const away = toSide(fixture.awayClub);
+      const result = await prisma.matchRuntime.createMany({
+        data: [{
+          matchId: fixture.id, status: "QUEUED", currentMinute: 0,
+          nextActionAt: fixture.scheduledAt,
+          kickoffSnapshot: jsonSafe({ home, away }),
+          fallbackPlan: jsonSafe({ home: null, away: null }),
+        }],
+        skipDuplicates: true,
+      });
+      created += result.count;
+    } catch {
+      // A malformed squad must not block other due fixtures; retry on the next worker tick.
+    }
   }
   return created;
 }
