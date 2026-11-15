@@ -539,6 +539,12 @@ model MatchTacticalCheckpoint {
   resolution Json?
   homeBotNotifiedAt DateTime?
   awayBotNotifiedAt DateTime?
+  homeBotNotificationClaimedAt DateTime?
+  awayBotNotificationClaimedAt DateTime?
+  homeBotNotificationAttempts Int @default(0)
+  awayBotNotificationAttempts Int @default(0)
+  homeBotNotificationLastError String?
+  awayBotNotificationLastError String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   match FootballMatch @relation(fields: [matchId], references: [id], onDelete: Cascade)
