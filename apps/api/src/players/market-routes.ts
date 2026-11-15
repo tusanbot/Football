@@ -22,7 +22,7 @@ function sendMarketError(reply: FastifyReply, error: unknown) {
   if (error instanceof MarketError) {
     const status = error.code === "INSUFFICIENT_FUNDS" ? 409
       : error.code === "CLUB_NOT_FOUND" || error.code === "PLAYER_NOT_FOUND" || error.code === "LISTING_NOT_FOUND" ? 404
-      : error.code === "WALLET_NOT_FOUND" ? 409 : 400;
+      : error.code === "WALLET_NOT_FOUND" || error.code === "MARKET_LOCKED_DURING_MATCH" || error.code === "MINIMUM_ACTIVE_SQUAD_REQUIRED" ? 409 : 400;
     return reply.code(status).send({ error: error.code });
   }
   throw error;
