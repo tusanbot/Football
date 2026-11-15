@@ -111,7 +111,7 @@ export function registerGameRoutes(app: FastifyInstance) {
         // Re-check ownership and availability inside the same transaction that
         // writes lineup slots; the earlier read is only for fast validation.
         const currentPlayers = await tx.player.findMany({
-          where: { id: { in: parsed.data.playerIds }, clubId: club.id, status: "ACTIVE" },
+          where: { id: { in: parsed.data.playerIds }, clubId: club.id, status: "ACTIVE", suspensionMatchesRemaining: 0 },
           select: { id: true, position: true, overall: true },
         });
         if (currentPlayers.length !== 11) return "PLAYERS_CHANGED";
