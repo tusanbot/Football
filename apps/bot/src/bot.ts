@@ -1798,6 +1798,8 @@ if (apiUrl && botApiSecret) {
   console.warn("Durable group message deletion worker is disabled: configure FOOTBALL_API_URL and BOT_API_SECRET.");
 }
 
+const apiReadiness = await fetch(new URL("/ready", apiUrl), { signal: AbortSignal.timeout(15_000) });
+if (!apiReadiness.ok) throw new Error("Football Empire API is not ready (HTTP " + apiReadiness.status + "). Start and verify the API before the Bot.");
 await bot.api.deleteWebhook({ drop_pending_updates: false });
 const botIdentity = await bot.api.getMe();
 botTelegramId = botIdentity.id;
