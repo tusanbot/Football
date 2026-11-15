@@ -35,6 +35,15 @@ export function buildApp() {
     bodyLimit: 1_048_576,
   });
 
+  app.addHook("onSend", async (_request, reply, payload) => {
+    reply.header("x-content-type-options", "nosniff");
+    reply.header("x-frame-options", "DENY");
+    reply.header("referrer-policy", "no-referrer");
+    reply.header("permissions-policy", "camera=(), microphone=(), geolocation=()");
+    if (process.env.NODE_ENV === "production") reply.header("strict-transport-security", "max-age=31536000; includeSubDomains");
+    return payload;
+  });
+
   void app.register(cors, {
     origin: process.env.CORS_ORIGIN?.split(",").map((origin) => origin.trim()).filter(Boolean) ?? false,
     credentials: true,
