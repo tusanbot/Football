@@ -99,6 +99,87 @@ test("friendly match simulation settles score, events, fitness, gate revenue and
   }
 });
 
+
+
+test("reserve goalkeeper replaces an outfield starter when the selected XI has no keeper", async (t) => {
+  if (!process.env.DATABASE_URL) {
+    t.skip("DATABASE_URL is only configured in the ephemeral PostgreSQL CI job.");
+    return;
+  }
+  const suffix = randomUUID().replaceAll("-", "");
+  const clubs: Array<{ userId: string; clubId: string }> = [];
+  try {
+    clubs.push(await makeClub(suffix, 0), await makeClub(suffix, 1));
+    const roster = await prisma.player.findMany({ where: { clubId: clubs[0]!.clubId }, orderBy: { createdAt: "asc" }, select: { id: true, position: true } });
+    const startingKeeper = roster.find((player) => player.position === "GK" && player.id === roster[0]!.id)!;
+    const reserveOutfield = roster.find((player) => player.position !== "GK" && roster.indexOf(player) >= 11)!;
+    await prisma.player.update({ where: { id: startingKeeper.id }, data: { lineupSlot: null } });
+    await prisma.player.update({ where: { id: reserveOutfield.id }, data: { lineupSlot: 1 } });
+    const scheduledAt = new Date(Date.now() + 60_000);
+    const created = await createFriendlyMatch(clubs[0]!.userId, clubs[1]!.clubId, "keeper-reserve-" + suffix, scheduledAt);
+    const processed = await processDueMatchRuntimes("keeper-reserve-test", new Date(scheduledAt.getTime() + 1_000));
+    assert.ok(processed.enqueued >= 1);
+    const runtime = await prisma.matchRuntime.findUniqueOrThrow({ where: { matchId: created.match.id } });
+    const snapshot = runtime.kickoffSnapshot as unknown as { home: { players: Array<{ position: string }> } };
+    assert.equal(snapshot.home.players.length, 11);
+    assert.ok(snapshot.home.players.some((player) => player.position === "GK"));
+  } finally {
+    const ids = clubs.map((club) => club.clubId);
+    if (ids.length) {
+      await prisma.footballMatch.deleteMany({ where: { OR: [{ homeClubId: { in: ids } }, { awayClubId: { in: ids } }] } });
+      await prisma.player.deleteMany({ where: { clubId: { in: ids } } });
+      await prisma.club.deleteMany({ where: { id: { in: ids } } });
+    }
+    const users = clubs.map((club) => club.userId);
+    if (users.length) {
+      await prisma.wallet.deleteMany({ where: { userId: { in: users } } });
+      await prisma.user.deleteMany({ where: { id: { in: users } } });
+    }
+  }
+});
+
+test("a due fixture is settled as an automatic forfeit instead of retrying forever with an invalid squad", async (t) => {
+  if (!process.env.DATABASE_URL) {
+    t.skip("DATABASE_URL is only configured in the ephemeral PostgreSQL CI job.");
+    return;
+  }
+  const suffix = randomUUID().replaceAll("-", "");
+  const clubs: Array<{ userId: string; clubId: string }> = [];
+  try {
+    clubs.push(await makeClub(suffix, 0), await makeClub(suffix, 1));
+    const scheduledAt = new Date(Date.now() + 60_000);
+    const created = await createFriendlyMatch(clubs[0]!.userId, clubs[1]!.clubId, "forfeit-" + suffix, scheduledAt);
+    const awayOutfield = await prisma.player.findMany({
+      where: { clubId: clubs[1]!.clubId, position: { not: "GK" } },
+      orderBy: { id: "asc" }, take: 9, select: { id: true },
+    });
+    await prisma.player.updateMany({
+      where: { id: { in: awayOutfield.map((player) => player.id) } },
+      data: { suspensionMatchesRemaining: 1 },
+    });
+    await processDueMatchRuntimes("forfeit-test", new Date(scheduledAt.getTime() + 1_000));
+    const match = await prisma.footballMatch.findUniqueOrThrow({ where: { id: created.match.id } });
+    assert.equal(match.status, "COMPLETED");
+    assert.equal(match.homeScore, 3);
+    assert.equal(match.awayScore, 0);
+    assert.equal(match.winnerClubId, clubs[0]!.clubId);
+    assert.equal(await prisma.matchRuntime.count({ where: { matchId: match.id } }), 0);
+    assert.equal(await prisma.player.count({ where: { id: { in: awayOutfield.map((player) => player.id) }, suspensionMatchesRemaining: 1 } }), 9);
+  } finally {
+    const ids = clubs.map((club) => club.clubId);
+    if (ids.length) {
+      await prisma.footballMatch.deleteMany({ where: { OR: [{ homeClubId: { in: ids } }, { awayClubId: { in: ids } }] } });
+      await prisma.player.deleteMany({ where: { clubId: { in: ids } } });
+      await prisma.club.deleteMany({ where: { id: { in: ids } } });
+    }
+    const users = clubs.map((club) => club.userId);
+    if (users.length) {
+      await prisma.wallet.deleteMany({ where: { userId: { in: users } } });
+      await prisma.user.deleteMany({ where: { id: { in: users } } });
+    }
+  }
+});
+
 test("league registration, round-robin fixtures and final standings are transactional", async (t) => {
   if (!process.env.DATABASE_URL) {
     t.skip("DATABASE_URL is only configured in the ephemeral PostgreSQL CI job.");
