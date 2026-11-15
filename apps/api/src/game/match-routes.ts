@@ -1,5 +1,6 @@
 import type { FastifyInstance, FastifyReply } from "fastify";
 import { z } from "zod";
+import type { MatchTacticalInstruction } from "@football/domain";
 import { requireTelegramUser } from "../auth/require-telegram-user.js";
 import {
   MatchServiceError, createFriendlyMatch, createLeague, getLeague, joinLeague,
@@ -80,8 +81,11 @@ export function registerMatchRoutes(app: FastifyInstance) {
     }).strict().safeParse(request.body);
     if (!body.success) return reply.code(400).send({ error: "INVALID_MATCH_DECISION" });
     try {
+      const instruction = Object.fromEntries(
+        Object.entries(body.data.instruction).filter(([, value]) => value !== undefined),
+      ) as MatchTacticalInstruction;
       return await submitMatchCheckpointDecision(user.id, params.data.id, params.data.checkpointKey,
-        body.data.idempotencyKey, body.data.instruction);
+        body.data.idempotencyKey, instruction);
     } catch (error) { return sendMatchError(reply, error); }
   });
 
