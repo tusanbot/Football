@@ -549,9 +549,10 @@ export async function simulateScheduledMatch(userId: string, matchId: string, no
       ? await tx.competition.findUnique({ where: { id: match.competitionId }, select: { format: true, rules: true } })
       : null;
     if (match.scheduledAt > now) throw new MatchServiceError("MATCH_NOT_DUE", { scheduledAt: match.scheduledAt.toISOString() });
+    const matchRules = validateMatchRules(match.rulesSnapshot ?? competition?.rules ?? defaultMatchRules(match.type));
     const homeSide = toSide(home);
     const awaySide = toSide(away);
-    const generated = simulateFootballMatch({ seed: match.seed, home: homeSide, away: awaySide });
+    const generated = simulateFootballMatch({ seed: match.seed, home: homeSide, away: awaySide, rules: matchRules });
     const runtimeEvents = runtimeState?.segment.events;
     const runtimePlayerStats = new Map((runtimeState?.segment.playerStats ?? [])
       .map((item) => [item.playerId, item]));
@@ -585,7 +586,6 @@ export async function simulateScheduledMatch(userId: string, matchId: string, no
           }),
         }
       : generated;
-    const matchRules = validateMatchRules(match.rulesSnapshot ?? competition?.rules ?? defaultMatchRules(match.type));
     const penalties = matchRules.penaltiesOnDraw && result.homeScore === result.awayScore
       ? simulatePenaltyShootout({ seed: match.seed, home: homeSide, away: awaySide })
       : null;
