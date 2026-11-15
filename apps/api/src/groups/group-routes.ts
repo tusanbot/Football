@@ -78,7 +78,7 @@ function sendGroupError(reply: FastifyReply, error: unknown) {
     if (typeof error === "object" && error !== null && "code" in error && (error.code === "P2034" || error.code === "P2002")) return reply.code(409).send({ error: "CONCURRENT_MODIFICATION" });
     throw error;
   }
-  const status = ["ACCOUNT_NOT_FOUND","CLUB_NOT_FOUND","GROUP_NOT_REGISTERED","GROUP_REWARD_NOT_FOUND","CHALLENGE_NOT_FOUND","COMPETITION_NOT_FOUND"].includes(error.code)?404:["NOT_GROUP_MEMBER","GROUP_MANAGER_REQUIRED","RECIPIENT_NOT_GROUP_MEMBER","WINNER_NOT_PARTICIPANT"].includes(error.code)?403:["GROUP_MINIMUM_MEMBERS_REQUIRED","INSUFFICIENT_GROUP_POINTS","INVALID_CHALLENGE_REWARD"].includes(error.code)?422:["GROUP_INACTIVE","CHALLENGE_NOT_OPEN","CHALLENGE_NOT_READY","CHALLENGE_ALREADY_SETTLED","IDEMPOTENCY_CONFLICT","COMPETITION_NOT_OPEN","COMPETITION_FULL"].includes(error.code)?409:400;
+  const status = ["ACCOUNT_NOT_FOUND","CLUB_NOT_FOUND","GROUP_NOT_REGISTERED","GROUP_REWARD_NOT_FOUND","CHALLENGE_NOT_FOUND","COMPETITION_NOT_FOUND"].includes(error.code)?404:["NOT_GROUP_MEMBER","GROUP_MANAGER_REQUIRED","RECIPIENT_NOT_GROUP_MEMBER","WINNER_NOT_PARTICIPANT"].includes(error.code)?403:["GROUP_MINIMUM_MEMBERS_REQUIRED","GROUP_SUSPENDED","INSUFFICIENT_GROUP_POINTS","INVALID_CHALLENGE_REWARD"].includes(error.code)?422:["GROUP_INACTIVE","CHALLENGE_NOT_OPEN","CHALLENGE_NOT_READY","CHALLENGE_ALREADY_SETTLED","IDEMPOTENCY_CONFLICT","COMPETITION_NOT_OPEN","COMPETITION_FULL"].includes(error.code)?409:400;
   return reply.code(status).send({ error: error.code, ...(error.code === "GROUP_MINIMUM_MEMBERS_REQUIRED" ? { minimumMembers: 10 } : {}) });
 }
 const groupId = z.string().regex(/^-?\d{1,20}$/);
@@ -105,7 +105,7 @@ export function registerGroupRoutes(app: FastifyInstance) {
  }
  return{updated:true,isMember:b.data.isMember};
  });
- app.post("/v1/groups/system/member-count",async(request,reply)=>{if(!authenticateSystemBot(request,reply))return;const b=z.object({telegramGroupId:groupId,memberCount:z.number().int().min(0).max(1000000)}).safeParse(request.body);if(!b.success)return reply.code(400).send({error:"INVALID_GROUP_CHECK"});return checkTelegramGroupMembers(b.data.telegramGroupId,b.data.memberCount);});
+ app.post("/v1/groups/system/member-count",async(request,reply)=>{if(!authenticateSystemBot(request,reply))return;const b=z.object({telegramGroupId:groupId,memberCount:z.number().int().min(0).max(1000000),botPresent:z.boolean().optional()}).safeParse(request.body);if(!b.success)return reply.code(400).send({error:"INVALID_GROUP_CHECK"});return checkTelegramGroupMembers(b.data.telegramGroupId,b.data.memberCount,b.data.botPresent??true);});
 
   app.post("/v1/groups/register", async (request, reply) => {
     const telegramUserId = await authenticateBot(request, reply); if (!telegramUserId) return;
