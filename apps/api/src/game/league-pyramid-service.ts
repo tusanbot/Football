@@ -562,9 +562,9 @@ export async function acceptFriendlyChallenge(userId: string, token: string, now
     return { match, replayed: false };
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 }
-export async function grantPurchasedChallengeCredits(userId: string, quantity: number) {
+export async function grantPurchasedChallengeCredits(userId: string, quantity: number, now = new Date()) {
   if (!Number.isInteger(quantity) || quantity < 1 || quantity > 100) throw new PyramidLeagueError("INVALID_CHALLENGE_CREDIT_QUANTITY");
-  const day = new Date(); day.setUTCHours(0, 0, 0, 0);
+  const day = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
   return prisma.challengeDailyUsage.upsert({
     where: { userId_usageDate: { userId, usageDate: day } },
     create: { userId, usageDate: day, purchasedCredits: quantity },
