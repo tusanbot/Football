@@ -107,14 +107,14 @@ export default function MatchCenter(){
    <section><h2 style={{fontSize:17}}>مسابقات شما</h2>
     {matches.map(match=><button key={match.id} onClick={()=>setSelected(match.id)} style={{...cardStyle,width:"100%",textAlign:"right",color:"#f4f7fb",cursor:"pointer",borderColor:activeMatch?.id===match.id?"#63d3a5":"#263b52"}}>
      <strong>{match.homeClub.name} {match.homeScore??"–"} : {match.awayScore??"–"} {match.awayClub.name}</strong>
-     <div style={{color:"#9fb0c5",fontSize:12,marginTop:7}}>{"دقیقه "+(match.runtime?.currentMinute??0)+" · "+(match.runtime?.status??match.status)} · {new Date(match.scheduledAt).toLocaleString("fa-IR")}</div>
+     <div style={{color:"#9fb0c5",fontSize:12,marginTop:7}}>{"دقیقه "+(match.runtime?.currentMinute??0)+" · "+(runtimeStatusLabels[match.runtime?.status??""]??matchStatusLabels[match.status]??match.status)} · {new Date(match.scheduledAt).toLocaleString("fa-IR")}</div>
      {match.checkpoints.some(c=>c.status==="OPEN")&&<small style={{display:"block",color:"#9ce8c5",marginTop:7}}>نیازمند تصمیم تاکتیکی</small>}
     </button>)}
    </section>
    {activeMatch&&<section>
     <article style={cardStyle}><div style={{color:"#9fb0c5",fontSize:12}}>{matchTypeLabels[activeMatch.type]??activeMatch.type} · {matchStatusLabels[activeMatch.status]??activeMatch.status}</div>
      <h2 style={{fontSize:22,margin:"8px 0"}}>{activeMatch.homeClub.name} {activeMatch.homeScore??"–"} : {activeMatch.awayScore??"–"} {activeMatch.awayClub.name}</h2>
-     <div style={{display:"flex",justifyContent:"space-between",color:"#9ce8c5",fontSize:13}}><span>دقیقه {activeMatch.runtime?.currentMinute??0}</span><span>{activeMatch.runtime?.status??activeMatch.status}</span></div>
+     <div style={{display:"flex",justifyContent:"space-between",color:"#9ce8c5",fontSize:13}}><span>دقیقه {activeMatch.runtime?.currentMinute??0}</span><span>{runtimeStatusLabels[activeMatch.runtime?.status??""]??matchStatusLabels[activeMatch.status]??activeMatch.status}</span></div>
      <div style={{height:7,background:"#263b52",borderRadius:10,overflow:"hidden",marginTop:10}}><div style={{height:"100%",width:Math.min(100,(activeMatch.runtime?.currentMinute??0)/90*100)+"%",background:"#63d3a5"}}/></div>
     </article>
     {openCheckpoint&&<article style={cardStyle}><h2 style={{marginTop:0,fontSize:18}}>تصمیم تاکتیکی · دقیقه {openCheckpoint.minute}</h2>
