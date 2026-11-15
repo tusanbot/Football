@@ -16,7 +16,7 @@ export class MatchServiceError extends Error {
   }
 }
 function aggregateCupScore<T extends { id: string; tieId: string | null; leg: number; homeScore: number | null; awayScore: number | null }>(
-  match: T, fixtures: readonly T,
+  match: T, fixtures: readonly T[],
 ) {
   if (!match.tieId || match.leg !== 2 || match.homeScore === null || match.awayScore === null) {
     return { aggregateHomeScore: null, aggregateAwayScore: null };
