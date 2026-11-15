@@ -142,3 +142,8 @@ Supported settings:
 - Penalty shootouts on a tied score, independently configurable for a competition.
 
 The Mini App exposes these settings during creation and lets the creator edit them before kickoff. Telegram managers can use `/competitionrules COMPETITION_ID subs=5 windows=3 injuries=on injurydays=5 red=1 yellow=3 yellowban=1 penalties=on`. The API validates ranges and combinations, enforces creator ownership and locks settings once registration ends. League defaults preserve the five-substitution/three-window rule and use accumulated yellow-card bans; knockout cups default to penalties on a draw.
+
+
+### Knockout cup legs and aggregate progression
+
+Knockout cups can be configured as single-match or two-legged ties. Two-legged ties create a first leg and a reversed home/away return leg, each with an immutable competition rules snapshot. A tie cannot advance after its first leg: both fixtures must complete, and the deciding leg resolves the winner from the aggregate score. If aggregate scores are level, the configured mandatory cup penalty shootout runs after the second leg only. First-leg draws never trigger penalties. The Mini App and Telegram `/cup NAME [4|8] [legs=1|2]` command expose the format; fixture views show leg labels and aggregate scores.
