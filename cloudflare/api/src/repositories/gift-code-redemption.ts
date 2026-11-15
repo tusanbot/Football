@@ -92,7 +92,7 @@ export class GiftCodeRedemptionRepository {
 
     const prior = await this.findPrior(input.idempotencyKey);
     if (prior) {
-      if (prior.userId !== input.userId || prior.code !== code ||
+      if (prior.userId !== input.userId || prior.giftCodeId !== gift.id || prior.code !== code ||
           prior.groupId !== (group?.id ?? null) ||
           prior.cashAmount !== cash.toString() || prior.goldAmount !== gold.toString() ||
           prior.groupPoints !== points.toString()) throw new GiftCodeIdempotencyConflictError();
@@ -180,7 +180,7 @@ export class GiftCodeRedemptionRepository {
     } catch (error) {
       const replay = await this.findPrior(input.idempotencyKey).catch(() => null);
       if (replay) {
-        if (replay.userId === input.userId && replay.code === code && replay.groupId === (group?.id ?? null) &&
+        if (replay.userId === input.userId && replay.giftCodeId === gift.id && replay.code === code && replay.groupId === (group?.id ?? null) &&
             replay.cashAmount === cash.toString() && replay.goldAmount === gold.toString() && replay.groupPoints === points.toString()) {
           return { status: "duplicate", reward: { cash: replay.cashAmount, gold: replay.goldAmount, groupPoints: replay.groupPoints } };
         }
@@ -193,10 +193,28 @@ export class GiftCodeRedemptionRepository {
         'SELECT COUNT(*) AS "count" FROM "GiftCodeRedemption" WHERE "giftCodeId" = ? AND "userId" = ?'
       ).bind(gift.id, input.userId).first<{ count: number }>().catch(() => null);
       if ((count?.count ?? 0) >= fresh.perUserLimit) throw new GiftCodeUserLimitError();
-      const walletRows = await this.db.prepare(
-        'SELECT "asset", CAST("balance" AS TEXT) AS "balance", "version" FROM "Wallet" WHERE "userId" = ?'
-      ).bind(input.userId).first<{ asset: string; balance: string; version: number }>().catch(() => null);
-      if (walletRows && walletRows.version >= MAX_VERSION) throw new GiftCodeBalanceOverflowError();
+      if (gift.rewardType === "GROUP_POINTS" && input.telegramGroupId) {
+        const groupState = await this.db.prepare(
+          'SELECT "id", "isActive", "isSuspended", CAST("points" AS TEXT) AS "points" FROM "TelegramGroup" WHERE "telegramId" = ? LIMIT 1'
+        ).bind(input.telegramGroupId).first<{ id: string; isActive: number; isSuspended: number; points: string }>().catch(() => null);
+        if (!groupState || groupState.isActive !== 1 || groupState.isSuspended === 1) throw new GiftCodeGroupUnavailableError();
+        const membership = await this.db.prepare(
+          'SELECT "id" FROM "GroupMembership" WHERE "groupId" = ? AND "userId" = ? LIMIT 1'
+        ).bind(groupState.id, input.userId).first<{ id: string }>().catch(() => null);
+        if (!membership) throw new GiftCodeMembershipRequiredError();
+        if (points > 0n && fromD1Integer(groupState.points)! > ((1n << 63n) - 1n) - points) {
+          throw new GiftCodeBalanceOverflowError();
+        }
+      }
+      for (const [asset, amount] of [["CASH", cash], ["GOLD", gold]] as const) {
+        if (amount === 0n) continue;
+        const wallet = await this.db.prepare(
+          'SELECT CAST("balance" AS TEXT) AS "balance", "version" FROM "Wallet" WHERE "userId" = ? AND "asset" = ? LIMIT 1'
+        ).bind(input.userId, asset).first<{ balance: string; version: number }>().catch(() => null);
+        if (wallet && (wallet.version >= MAX_VERSION || fromD1Integer(wallet.balance)! > ((1n << 63n) - 1n) - amount)) {
+          throw new GiftCodeBalanceOverflowError();
+        }
+      }
       throw error;
     }
   }
