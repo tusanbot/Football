@@ -28,6 +28,7 @@ export const PRIVATE_MENU_ROWS = [
   [{ label: "📈 توسعه بازیکنان", command: "development" }, { label: "🏗 امکانات باشگاه", command: "operations" }],
   [{ label: "📊 امور مالی", command: "finance" }, { label: "🔎 استعدادیابی", command: "scout" }],
   [{ label: "⚔️ حریفان", command: "opponents" }, { label: "🗓 مسابقات", command: "matches" }],
+  [{ label: "🧠 برنامه جایگزین", command: "fallback" }],
   [{ label: "🏆 لیگ‌ها", command: "leagues" }, { label: "🛒 بازار نقل‌وانتقالات", command: "market" }],
   [{ label: "⭐ بازیکنان ویژه", command: "special" }, { label: "❔ راهنما", command: "help" }],
   [{ label: "⌂ منوی اصلی", command: "menu" }],
