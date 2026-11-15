@@ -153,6 +153,10 @@ test("group friendly challenges can only be accepted by another member of that T
     matchId = accepted.match.id;
     assert.equal(accepted.match.homeClubId, creator.clubId);
     assert.equal(accepted.match.awayClubId, opponent.clubId);
+    assert.equal(accepted.replayed, false);
+    const acceptedReplay = await import("../src/game/league-pyramid-service.js").then((service) => service.acceptFriendlyChallenge(opponent.userId, invite.challenge.token, new Date("2026-11-15T13:01:00.000Z")));
+    assert.equal(acceptedReplay.replayed, true);
+    assert.equal(acceptedReplay.match.id, accepted.match.id);
     const challenge = await prisma.friendlyChallenge.findUniqueOrThrow({ where: { id: invite.challenge.id } });
     assert.equal(challenge.status, "ACCEPTED");
   } finally {
