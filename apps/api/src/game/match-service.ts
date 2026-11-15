@@ -539,30 +539,25 @@ export async function simulateScheduledMatch(userId: string, matchId: string, no
           homeExpectedGoals: runtimeState.segment.home.expectedGoals,
           awayExpectedGoals: runtimeState.segment.away.expectedGoals,
           performances: generated.performances.map((line) => {
+            const segmentStats = new Map((runtimeState.segment.playerStats ?? [])
+              .map((item) => [item.playerId, item]));
+            const stats = segmentStats.get(line.playerId);
             const goals = (runtimeEvents ?? []).filter((event) => event.type === "GOAL" && event.playerId === line.playerId).length;
             const assists = (runtimeEvents ?? []).filter((event) => event.type === "GOAL" && event.relatedPlayerId === line.playerId).length;
-            const enteredAt = (runtimeEvents ?? []).filter((event) => event.type === "SUBSTITUTION" && event.relatedPlayerId === line.playerId)
-              .reduce((minute, event) => Math.min(minute, event.minute), 90);
-            const substitutedAt = (runtimeEvents ?? []).filter((event) => event.type === "SUBSTITUTION" && event.playerId === line.playerId)
-              .reduce((minute, event) => Math.min(minute, event.minute), 90);
-            const redCardAt = (runtimeEvents ?? []).filter((event) => event.type === "RED_CARD" && event.playerId === line.playerId)
-              .reduce((minute, event) => Math.min(minute, event.minute), 90);
-            const injuryAt = (runtimeEvents ?? []).filter((event) => event.type === "INJURY" && event.playerId === line.playerId)
-              .reduce((minute, event) => Math.min(minute, event.minute), 90);
-            const exitedAt = Math.min(substitutedAt, redCardAt, injuryAt);
-            const wasStarter = [...homeSide.players, ...awaySide.players].some((player) => player.id === line.playerId);
-            const minutesPlayed = Math.max(0, exitedAt - (wasStarter ? 0 : enteredAt));
-            const fraction = minutesPlayed / 90;
             const yellowCards = (runtimeEvents ?? []).filter((event) => event.type === "YELLOW_CARD" && event.playerId === line.playerId).length;
             const redCards = (runtimeEvents ?? []).filter((event) => event.type === "RED_CARD" && event.playerId === line.playerId).length;
             const injuries = (runtimeEvents ?? []).filter((event) => event.type === "INJURY" && event.playerId === line.playerId).length;
-            const rating = Math.max(3, line.rating - yellowCards * 0.35 - redCards * 1.25 - injuries * 0.65);
+            const minutesPlayed = stats?.minutesPlayed ?? 0;
+            const shots = Math.max(goals, stats?.shots ?? 0);
+            const passes = stats?.passes ?? 0;
+            const tackles = stats?.tackles ?? 0;
+            const fitnessLoss = stats?.fitnessLoss ?? 0;
+            const rating = Math.max(3, Math.min(10,
+              6 + goals * 0.9 + assists * 0.45 + shots * 0.08 + tackles * 0.06
+              + passes / 100 * 0.2 - yellowCards * 0.35 - redCards * 1.25 - injuries * 0.65));
             return {
               ...line, minutesPlayed, goals, assists, yellowCards, redCards, rating,
-              shots: Math.max(goals, Math.round(line.shots * fraction)),
-              passes: Math.round(line.passes * fraction),
-              tackles: Math.round(line.tackles * fraction),
-              fitnessLoss: Math.round(line.fitnessLoss * fraction),
+              shots, passes, tackles, fitnessLoss,
             };
           }),
         }
