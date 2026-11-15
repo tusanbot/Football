@@ -258,9 +258,17 @@ test("durable match worker advances checkpoints, resumes on two early decisions 
     });
     assert.equal(halfTime.status, "OPEN");
     const decisionTime = new Date(kickoff.getTime() + 7_000);
+    const homeRoster = await prisma.player.findMany({
+      where: { clubId: clubs[0]!.clubId }, select: { id: true, position: true, lineupSlot: true },
+    });
+    const outgoing = homeRoster.find((player) => player.lineupSlot === 11)!;
+    const incoming = homeRoster.find((player) => player.lineupSlot === null && player.position === "ST")!;
     await submitMatchCheckpointDecision(
       clubs[0]!.userId, created.match.id, "minute-45", `decision-home-${suffix}`,
-      { mentality: "ATTACKING", tempo: "FAST" }, decisionTime,
+      {
+        mentality: "ATTACKING", tempo: "FAST",
+        substitutions: [{ outgoingPlayerId: outgoing.id, incomingPlayerId: incoming.id }],
+      }, decisionTime,
     );
     await submitMatchCheckpointDecision(
       clubs[1]!.userId, created.match.id, "minute-45", `decision-away-${suffix}`,
@@ -291,8 +299,11 @@ test("durable match worker advances checkpoints, resumes on two early decisions 
     assert.equal(runtime.status, "COMPLETED");
     assert.equal(runtime.currentMinute, 90);
     assert.deepEqual(checkpoints.map((item) => item.status), ["RESOLVED", "RESOLVED", "RESOLVED"]);
-    assert.equal(await prisma.matchEvent.count({ where: { matchId: match.id } }), match.homeScore! + match.awayScore!
-      + await prisma.matchEvent.count({ where: { matchId: match.id, type: "YELLOW_CARD" } }));
+    assert.ok(await prisma.matchEvent.count({ where: { matchId: match.id, type: "SUBSTITUTION" } }) >= 1);
+    assert.equal(await prisma.matchEvent.count({ where: { matchId: match.id } }),
+      match.homeScore! + match.awayScore!
+      + await prisma.matchEvent.count({ where: { matchId: match.id, type: "YELLOW_CARD" } })
+      + await prisma.matchEvent.count({ where: { matchId: match.id, type: "SUBSTITUTION" } }));
     const replay = await simulateScheduledMatch(clubs[1]!.userId, match.id);
     assert.equal(replay.replayed, true);
     assert.equal(await prisma.ledgerTransaction.count({
