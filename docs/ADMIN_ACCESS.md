@@ -15,3 +15,4 @@ Example:
 ```
 
 Malformed JSON and unknown roles fail closed. A user listed in `GAME_ADMIN_TELEGRAM_IDS` always receives `superadmin` permissions.
+\n\n## Admin catalog operations\n\nThe central admin panel supports creating, editing, and activating/deactivating group reward catalog items. Item slugs are stable lowercase identifiers; scope is either `GROUP` or `PERSONAL`. All writes pass through the permission-checked admin action API and create an immutable audit record.\n
