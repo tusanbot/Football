@@ -256,7 +256,7 @@ export async function startLeague(userId: string, competitionId: string, now = n
           return {
             homeClubId: legHome, awayClubId: legAway, round: 1, type: "CUP" as const,
             competitionId, rulesSnapshot: validateMatchRules(competition.rules ?? defaultMatchRules("CUP")),
-            tieId, leg, scheduledAt: new Date(now.getTime() + (2 + leg * 3) * DAY_MS),
+            tieId, leg, scheduledAt: new Date(now.getTime() + leg * 3 * DAY_MS),
             seed: idempotencyKey, idempotencyKey,
           };
         });
@@ -422,16 +422,39 @@ export async function listClubMatches(userId: string) {
   };
 }
 async function advanceCupRound(competitionId: string, round: number, now: Date) {
-  const competition = await prisma.competition.findUnique({ where: { id: competitionId }, select: { status: true, format: true } });
+  const competition = await prisma.competition.findUnique({
+    where: { id: competitionId },
+    select: { status: true, format: true, cupLegs: true, rules: true },
+  });
   if (!competition || competition.status !== "ACTIVE" || competition.format !== "CUP") return;
   const currentRound = await prisma.footballMatch.findMany({
     where: { competitionId, round },
-    select: { winnerClubId: true, status: true },
-    orderBy: { id: "asc" },
+    select: {
+      id: true, tieId: true, leg: true, homeClubId: true, awayClubId: true,
+      homeScore: true, awayScore: true, winnerClubId: true, status: true,
+    },
+    orderBy: [{ tieId: "asc" }, { leg: "asc" }, { id: "asc" }],
   });
-  if (currentRound.length === 0 || !currentRound.every((fixture) => fixture.status === "COMPLETED" && fixture.winnerClubId)) return;
-  const winners = currentRound.map((fixture) => fixture.winnerClubId!).filter(Boolean);
-  if (winners.length === 1) {
+  if (currentRound.length === 0) return;
+  const ties = new Map<string, typeof currentRound>();
+  for (const fixture of currentRound) {
+    const tieId = fixture.tieId ?? "legacy:" + fixture.id;
+    ties.set(tieId, [...(ties.get(tieId) ?? []), fixture]);
+  }
+  const resolvedWinners: string[] = [];
+  for (const [tieId, fixtures] of [...ties.entries()].sort(([a], [b]) => a.localeCompare(b))) {
+    if (fixtures.some((fixture) => fixture.status !== "COMPLETED")) return;
+    if (competition.cupLegs === 2) {
+      if (fixtures.length !== 2) return;
+      const decidingLeg = fixtures.find((fixture) => fixture.leg === 2);
+      if (!decidingLeg?.winnerClubId) return;
+      resolvedWinners.push(decidingLeg.winnerClubId);
+    } else {
+      if (fixtures.length !== 1 || !fixtures[0]!.winnerClubId) return;
+      resolvedWinners.push(fixtures[0]!.winnerClubId);
+    }
+  }
+  if (resolvedWinners.length === 1) {
     await prisma.competition.updateMany({
       where: { id: competitionId, status: "ACTIVE" },
       data: { status: "COMPLETED", completedAt: now },
@@ -441,19 +464,27 @@ async function advanceCupRound(competitionId: string, round: number, now: Date) 
   const nextRound = round + 1;
   const existingNextRound = await prisma.footballMatch.count({ where: { competitionId, round: nextRound } });
   if (existingNextRound > 0) return;
+  const rulesSnapshot = validateMatchRules(competition.rules ?? defaultMatchRules("CUP"));
   const fixtures = [];
-  for (let index = 0; index < winners.length; index += 2) {
-    const homeClubId = winners[index]!;
-    const awayClubId = winners[index + 1]!;
-    const idempotencyKey = "cup:" + competitionId + ":r" + nextRound + ":" + homeClubId + ":" + awayClubId;
-    fixtures.push({
-      idempotencyKey, type: "CUP" as const, competitionId, round: nextRound,
-      homeClubId, awayClubId, scheduledAt: new Date(now.getTime() + 3 * DAY_MS), seed: idempotencyKey,
-    });
+  for (let index = 0; index < resolvedWinners.length; index += 2) {
+    const homeClubId = resolvedWinners[index]!;
+    const awayClubId = resolvedWinners[index + 1]!;
+    const tieId = `cup:${competitionId}:r${nextRound}:t${index / 2 + 1}`;
+    for (let legIndex = 0; legIndex < competition.cupLegs; legIndex++) {
+      const leg = legIndex + 1;
+      const legHome = leg === 1 ? homeClubId : awayClubId;
+      const legAway = leg === 1 ? awayClubId : homeClubId;
+      const idempotencyKey = tieId + `:leg${leg}`;
+      fixtures.push({
+        idempotencyKey, type: "CUP" as const, competitionId, round: nextRound,
+        homeClubId: legHome, awayClubId: legAway, tieId, leg,
+        rulesSnapshot,
+        scheduledAt: new Date(now.getTime() + leg * 3 * DAY_MS), seed: idempotencyKey,
+      });
+    }
   }
   await prisma.footballMatch.createMany({ data: fixtures, skipDuplicates: true });
 }
-
 
 export async function submitMatchCheckpointDecision(userId: string, matchId: string, checkpointKey: string,
   idempotencyKey: string, instruction: MatchTacticalInstruction, now = new Date()) {
