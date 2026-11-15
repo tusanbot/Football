@@ -869,12 +869,20 @@ async function processClaimedMatchRuntime(
       away: { side: snapshot.away, score: 0, expectedGoals: 0 },
       events: [],
     };
-    const first = advanceMatchSegment({ seed: runtime.match.seed, state: initial, toMinute: 45 });
+    const initialSubstitutions = {
+      home: substitutionState(snapshot.home),
+      away: substitutionState(snapshot.away),
+    };
+    const first = advanceMatchSegment({
+      seed: runtime.match.seed, state: initial, toMinute: 45,
+      homeSubstitutions: initialSubstitutions.home,
+      awaySubstitutions: initialSubstitutions.away,
+    });
     const checkpointAt = new Date(now.getTime() + 60_000);
     state = {
       segment: first.state,
-      substitutions: { home: substitutionState(snapshot.home), away: substitutionState(snapshot.away) },
-      substitutionErrors: [],
+      substitutions: { home: first.homeSubstitutions, away: first.awaySubstitutions },
+      substitutionErrors: first.substitutionErrors,
     };
     await prisma.$transaction(async (tx) => {
       const runtimeUpdated = await tx.matchRuntime.updateMany({
@@ -962,12 +970,15 @@ async function processClaimedMatchRuntime(
       away: { ...state.segment.away, side: awayApplied.side },
     },
     toMinute: nextMinute,
+    homeSubstitutions: homeApplied.substitutions,
+    awaySubstitutions: awayApplied.substitutions,
   });
   const nextState: RuntimeState = {
     segment: advanced.state,
-    substitutions: { home: homeApplied.substitutions, away: awayApplied.substitutions },
+    substitutions: { home: advanced.homeSubstitutions, away: advanced.awaySubstitutions },
     substitutionErrors: [
       ...state.substitutionErrors,
+      ...advanced.substitutionErrors,
       ...(homeApplied.error ? ["HOME:" + homeApplied.error] : []),
       ...(awayApplied.error ? ["AWAY:" + awayApplied.error] : []),
     ],
