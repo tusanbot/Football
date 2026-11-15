@@ -29,7 +29,7 @@ test("preserves FIFO application order and uses club id as a stable tie-breaker"
     applications: [
       { clubId: "zeta", appliedAt: new Date("2026-01-01T00:00:00Z") },
       { clubId: "alpha", appliedAt: new Date("2026-01-01T00:00:00Z") },
-      ...applications(6),
+      ...applications(6).map((application) => ({ ...application, appliedAt: new Date("2026-02-01T00:00:00Z") })),
     ],
     tier: 1, season: 1,
   });
