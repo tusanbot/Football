@@ -492,29 +492,39 @@ bot.command("adminchallenge", async (ctx) => {
 
 bot.command("adminseason", async (ctx) => {
   if (!ctx.from || !adminOnlyInPrivate(ctx)) return;
-  const [operation,seasonOrAllianceId,decisionOrDuration]=String(ctx.match??"").trim().split(/\\s+/);
-  if(operation==="start"&&seasonOrAllianceId){
-    const durationDays=Number(decisionOrDuration??30);
-    if(!Number.isInteger(durationDays)||durationDays<7||durationDays>90)return ctx.reply("مدت فصل باید بین ۷ تا ۹۰ روز باشد.");
-    try{
-      const result=await api<{seasonNumber:number;endsAt:string}>("/v1/admin/actions",ctx.from.id,"POST",{action:"start-alliance-season",targetId:seasonOrAllianceId,durationDays,idempotencyKey:randomUUID()});
-      return ctx.reply("فصل شماره "+result.seasonNumber+" آغاز شد و در "+result.endsAt+" پایان می‌یابد.");
-    }catch(error){return ctx.reply("شروع فصل ناموفق بود: "+(error instanceof Error?error.message:"خطای نامشخص"));}
+  const [operation, targetId, argument] = String(ctx.match ?? "").trim().split(/\s+/);
+  if (operation === "start" && targetId) {
+    const durationDays = Number(argument ?? 30);
+    if (!Number.isInteger(durationDays) || durationDays < 7 || durationDays > 90) return ctx.reply("مدت فصل باید بین ۷ تا ۹۰ روز باشد.");
+    try {
+      const result = await api<{seasonNumber:number;endsAt:string}>("/v1/admin/actions", ctx.from.id, "POST", {
+        action: "start-alliance-season", targetId, durationDays, idempotencyKey: randomUUID(),
+      });
+      return ctx.reply("فصل شماره " + result.seasonNumber + " آغاز شد و در " + result.endsAt + " پایان می‌یابد.");
+    } catch (error) {
+      return ctx.reply("شروع فصل ناموفق بود: " + (error instanceof Error ? error.message : "خطای نامشخص"));
+    }
   }
-
-  if (!ctx.from || !adminOnlyInPrivate(ctx)) return;
-  const [operation,seasonId,decision]=String(ctx.match??"").trim().split(/\s+/);
-  if(operation==="close"&&seasonId){
-    try{
-      const result=await api<{reviewStatus:string;prize?:string;replayed:boolean}>("/v1/admin/actions",ctx.from.id,"POST",{action:"close-alliance-season",targetId:seasonId,idempotencyKey:randomUUID()});
-      return ctx.reply("فصل اتحاد بسته شد. وضعیت بررسی: "+result.reviewStatus+" · جایزه پرداخت‌شده: "+(result.prize??"0")+(result.reviewStatus==="FLAGGED"?"\nجایزه تا بررسی امنیتی مسدود است.":""));
-    }catch(error){return ctx.reply("بستن فصل ناموفق بود: "+(error instanceof Error?error.message:"خطای نامشخص"));}
+  if (operation === "close" && targetId) {
+    try {
+      const result = await api<{reviewStatus:string;prize?:string;replayed:boolean}>("/v1/admin/actions", ctx.from.id, "POST", {
+        action: "close-alliance-season", targetId, idempotencyKey: randomUUID(),
+      });
+      return ctx.reply("فصل اتحاد بسته شد. وضعیت بررسی: " + result.reviewStatus + " · جایزه پرداخت‌شده: " + (result.prize ?? "0") +
+        (result.reviewStatus === "FLAGGED" ? "\nجایزه تا بررسی امنیتی مسدود است." : ""));
+    } catch (error) {
+      return ctx.reply("بستن فصل ناموفق بود: " + (error instanceof Error ? error.message : "خطای نامشخص"));
+    }
   }
-  if(operation==="review"&&seasonId&&["approve","reject"].includes(decision??"")){
-    try{
-      const result=await api<{reviewStatus:string;prize:string;replayed:boolean}>("/v1/admin/actions",ctx.from.id,"POST",{action:"review-alliance-season",targetId:seasonId,review:decision==="approve"?"APPROVED":"REJECTED",idempotencyKey:randomUUID()});
-      return ctx.reply("بررسی فصل ثبت شد. وضعیت: "+result.reviewStatus+" · جایزه: "+result.prize);
-    }catch(error){return ctx.reply("بررسی فصل ناموفق بود: "+(error instanceof Error?error.message:"خطای نامشخص"));}
+  if (operation === "review" && targetId && ["approve", "reject"].includes(argument ?? "")) {
+    try {
+      const result = await api<{reviewStatus:string;prize:string;replayed:boolean}>("/v1/admin/actions", ctx.from.id, "POST", {
+        action: "review-alliance-season", targetId, review: argument === "approve" ? "APPROVED" : "REJECTED", idempotencyKey: randomUUID(),
+      });
+      return ctx.reply("بررسی فصل ثبت شد. وضعیت: " + result.reviewStatus + " · جایزه: " + result.prize);
+    } catch (error) {
+      return ctx.reply("بررسی فصل ناموفق بود: " + (error instanceof Error ? error.message : "خطای نامشخص"));
+    }
   }
   await ctx.reply("استفاده: /adminseason start ALLIANCE_ID [DAYS]، /adminseason close SEASON_ID یا /adminseason review SEASON_ID approve|reject");
 });
