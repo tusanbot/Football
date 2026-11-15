@@ -33,6 +33,7 @@ type PyramidLeagueOverview = {
   tiers: Array<{ tier:number; key:string; name:string; waitingTeams:number; myApplication:string|null; leagues:Array<{id:string;competitionId:string;name:string;status:string;startsAt:string|null;teams:number;clubs:string[];isMyLeague:boolean}> }>;
   currentLeagueId:string|null;
   promotionOffers:Array<{id:string;fromTier:number;targetTier:number;season:number;finalPosition:number}>;
+  history:Array<{id:string;tier:number;tierName:string;season:number;groupNumber:number;name:string;status:string;teams:number}>;
 };
 type PyramidLeagueDetails = {
   league:{id:string;tier:number;tierName:string;season:number;groupNumber:number;name:string;status:string;startsAt:string|null};
@@ -571,6 +572,7 @@ export default function MarketPage() {
           {tier.tier === 1 && !tier.myApplication && <button className="secondary" disabled={!!busy} onClick={() => void action("pyramid-apply", "/v1/pyramid-leagues/apply", "POST", {tier:1})}>درخواست ورود به لیگ پایه</button>}
           {tier.leagues.map((league) => <button key={league.id} className="secondary" disabled={!!busy} onClick={() => void viewPyramidLeague(league.id)}>مشاهده لیگ</button>)}
         </div>)}
+        {pyramidLeagues?.history.length ? <><h3>آرشیو لیگ‌های فصل‌های قبل</h3>{pyramidLeagues.history.map((league) => <div className="operation-row" key={league.id}><div><strong>{league.name} · {league.tierName}</strong><small>فصل {league.season} · {league.teams}/8 تیم · {league.status}</small></div><button className="secondary" disabled={!!busy} onClick={() => void viewPyramidLeague(league.id)}>مشاهده جدول و آمار</button></div>)}</> : null}
         {pyramidLeagues?.promotionOffers.map((offer) => <div className="operation-row" key={offer.id}>
           <div><strong>پیشنهاد صعود به {pyramidLeagues.tiers.find((tier) => tier.tier === offer.targetTier)?.name ?? "سطح بالاتر"}</strong><small>رتبه {offer.finalPosition} · فصل {offer.season}</small></div>
           <button disabled={!!busy} onClick={() => void action("promotion-accept-"+offer.id, "/v1/pyramid-leagues/promotions/"+offer.id+"/respond", "POST", {accept:true})}>پذیرش صعود</button>
