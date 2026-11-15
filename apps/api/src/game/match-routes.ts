@@ -2,6 +2,7 @@ import type { FastifyInstance, FastifyReply } from "fastify";
 import { z } from "zod";
 import type { MatchTacticalInstruction } from "@football/domain";
 import { requireTelegramUser } from "../auth/require-telegram-user.js";
+import { TelegramGroupAuthorizationError, verifyTelegramGroupActor } from "../groups/telegram-group-authorization.js";
 import { getMatchFallbackPlan, saveMatchFallbackPlan, MatchFallbackPlanError } from "./match-fallback-service.js";
 import {
   MatchServiceError, createFriendlyMatch, createLeague, getLeague, joinLeague,
@@ -34,8 +35,9 @@ function sendMatchError(reply: FastifyReply, error: unknown) {
   }
   if (error instanceof PyramidLeagueError) {
     const notFound = ["CLUB_NOT_FOUND", "PYRAMID_LEAGUE_NOT_FOUND", "FRIENDLY_CHALLENGE_NOT_FOUND", "PROMOTION_OFFER_NOT_FOUND"];
-    const conflicts = ["CLUB_ALREADY_IN_ACTIVE_PYRAMID_LEAGUE", "APPLICATION_ALREADY_WITHDRAWN", "PROMOTION_OFFER_ALREADY_RESOLVED", "PROMOTION_OFFER_EXPIRED", "FRIENDLY_CHALLENGE_EXPIRED", "CANNOT_ACCEPT_OWN_CHALLENGE", "NOT_PROMOTION_OFFER_OWNER", "NOT_PYRAMID_LEAGUE_MEMBER", "DAILY_CHALLENGE_LIMIT_REACHED", "INSUFFICIENT_GOLD", "CONCURRENT_MODIFICATION"];
-    return reply.code(notFound.includes(error.code) ? 404 : conflicts.includes(error.code) ? 409 : 400).send({ error: error.code });
+    const forbidden = ["GROUP_MEMBERSHIP_REQUIRED"];
+    const conflicts = ["CLUB_ALREADY_IN_ACTIVE_PYRAMID_LEAGUE", "APPLICATION_ALREADY_WITHDRAWN", "PROMOTION_OFFER_ALREADY_RESOLVED", "PROMOTION_OFFER_EXPIRED", "FRIENDLY_CHALLENGE_EXPIRED", "FRIENDLY_CHALLENGE_ALREADY_ACCEPTED", "CANNOT_ACCEPT_OWN_CHALLENGE", "NOT_PROMOTION_OFFER_OWNER", "NOT_PYRAMID_LEAGUE_MEMBER", "DAILY_CHALLENGE_LIMIT_REACHED", "INSUFFICIENT_GOLD", "CONCURRENT_MODIFICATION", "GROUP_INACTIVE", "ALL_TEAMS_NEED_VALID_LINEUPS", "CLUB_ALREADY_HAS_MATCH_IN_WINDOW"]
+    return reply.code(notFound.includes(error.code) ? 404 : forbidden.includes(error.code) ? 403 : conflicts.includes(error.code) ? 409 : 400).send({ error: error.code });
   }
   if (error instanceof MatchFallbackPlanError) {
     const status = error.code === "CLUB_NOT_FOUND" ? 404 : error.code === "FALLBACK_PLAN_VERSION_CONFLICT" ? 409 : 400;
@@ -264,8 +266,22 @@ export function registerMatchRoutes(app: FastifyInstance) {
     if (!user) return reply.code(401).send({ error: "UNAUTHENTICATED" });
     const params = z.object({ token: z.string().min(10).max(100) }).safeParse(request.params);
     if (!params.success) return reply.code(400).send({ error: "INVALID_FRIENDLY_CHALLENGE_TOKEN" });
-    try { return await acceptFriendlyChallenge(user.id, params.data.token); }
-    catch (error) { return sendMatchError(reply, error); }
+    try {
+      const challenge = await getFriendlyChallengeInfo(params.data.token);
+      if (challenge.groupTelegramId) {
+        try {
+          await verifyTelegramGroupActor({ telegramGroupId: challenge.groupTelegramId, telegramUserId: user.telegramId });
+        } catch (error) {
+          if (error instanceof TelegramGroupAuthorizationError) {
+            const status = error.code === "TELEGRAM_BOT_TOKEN_NOT_CONFIGURED" ? 503
+              : error.code === "TELEGRAM_GROUP_CHECK_FAILED" ? 502 : 403;
+            return reply.code(status).send({ error: error.code });
+          }
+          throw error;
+        }
+      }
+      return await acceptFriendlyChallenge(user.id, params.data.token);
+    } catch (error) { return sendMatchError(reply, error); }
   });
 
 }
