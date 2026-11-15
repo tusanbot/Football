@@ -1,3 +1,44 @@
+
+test("group friendly challenges can only be accepted by another member of that Telegram group", async (t) => {
+  if (!process.env.DATABASE_URL) {
+    t.skip("DATABASE_URL is only configured in the ephemeral PostgreSQL CI job.");
+    return;
+  }
+  const suffix = randomUUID().replaceAll("-", "");
+  const creator = await makePyramidClub(suffix, 0);
+  const opponent = await makePyramidClub(suffix, 1);
+  const group = await prisma.telegramGroup.create({ data: { telegramId: "-100" + suffix.slice(0, 10), title: "Pyramid Test Group" } });
+  let matchId: string | undefined;
+  try {
+    await prisma.groupMembership.create({ data: { groupId: group.id, userId: creator.userId, role: "MEMBER" } });
+    const invite = await createFriendlyChallenge(creator.userId, 100n, new Date("2026-11-15T12:00:00.000Z"), group.telegramId);
+    await assert.rejects(
+      import("../src/game/league-pyramid-service.js").then((service) => service.acceptFriendlyChallenge(opponent.userId, invite.challenge.token)),
+      (error: unknown) => error instanceof Error && error.message === "GROUP_MEMBERSHIP_REQUIRED",
+    );
+    await prisma.groupMembership.create({ data: { groupId: group.id, userId: opponent.userId, role: "MEMBER" } });
+    const accepted = await import("../src/game/league-pyramid-service.js").then((service) => service.acceptFriendlyChallenge(opponent.userId, invite.challenge.token));
+    matchId = accepted.match.id;
+    assert.equal(accepted.match.homeClubId, creator.clubId);
+    assert.equal(accepted.match.awayClubId, opponent.clubId);
+    const challenge = await prisma.friendlyChallenge.findUniqueOrThrow({ where: { id: invite.challenge.id } });
+    assert.equal(challenge.status, "ACCEPTED");
+  } finally {
+    if (matchId) await prisma.footballMatch.deleteMany({ where: { id: matchId } });
+    await prisma.friendlyChallenge.deleteMany({ where: { creatorUserId: creator.userId } });
+    await prisma.groupMembership.deleteMany({ where: { groupId: group.id } });
+    await prisma.telegramGroup.delete({ where: { id: group.id } });
+    for (const club of [creator, opponent]) {
+      await prisma.challengeDailyUsage.deleteMany({ where: { userId: club.userId } });
+      await prisma.ledgerTransaction.deleteMany({ where: { userId: club.userId } });
+      await prisma.player.deleteMany({ where: { clubId: club.clubId } });
+      await prisma.club.deleteMany({ where: { id: club.clubId } });
+      await prisma.wallet.deleteMany({ where: { userId: club.userId } });
+      await prisma.user.deleteMany({ where: { id: club.userId } });
+    }
+  }
+});
+
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
