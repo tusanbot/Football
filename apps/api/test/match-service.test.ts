@@ -275,7 +275,17 @@ test("durable match worker advances checkpoints, resumes on two early decisions 
     const created = await createFriendlyMatch(
       clubs[0]!.userId, clubs[1]!.clubId, `runtime-${suffix}`, kickoff,
     );
-    await prisma.footballMatch.update({ where: { id: created.match.id }, data: { seed: "runtime-injury-red0-90" } });
+    await prisma.footballMatch.update({
+      where: { id: created.match.id },
+      data: {
+        seed: "runtime-injury-red0-90",
+        rulesSnapshot: {
+          maxSubstitutions: 5, maxInPlayWindows: 3, injuriesEnabled: true, injuryDurationDays: 9,
+          redCardSuspensionMatches: 1, yellowCardsToSuspend: 3,
+          yellowCardSuspensionMatches: 1, penaltiesOnDraw: false,
+        },
+      },
+    });
     const firstTick = await processDueMatchRuntimes("test-runtime-worker", kickoff, 5);
     assert.equal(firstTick.enqueued, 1);
     assert.equal(firstTick.advanced, 1);
@@ -376,6 +386,7 @@ test("durable match worker advances checkpoints, resumes on two early decisions 
     assert.equal(redCardPerformance.redCards, 1);
     const injuredPlayer = await prisma.player.findUniqueOrThrow({ where: { id: injuryEvent.playerId } });
     assert.equal(injuredPlayer.status, "INJURED");
+    assert.equal(injuredPlayer.injuryUntil?.getTime(), match.completedAt!.getTime() + 9 * 86_400_000);
     const sentOffPlayer = await prisma.player.findUniqueOrThrow({ where: { id: redCardEvent.playerId } });
     assert.equal(sentOffPlayer.suspensionMatchesRemaining, 1);
     const nextFixture = await createFriendlyMatch(
