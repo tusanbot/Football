@@ -1,6 +1,6 @@
 {
   "source": "apps/api/prisma/schema.prisma",
-  "sourceSha256": "4d89b8049c822289a83a56865c32e8ac3dfa179ab48b75ce6ba4e8900d740118",
+  "sourceSha256": "a7669424c0d98e63406ab1f66ef757037e8445de989977433a1199cf85c8c2e1",
   "target": "Cloudflare D1 / SQLite",
   "mappingPolicy": {
     "String": "TEXT",
