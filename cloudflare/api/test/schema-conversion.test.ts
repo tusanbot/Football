@@ -36,6 +36,28 @@ test("Prisma enum values become database CHECK constraints", () => {
   assert.match(converted.sql, /"balance" INTEGER NOT NULL DEFAULT 0/);
 });
 
+test("relation defaults preserve Prisma referential actions", () => {
+  const converted = convertPrismaSchema([
+    "model Parent {",
+    " id String @id",
+    " requiredChildren Child[]",
+    " optionalChildren OptionalChild[]",
+    "}",
+    "model Child {",
+    " id String @id",
+    " parentId String",
+    " parent Parent @relation(fields: [parentId], references: [id])",
+    "}",
+    "model OptionalChild {",
+    " id String @id",
+    " parentId String?",
+    " parent Parent? @relation(fields: [parentId], references: [id])",
+    "}"
+  ].join("\\n"));
+  assert.match(converted.sql, /ON DELETE RESTRICT ON UPDATE CASCADE/);
+  assert.match(converted.sql, /ON DELETE SET NULL ON UPDATE CASCADE/);
+});
+
 test("D1 integer bridge preserves exact signed 64-bit values", () => {
   const exact = "9007199254740993";
   assert.equal(toD1Integer(exact), exact);
