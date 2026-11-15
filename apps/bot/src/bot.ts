@@ -337,7 +337,7 @@ function playerName(player: ApiPlayer) { return `${player.firstName} ${player.la
 bot.command("start", async (ctx) => {
   if (!ctx.from) return;
   if (ctx.chat.type !== "private") {
-    return ctx.reply("To create or open your Football Empire club, start a private chat with me.");
+    return ctx.reply("برای ساخت یا مدیریت باشگاه، ربات Football Empire را در گفت‌وگوی خصوصی باز کنید.");
   }
 
   try {
@@ -371,15 +371,16 @@ bot.command("start", async (ctx) => {
     const keyboard = privateMenuKeyboard();
 
     await ctx.reply(
-      `Welcome, ${account.user.displayName}! Your club is ready.\n\n` +
-      `Club: ${account.club?.name ?? "Not created"} (Level ${account.club?.level ?? 1})\n` +
-      `Starter balance: ${cash(cashBalance)} Cash · ${cash(goldBalance)} Gold\n\n` +
-      `You can manage your club directly here or continue in the Mini App.\n\n` +
-      `Commands: /club /wallet /rename /players /lineup /development /train /renew /market /special /pack /sell /buy /records /menu`,
+      `سلام ${account.user.displayName}، به Football Empire خوش آمدید.\n\n` +
+      `باشگاه: ${account.club?.name ?? "هنوز ساخته نشده"} · سطح ${account.club?.level ?? 1}\n` +
+      `موجودی آغازین: ${cash(cashBalance)} کش · ${cash(goldBalance)} طلا\n\n` +
+      `مدیریت باشگاه از همین ربات یا نسخه مینی‌اپ امکان‌پذیر است. برای شروع، یکی از گزینه‌های منوی پایین را انتخاب کنید.\n\n` +
+      `دستورهای پرکاربرد: /club /wallet /players /lineup /matches /leagues /market /help`,
       { reply_markup: keyboard },
     );
   } catch (error) {
-    await ctx.reply(`Could not create or load your club: ${error instanceof Error ? error.message : "unknown error"}`);
+    console.error("Telegram onboarding failed:", error);
+    await ctx.reply("دریافت اطلاعات باشگاه انجام نشد. لطفاً چند لحظه دیگر دوباره تلاش کنید.");
   }
 });
 
@@ -577,7 +578,7 @@ bot.command("admingift", async (ctx) => {
       return ctx.reply("کد هدیه ایجاد شد. شناسه: "+result.targetId);
     }
     if(operation==="toggle"){
-      const [id,state]=rest.split(/s+/);
+      const [id,state]=rest.split(/\\s+/);
       if(!id||!["on","off"].includes(state??""))return ctx.reply("استفاده: /admingift toggle GIFT_ID on|off");
       await api("/v1/admin/actions",ctx.from.id,"POST",{action:"toggle-gift-code",targetId:id,active:state==="on",idempotencyKey:randomUUID()});
       return ctx.reply("وضعیت کد هدیه تغییر کرد.");
@@ -604,7 +605,7 @@ bot.command("adminitem", async (ctx) => {
       return ctx.reply("آیتم به‌روزرسانی شد.");
     }
     if(operation==="toggle"){
-      const [id,state]=rest.split(/s+/);
+      const [id,state]=rest.split(/\\s+/);
       if(!id||!["on","off"].includes(state??""))return ctx.reply("استفاده: /adminitem toggle ITEM_ID on|off");
       await api("/v1/admin/actions",ctx.from.id,"POST",{action:"toggle-item",targetId:id,active:state==="on",idempotencyKey:randomUUID()});
       return ctx.reply("وضعیت آیتم تغییر کرد.");
@@ -616,7 +617,7 @@ bot.command("adminitem", async (ctx) => {
 bot.command("adminupdate", async (ctx) => {
   if (!ctx.from || !adminOnlyInPrivate(ctx)) return;
   const input=String(ctx.match??"").trim();
-  const parts=input.split(/s+/);
+  const parts=input.split(/\\s+/);
   const resource=parts.shift(),targetId=parts.shift(),json=parts.join(" ");
   const actions:Record<string,{action:string;fields:string[]}>={
     player:{action:"player-update",fields:["firstName","lastName","age","overall","potential","wage","contractDays","fitness","morale"]},
@@ -728,7 +729,34 @@ bot.command("menu", async (ctx) => {
 });
 
 bot.command("help", async (ctx) => ctx.reply(
-  "Football Empire commands:\n/menu — show the private Reply Keyboard again\n/club — club profile\n/wallet — Cash and Gold balances\n/rename NEW NAME — rename your club\n/players — your active squad\n/lineup — view starting XI and tactics\n/setlineup FORMATION ID1 ... ID11 — set your XI\n/development — player development overview\n/train PLAYER_ID FOCUS INTENSITY — train a player\n/renew PLAYER_ID DAYS WEEKLY_WAGE — renew a contract\n/operations — facilities, academy, sponsors and finance\n/finance [DAYS] — income and expense statement\n/upgrade stadium|training|academy — upgrade a facility\n/ticket-price PRICE — set stadium ticket price\n/scout — find academy prospects\n/recruit PROSPECT_ID — sign an academy prospect\n/sponsor OFFER_ID — sign a sponsor\n/coach-upgrade — develop your coach\n/hire-coach balanced|youth|performance — hire a coach\n/opponents — clubs available for friendlies\n/friendly CLUB_ID — schedule a friendly\n/challenge — create a shareable friendly challenge (3 free + 2 Gold/day)\n/acceptchallenge TOKEN — accept a shared challenge\n/matches — fixtures, live status and quick tactical buttons\n/tactic MATCH_ID minute-45 mentality=ATTACKING pressing=HIGH_PRESS tempo=FAST passingStyle=DIRECT formation=4-3-3\n/sub MATCH_ID minute-45 OUT_ID IN_ID [OUT_ID IN_ID ...] — make up to five substitutions\n/play MATCH_ID — simulate a due match\n/league NAME [4-10] — create a league\n/cup NAME [4|8] [legs=1|2] — create a single- or two-legged knockout cup\n/leagues — open leagues\n/joinleague ID — join a league\n/startleague ID — start your league\n/startcup ID — start your cup\n/table ID — league table or cup bracket\n/pyramidleagues — national league pyramid\n/pyramidtable LEAGUE_ID — table, scorers, assists and awards\n/records [goals|assists|appearances|rating] — all-time player records\n/seasonawards [YEAR] — seasonal awards and team of the season\n/leagueapply — apply for the base league\n/promotion OFFER_ID accept|decline — respond to promotion\n/leaguenotices — view promotion and league notices\n/competitionrules ID [subs=5 windows=3 injuries=on injurydays=5 red=1 yellow=3 yellowban=1 penalties=on] — configure competition rules before kickoff\n/group-register — register this Telegram group (admins only)\n/group-join — join this group with your club\n/group — show group status and treasury\n/group-activity — earn one daily group point\n/group-shop — reward shop\n/group-buy ITEM [USER_ID] — purchase reward\n/group-challenges — list challenges\n/group-challenge TITLE|START_ISO|END_ISO|POINTS — create challenge\n/group-challenge-join ID — join challenge\n/group-challenge-complete ID USER_ID — settle challenge\n/group-check — refresh member threshold\n/group-league NAME [4-10] — create local league\n/group-league-join ID — join local league\n/group-league-start ID — start local league\n/group-league-table ID — standings\n/alliance — alliance status and invitations\n/alliance-create NAME — create an alliance\n/alliance-invite GROUP_ID — invite a group\n/alliance-contribute AMOUNT — contribute group points to alliance treasury\n/alliance-accept ID / /alliance-decline ID — respond to invite\n/alliance-championship NAME|TEAMS — cross-group tournament\n/alliance-championship-join ID / alliance-championship-start ID\n/alliance-season-start [DAYS] / alliance-season-close\n/alliance-season-review SEASON_ID approve|reject — flagged prize review (authorized reviewer)\n/market — open transfer listings\n/sell PLAYER_ID PRICE — list a generated player\n/buy LISTING_ID — buy a listed player\n/special — view special players and pack prices\n/pack epic|legendary|icon — acquire a special player\n\nSpecial players are not tradeable in the regular market.",
+  "راهنمای Football Empire\n\n" +
+  "🏟 باشگاه و بازیکنان\n" +
+  "/club — اطلاعات باشگاه\n/wallet — موجودی کش و طلا\n/rename نام جدید — تغییر نام باشگاه\n" +
+  "/players — فهرست بازیکنان\n/lineup — ترکیب و تاکتیک‌ها\n/setlineup FORMATION ID1 ... ID11 — ثبت ترکیب اصلی\n" +
+  "/development — وضعیت توسعه بازیکنان\n/train PLAYER_ID FOCUS INTENSITY — تمرین بازیکن\n/renew PLAYER_ID DAYS WEEKLY_WAGE — تمدید قرارداد\n" +
+  "/operations — امکانات، آکادمی، مربی و حامی مالی\n/finance [DAYS] — گزارش درآمد و هزینه\n" +
+  "/upgrade stadium|training|academy — ارتقای امکانات\n/ticket-price PRICE — تعیین قیمت بلیت\n/scout و /recruit — استعدادیابی و جذب بازیکن\n" +
+  "/sponsor OFFER_ID — عقد قرارداد حامی مالی\n/coach-upgrade و /hire-coach — مدیریت مربی\n\n" +
+  "⚽ مسابقات و لیگ‌ها\n" +
+  "/opponents — فهرست حریفان\n/friendly CLUB_ID — زمان‌بندی بازی دوستانه\n/challenge — ساخت چالش دوستانه\n/acceptchallenge TOKEN — پذیرش چالش\n" +
+  "/matches — مسابقات، گزارش زنده و تصمیم‌های تاکتیکی\n/tactic MATCH_ID minute-45 mentality=ATTACKING — تغییر تاکتیک در وقفه\n" +
+  "/sub MATCH_ID minute-45 OUT_ID IN_ID — تعویض بازیکن؛ حداکثر ۵ تعویض در کل مسابقه\n/play MATCH_ID — اجرای مسابقه سررسیدشده\n" +
+  "/league NAME [4-10] — ساخت لیگ\n/cup NAME [4|8] [legs=1|2] — ساخت جام حذفی یک‌مرحله‌ای یا رفت‌وبرگشت\n" +
+  "/leagues و /joinleague ID — مشاهده و عضویت در لیگ‌ها\n/startleague ID و /startcup ID — آغاز رقابت\n/table ID — جدول یا براکت جام\n" +
+  "/pyramidleagues و /pyramidtable ID — هرم لیگ و جدول آن\n/leagueapply — درخواست حضور در لیگ پایه\n/promotion OFFER_ID accept|decline — پاسخ به پیشنهاد صعود\n/leaguenotices — اعلان‌های لیگ\n" +
+  "/competitionrules ID ... — تنظیم قوانین مسابقه پیش از شروع\n\n" +
+  "👥 گروه‌ها و اتحادها\n" +
+  "/group-register — ثبت گروه (ویژه مدیران)\n/group-join — عضویت باشگاه در گروه\n/group و /group-activity — وضعیت گروه و امتیاز فعالیت روزانه\n" +
+  "/group-shop و /group-buy ITEM [USER_ID] — فروشگاه و دریافت جایزه\n/group-challenges — فهرست چالش‌ها\n" +
+  "/group-challenge TITLE|START_ISO|END_ISO|POINTS — ساخت چالش\n/group-challenge-join ID — عضویت در چالش\n/group-challenge-complete ID USER_ID — تسویه چالش\n" +
+  "/group-check — بررسی مجدد اعضا\n/group-league NAME [4-10] — ساخت لیگ گروهی\n/group-league-join ID و /group-league-start ID — عضویت و آغاز لیگ\n/group-league-table ID — جدول لیگ گروهی\n" +
+  "/alliance — وضعیت اتحاد\n/alliance-create NAME و /alliance-invite GROUP_ID — ساخت اتحاد و دعوت گروه\n/alliance-accept ID و /alliance-decline ID — پاسخ به دعوت\n" +
+  "/alliance-championship NAME|TEAMS — ساخت قهرمانی بین‌گروهی\n/alliance-contribute AMOUNT — واریز به خزانه اتحاد\n/alliance-season-start [DAYS] و /alliance-season-close — مدیریت فصل اتحاد\n/alliance-season-review SEASON_ID approve|reject — بررسی جایزه مشکوک (ویژه بازبین مجاز)\n\n" +
+  "🏆 بازار و آمار\n" +
+  "/market — بازار نقل‌وانتقالات\n/sell PLAYER_ID PRICE و /buy LISTING_ID — فروش و خرید بازیکن\n" +
+  "/special و /pack epic|legendary|icon — بازیکنان ویژه و بسته‌های جذب\n/records [goals|assists|appearances|rating] — رکوردهای تاریخی\n/seasonawards [YEAR] — جوایز و تیم منتخب فصل\n" +
+  "/clubs و /clubprofile CLUB_ID — باشگاه‌های عمومی و پروفایل\n/clubcompare ID1 ID2 — مقایسه دو باشگاه\n\n" +
+  "برای بازگشت به منوی دکمه‌ای، /menu را ارسال کنید. امکانات اصلی از ربات و مینی‌اپ در دسترس‌اند."
 ));
 
 bot.command("group-cleanup-test", async (ctx) => {
