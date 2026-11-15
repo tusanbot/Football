@@ -1,4 +1,4 @@
-import { fromD1Integer, toD1Integer } from "../d1-integer.js";
+import { fromD1Integer } from "../d1-integer.js";
 
 export interface GiftCodeD1Statement {
   bind(...values: unknown[]): GiftCodeD1Statement;
@@ -18,7 +18,6 @@ export class GiftCodeExhaustedError extends Error { constructor() { super("Gift 
 export class GiftCodeIdempotencyConflictError extends Error { constructor() { super("Idempotency key belongs to a different redemption"); this.name = "GiftCodeIdempotencyConflictError"; } }
 export class GiftCodeBalanceOverflowError extends Error { constructor() { super("Wallet or group points balance would overflow"); this.name = "GiftCodeBalanceOverflowError"; } }
 
-const MAX_INT64 = (1n << 63n) - 1n;
 const MAX_VERSION = 2_147_483_647;
 const GUARD = "INSERT INTO fe_write_guard (assertion) VALUES (changes())";
 const CLEAR_GUARD = "DELETE FROM fe_write_guard";
@@ -82,6 +81,7 @@ export class GiftCodeRedemptionRepository {
     const group = gift.rewardType === "GROUP_POINTS"
       ? await this.findGroup(input.telegramGroupId as string, input.userId)
       : null;
+    if (gift.rewardType === "GROUP_POINTS" && group && (group.isActive !== 1 || group.isSuspended === 1)) throw new GiftCodeGroupUnavailableError();
     if (gift.rewardType === "GROUP_POINTS" && !group) {
       const raw = await this.db.prepare(
         'SELECT "id", "isActive", "isSuspended", CAST("points" AS TEXT) AS "points" FROM "TelegramGroup" WHERE "telegramId" = ? LIMIT 1'
@@ -126,6 +126,7 @@ export class GiftCodeRedemptionRepository {
       ).bind(gift.id, now, now),
       this.db.prepare(GUARD),
     ];
+    const guardIndexes = [1, 3];
 
     const appendWalletCredit = (asset: "CASH" | "GOLD", amount: bigint, walletId: string, ledgerId: string) => {
       if (amount === 0n) return;
@@ -134,6 +135,7 @@ export class GiftCodeRedemptionRepository {
         'INSERT INTO "LedgerTransaction" ("id", "idempotencyKey", "userId", "asset", "direction", "amount", "reason", "referenceType", "referenceId", "createdAt") ' +
         'SELECT ?, ?, ?, ?, \'CREDIT\', CAST(? AS INTEGER), \'GIFT_CODE_REDEMPTION\', \'GIFT_CODE\', ?, ? WHERE changes() = 1 ON CONFLICT("idempotencyKey") DO NOTHING'
       ).bind(ledgerId, key, input.userId, asset, amount.toString(), gift.id, now));
+      guardIndexes.push(statements.length);
       statements.push(this.db.prepare(GUARD));
       statements.push(this.db.prepare(
         'INSERT INTO "Wallet" ("id", "userId", "asset", "balance", "version", "createdAt", "updatedAt") ' +
@@ -141,6 +143,7 @@ export class GiftCodeRedemptionRepository {
         'ON CONFLICT("userId", "asset") DO UPDATE SET "balance" = "Wallet"."balance" + excluded."balance", "version" = "Wallet"."version" + 1, "updatedAt" = excluded."updatedAt" ' +
         'WHERE "Wallet"."balance" <= 9223372036854775807 - excluded."balance" AND "Wallet"."version" < 2147483647'
       ).bind(walletId, input.userId, asset, amount.toString(), now, now));
+      guardIndexes.push(statements.length);
       statements.push(this.db.prepare(GUARD));
     };
     appendWalletCredit("CASH", cash, input.cashWalletId, input.cashLedgerId);
@@ -150,11 +153,13 @@ export class GiftCodeRedemptionRepository {
       statements.push(this.db.prepare(
         'UPDATE "TelegramGroup" SET "points" = "points" + CAST(? AS INTEGER) WHERE "id" = ? AND changes() = 1 AND "isActive" = 1 AND "isSuspended" = 0 AND "points" <= 9223372036854775807 - CAST(? AS INTEGER)'
       ).bind(points.toString(), group.id, points.toString()));
+      guardIndexes.push(statements.length);
       statements.push(this.db.prepare(GUARD));
       statements.push(this.db.prepare(
         'INSERT INTO "GroupPointLedger" ("id", "idempotencyKey", "groupId", "userId", "amount", "source", "description", "createdAt") ' +
         'SELECT ?, ?, ?, ?, CAST(? AS INTEGER), \'GIFT_CODE\', ?, ? WHERE changes() = 1 ON CONFLICT("idempotencyKey") DO NOTHING'
       ).bind(input.groupLedgerId, input.idempotencyKey + ":GROUP_POINTS", group.id, input.userId, points.toString(), "Gift code redemption: " + code, now));
+      guardIndexes.push(statements.length);
       statements.push(this.db.prepare(GUARD));
     }
     statements.push(this.db.prepare(CLEAR_GUARD));
@@ -168,11 +173,9 @@ export class GiftCodeRedemptionRepository {
         throw new Error("Gift-code batch did not reserve and increment the code");
       }
       // Every guarded mutation is followed by a CHECK-constrained guard insert.
-      for (let i = 0; i < results.length; i++) {
-        const sql = (statements[i] as unknown as { sql?: string }).sql ?? "";
-        if (sql === GUARD && results[i]?.meta?.changes !== 1) throw new Error("Gift-code write guard failed");
+      for (const index of guardIndexes) {
+        if (results[index]?.meta?.changes !== 1) throw new Error("Gift-code write guard failed");
       }
-      void requiredChanges;
       return { status: "redeemed", reward: { cash: cash.toString(), gold: gold.toString(), groupPoints: points.toString() } };
     } catch (error) {
       const replay = await this.findPrior(input.idempotencyKey).catch(() => null);
