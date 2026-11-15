@@ -149,7 +149,7 @@ test("competition rule defaults distinguish league, cup and friendly formats", (
 
 test("competition rule validation rejects impossible limits and accepts customized rules", () => {
   const custom = {
-    maxSubstitutions: 4, maxInPlayWindows: 2, injuriesEnabled: false,
+    maxSubstitutions: 4, maxInPlayWindows: 2, injuriesEnabled: false, injuryDurationDays: 5,
     redCardSuspensionMatches: 2, yellowCardsToSuspend: 4,
     yellowCardSuspensionMatches: 2, penaltiesOnDraw: true,
   };
