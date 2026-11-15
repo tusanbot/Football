@@ -578,7 +578,7 @@ bot.command("admingift", async (ctx) => {
       return ctx.reply("کد هدیه ایجاد شد. شناسه: "+result.targetId);
     }
     if(operation==="toggle"){
-      const [id,state]=rest.split(/\\s+/);
+      const [id,state]=rest.split(/\s+/);
       if(!id||!["on","off"].includes(state??""))return ctx.reply("استفاده: /admingift toggle GIFT_ID on|off");
       await api("/v1/admin/actions",ctx.from.id,"POST",{action:"toggle-gift-code",targetId:id,active:state==="on",idempotencyKey:randomUUID()});
       return ctx.reply("وضعیت کد هدیه تغییر کرد.");
@@ -605,7 +605,7 @@ bot.command("adminitem", async (ctx) => {
       return ctx.reply("آیتم به‌روزرسانی شد.");
     }
     if(operation==="toggle"){
-      const [id,state]=rest.split(/\\s+/);
+      const [id,state]=rest.split(/\s+/);
       if(!id||!["on","off"].includes(state??""))return ctx.reply("استفاده: /adminitem toggle ITEM_ID on|off");
       await api("/v1/admin/actions",ctx.from.id,"POST",{action:"toggle-item",targetId:id,active:state==="on",idempotencyKey:randomUUID()});
       return ctx.reply("وضعیت آیتم تغییر کرد.");
@@ -617,7 +617,7 @@ bot.command("adminitem", async (ctx) => {
 bot.command("adminupdate", async (ctx) => {
   if (!ctx.from || !adminOnlyInPrivate(ctx)) return;
   const input=String(ctx.match??"").trim();
-  const parts=input.split(/\\s+/);
+  const parts=input.split(/\s+/);
   const resource=parts.shift(),targetId=parts.shift(),json=parts.join(" ");
   const actions:Record<string,{action:string;fields:string[]}>={
     player:{action:"player-update",fields:["firstName","lastName","age","overall","potential","wage","contractDays","fitness","morale"]},
