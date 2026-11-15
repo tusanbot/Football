@@ -256,7 +256,7 @@ export async function startLeague(userId: string, competitionId: string, now = n
           return {
             homeClubId: legHome, awayClubId: legAway, round: 1, type: "CUP" as const,
             competitionId, rulesSnapshot: validateMatchRules(competition.rules ?? defaultMatchRules("CUP")),
-            tieId, leg, scheduledAt: new Date(now.getTime() + leg * 3 * DAY_MS),
+            tieId: competition.cupLegs === 2 ? tieId : null, leg, scheduledAt: new Date(now.getTime() + leg * 3 * DAY_MS),
             seed: idempotencyKey, idempotencyKey,
           };
         });
@@ -477,7 +477,7 @@ async function advanceCupRound(competitionId: string, round: number, now: Date) 
       const idempotencyKey = tieId + `:leg${leg}`;
       fixtures.push({
         idempotencyKey, type: "CUP" as const, competitionId, round: nextRound,
-        homeClubId: legHome, awayClubId: legAway, tieId, leg,
+        homeClubId: legHome, awayClubId: legAway, tieId: competition.cupLegs === 2 ? tieId : null, leg,
         rulesSnapshot,
         scheduledAt: new Date(now.getTime() + leg * 3 * DAY_MS), seed: idempotencyKey,
       });
