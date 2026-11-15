@@ -192,7 +192,7 @@ export async function respondToPromotion(userId: string, offerId: string, accept
   return prisma.$transaction(async (tx) => {
     const offer = await tx.leaguePromotionOffer.findUnique({
       where: { id: offerId },
-      include: { league: { include: { competition: { include: { entries: { include: { club: { select: { id: true, ownerId: true } } } } } } } },
+      include: { league: { include: { competition: { include: { entries: { include: { club: { select: { id: true, ownerId: true } } } } } } } } },
     });
     if (!offer) throw new PyramidLeagueError("PROMOTION_OFFER_NOT_FOUND");
     if (offer.clubId !== club.id) throw new PyramidLeagueError("NOT_PROMOTION_OFFER_OWNER");
@@ -241,7 +241,7 @@ export async function processPyramidLeagueCompletion(competitionId: string, now 
   return prisma.$transaction(async (tx) => {
     const league = await tx.pyramidLeague.findUnique({
       where: { competitionId },
-      include: { competition: { include: { entries: { include: { club: { select: { id: true, ownerId: true, name: true } } } } } },
+      include: { competition: { include: { entries: { include: { club: { select: { id: true, ownerId: true, name: true } } } } } } },
     });
     if (!league || league.promotionProcessedAt || league.competition.status !== "COMPLETED") return { processed: false };
     const ranked = rankLeagueTeams(league.competition.entries.map((entry) => ({
