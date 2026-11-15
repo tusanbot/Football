@@ -10,6 +10,7 @@ import {
   resolvePrivateMenuCommand,
   formatApiError,
   limitTelegramMessage,
+  assertLongPollingWebhookClear,
 } from "../src/telegram-ux.js";
 
 const botSource = await readFile(new URL("../src/bot.ts", import.meta.url), "utf8");
@@ -160,4 +161,12 @@ test("Telegram replies are capped below the platform message limit", () => {
   assert.equal(safe.length, 3900);
   assert.equal(safe.endsWith("…"), true);
   assert.equal(limitTelegramMessage("short"), "short");
+});
+
+test("long-polling startup refuses an existing webhook without deleting it", () => {
+  assert.doesNotThrow(() => assertLongPollingWebhookClear(""));
+  assert.doesNotThrow(() => assertLongPollingWebhookClear(undefined));
+  assert.throws(() => assertLongPollingWebhookClear("https://example.invalid/webhook"), /TELEGRAM_WEBHOOK_CONFIGURED/);
+  assert.ok(botSource.includes("bot.api.getWebhookInfo()"));
+  assert.equal(botSource.includes("bot.api.deleteWebhook("), false);
 });
