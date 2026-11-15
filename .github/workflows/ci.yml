@@ -55,16 +55,22 @@ jobs:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/football_empire
       - name: Verify seeded special-player catalog
         run: |
-          pnpm --filter @football/api exec tsx -e 'import { PrismaClient } from "@prisma/client"; void (async () => { const prisma = new PrismaClient(); try { const count = await prisma.specialPlayer.count(); console.log(`Seeded special players: ${count}`); if (count !== 15) process.exitCode = 1; } finally { await prisma.$disconnect(); } })();'
+          pnpm --filter @football/api exec tsx -e 'import { createPrismaClient } from "./src/db.ts"; void (async () => { const prisma = createPrismaClient(); try { const count = await prisma.specialPlayer.count(); console.log(`Seeded special players: ${count}`); if (count !== 15) process.exitCode = 1; } finally { await prisma.$disconnect(); } })();'
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/football_empire
       - name: Build shared domain package
         run: pnpm --filter @football/domain build
       - name: Typecheck
         run: pnpm typecheck
-      - name: Typecheck Cloudflare API migration scaffold
-        run: pnpm exec tsc --noEmit -p cloudflare/api/tsconfig.json
-      - name: Test Cloudflare API migration scaffold
+      - name: Typecheck Cloudflare API Worker
+        run: pnpm --dir cloudflare/api typecheck
+      - name: Bundle Cloudflare API Worker (dry run)
+        run: pnpm --dir cloudflare/api check:worker
+      - name: Build Cloudflare Mini App Worker
+        run: pnpm --dir apps/web build:worker
+        env:
+          NEXT_PUBLIC_API_URL: https://api.example.invalid
+      - name: Test Cloudflare API Worker runtime
         run: pnpm exec tsx --test cloudflare/api/test/*.test.ts
       - name: Generate and validate D1 schema on SQLite
         run: |

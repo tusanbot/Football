@@ -1,7 +1,6 @@
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "../src/db.js";
 import { SPECIAL_PLAYER_CATALOG } from "../src/players/special-catalog.js";
 
-const prisma = new PrismaClient();
 
 async function main() {
   for (const player of SPECIAL_PLAYER_CATALOG) {

@@ -1,109 +1,104 @@
-# Football Empire — Cloudflare Workers setup
+# Football Empire — Cloudflare runtime
 
-This directory documents the non-production Cloudflare runtime setup. The repository currently has two Worker applications:
+This branch prepares two independent Cloudflare Workers:
 
-1. **Web / Telegram Mini App** — the existing Next.js 15 app, adapted with OpenNext for Cloudflare Workers.
-2. **Game API** — a separate Worker with a D1 binding and migration scaffold.
+1. **Web / Telegram Mini App** — the existing Next.js 15 application, built with the OpenNext Cloudflare adapter.
+2. **Game API** — the existing Fastify API and Prisma domain services, executed inside a Worker with Node.js compatibility and PostgreSQL connectivity.
 
-The Bot is still the existing grammY long-polling Node.js process. It is **not** a Cloudflare webhook Worker yet. Do not configure a Telegram webhook or point Telegram updates at either Worker.
+The API Worker reuses the same Fastify route registration and Prisma domain code as the current Node.js API. This avoids a second, incomplete implementation of game rules and preserves existing PostgreSQL transaction semantics while the D1 migration is validated separately.
 
-## Cloudflare dashboard: connect the two Workers
+## Database architecture
 
-Use the same repository and the `feat/cloudflare-worker-runtime` branch for the first validation pass. Configure each Worker independently:
+The current game API remains PostgreSQL-backed. The API Worker accepts either a Cloudflare **Hyperdrive** binding named `HYPERDRIVE` (recommended), or a server-side `DATABASE_URL` secret using a PostgreSQL connection string.
+
+The Worker creates a request-scoped Prisma Client using `@prisma/adapter-pg`, `pg`, and Prisma's JavaScript engine. AsyncLocalStorage isolates concurrent requests. The Node.js API uses the same adapter with its normal process-scoped client.
+
+This is a compatibility runtime, not a D1 cutover. The generated D1 schema and D1-native economy repositories remain migration work and are not used for live game traffic. D1 readiness must not be claimed until every API domain, transaction, idempotency rule, route, and background job has been ported and proven against D1.
+
+## Cloudflare dashboard setup
+
+Connect both Workers to repository `tusanbot/Football`, branch `feat/cloudflare-worker-runtime`:
 
 | Setting | Web / Mini App | Game API |
 | --- | --- | --- |
 | Root directory | `apps/web` | `cloudflare/api` |
-| Config file | `wrangler.jsonc` | `wrangler.jsonc` |
+| Wrangler config | `wrangler.jsonc` | `wrangler.jsonc` |
 | Worker name | `football-empire-web-dev` | `football-empire-api-dev` |
+| Build command | `pnpm build:worker` | `pnpm check:worker` |
 | Local preview | `pnpm preview:worker` | `pnpm dev` |
-| Build command | `pnpm dlx @opennextjs/cloudflare@1.20.17 build` | `pnpm typecheck` |
-| Deploy command | **Leave unset until explicitly approved** | **Leave unset until API migration gates pass** |
 
-Do not use `npx wrangler deploy` from the repository root. Each Worker has its own root directory and Wrangler configuration. When a deploy is eventually approved, invoke the adapter/Wrangler from that Worker root with its own config.
+Do not run Wrangler from the monorepo root. Each Worker needs its own root directory.
 
-## 1. Web / Telegram Mini App Worker
+## Web / Mini App Worker
 
-The Web Worker uses the maintained OpenNext Cloudflare adapter for the existing Next.js 15 application. Its configuration is in `apps/web/wrangler.jsonc` and points to the adapter output at `.open-next/worker.js`.
+The Web Worker uses OpenNext. Configuration is in `apps/web/wrangler.jsonc` and `apps/web/open-next.config.ts`. It enables `nodejs_compat`, uses the generated `ASSETS` binding, and enables observability/source maps.
 
-Required runtime settings:
+Set this build variable in the Web Worker:
 
-- `nodejs_compat` is enabled.
-- Static assets are served through the `ASSETS` binding.
-- Source maps and Worker observability are enabled.
-- No production route, custom domain, or secret is embedded in the repository.
-- `NEXT_PUBLIC_API_URL` is a **build-time public value**. Set it in the Web Worker build environment to the HTTPS origin of the intended API. Never put `BOT_API_SECRET` or the Telegram Bot token in a `NEXT_PUBLIC_*` variable.
+- `NEXT_PUBLIC_API_URL`: HTTPS origin of the deployed Game API Worker, without path, query, fragment, username, or password.
 
-From the repository root, install the workspace dependencies first, then preview the production Worker build:
+This is public and compiled into the Mini App. Never use `NEXT_PUBLIC_*` for `BOT_API_SECRET`, `TELEGRAM_BOT_TOKEN`, or database credentials.
+
+Preview from repository root:
 
 ```bash
-pnpm install --frozen-lockfile
+pnpm install
+pnpm --dir apps/web typecheck
 pnpm --dir apps/web preview:worker
 ```
 
-This runs the OpenNext build and starts its local Workers preview. It does not deploy anything. The ordinary `pnpm --dir apps/web dev` command remains the Node.js Next.js development server and is not a substitute for Workers-runtime preview.
+Preview builds OpenNext output and runs it locally; it does not deploy.
 
-The Worker does not yet have an approved production API origin. Do not publish the Mini App against the Cloudflare API scaffold: its game routes intentionally return HTTP 503.
+## Game API Worker
 
-## 2. Game API Worker
+The API Worker imports the existing Fastify application and all route registrations. It adapts Fetch API requests through Fastify's injection interface.
 
-The API Worker configuration is in `cloudflare/api/wrangler.jsonc`. It defines:
+Required secrets:
 
-- Entry point: `src/index.ts`
-- D1 binding: `DB`
-- Development database name: `football-empire-dev`
-- Migrations directory: `migrations`
-- Local-only placeholder D1 ID: `00000000-0000-0000-0000-000000000001`
+- `DATABASE_URL`: PostgreSQL connection string, unless a `HYPERDRIVE` binding is attached.
+- `TELEGRAM_BOT_TOKEN`: used by Telegram Mini App init-data verification.
+- `BOT_API_SECRET`: same server-to-server secret used by the existing Bot; at least 32 random characters.
 
-The placeholder is only for Wrangler's local D1 state. It is **not** the ID of a real Cloudflare database. Before any remote D1 operation, create/select the intended development D1 database and replace this value with its actual ID. Do not apply the generated game-schema draft remotely.
+Required variables:
 
-From the repository root:
+- `CORS_ORIGIN`: exact comma-separated HTTPS origins allowed to call the API; include the Web Worker origin.
+- `GAME_ADMIN_TELEGRAM_IDS`: comma-separated numeric Telegram administrator IDs.
+- `ENVIRONMENT`: use `development` for initial staging validation.
+
+Create a Cloudflare Hyperdrive configuration pointing at the existing **development PostgreSQL database**, then attach it with binding name `HYPERDRIVE`. Hyperdrive is preferred for connection pooling. Without it, set `DATABASE_URL` as a Worker secret. Never commit database credentials or put them in Wrangler `vars`.
+
+For local preview, copy `cloudflare/api/.dev.vars.example` to `.dev.vars` and replace placeholders with local development values. The real `.dev.vars` file is Git-ignored.
+
+Commands from repository root:
 
 ```bash
 pnpm --dir cloudflare/api typecheck
 pnpm --dir cloudflare/api test
+pnpm --dir cloudflare/api check:worker
 pnpm --dir cloudflare/api dev
 ```
 
-Optional local D1 migration command (only changes local Wrangler state):
+The API Worker exposes the existing Fastify routes for Telegram auth, Bot auth, clubs, players, market, matches, groups, leagues, gifts, administration, and public records. `GET /health` does not require database credentials; `GET /ready` checks configuration and database connectivity.
 
-```bash
-pnpm --dir cloudflare/api db:migrate:local
-```
+### Background game processing
 
-The API Worker is still a migration scaffold, not a game API release:
+A one-minute Cron Trigger runs the existing due-match and promotion processors. This replaces the Node server's five-second in-process polling loop. Verify that this cadence satisfies match timing in staging. If not, move match progression to durable Queue/Workflow/Alarm orchestration before cutover.
 
-- `GET /health` is available.
-- `GET /ready` intentionally returns HTTP 503 until all migration gates pass.
-- All `/v1/*` game routes intentionally return HTTP 503.
-- The generated D1 schema and the small set of D1-native economy repositories do not constitute full API route parity.
-- PostgreSQL remains the authoritative development database.
+## D1 migration track
 
-Do not deploy this Worker or configure the Web Worker to use it for game traffic yet.
+D1 schema conversion, migration files, and D1-native economy repositories remain in the repository as a future migration track. They are not attached to the live API Worker because only a subset of economy operations currently has D1 repositories and complete Fastify route parity is not implemented on D1.
 
-## 3. API migration gates before deployment
+Do not use Prisma's D1 adapter as a drop-in replacement for multi-record economy transactions. Do not switch live traffic to D1 until all domains have complete repositories and atomicity, idempotency, and concurrency tests.
 
-The following must be completed and verified before the API Worker can be considered deployable:
+## Telegram Bot boundary
 
-1. Review and test the generated D1 schema against every PostgreSQL model, migration, constraint and index.
-2. Complete D1-native repositories for every game domain; do not use Prisma's D1 adapter for the existing transactional economy.
-3. Prove atomicity, idempotency and concurrency behavior for wallet/ledger, transfers, rewards, competitions and all other multi-record writes.
-4. Port API authentication, authorization, rate limits and **all** existing Fastify routes with Bot/Mini App parity.
-5. Add integration tests against local D1 and run realistic concurrency/load and backup/restore tests.
-6. Change `/ready` only after those gates are satisfied; keep unknown and unported game routes fail-closed.
-
-## 4. Bot and Telegram webhook status
-
-The current Bot remains `apps/bot`, runs grammY long polling, checks API readiness, and owns a PostgreSQL polling lease. A Worker-safe Bot factory, durable Telegram update deduplication, retry-safe Queue consumers, and command parity have not yet been completed.
-
-Therefore:
+The grammY Bot remains a separate long-polling process. This API Worker is not the Telegram Bot Worker.
 
 - Keep the existing Bot in polling mode.
 - Do not call Telegram `setWebhook`.
-- Do not set a webhook URL in BotFather.
-- Do not add `TELEGRAM_BOT_TOKEN` to the Web or API Worker configuration.
+- Set the Bot's `FOOTBALL_API_URL` to the API Worker origin only after API readiness and route smoke tests pass.
 - Keep `BOT_API_SECRET` server-side and out of the Mini App.
 
-## 5. Current release boundary
+## Release boundary
 
-This setup provides reproducible per-Worker configuration and local preview commands. It does **not** mean the Cloudflare migration is complete or that either Worker is approved for production deployment. No production database, DNS route, custom domain, webhook, or deployment is changed by these repository files.
+This branch does not create Hyperdrive resources, configure account-specific secrets, create a production database, change DNS, deploy either Worker, change production data, or enable a Telegram webhook. No changes are made to `main`.

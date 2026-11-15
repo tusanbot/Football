@@ -2,63 +2,34 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import worker from "../src/index.js";
 
-const unusedDb = {
-  prepare() {
-    return {
-      bind() { return this; },
-      async first() { return null; },
-    };
-  },
-};
+const context = { waitUntil() {} };
 
-test("health endpoint identifies the migration scaffold", async () => {
-  const response = await worker.fetch(new Request("https://api.example.test/health"), { DB: unusedDb });
+test("health endpoint works without database configuration", async () => {
+  const response = await worker.fetch(new Request("https://api.example.test/health"), {}, context);
   assert.equal(response.status, 200);
   assert.deepEqual(await response.json(), {
     status: "ok",
     service: "football-empire-cloudflare-api",
-    mode: "migration-scaffold",
+    mode: "fastify-prisma-runtime",
   });
 });
 
-test("readiness stays closed even after the bootstrap migration", async () => {
-  const db = {
-    prepare() {
-      return {
-        bind() { return this; },
-        async first() { return { version: "0001_platform_bootstrap" }; },
-      };
-    },
-  };
-  const response = await worker.fetch(new Request("https://api.example.test/ready"), { DB: db });
+test("readiness fails closed and reports missing runtime configuration", async () => {
+  const response = await worker.fetch(new Request("https://api.example.test/ready"), {}, context);
   assert.equal(response.status, 503);
-  const body = await response.json() as { status: string; missing: string[]; database: { available: boolean } };
+  const body = await response.json() as { status: string; missing: string[] };
   assert.equal(body.status, "not_ready");
-  assert.equal(body.database.available, true);
-  assert.ok(body.missing.includes("GAME_SCHEMA_MIGRATION"));
-  assert.ok(body.missing.includes("D1_ATOMIC_REPOSITORY"));
+  assert.ok(body.missing.includes("HYPERDRIVE or DATABASE_URL"));
+  assert.ok(body.missing.includes("TELEGRAM_BOT_TOKEN"));
+  assert.ok(body.missing.includes("BOT_API_SECRET"));
+  assert.ok(body.missing.includes("CORS_ORIGIN"));
+  assert.ok(body.missing.includes("GAME_ADMIN_TELEGRAM_IDS"));
 });
 
-test("game routes fail closed until migration gates pass", async () => {
-  const response = await worker.fetch(new Request("https://api.example.test/v1/me"), { DB: unusedDb });
+test("game routes stay closed until server-side configuration exists", async () => {
+  const response = await worker.fetch(new Request("https://api.example.test/v1/me"), {}, context);
   assert.equal(response.status, 503);
-  assert.equal((await response.json() as { error: string }).error, "GAME_API_MIGRATION_INCOMPLETE");
-});
-
-
-test("readiness recognizes the generated game schema migration", async () => {
-  const db = {
-    prepare() {
-      return {
-        bind() { return this; },
-        async first() { return { version: "0002_game_schema" }; },
-      };
-    },
-  };
-  const response = await worker.fetch(new Request("https://api.example.test/ready"), { DB: db });
-  assert.equal(response.status, 503);
-  const body = await response.json() as { missing: string[]; database: { migrationVersion: string } };
-  assert.equal(body.database.migrationVersion, "0002_game_schema");
-  assert.ok(!body.missing.includes("GAME_SCHEMA_MIGRATION"));
-  assert.ok(body.missing.includes("D1_ATOMIC_REPOSITORY"));
+  const body = await response.json() as { status: string; missing: string[] };
+  assert.equal(body.status, "not_ready");
+  assert.ok(body.missing.length >= 5);
 });

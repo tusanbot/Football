@@ -3,17 +3,9 @@
   "name": "football-empire-api-dev",
   "main": "src/index.ts",
   "compatibility_date": "2026-11-15",
+  "compatibility_flags": ["nodejs_compat"],
   "workers_dev": true,
   "preview_urls": false,
-  "observability": {
-    "enabled": true
-  },
-  "d1_databases": [
-    {
-      "binding": "DB",
-      "database_name": "football-empire-dev",
-      "database_id": "00000000-0000-0000-0000-000000000001",
-      "migrations_dir": "migrations"
-    }
-  ]
+  "observability": { "enabled": true },
+  "triggers": { "crons": ["* * * * *"] }
 }
