@@ -194,6 +194,10 @@ export function advanceMatchSegment(input: {
   for (const event of orderedEvents) {
     const current = substitutionStates.get(event.teamId);
     if (!current) continue;
+    const activePlayer = current.side.players.find((player) => player.id === event.playerId);
+    if ((event.type === "YELLOW_CARD" || event.type === "RED_CARD" || event.type === "INJURY") && !activePlayer) {
+      continue;
+    }
     let nextEvent = event;
     if (event.type === "GOAL") {
       const activeIds = new Set(current.side.players.map((player) => player.id));
@@ -202,77 +206,64 @@ export function advanceMatchSegment(input: {
         const scorer = choose(scorers.length ? scorers : current.side.players, random);
         const helpers = current.side.players.filter((player) => player.id !== scorer.id);
         const assister = random() < 0.72 && helpers.length ? choose(helpers, random) : null;
-        nextEvent = {
-          ...event, playerId: scorer.id,
-          ...(assister ? { relatedPlayerId: assister.id } : { relatedPlayerId: undefined }),
-        };
+        const goal = { ...event };
+        delete goal.relatedPlayerId;
+        nextEvent = { ...goal, playerId: scorer.id, ...(assister ? { relatedPlayerId: assister.id } : {}) };
       } else if (event.relatedPlayerId && !activeIds.has(event.relatedPlayerId)) {
         const helpers = current.side.players.filter((player) => player.id !== event.playerId);
         const assister = helpers.length ? choose(helpers, random) : null;
-        nextEvent = { ...event, ...(assister ? { relatedPlayerId: assister.id } : { relatedPlayerId: undefined }) };
+        const goal = { ...event };
+        delete goal.relatedPlayerId;
+        nextEvent = { ...goal, ...(assister ? { relatedPlayerId: assister.id } : {}) };
       }
     }
     processedEvents.push(nextEvent);
-    if (event.type === "RED_CARD") {
-      const dismissed = current.side.players.find((player) => player.id === event.playerId);
-      if (dismissed) {
-        current.side = { ...current.side, players: current.side.players.filter((player) => player.id !== event.playerId) };
-        current.state = {
-          ...current.state,
-          onPitch: current.state.onPitch.filter((player) => player.id !== event.playerId),
-          sentOffIds: [...current.state.sentOffIds, event.playerId],
-        };
-        substitutionStates.set(event.teamId, current);
-      }
+    if (event.type === "RED_CARD" && activePlayer) {
+      current.side = { ...current.side, players: current.side.players.filter((player) => player.id !== event.playerId) };
+      current.state = {
+        ...current.state,
+        onPitch: current.state.onPitch.filter((player) => player.id !== event.playerId),
+        sentOffIds: [...current.state.sentOffIds, event.playerId],
+      };
+      substitutionStates.set(event.teamId, current);
     }
-    if (event.type === "INJURY") {
-      const injured = current.side.players.find((player) => player.id === event.playerId);
-      if (injured) {
-        const role = (position: string) => position === "GK" ? "GK"
-          : ["CB", "LB", "RB"].includes(position) ? "DEF"
-            : ["CDM", "CM", "CAM"].includes(position) ? "MID" : "ATT";
-        const incoming = (current.side.bench ?? [])
-          .filter((player) => role(player.position) === role(injured.position))
-          .sort((a, b) => b.overall - a.overall || a.id.localeCompare(b.id))[0];
-        if (incoming) {
-          try {
-            const checkpointId = "injury-" + input.seed + "-" + event.minute + "-" + injured.id;
-            const applied = applyMatchSubstitutions({
-              state: current.state,
-              changes: [{ outgoingPlayerId: injured.id, incomingPlayerId: incoming.id }],
-              checkpoint: "INJURY",
-              checkpointId,
-              source: "FORCED_INJURY",
-            });
-            const players = new Map([...current.side.players, ...(current.side.bench ?? [])].map((player) => [player.id, player]));
-            current.side = {
-              ...current.side,
-              players: applied.state.onPitch.map((player) => players.get(player.id)!).filter(Boolean),
-              bench: applied.state.bench.map((player) => players.get(player.id)!).filter(Boolean),
-            };
-            current.state = applied.state;
-            processedEvents.push({
-              sequence: sequence++,
-              minute: event.minute,
-              type: "SUBSTITUTION",
-              teamId: event.teamId,
-              playerId: injured.id,
-              relatedPlayerId: incoming.id,
-              detail: "Forced injury substitution: " + injured.name + " replaced by " + incoming.name + ".",
-            });
-            substitutionStates.set(event.teamId, current);
-          } catch (error) {
-            substitutionErrors.push(event.teamId + ":" + (error instanceof Error ? error.message : "FORCED_INJURY_SUBSTITUTION_FAILED"));
-            current.side = { ...current.side, players: current.side.players.filter((player) => player.id !== injured.id) };
-            current.state = {
-              ...current.state,
-              onPitch: current.state.onPitch.filter((player) => player.id !== injured.id),
-              substitutedOutIds: [...current.state.substitutedOutIds, injured.id],
-            };
-            substitutionStates.set(event.teamId, current);
-          }
-        } else {
-          // No legal replacement: the injured player leaves and the side plays short.
+    if (event.type === "INJURY" && activePlayer) {
+      const injured = activePlayer;
+      const role = (position: string) => position === "GK" ? "GK"
+        : ["CB", "LB", "RB"].includes(position) ? "DEF"
+          : ["CDM", "CM", "CAM"].includes(position) ? "MID" : "ATT";
+      const incoming = (current.side.bench ?? [])
+        .filter((player) => role(player.position) === role(injured.position))
+        .sort((a, b) => b.overall - a.overall || a.id.localeCompare(b.id))[0];
+      if (incoming) {
+        try {
+          const checkpointId = "injury-" + input.seed + "-" + event.minute + "-" + injured.id;
+          const applied = applyMatchSubstitutions({
+            state: current.state,
+            changes: [{ outgoingPlayerId: injured.id, incomingPlayerId: incoming.id }],
+            checkpoint: "INJURY",
+            checkpointId,
+            source: "FORCED_INJURY",
+          });
+          const players = new Map([...current.side.players, ...(current.side.bench ?? [])].map((player) => [player.id, player]));
+          current.side = {
+            ...current.side,
+            players: applied.state.onPitch.map((player) => players.get(player.id)!).filter(Boolean),
+            bench: applied.state.bench.map((player) => players.get(player.id)!).filter(Boolean),
+          };
+          current.state = applied.state;
+          processedEvents.push({
+            sequence: sequence++,
+            minute: event.minute,
+            type: "SUBSTITUTION",
+            teamId: event.teamId,
+            playerId: injured.id,
+            relatedPlayerId: incoming.id,
+            detail: "Forced injury substitution: " + injured.name + " replaced by " + incoming.name + ".",
+          });
+          substitutionStates.set(event.teamId, current);
+        } catch (error) {
+          substitutionErrors.push(event.teamId + ":" + (error instanceof Error ? error.message : "FORCED_INJURY_SUBSTITUTION_FAILED"));
           current.side = { ...current.side, players: current.side.players.filter((player) => player.id !== injured.id) };
           current.state = {
             ...current.state,
@@ -281,6 +272,15 @@ export function advanceMatchSegment(input: {
           };
           substitutionStates.set(event.teamId, current);
         }
+      } else {
+        // No legal replacement: the injured player leaves and the side plays short.
+        current.side = { ...current.side, players: current.side.players.filter((player) => player.id !== injured.id) };
+        current.state = {
+          ...current.state,
+          onPitch: current.state.onPitch.filter((player) => player.id !== injured.id),
+          substitutedOutIds: [...current.state.substitutedOutIds, injured.id],
+        };
+        substitutionStates.set(event.teamId, current);
       }
     }
   }
