@@ -12,3 +12,15 @@ test("club logo mutations require Telegram authentication", async (t) => {
   ]);
   assert.deepEqual(responses.map((response) => response.statusCode), [401, 401]);
 });
+
+test("public club comparison rejects missing, identical, and malformed club IDs", async (t) => {
+  const app = buildApp();
+  await app.ready();
+  t.after(async () => app.close());
+  const responses = await Promise.all([
+    app.inject({ method: "GET", url: "/v1/clubs/compare?first=club-a" }),
+    app.inject({ method: "GET", url: "/v1/clubs/compare?first=club-a&second=club-a" }),
+    app.inject({ method: "GET", url: "/v1/clubs/compare?first=&second=club-b" }),
+  ]);
+  assert.deepEqual(responses.map((response) => response.statusCode), [400, 400, 400]);
+});

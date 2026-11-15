@@ -102,6 +102,74 @@ export function registerPublicClubRoutes(app: FastifyInstance) {
     };
   });
 
+
+  app.get("/v1/clubs/compare", async (request, reply) => {
+    const query = z.object({
+      first: z.string().min(1).max(64),
+      second: z.string().min(1).max(64),
+    }).safeParse(request.query);
+    if (!query.success || query.data.first === query.data.second) {
+      return reply.code(400).send({ error: "INVALID_CLUB_COMPARISON" });
+    }
+    const [first, second] = await Promise.all([
+      prisma.club.findUnique({ where: { id: query.data.first }, select: { id: true, name: true, level: true, reputation: true, logoMime: true } }),
+      prisma.club.findUnique({ where: { id: query.data.second }, select: { id: true, name: true, level: true, reputation: true, logoMime: true } }),
+    ]);
+    if (!first || !second) return reply.code(404).send({ error: "CLUB_NOT_FOUND" });
+    const matches = await prisma.footballMatch.findMany({
+      where: {
+        status: "COMPLETED",
+        OR: [
+          { homeClubId: first.id, awayClubId: second.id },
+          { homeClubId: second.id, awayClubId: first.id },
+        ],
+      },
+      orderBy: [{ completedAt: "desc" }, { scheduledAt: "desc" }],
+      select: {
+        id: true, scheduledAt: true, completedAt: true, homeClubId: true, awayClubId: true,
+        homeScore: true, awayScore: true, type: true,
+        homeClub: { select: { name: true } }, awayClub: { select: { name: true } },
+        competition: { select: { name: true, season: true } },
+      },
+    });
+    const summarize = (clubId: string) => {
+      const summary = { played: 0, won: 0, drawn: 0, lost: 0, goalsFor: 0, goalsAgainst: 0, homePlayed: 0, awayPlayed: 0, biggestWin: null as null | { margin: number; score: string; opponent: string } };
+      for (const match of matches) {
+        const home = match.homeClubId === clubId;
+        const goalsFor = (home ? match.homeScore : match.awayScore) ?? 0;
+        const goalsAgainst = (home ? match.awayScore : match.homeScore) ?? 0;
+        summary.played++;
+        summary.goalsFor += goalsFor;
+        summary.goalsAgainst += goalsAgainst;
+        if (home) summary.homePlayed++; else summary.awayPlayed++;
+        if (goalsFor > goalsAgainst) summary.won++;
+        else if (goalsFor === goalsAgainst) summary.drawn++;
+        else summary.lost++;
+        const margin = goalsFor - goalsAgainst;
+        if (margin > 0 && (!summary.biggestWin || margin > summary.biggestWin.margin)) {
+          summary.biggestWin = { margin, score: goalsFor + "-" + goalsAgainst, opponent: home ? match.awayClub.name : match.homeClub.name };
+        }
+      }
+      return { ...summary, goalDifference: summary.goalsFor - summary.goalsAgainst };
+    };
+    return {
+      clubs: [first, second].map((club) => ({
+        id: club.id, name: club.name, level: club.level, reputation: club.reputation,
+        logoUrl: club.logoMime ? "/v1/clubs/" + club.id + "/logo" : null,
+        record: summarize(club.id),
+      })),
+      headToHead: {
+        totalMatches: matches.length,
+        recentMatches: matches.slice(0, 20).map((match) => ({
+          id: match.id, date: (match.completedAt ?? match.scheduledAt).toISOString(),
+          type: match.type, homeClub: match.homeClub.name, awayClub: match.awayClub.name,
+          homeScore: match.homeScore, awayScore: match.awayScore,
+          competition: match.competition?.name ?? null, season: match.competition?.season ?? null,
+        })),
+      },
+    };
+  });
+
   app.get("/v1/clubs/:clubId/logo", async (request, reply) => {
     const params = z.object({ clubId: z.string().min(1).max(64) }).safeParse(request.params);
     if (!params.success) return reply.code(400).send({ error: "INVALID_CLUB_ID" });

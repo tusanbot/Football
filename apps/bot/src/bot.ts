@@ -1339,6 +1339,24 @@ bot.command("clubs", async (ctx) => {
     await ctx.reply("باشگاه‌های Football Empire\n\n" + (lines.join("\n") || "هنوز باشگاهی ثبت نشده است.") + "\n\nبرای مشاهده پروفایل: /clubprofile CLUB_ID");
   } catch (error) { await ctx.reply("دریافت فهرست باشگاه‌ها ناموفق بود: " + (error instanceof Error ? error.message : "خطای نامشخص")); }
 });
+
+bot.command("clubcompare", async (ctx) => {
+  const ids = String(ctx.match ?? "").trim().split(/\s+/).filter(Boolean);
+  if (ids.length !== 2 || ids[0] === ids[1]) return ctx.reply("استفاده: /clubcompare CLUB_ID_1 CLUB_ID_2");
+  try {
+    const result = await publicApi<{ clubs: Array<{ name: string; level: number; record: { played: number; won: number; drawn: number; lost: number; goalsFor: number; goalsAgainst: number; goalDifference: number; biggestWin: { score: string; opponent: string } | null } }>; headToHead: { totalMatches: number; recentMatches: Array<{ homeClub: string; awayClub: string; homeScore: number | null; awayScore: number | null; date: string }> } }>(
+      "/v1/clubs/compare?first=" + encodeURIComponent(ids[0]!) + "&second=" + encodeURIComponent(ids[1]!),
+    );
+    const lines = result.clubs.map((club) => club.name + " · سطح " + club.level + "\n" +
+      club.record.played + " بازی · " + club.record.won + " برد · " + club.record.drawn + " مساوی · " + club.record.lost + " باخت\n" +
+      "گل " + club.record.goalsFor + "-" + club.record.goalsAgainst + " · تفاضل " + club.record.goalDifference +
+      (club.record.biggestWin ? " · بهترین برد " + club.record.biggestWin.score + " مقابل " + club.record.biggestWin.opponent : ""));
+    const recent = result.headToHead.recentMatches.slice(0, 8).map((match) =>
+      match.homeClub + " " + (match.homeScore ?? "—") + "-" + (match.awayScore ?? "—") + " " + match.awayClub + " · " + new Date(match.date).toLocaleDateString("fa-IR"));
+    await ctx.reply("مقایسه باشگاه‌ها\n\n" + lines.join("\n\n") + "\n\nرودررو: " + result.headToHead.totalMatches + " مسابقه\n" + (recent.join("\n") || "بدون مسابقه ثبت‌شده."));
+  } catch (error) { await ctx.reply("مقایسه باشگاه‌ها ناموفق بود: " + (error instanceof Error ? error.message : "خطای نامشخص")); }
+});
+
 bot.command("clubprofile", async (ctx) => {
   const id = String(ctx.match ?? "").trim().split(/\s+/)[0];
   if (!id) return ctx.reply("استفاده: /clubprofile CLUB_ID");

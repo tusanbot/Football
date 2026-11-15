@@ -43,6 +43,14 @@ type PublicClubProfile = {
   movements: Array<{ season: number; tierName: string; position: number; movement: "PROMOTION" | "RELEGATION"; targetTier: number | null }>;
   leagues: Array<{ id: string; season: number; tierName: string; groupNumber: number; finalPosition: number | null; awards: Array<{ awardName: string }> }>;
 };
+
+type ClubComparison = {
+  clubs: Array<{
+    id: string; name: string; level: number; reputation: number; logoUrl: string | null;
+    record: { played: number; won: number; drawn: number; lost: number; goalsFor: number; goalsAgainst: number; goalDifference: number; homePlayed: number; awayPlayed: number; biggestWin: { margin: number; score: string; opponent: string } | null };
+  }>;
+  headToHead: { totalMatches: number; recentMatches: Array<{ id: string; date: string; type: string; homeClub: string; awayClub: string; homeScore: number | null; awayScore: number | null; competition: string | null; season: number | null }> };
+};
 type PyramidClubHistory = {
   club: { id: string; name: string };
   stats: { seasons: number; appearances: number; championships: number; podiums: number; promotions: number; relegations: number };
@@ -130,6 +138,10 @@ export default function MarketPage() {
   const [pyramidClubHistory, setPyramidClubHistory] = useState<PyramidClubHistory | null>(null);
   const [publicClubs, setPublicClubs] = useState<PublicClub[]>([]);
   const [publicClubProfile, setPublicClubProfile] = useState<PublicClubProfile | null>(null);
+  const [comparisonFirst, setComparisonFirst] = useState("");
+  const [comparisonSecond, setComparisonSecond] = useState("");
+  const [clubComparison, setClubComparison] = useState<ClubComparison | null>(null);
+
   const [logoBusy, setLogoBusy] = useState(false);
   const [challengeShareUrl, setChallengeShareUrl] = useState("");
   const [groups, setGroups] = useState<Array<{telegramGroupId:string;title:string;role:string;memberCount:number;isActive:boolean;points:string}>>([]);
@@ -219,7 +231,14 @@ export default function MarketPage() {
     const clubHistoryResponse = await fetch(API + "/v1/pyramid-leagues/history", { headers });
     if (clubHistoryResponse.ok) setPyramidClubHistory(await clubHistoryResponse.json());
     const publicClubsResponse = await fetch(API + "/v1/clubs/public");
-    if (publicClubsResponse.ok) setPublicClubs((await publicClubsResponse.json()).clubs);
+    if (publicClubsResponse.ok) {
+      const clubs = (await publicClubsResponse.json()).clubs as PublicClub[];
+      setPublicClubs(clubs);
+      if (clubs.length > 1) {
+        setComparisonFirst((current) => current || clubs[0]!.id);
+        setComparisonSecond((current) => current || clubs[1]!.id);
+      }
+    }
     if (groupResponse.ok) {
       const groupData = await groupResponse.json();
       const nextGroups = groupData.groups ?? [];
@@ -308,6 +327,22 @@ export default function MarketPage() {
       const data = await response.json();
       if (!response.ok) throw new Error(data.error ?? "دریافت پروفایل باشگاه ناموفق بود.");
       setPublicClubProfile(data as PublicClubProfile);
+    } catch (e) { setError(e instanceof Error ? e.message : "خطای نامشخص"); }
+    finally { setBusy(""); }
+  }
+
+
+  async function comparePublicClubs() {
+    if (!comparisonFirst || !comparisonSecond || comparisonFirst === comparisonSecond) {
+      setError("برای مقایسه، دو باشگاه متفاوت انتخاب کنید.");
+      return;
+    }
+    setBusy("club-comparison"); setError(""); setClubComparison(null);
+    try {
+      const response = await fetch(API + "/v1/clubs/compare?first=" + encodeURIComponent(comparisonFirst) + "&second=" + encodeURIComponent(comparisonSecond));
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error ?? "مقایسه باشگاه‌ها ناموفق بود.");
+      setClubComparison(data as ClubComparison);
     } catch (e) { setError(e instanceof Error ? e.message : "خطای نامشخص"); }
     finally { setBusy(""); }
   }
@@ -421,6 +456,41 @@ export default function MarketPage() {
         </label>
         <button className="secondary" disabled={logoBusy} onClick={() => void removeClubLogo()}>حذف لوگوی فعلی</button>
       </div>}
+
+      <div className="market-card">
+        <h2>مقایسه رودرروی باشگاه‌ها</h2>
+        <p className="muted">عملکرد دو باشگاه در تمام مسابقات تکمیل‌شده ثبت‌شده را مقایسه کنید.</p>
+        <div className="development-stats">
+          <label>باشگاه اول<select value={comparisonFirst} onChange={(event) => { setComparisonFirst(event.target.value); setClubComparison(null); }}>
+            <option value="">انتخاب باشگاه</option>{publicClubs.map((club) => <option key={club.id} value={club.id}>{club.name}</option>)}
+          </select></label>
+          <label>باشگاه دوم<select value={comparisonSecond} onChange={(event) => { setComparisonSecond(event.target.value); setClubComparison(null); }}>
+            <option value="">انتخاب باشگاه</option>{publicClubs.map((club) => <option key={club.id} value={club.id}>{club.name}</option>)}
+          </select></label>
+        </div>
+        <button disabled={busy === "club-comparison" || !comparisonFirst || !comparisonSecond || comparisonFirst === comparisonSecond} onClick={() => void comparePublicClubs()}>
+          {busy === "club-comparison" ? "در حال مقایسه…" : "مقایسه دو باشگاه"}
+        </button>
+        {clubComparison && <>
+          <div className="development-stats">
+            {clubComparison.clubs.map((club) => <div key={club.id}>
+              <strong>{club.name}</strong><span>سطح {club.level} · اعتبار {club.reputation}</span>
+              <strong>{club.record.won} برد · {club.record.drawn} مساوی · {club.record.lost} باخت</strong>
+              <span>{club.record.played} بازی · گل زده {club.record.goalsFor} · گل خورده {club.record.goalsAgainst} · تفاضل {club.record.goalDifference}</span>
+              <span>بازی خانگی {club.record.homePlayed} · بازی خارج از خانه {club.record.awayPlayed}</span>
+              {club.record.biggestWin && <span>بهترین برد: {club.record.biggestWin.score} مقابل {club.record.biggestWin.opponent}</span>}
+            </div>)}
+          </div>
+          <h3>نتایج رودررو · {clubComparison.headToHead.totalMatches} مسابقه</h3>
+          {clubComparison.headToHead.recentMatches.map((match) => <div className="operation-row" key={match.id}>
+            <div><strong>{match.homeClub} {match.homeScore ?? "—"} : {match.awayScore ?? "—"} {match.awayClub}</strong>
+              <small>{match.competition ?? (match.type === "FRIENDLY" ? "دوستانه" : match.type)}{match.season ? " · فصل " + match.season : ""} · {new Date(match.date).toLocaleDateString("fa-IR")}</small>
+            </div>
+          </div>)}
+          {clubComparison.headToHead.totalMatches > clubComparison.headToHead.recentMatches.length && <p className="muted">۲۰ مسابقه اخیر نمایش داده شده‌اند؛ آمار کلی بر اساس تمام {clubComparison.headToHead.totalMatches} مسابقه محاسبه شده است.</p>}
+          {clubComparison.headToHead.totalMatches === 0 && <p className="muted">هنوز مسابقه رودرروی تکمیل‌شده‌ای بین این دو باشگاه ثبت نشده است.</p>}
+        </>}
+      </div>
       {publicClubProfile && <div className="market-card">
         <div className="public-club-profile">
           {publicClubProfile.club.logoUrl ? <img src={API + publicClubProfile.club.logoUrl} alt={"لوگوی " + publicClubProfile.club.name} /> : <div className="club-logo-placeholder large">{publicClubProfile.club.name.slice(0, 1)}</div>}
