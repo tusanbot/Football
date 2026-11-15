@@ -9,6 +9,7 @@ import {
   isPersistentGroupReply,
   resolvePrivateMenuCommand,
   formatApiError,
+  limitTelegramMessage,
 } from "../src/telegram-ux.js";
 
 const botSource = await readFile(new URL("../src/bot.ts", import.meta.url), "utf8");
@@ -151,4 +152,12 @@ test("common game API failures are presented in Persian without exposing interna
   assert.match(formatApiError("CONCURRENT_MODIFICATION"), /هم‌زمان/);
   assert.match(formatApiError("MATCH_RUNTIME_AUTOMATIC"), /خودکار/);
   assert.match(formatApiError("UNRECOGNIZED_CODE"), /کد خطا/);
+});
+
+test("Telegram replies are capped below the platform message limit", () => {
+  const long = "x".repeat(5000);
+  const safe = limitTelegramMessage(long);
+  assert.equal(safe.length, 3900);
+  assert.equal(safe.endsWith("…"), true);
+  assert.equal(limitTelegramMessage("short"), "short");
 });
