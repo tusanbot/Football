@@ -100,6 +100,23 @@ test("Mini App group workspace requires Telegram initData",async t=>{
  ]);
  assert.equal(mine.statusCode,401);assert.equal(workspace.statusCode,401);
 });
+test("system group membership synchronization requires the Bot secret", async (t) => {
+  const previous = process.env.BOT_API_SECRET;
+  process.env.BOT_API_SECRET = "group-test-secret";
+  const app = buildApp();
+  await app.ready();
+  t.after(async () => {
+    await app.close();
+    if (previous === undefined) delete process.env.BOT_API_SECRET;
+    else process.env.BOT_API_SECRET = previous;
+  });
+  const response = await app.inject({
+    method: "POST", url: "/v1/groups/system/member-update",
+    payload: { telegramGroupId: "-100123", telegramUserId: "12345", isMember: true, role: "ADMIN" },
+  });
+  assert.equal(response.statusCode, 401);
+});
+
 test("group game activity validates its action payload",async t=>{
  const old=process.env.BOT_API_SECRET;process.env.BOT_API_SECRET="group-test-secret";const app=buildApp();await app.ready();
  t.after(async()=>{await app.close();if(old===undefined)delete process.env.BOT_API_SECRET;else process.env.BOT_API_SECRET=old;});

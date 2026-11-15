@@ -54,7 +54,16 @@ async function authenticateGroupActor(request: FastifyRequest, reply: FastifyRep
   if (groupId && /^-?\\d{5,20}$/.test(groupId)) {
     try {
       // Mini App membership rows can become stale after a member leaves a group.
-      await verifyTelegramGroupActor({ telegramGroupId: groupId, telegramUserId: user.telegramId });
+      const managerRoutes = new Set([
+        "/v1/groups/:telegramGroupId/challenges",
+        "/v1/groups/:telegramGroupId/challenges/:challengeId/cancel",
+        "/v1/groups/:telegramGroupId/challenges/:challengeId/complete",
+        "/v1/groups/:telegramGroupId/leagues",
+        "/v1/groups/:telegramGroupId/leagues/:competitionId/start",
+        "/v1/groups/:telegramGroupId/check",
+      ]);
+      const requireManager = request.method === "POST" && managerRoutes.has(request.routeOptions.url ?? "");
+      await verifyTelegramGroupActor({ telegramGroupId: groupId, telegramUserId: user.telegramId, requireManager });
     } catch (error) {
       if (error instanceof TelegramGroupAuthorizationError) {
         const status = error.code === "TELEGRAM_BOT_TOKEN_NOT_CONFIGURED" ? 503
@@ -91,7 +100,7 @@ export function registerGroupRoutes(app: FastifyInstance) {
   app.post("/v1/groups/:telegramGroupId/activity/award",async(request,reply)=>{const id=await authenticateBot(request,reply);if(!id)return;const p=z.object({telegramGroupId:groupId}).safeParse(request.params),b=z.object({activityType:z.enum(["CHALLENGE_JOIN","CHALLENGE_CREATE","LEAGUE_JOIN","LEAGUE_CREATE","MATCH_PLAYED"]),referenceId:z.string().min(1).max(80).regex(/^[A-Za-z0-9:_-]+$/)}).safeParse(request.body);if(!p.success||!b.success)return reply.code(400).send({error:"INVALID_GROUP_ACTIVITY"});try{return await recordGroupGameActivity({telegramUserId:id,...p.data,...b.data});}catch(e){return sendGroupError(reply,e);}});
   app.post("/v1/groups/system/member-update",async(request,reply)=>{
  if(!authenticateSystemBot(request,reply))return;
- const b=z.object({telegramGroupId:groupId,telegramUserId:z.string().regex(/^\\d{1,20}$/),isMember:z.boolean()}).safeParse(request.body);
+ const b=z.object({telegramGroupId:groupId,telegramUserId:z.string().regex(/^\\d{1,20}$/),isMember:z.boolean(),role:z.enum(["OWNER","ADMIN","MEMBER"]).optional()}).safeParse(request.body);
  if(!b.success)return reply.code(400).send({error:"INVALID_GROUP_MEMBER_UPDATE"});
  const [group,user]=await Promise.all([
   prisma.telegramGroup.findUnique({where:{telegramId:b.data.telegramGroupId},select:{id:true}}),
@@ -99,7 +108,7 @@ export function registerGroupRoutes(app: FastifyInstance) {
  ]);
  if(!group||!user)return{updated:false};
  if(b.data.isMember){
-  await prisma.groupMembership.createMany({data:[{groupId:group.id,userId:user.id,role:"MEMBER"}],skipDuplicates:true});
+  await prisma.groupMembership.upsert({where:{groupId_userId:{groupId:group.id,userId:user.id}},create:{groupId:group.id,userId:user.id,role:b.data.role??"MEMBER"},update:{role:b.data.role??"MEMBER"}});
  }else{
   await prisma.groupMembership.deleteMany({where:{groupId:group.id,userId:user.id}});
  }

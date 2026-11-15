@@ -1663,7 +1663,8 @@ bot.on(["chat_member","my_chat_member"],async ctx=>{
   if(memberChange){
    const member=memberChange.new_chat_member;
    const isMember=member.status==="creator"||member.status==="administrator"||member.status==="member"||(member.status==="restricted"&&member.is_member);
-   await apiSystem("/v1/groups/system/member-update",{telegramGroupId:String(ctx.chat.id),telegramUserId:String(member.user.id),isMember});
+   const role=member.status==="creator"?"OWNER":member.status==="administrator"?"ADMIN":"MEMBER";
+   await apiSystem("/v1/groups/system/member-update",{telegramGroupId:String(ctx.chat.id),telegramUserId:String(member.user.id),isMember,role});
   }
  }catch(error){console.warn("Could not refresh Telegram group membership:",error instanceof Error?error.message:error);}
 });
