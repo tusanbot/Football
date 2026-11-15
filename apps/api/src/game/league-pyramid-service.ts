@@ -531,7 +531,7 @@ export async function acceptFriendlyChallenge(userId: string, token: string, now
     const clubIds = [challenge.creatorClubId, opponent.id];
     const overlap = await tx.footballMatch.findFirst({
       where: {
-        status: "SCHEDULED",
+        status: { in: ["SCHEDULED", "IN_PROGRESS"] },
         scheduledAt: { gte: new Date(now.getTime() - 2 * 60 * 60_000), lte: new Date(now.getTime() + 2 * 60 * 60_000) },
         OR: [{ homeClubId: { in: clubIds } }, { awayClubId: { in: clubIds } }],
       },
