@@ -21,6 +21,7 @@ const API_ERROR_MESSAGES: Record<string, string> = {
   ALL_TEAMS_NEED_VALID_LINEUPS: "همه تیم‌ها باید ترکیب معتبر داشته باشند.",
   BOTH_CLUBS_NEED_VALID_LINEUPS: "هر دو باشگاه باید حداقل یازده بازیکن واجد شرایط داشته باشند.",
   MATCH_NOT_DUE: "زمان شروع این مسابقه هنوز نرسیده است.",
+  MATCH_RUNTIME_AUTOMATIC: "این مسابقه به‌صورت خودکار اجرا می‌شود؛ برای مشاهده وضعیت از بخش مسابقات استفاده کنید.",
   MATCH_ALREADY_SIMULATED: "این مسابقه قبلاً اجرا شده است.",
   MATCH_CHECKPOINT_CLOSED: "مهلت ثبت تصمیم تاکتیکی این وقفه به پایان رسیده است.",
   IDEMPOTENCY_CONFLICT: "این درخواست با شناسه تکراری اما اطلاعات متفاوت ارسال شده است.",
