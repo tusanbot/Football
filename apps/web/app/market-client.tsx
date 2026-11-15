@@ -109,6 +109,15 @@ const formationOptions = ["4-3-3", "4-4-2", "3-5-2", "4-2-3-1"];
 declare global { interface Window { Telegram?: { WebApp?: { initData?: string; ready?: () => void; expand?: () => void } } } }
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
+
+function matchStatusLabel(status: string): string {
+  return ({
+    SCHEDULED: "برنامه‌ریزی‌شده",
+    IN_PROGRESS: "در حال برگزاری",
+    COMPLETED: "پایان‌یافته",
+    CANCELLED: "لغوشده",
+  } as Record<string, string>)[status] ?? status;
+}
 const money = (value: string | number) => new Intl.NumberFormat("en-US").format(Number(value));
 const rarityLabel: Record<string, string> = { ICON: "Icon", LEGENDARY: "Legendary", EPIC: "Epic", RARE: "Rare" };
 const matchEventLabel: Record<string, string> = {
@@ -899,12 +908,12 @@ export default function MarketPage() {
         {matches.length === 0 ? <p className="muted">هنوز مسابقه‌ای ثبت نشده است.</p> : matches.map((match) => <div className="operation-row" key={match.id}>
           <div>
             <strong>{match.homeClub.name} {match.homeScore ?? "–"} : {match.awayScore ?? "–"} {match.awayClub.name}{match.homePenalties !== null ? ` (پنالتی ${match.homePenalties}-${match.awayPenalties})` : ""}{match.aggregateHomeScore !== null ? ` · مجموع ${match.aggregateHomeScore}-${match.aggregateAwayScore}` : ""}</strong>
-            <small>{match.type === "CUP" ? "جام حذفی" + (match.tieId ? " · " + (match.leg === 2 ? "بازی برگشت" : "بازی رفت") : "") : match.type === "LEAGUE" ? "لیگ" : "دوستانه"} · {match.status === "COMPLETED" ? "پایان‌یافته" : match.status === "SCHEDULED" ? "برنامه‌ریزی‌شده" : "لغوشده"} · {new Date(match.scheduledAt).toLocaleString("fa-IR")}</small>
+            <small>{match.type === "CUP" ? "جام حذفی" + (match.tieId ? " · " + (match.leg === 2 ? "بازی برگشت" : "بازی رفت") : "") : match.type === "LEAGUE" ? "لیگ" : "دوستانه"} · {matchStatusLabel(match.status)} · {new Date(match.scheduledAt).toLocaleString("fa-IR")}</small>
             <small>قوانین: {match.rules.maxSubstitutions} تعویض · {match.rules.maxInPlayWindows} پنجره · محرومیت قرمز {match.rules.redCardSuspensionMatches} بازی · مصدومیت {match.rules.injuriesEnabled ? match.rules.injuryDurationDays + " روز" : "غیرفعال"}</small>
             {match.status === "COMPLETED" && <small>تماشاگر: {money(match.attendance)} · درآمد بلیت: {money(match.ticketRevenue)} Cash</small>}
             {match.events.slice(0, 8).map((event, index) => <small key={match.id + "-event-" + index}>{event.minute} دقیقه · {matchEventLabel[event.type] ?? event.type} · {event.playerName}{event.relatedPlayerName ? (event.type === "SUBSTITUTION" ? " (ورود: " : " (پاس گل: ") + event.relatedPlayerName + ")" : ""}</small>)}
           </div>
-          {match.status === "SCHEDULED" && new Date(match.scheduledAt).getTime() <= Date.now() && <button disabled={!!busy} onClick={() => void action("play-" + match.id, "/v1/matches/" + match.id + "/simulate", "POST", {})}>شبیه‌سازی مسابقه</button>}
+          {match.status === "SCHEDULED" && new Date(match.scheduledAt).getTime() <= Date.now() && <small className="muted">در صف اجرای خودکار</small>}
         </div>)}
       </div>
       <div className="market-card">
@@ -958,9 +967,9 @@ export default function MarketPage() {
         </div>}
         <h3>برنامه مسابقات</h3>
         {leagueDetail.matches.map((match) => <div className="operation-row" key={match.id}>
-          <div><strong>{match.homeClub.name} {match.homeScore ?? "–"} : {match.awayScore ?? "–"} {match.awayClub.name}</strong><small>{leagueDetail.competition.format === "CUP" ? "مرحله " : "هفته "}{match.round ?? "—"}{leagueDetail.competition.format === "CUP" && leagueDetail.competition.cupLegs === 2 ? (match.leg === 2 ? " · برگشت" : " · رفت") : ""} · {match.status} · {new Date(match.scheduledAt).toLocaleDateString("fa-IR")}{match.homePenalties !== null && match.homePenalties !== undefined ? ` · پنالتی ${match.homePenalties}-${match.awayPenalties}` : ""}{match.aggregateHomeScore !== null ? ` · مجموع رفت‌وبرگشت ${match.aggregateHomeScore}-${match.aggregateAwayScore}` : ""}{match.winnerClubId ? " · برنده: " + (match.winnerClubId === match.homeClub.id ? match.homeClub.name : match.awayClub.name) : ""}</small>
+          <div><strong>{match.homeClub.name} {match.homeScore ?? "–"} : {match.awayScore ?? "–"} {match.awayClub.name}</strong><small>{leagueDetail.competition.format === "CUP" ? "مرحله " : "هفته "}{match.round ?? "—"}{leagueDetail.competition.format === "CUP" && leagueDetail.competition.cupLegs === 2 ? (match.leg === 2 ? " · برگشت" : " · رفت") : ""} · {matchStatusLabel(match.status)} · {new Date(match.scheduledAt).toLocaleDateString("fa-IR")}{match.homePenalties !== null && match.homePenalties !== undefined ? ` · پنالتی ${match.homePenalties}-${match.awayPenalties}` : ""}{match.aggregateHomeScore !== null ? ` · مجموع رفت‌وبرگشت ${match.aggregateHomeScore}-${match.aggregateAwayScore}` : ""}{match.winnerClubId ? " · برنده: " + (match.winnerClubId === match.homeClub.id ? match.homeClub.name : match.awayClub.name) : ""}</small>
           <small>قوانین: {match.rules.maxSubstitutions} تعویض · {match.rules.maxInPlayWindows} پنجره · کارت زرد هر {match.rules.yellowCardsToSuspend || "—"} اخطار</small></div>
-          {match.status === "SCHEDULED" && new Date(match.scheduledAt).getTime() <= Date.now() && <button disabled={!!busy} onClick={() => void action("play-" + match.id, "/v1/matches/" + match.id + "/simulate", "POST", {})}>شبیه‌سازی</button>}
+          {match.status === "SCHEDULED" && new Date(match.scheduledAt).getTime() <= Date.now() && <small className="muted">در صف اجرای خودکار</small>}
         </div>)}
       </div>}
     </section>}
