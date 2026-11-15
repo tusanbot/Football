@@ -542,15 +542,22 @@ export async function simulateScheduledMatch(userId: string, matchId: string, no
             const assists = (runtimeEvents ?? []).filter((event) => event.type === "GOAL" && event.relatedPlayerId === line.playerId).length;
             const enteredAt = (runtimeEvents ?? []).filter((event) => event.type === "SUBSTITUTION" && event.relatedPlayerId === line.playerId)
               .reduce((minute, event) => Math.min(minute, event.minute), 90);
-            const exitedAt = (runtimeEvents ?? []).filter((event) => event.type === "SUBSTITUTION" && event.playerId === line.playerId)
+            const substitutedAt = (runtimeEvents ?? []).filter((event) => event.type === "SUBSTITUTION" && event.playerId === line.playerId)
               .reduce((minute, event) => Math.min(minute, event.minute), 90);
+            const redCardAt = (runtimeEvents ?? []).filter((event) => event.type === "RED_CARD" && event.playerId === line.playerId)
+              .reduce((minute, event) => Math.min(minute, event.minute), 90);
+            const injuryAt = (runtimeEvents ?? []).filter((event) => event.type === "INJURY" && event.playerId === line.playerId)
+              .reduce((minute, event) => Math.min(minute, event.minute), 90);
+            const exitedAt = Math.min(substitutedAt, redCardAt, injuryAt);
             const wasStarter = [...homeSide.players, ...awaySide.players].some((player) => player.id === line.playerId);
             const minutesPlayed = Math.max(0, exitedAt - (wasStarter ? 0 : enteredAt));
             const fraction = minutesPlayed / 90;
             const yellowCards = (runtimeEvents ?? []).filter((event) => event.type === "YELLOW_CARD" && event.playerId === line.playerId).length;
             const redCards = (runtimeEvents ?? []).filter((event) => event.type === "RED_CARD" && event.playerId === line.playerId).length;
+            const injuries = (runtimeEvents ?? []).filter((event) => event.type === "INJURY" && event.playerId === line.playerId).length;
+            const rating = Math.max(3, line.rating - yellowCards * 0.35 - redCards * 1.25 - injuries * 0.65);
             return {
-              ...line, minutesPlayed, goals, assists, yellowCards, redCards,
+              ...line, minutesPlayed, goals, assists, yellowCards, redCards, rating,
               shots: Math.max(goals, Math.round(line.shots * fraction)),
               passes: Math.round(line.passes * fraction),
               tackles: Math.round(line.tackles * fraction),
