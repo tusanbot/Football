@@ -195,6 +195,10 @@ model User {
   trainingLogs PlayerTrainingLog[]
   contractRenewals PlayerContractRenewal[]
   giftCodeRedemptions GiftCodeRedemption[]
+  pyramidLeagueApplications PyramidLeagueApplication[]
+  leagueNotices LeagueNotice[]
+  challengeDailyUsages ChallengeDailyUsage[]
+  createdFriendlyChallenges FriendlyChallenge[]
 }
 
 model Club {
@@ -242,6 +246,11 @@ model Club {
   competitionEntries CompetitionEntry[]
   matchPerformances PlayerMatchPerformance[]
   matchTacticalDecisions MatchTacticalDecision[]
+  pyramidLeagueEntries PyramidLeagueEntry[]
+  pyramidLeagueApplications PyramidLeagueApplication[]
+  promotionOffers LeaguePromotionOffer[]
+  createdFriendlyChallenges FriendlyChallenge[]
+  leagueAwards LeagueAward[]
 }
 
 model Player {
@@ -254,6 +263,7 @@ model Player {
   position        PlayerPosition
   overall         Int
   potential       Int
+  marketValue     BigInt         @default(1000)
   attributes      Json
   wage            BigInt
   contractDays    Int
@@ -467,6 +477,120 @@ model Competition {
   @@index([status, createdAt])
   @@index([groupId, status])
   @@index([allianceId])
+  pyramidLeague PyramidLeague?
+}
+
+model PyramidLeague {
+  id String @id @default(cuid())
+  competitionId String @unique
+  tier Int
+  season Int
+  groupNumber Int
+  promotionProcessedAt DateTime?
+  createdAt DateTime @default(now())
+  competition Competition @relation(fields: [competitionId], references: [id], onDelete: Cascade)
+  entries PyramidLeagueEntry[]
+  awards LeagueAward[]
+  promotionOffers LeaguePromotionOffer[]
+  @@unique([tier, season, groupNumber])
+  @@index([tier, season])
+}
+
+model LeagueAward {
+  id String @id @default(cuid())
+  leagueId String
+  clubId String
+  season Int
+  tier Int
+  placement Int
+  awardName String
+  awardType String
+  createdAt DateTime @default(now())
+  league PyramidLeague @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+  club Club @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  @@unique([leagueId, placement])
+  @@index([clubId, season, tier])
+}
+
+model PyramidLeagueEntry {
+  id String @id @default(cuid())
+  leagueId String
+  clubId String
+  joinedAt DateTime @default(now())
+  finalPosition Int?
+  league PyramidLeague @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+  club Club @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  @@unique([leagueId, clubId])
+  @@index([clubId, joinedAt])
+}
+
+model PyramidLeagueApplication {
+  id String @id @default(cuid())
+  userId String
+  clubId String
+  tier Int
+  season Int
+  status LeagueApplicationStatus @default(QUEUED)
+  appliedAt DateTime @default(now())
+  assignedLeagueId String?
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  club Club @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  @@unique([clubId, tier, season])
+  @@index([tier, season, status, appliedAt])
+}
+
+model LeaguePromotionOffer {
+  id String @id @default(cuid())
+  leagueId String
+  clubId String
+  targetTier Int
+  finalPosition Int
+  status PromotionOfferStatus @default(PENDING)
+  offeredAt DateTime @default(now())
+  resolvedAt DateTime?
+  league PyramidLeague @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+  club Club @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  @@unique([leagueId, clubId])
+  @@index([clubId, status, offeredAt])
+}
+
+model LeagueNotice {
+  id String @id @default(cuid())
+  userId String
+  kind String
+  title String
+  body String
+  referenceId String?
+  createdAt DateTime @default(now())
+  readAt DateTime?
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([userId, readAt, createdAt])
+}
+
+model FriendlyChallenge {
+  id String @id @default(cuid())
+  token String @unique
+  creatorUserId String
+  creatorClubId String
+  status FriendlyChallengeStatus @default(OPEN)
+  matchId String? @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  creator User @relation(fields: [creatorUserId], references: [id], onDelete: Cascade)
+  club Club @relation(fields: [creatorClubId], references: [id], onDelete: Cascade)
+  @@index([status, expiresAt])
+  @@index([creatorClubId, createdAt])
+}
+
+model ChallengeDailyUsage {
+  id String @id @default(cuid())
+  userId String
+  usageDate DateTime @db.Date
+  freeUsed Int @default(0)
+  goldUsed Int @default(0)
+  purchasedCredits Int @default(0)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@unique([userId, usageDate])
 }
 
 model CompetitionEntry {
