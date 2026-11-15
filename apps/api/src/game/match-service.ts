@@ -701,9 +701,10 @@ function applyRuntimeInstruction(
   checkpoint: "HALF_TIME" | "MINUTE_60" | "MINUTE_75",
   checkpointId: string,
   source: "MANAGER" | "PREMATCH_PLAN" | "AI",
-): { side: MatchSide; substitutions: MatchSubstitutionState; error: string | null } {
+): { side: MatchSide; substitutions: MatchSubstitutionState; events: MatchSegmentState["events"]; error: string | null } {
   let nextSide = side;
   let nextSubstitutions = current;
+  let events: MatchSegmentState["events"] = [];
   let error: string | null = null;
   if (instruction.substitutions?.length) {
     try {
@@ -721,6 +722,15 @@ function applyRuntimeInstruction(
         bench: applied.state.bench.map((player) => players.get(player.id)!).filter(Boolean),
       };
       nextSubstitutions = applied.state;
+      const names = new Map([...side.players, ...(side.bench ?? [])].map((player) => [player.id, player.name]));
+      const minute = checkpoint === "HALF_TIME" ? 45 : checkpoint === "MINUTE_60" ? 60 : 75;
+      events = applied.substitutions.map((change) => ({
+        minute, type: "SUBSTITUTION" as const, teamId: side.clubId,
+        playerId: change.outgoingPlayerId, relatedPlayerId: change.incomingPlayerId,
+        detail: "Substitution: " + (names.get(change.outgoingPlayerId) ?? "Player")
+          + " replaced by " + (names.get(change.incomingPlayerId) ?? "Player") + ".",
+        sequence: 0,
+      }));
     } catch (cause) {
       error = cause instanceof Error ? cause.message : "INVALID_SUBSTITUTION_PACKAGE";
     }
@@ -738,6 +748,7 @@ function applyRuntimeInstruction(
       },
     },
     substitutions: nextSubstitutions,
+    events,
     error,
   };
 }
@@ -874,10 +885,15 @@ async function processClaimedMatchRuntime(
     checkpointName, checkpoint.checkpointKey, resolution.away.source,
   );
   const nextMinute = checkpoint.minute === 45 ? 60 : checkpoint.minute === 60 ? 75 : 90;
+  const substitutionEvents = [...homeApplied.events, ...awayApplied.events].map((event, index) => ({
+    ...event, sequence: state.segment.nextSequence + index,
+  }));
   const advanced = advanceMatchSegment({
     seed: runtime.match.seed,
     state: {
       ...state.segment,
+      nextSequence: state.segment.nextSequence + substitutionEvents.length,
+      events: [...state.segment.events, ...substitutionEvents],
       home: { ...state.segment.home, side: homeApplied.side },
       away: { ...state.segment.away, side: awayApplied.side },
     },
