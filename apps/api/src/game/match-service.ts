@@ -131,39 +131,51 @@ export async function listMatchOpponents(userId: string) {
 }
 export async function createFriendlyMatch(userId: string, opponentClubId: string, idempotencyKey: string, scheduledAt = new Date(Date.now() + 5 * 60_000)) {
   keyValid(idempotencyKey);
-  const own = await getOwnedClub(userId);
-  if (own.id === opponentClubId) throw new MatchServiceError("MATCH_TEAMS_MUST_DIFFER");
-  const [home, away] = await Promise.all([
-    prisma.club.findUnique({ where: { id: own.id }, include: matchClubInclude }),
-    prisma.club.findUnique({ where: { id: opponentClubId }, include: matchClubInclude }),
-  ]);
-  if (!home || !away) throw new MatchServiceError("OPPONENT_NOT_FOUND");
-  if (home.players.length < 11 || away.players.length < 11) throw new MatchServiceError("BOTH_CLUBS_NEED_VALID_LINEUPS");
-  toSide(home); toSide(away);
   if (scheduledAt.getTime() < Date.now() - 60_000 || scheduledAt.getTime() > Date.now() + 30 * DAY_MS) {
     throw new MatchServiceError("INVALID_MATCH_SCHEDULE");
   }
-  const previous = await prisma.footballMatch.findUnique({ where: { idempotencyKey } });
-  if (previous) {
-    if (previous.homeClubId !== own.id || previous.awayClubId !== opponentClubId || previous.type !== "FRIENDLY") {
-      throw new MatchServiceError("IDEMPOTENCY_CONFLICT");
+  return prisma.$transaction(async (tx) => {
+    const own = await tx.club.findUnique({ where: { ownerId: userId }, select: { id: true } });
+    if (!own) throw new MatchServiceError("CLUB_NOT_FOUND");
+    if (own.id === opponentClubId) throw new MatchServiceError("MATCH_TEAMS_MUST_DIFFER");
+
+    const previous = await tx.footballMatch.findUnique({ where: { idempotencyKey } });
+    if (previous) {
+      if (previous.homeClubId !== own.id || previous.awayClubId !== opponentClubId || previous.type !== "FRIENDLY") {
+        throw new MatchServiceError("IDEMPOTENCY_CONFLICT");
+      }
+      return { match: previous, replayed: true };
     }
-    return { match: previous, replayed: true };
-  }
-  const overlap = await prisma.footballMatch.findFirst({
-    where: {
-      status: "SCHEDULED", scheduledAt: { gte: new Date(scheduledAt.getTime() - 2 * 60 * 60_000), lte: new Date(scheduledAt.getTime() + 2 * 60 * 60_000) },
-      OR: [{ homeClubId: { in: [own.id, opponentClubId] } }, { awayClubId: { in: [own.id, opponentClubId] } }],
-    },
-  });
-  if (overlap) throw new MatchServiceError("CLUB_ALREADY_HAS_MATCH_IN_WINDOW");
-  const match = await prisma.footballMatch.create({
-    data: {
-      idempotencyKey, type: "FRIENDLY", homeClubId: own.id, awayClubId: opponentClubId,
-      scheduledAt, seed: idempotencyKey + ":" + randomUUID(), rulesSnapshot: defaultMatchRules("FRIENDLY"),
-    },
-  });
-  return { match, replayed: false };
+
+    const [home, away] = await Promise.all([
+      tx.club.findUnique({ where: { id: own.id }, include: matchClubInclude }),
+      tx.club.findUnique({ where: { id: opponentClubId }, include: matchClubInclude }),
+    ]);
+    if (!home || !away) throw new MatchServiceError("OPPONENT_NOT_FOUND");
+    if (home.players.length < 11 || away.players.length < 11) throw new MatchServiceError("BOTH_CLUBS_NEED_VALID_LINEUPS");
+    toSide(home); toSide(away);
+
+    const overlap = await tx.footballMatch.findFirst({
+      where: {
+        status: "SCHEDULED",
+        scheduledAt: {
+          gte: new Date(scheduledAt.getTime() - 2 * 60 * 60_000),
+          lte: new Date(scheduledAt.getTime() + 2 * 60 * 60_000),
+        },
+        OR: [{ homeClubId: { in: [own.id, opponentClubId] } }, { awayClubId: { in: [own.id, opponentClubId] } }],
+      },
+      select: { id: true },
+    });
+    if (overlap) throw new MatchServiceError("CLUB_ALREADY_HAS_MATCH_IN_WINDOW");
+
+    const match = await tx.footballMatch.create({
+      data: {
+        idempotencyKey, type: "FRIENDLY", homeClubId: own.id, awayClubId: opponentClubId,
+        scheduledAt, seed: idempotencyKey + ":" + randomUUID(), rulesSnapshot: defaultMatchRules("FRIENDLY"),
+      },
+    });
+    return { match, replayed: false };
+  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 }
 export async function createLeague(userId: string, name: string, maxTeams: number, idempotencyKey: string, format: "LEAGUE" | "CUP" = "LEAGUE", inputRules?: MatchRules, cupLegs = 1) {
   keyValid(idempotencyKey);
