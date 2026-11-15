@@ -290,7 +290,19 @@ export async function scoutAcademy(userId: string, idempotencyKey: string, now =
   return prisma.$transaction(async (tx) => {
     const club = await tx.club.findUnique({ where: { ownerId: userId } });
     if (!club) throw new ClubOperationsError("CLUB_NOT_FOUND");
-    if (await replayCheck(tx, userId, club.id, idempotencyKey, reason)) return { prospects: [], replayed: true };
+    if (await replayCheck(tx, userId, club.id, idempotencyKey, reason)) {
+      const previous = await tx.ledgerTransaction.findUniqueOrThrow({ where: { idempotencyKey: `club-op:${idempotencyKey}` }, select: { amount: true } });
+      const prospects = await tx.academyProspect.findMany({
+        where: { clubId: club.id, scoutingBatchKey: idempotencyKey },
+        orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+        select: { id: true, firstName: true, lastName: true, age: true, position: true, overall: true, potential: true, recruitmentCost: true },
+      });
+      return {
+        prospects: prospects.map((prospect) => ({ ...prospect, recruitmentCost: prospect.recruitmentCost.toString() })),
+        scoutingCost: previous.amount.toString(),
+        replayed: true,
+      };
+    }
     if (club.academyLevel < 1) throw new ClubOperationsError("ACADEMY_NOT_BUILT");
     const activeProspects = await tx.academyProspect.count({ where: { clubId: club.id, status: "AVAILABLE" } });
     if (activeProspects + 3 > 12) throw new ClubOperationsError("ACADEMY_CAPACITY_REACHED");
@@ -307,6 +319,7 @@ export async function scoutAcademy(userId: string, idempotencyKey: string, now =
         lastName: randomItem(LAST_NAMES), nationality: randomItem(NATIONALITIES),
         age, position, overall, potential, attributes,
         recruitmentCost: calculateProspectRecruitmentCost(overall, potential, club.academyLevel),
+        scoutingBatchKey: idempotencyKey,
       };
     });
     await tx.academyProspect.createMany({ data: prospects });
