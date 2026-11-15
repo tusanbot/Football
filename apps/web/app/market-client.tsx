@@ -22,7 +22,7 @@ type ClubOperations = {
 type MatchRecord = {
   id: string; type: string; status: string; round:number|null; leg:number; tieId:string|null; rules: MatchRulesForm; scheduledAt: string;
   homeClub: { id: string; name: string }; awayClub: { id: string; name: string };
-  homeScore: number | null; awayScore: number | null; homePenalties: number | null; awayPenalties: number | null; winnerClubId: string | null; attendance: number; ticketRevenue: string;
+  homeScore: number | null; awayScore: number | null; aggregateHomeScore:number|null; aggregateAwayScore:number|null; homePenalties: number | null; awayPenalties: number | null; winnerClubId: string | null; attendance: number; ticketRevenue: string;
   events: Array<{ minute: number; type: string; detail: string; playerId: string; playerName: string; relatedPlayerName: string | null }>;
 };
 type MatchRulesForm = { maxSubstitutions:number; maxInPlayWindows:number; injuriesEnabled:boolean; injuryDurationDays:number; redCardSuspensionMatches:number; yellowCardsToSuspend:number; yellowCardSuspensionMatches:number; penaltiesOnDraw:boolean };
@@ -31,7 +31,7 @@ type ClubCompetition = { id: string; name: string; season: number; format: strin
 type LeagueDetails = {
   competition: { id: string; name: string; season: number; format: string; cupLegs:number; status: string; startsAt: string | null };
   standings: Array<{ position: number; clubId: string; clubName: string; played: number; won: number; drawn: number; lost: number; goalsFor: number; goalsAgainst: number; goalDifference: number; points: number }>;
-  matches: Array<{ id: string; round: number | null; scheduledAt: string; status: string; homeClub: { id: string; name: string }; awayClub: { id: string; name: string }; homeScore: number | null; awayScore: number | null; homePenalties: number | null; awayPenalties: number | null; winnerClubId: string | null; leg:number; tieId:string|null; rules:MatchRulesForm }>;
+  matches: Array<{ id: string; round: number | null; scheduledAt: string; status: string; homeClub: { id: string; name: string }; awayClub: { id: string; name: string }; homeScore: number | null; awayScore: number | null; aggregateHomeScore:number|null; aggregateAwayScore:number|null; homePenalties: number | null; awayPenalties: number | null; winnerClubId: string | null; leg:number; tieId:string|null; rules:MatchRulesForm }>;
 };
 
 type GroupWorkspace = {
@@ -524,7 +524,7 @@ export default function MarketPage() {
         <h2>برنامه و نتایج مسابقات</h2>
         {matches.length === 0 ? <p className="muted">هنوز مسابقه‌ای ثبت نشده است.</p> : matches.map((match) => <div className="operation-row" key={match.id}>
           <div>
-            <strong>{match.homeClub.name} {match.homeScore ?? "–"} : {match.awayScore ?? "–"} {match.awayClub.name}{match.homePenalties !== null ? ` (پنالتی ${match.homePenalties}-${match.awayPenalties})` : ""}</strong>
+            <strong>{match.homeClub.name} {match.homeScore ?? "–"} : {match.awayScore ?? "–"} {match.awayClub.name}{match.homePenalties !== null ? ` (پنالتی ${match.homePenalties}-${match.awayPenalties})` : ""}{match.aggregateHomeScore !== null ? ` · مجموع ${match.aggregateHomeScore}-${match.aggregateAwayScore}` : ""}</strong>
             <small>{match.type === "CUP" ? "جام حذفی" + (match.tieId ? " · " + (match.leg === 2 ? "بازی برگشت" : "بازی رفت") : "") : match.type === "LEAGUE" ? "لیگ" : "دوستانه"} · {match.status === "COMPLETED" ? "پایان‌یافته" : match.status === "SCHEDULED" ? "برنامه‌ریزی‌شده" : "لغوشده"} · {new Date(match.scheduledAt).toLocaleString("fa-IR")}</small>
             <small>قوانین: {match.rules.maxSubstitutions} تعویض · {match.rules.maxInPlayWindows} پنجره · محرومیت قرمز {match.rules.redCardSuspensionMatches} بازی · مصدومیت {match.rules.injuriesEnabled ? match.rules.injuryDurationDays + " روز" : "غیرفعال"}</small>
             {match.status === "COMPLETED" && <small>تماشاگر: {money(match.attendance)} · درآمد بلیت: {money(match.ticketRevenue)} Cash</small>}
@@ -583,7 +583,7 @@ export default function MarketPage() {
         </div>}
         <h3>برنامه مسابقات</h3>
         {leagueDetail.matches.map((match) => <div className="operation-row" key={match.id}>
-          <div><strong>{match.homeClub.name} {match.homeScore ?? "–"} : {match.awayScore ?? "–"} {match.awayClub.name}</strong><small>{leagueDetail.competition.format === "CUP" ? "مرحله " : "هفته "}{match.round ?? "—"}{leagueDetail.competition.format === "CUP" && leagueDetail.competition.cupLegs === 2 ? (match.leg === 2 ? " · برگشت" : " · رفت") : ""} · {match.status} · {new Date(match.scheduledAt).toLocaleDateString("fa-IR")}{match.homePenalties !== null && match.homePenalties !== undefined ? ` · پنالتی ${match.homePenalties}-${match.awayPenalties}` : ""}{match.winnerClubId ? " · برنده: " + (match.winnerClubId === match.homeClub.id ? match.homeClub.name : match.awayClub.name) : ""}</small>
+          <div><strong>{match.homeClub.name} {match.homeScore ?? "–"} : {match.awayScore ?? "–"} {match.awayClub.name}</strong><small>{leagueDetail.competition.format === "CUP" ? "مرحله " : "هفته "}{match.round ?? "—"}{leagueDetail.competition.format === "CUP" && leagueDetail.competition.cupLegs === 2 ? (match.leg === 2 ? " · برگشت" : " · رفت") : ""} · {match.status} · {new Date(match.scheduledAt).toLocaleDateString("fa-IR")}{match.homePenalties !== null && match.homePenalties !== undefined ? ` · پنالتی ${match.homePenalties}-${match.awayPenalties}` : ""}{match.aggregateHomeScore !== null ? ` · مجموع رفت‌وبرگشت ${match.aggregateHomeScore}-${match.aggregateAwayScore}` : ""}{match.winnerClubId ? " · برنده: " + (match.winnerClubId === match.homeClub.id ? match.homeClub.name : match.awayClub.name) : ""}</small>
           <small>قوانین: {match.rules.maxSubstitutions} تعویض · {match.rules.maxInPlayWindows} پنجره · کارت زرد هر {match.rules.yellowCardsToSuspend || "—"} اخطار</small></div>
           {match.status === "SCHEDULED" && new Date(match.scheduledAt).getTime() <= Date.now() && <button disabled={!!busy} onClick={() => void action("play-" + match.id, "/v1/matches/" + match.id + "/simulate", "POST", {})}>شبیه‌سازی</button>}
         </div>)}
