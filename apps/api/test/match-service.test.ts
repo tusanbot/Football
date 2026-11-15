@@ -116,7 +116,7 @@ test("league registration, round-robin fixtures and final standings are transact
     assert.equal(replay.replayed, true);
     await assert.rejects(
       createLeague(clubs[0]!.userId, "Invalid penalty league", 4, `league-penalty-${suffix}`, "LEAGUE", {
-        maxSubstitutions: 5, maxInPlayWindows: 3, injuriesEnabled: true,
+        maxSubstitutions: 5, maxInPlayWindows: 3, injuriesEnabled: true, injuryDurationDays: 5,
         redCardSuspensionMatches: 1, yellowCardsToSuspend: 3,
         yellowCardSuspensionMatches: 1, penaltiesOnDraw: true,
       }),
@@ -124,7 +124,7 @@ test("league registration, round-robin fixtures and final standings are transact
         && error.code === "PENALTIES_NOT_ALLOWED_FOR_LEAGUE",
     );
     const customRules = {
-      maxSubstitutions: 4, maxInPlayWindows: 2, injuriesEnabled: false,
+      maxSubstitutions: 4, maxInPlayWindows: 2, injuriesEnabled: false, injuryDurationDays: 7,
       redCardSuspensionMatches: 2, yellowCardsToSuspend: 4,
       yellowCardSuspensionMatches: 2, penaltiesOnDraw: false,
     };
