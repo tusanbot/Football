@@ -66,6 +66,10 @@ jobs:
         run: pnpm exec tsc --noEmit -p cloudflare/api/tsconfig.json
       - name: Test Cloudflare API migration scaffold
         run: pnpm exec tsx --test cloudflare/api/test/*.test.ts
+      - name: Generate and validate D1 schema on SQLite
+        run: |
+          node cloudflare/api/scripts/prisma-d1-schema.mjs
+          python3 cloudflare/api/scripts/validate-d1-schema.py
       - name: Test
         run: pnpm test
         env:
