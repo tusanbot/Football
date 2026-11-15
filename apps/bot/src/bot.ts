@@ -490,6 +490,16 @@ bot.command("adminchallenge", async (ctx) => {
   }
 });
 
+bot.command("adminleague", async (ctx) => {
+  if (!ctx.from || !adminOnlyInPrivate(ctx)) return;
+  const [operation,targetId,status]=String(ctx.match??"").trim().split(/\s+/);
+  if(operation!=="status"||!targetId||!["DRAFT","REGISTRATION","ACTIVE","CANCELLED"].includes(status??""))return ctx.reply("استفاده: /adminleague status COMPETITION_ID DRAFT|REGISTRATION|ACTIVE|CANCELLED");
+  try{
+    await api("/v1/admin/actions",ctx.from.id,"POST",{action:"competition-status",targetId,status,idempotencyKey:randomUUID()});
+    await ctx.reply("وضعیت مسابقه تغییر کرد. پایان لیگ‌های هرم به‌صورت خودکار پس از تکمیل همه مسابقات پردازش می‌شود.");
+  }catch(error){await ctx.reply("تغییر وضعیت مسابقه ناموفق بود: "+(error instanceof Error?error.message:"خطای نامشخص"));}
+});
+
 bot.command("adminaward", async (ctx) => {
   if (!ctx.from || !adminOnlyInPrivate(ctx)) return;
   const input=String(ctx.match??"").trim(),space=input.indexOf(" ");
@@ -657,6 +667,7 @@ bot.command("adminhelp", async (ctx) => {
     "/adminfinance [DAYS] — گزارش مالی و مغایرت‌گیری\n" +
     "/adminbroadcast users|groups TEXT — ارسال پیام مدیریتی\n" +
     "/adminaward set|remove ... — مدیریت جوایز رسمی فصل\n" +
+    "/adminleague status ID STATUS — مدیریت وضعیت مسابقه\n" +
     "/admingift create|toggle ... — مدیریت کدهای هدیه\n" +
     "/adminitem create|update|toggle ... — مدیریت آیتم‌ها\n" +
     "/adminupdate player|club|match ID JSON — ویرایش اطلاعات\n\n" +
@@ -1671,7 +1682,7 @@ bot.command("seasonawards", async (ctx) => {
   const season = raw ? Number(raw) : new Date().getUTCFullYear();
   if (!Number.isInteger(season) || season < 2020 || season > 2200) return ctx.reply("استفاده: /seasonawards [YEAR]");
   try {
-    const result = await publicApi<{ season:number; matches:number; awards:{topScorer:{playerName:string;clubName:string;goals:number}|null;topAssists:{playerName:string;clubName:string;assists:number}|null;playerOfSeason:{playerName:string;clubName:string;averageRating:number}|null;teamOfSeason:Array<{playerName:string;clubName:string;position:string;averageRating:number}>};leaders:{scorers:Array<{playerName:string;clubName:string;goals:number}>;assists:Array<{playerName:string;clubName:string;assists:number}>} }>(
+    const result = await publicApi<{ season:number; matches:number; manualAwards:Array<{awardName:string;playerName:string;clubName:string;reason:string|null}>; awards:{topScorer:{playerName:string;clubName:string;goals:number}|null;topAssists:{playerName:string;clubName:string;assists:number}|null;playerOfSeason:{playerName:string;clubName:string;averageRating:number}|null;teamOfSeason:Array<{playerName:string;clubName:string;position:string;averageRating:number}>};leaders:{scorers:Array<{playerName:string;clubName:string;goals:number}>;assists:Array<{playerName:string;clubName:string;assists:number}>} }>(
       "/v1/seasons/" + season + "/awards",
     );
     const line = (label:string, row:{playerName:string;clubName:string}|null, stat:string) => label + ": " + (row ? row.playerName + " · " + row.clubName + " · " + stat : "ثبت نشده");
@@ -1680,7 +1691,7 @@ bot.command("seasonawards", async (ctx) => {
       line("بهترین گلزن",result.awards.topScorer,result.awards.topScorer?.goals+" گل")+"\n"+
       line("بهترین پاسور",result.awards.topAssists,result.awards.topAssists?.assists+" پاس گل")+"\n"+
       line("بازیکن فصل",result.awards.playerOfSeason,result.awards.playerOfSeason?.averageRating.toFixed(2)+" امتیاز")+
-      "\n\nتیم منتخب فصل ۴-۳-۳:\n"+(team.join("\n")||"اطلاعات کافی نیست"));
+      "\n\nتیم منتخب فصل ۴-۳-۳:\n"+(team.join("\n")||"اطلاعات کافی نیست")+(result.manualAwards.length?"\n\nجوایز رسمی مدیریت:\n"+result.manualAwards.map(a=>a.awardName+" · "+a.playerName+" · "+a.clubName+(a.reason?" · "+a.reason:"")).join("\n"):""));
   } catch(error) { await ctx.reply("دریافت آرشیو فصل ناموفق بود: "+(error instanceof Error?error.message:"خطای نامشخص")); }
 });
 
