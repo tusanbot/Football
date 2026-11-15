@@ -80,7 +80,7 @@ Set these values for the web app:
 
 The Mini App exchanges fresh Telegram-signed initData at POST /v1/auth/telegram. The API verifies the HMAC and timestamp (five-minute maximum age), provisions the account if needed, and returns a signed bearer session that expires after 12 hours. Web clients keep that session in memory and tab-scoped session storage, validate cached sessions through the API on page navigation, and send it as Authorization: Bearer; the Bot API secret is never sent to the browser. If the initial Telegram data has expired, the user must reopen the Mini App from Telegram to obtain fresh initData.
 
-Bot-to-API requests use BOT_API_SECRET plus the Telegram sender ID; keep the secret server-side and use HTTPS between services in production. The same secret signs Mini App sessions, so rotating it invalidates existing sessions. The Bot's private /start command provisions the same account/club through /v1/auth/bot; it does not require the user to open the Mini App. The Bot runs in long-polling mode and deliberately removes any configured webhook after its database polling lease is acquired. Run one Bot process per database; a second process is rejected until the active lease is released or expires.
+Bot-to-API requests use BOT_API_SECRET plus the Telegram sender ID; keep the secret server-side and use HTTPS between services in production. The same secret signs Mini App sessions, so rotating it invalidates existing sessions. The Bot's private /start command provisions the same account/club through /v1/auth/bot; it does not require the user to open the Mini App. The Bot runs in long-polling mode and refuses to start if Telegram reports an existing webhook; it never silently changes the Bot's webhook configuration. Run one Bot process per database; a second process is rejected until the active lease is released or expires.
 
 ## Database setup
 
@@ -107,7 +107,7 @@ The seed is safe to rerun: it upserts catalog records by stable slug. Run migrat
 1. Set unique production values for DATABASE_URL, DIRECT_URL, TELEGRAM_BOT_TOKEN, BOT_API_SECRET, CORS_ORIGIN, GAME_ADMIN_TELEGRAM_IDS, FOOTBALL_API_URL, NEXT_PUBLIC_API_URL and TELEGRAM_WEB_APP_URL. Production web/API origins must use HTTPS.
 2. Apply migrations once to the intended database with pnpm db:migrate:deploy, then run pnpm --filter @football/api db:seed:special.
 3. Start the API and confirm GET /ready returns HTTP 200 before starting the Bot.
-4. Start exactly one Bot process for that database. It verifies the Bot token against the API, acquires the database polling lease, switches Telegram to long polling, and renews the lease. Do not configure a webhook for this polling deployment.
+4. Start exactly one Bot process for that database. It verifies the Bot token against the API, confirms no webhook is configured, acquires the database polling lease, starts long polling, and renews the lease. Do not configure a webhook for this polling deployment; if one is already configured, resolve it explicitly in Telegram before starting the Bot.
 5. Open the Mini App through Telegram and test onboarding, wallet, player management, match checkpoints/fallback, competitions, group membership, gifts and admin permissions. Test Bot commands and Mini App actions against the same test accounts.
 6. Verify Bot administrator rights in every group, including the ability to query member status/count and delete the Bot's own temporary messages.
 7. Verify backup restoration, structured logs/alerts, queue retry behavior and load/concurrency limits before production traffic.
