@@ -347,6 +347,10 @@ test("durable match worker advances checkpoints, resumes on two early decisions 
       new Date(Date.now() - 1_000),
     );
     await simulateScheduledMatch(clubs[0]!.userId, nextFixture.match.id);
+    const suspendedPlayerPerformance = await prisma.playerMatchPerformance.findFirst({
+      where: { matchId: nextFixture.match.id, playerId: redCardEvent.playerId },
+    });
+    assert.equal(suspendedPlayerPerformance, null);
     const servedSuspension = await prisma.player.findUniqueOrThrow({ where: { id: redCardEvent.playerId } });
     assert.equal(servedSuspension.suspensionMatchesRemaining, 0);
     const replay = await simulateScheduledMatch(clubs[1]!.userId, match.id);
