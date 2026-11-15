@@ -137,10 +137,21 @@ export function registerGroupRoutes(app: FastifyInstance) {
  app.post("/v1/groups/system/member-count",async(request,reply)=>{if(!authenticateSystemBot(request,reply))return;const b=z.object({telegramGroupId:groupId,memberCount:z.number().int().min(0).max(1000000),botPresent:z.boolean().optional()}).safeParse(request.body);if(!b.success)return reply.code(400).send({error:"INVALID_GROUP_CHECK"});return checkTelegramGroupMembers(b.data.telegramGroupId,b.data.memberCount,b.data.botPresent??true);});
 
   app.post("/v1/groups/register", async (request, reply) => {
-    const telegramUserId = await authenticateBot(request, reply); if (!telegramUserId) return;
-    const parsed = z.object({ telegramGroupId: groupId, title: z.string().trim().min(1).max(255), role: z.enum(["OWNER", "ADMIN"]), memberCount: z.number().int().min(0).max(1_000_000) }).safeParse(request.body);
+    const telegramUserId = await authenticateGroupActor(request, reply); if (!telegramUserId) return;
+    const parsed = z.object({ telegramGroupId: groupId, title: z.string().trim().min(1).max(255), role: z.enum(["OWNER", "ADMIN"]).optional(), memberCount: z.number().int().min(0).max(1_000_000) }).safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ error: "INVALID_GROUP_REGISTRATION" });
-    try { return { registration: await registerTelegramGroup({ telegramUserId, ...parsed.data }) }; } catch (error) { return sendGroupError(reply, error); }
+    try {
+      const actor = await verifyTelegramGroupActor({ telegramGroupId: parsed.data.telegramGroupId, telegramUserId, requireManager: true });
+      const role = actor.status === "creator" ? "OWNER" : "ADMIN";
+      return { registration: await registerTelegramGroup({ telegramUserId, ...parsed.data, role }) };
+    } catch (error) {
+      if (error instanceof TelegramGroupAuthorizationError) {
+        const status = error.code === "TELEGRAM_BOT_TOKEN_NOT_CONFIGURED" ? 503
+          : error.code === "TELEGRAM_GROUP_CHECK_FAILED" ? 502 : 403;
+        return reply.code(status).send({ error: error.code });
+      }
+      return sendGroupError(reply, error);
+    }
   });
   app.post("/v1/groups/join", async (request, reply) => {
     const telegramUserId = await authenticateBot(request, reply); if (!telegramUserId) return;
