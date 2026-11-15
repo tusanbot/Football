@@ -1032,6 +1032,10 @@ export async function enqueueDueMatchRuntimes(now = new Date(), limit = 50) {
     try {
       const home = toSide(fixture.homeClub);
       const away = toSide(fixture.awayClub);
+      if (!isValidMatchSide(home) || !isValidMatchSide(away)) {
+        await simulateScheduledMatch(fixture.homeClub.ownerId, fixture.id, now);
+        continue;
+      }
       const result = await prisma.matchRuntime.createMany({
         data: [{
           matchId: fixture.id, status: "QUEUED", currentMinute: 0,
