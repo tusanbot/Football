@@ -1690,6 +1690,7 @@ if (apiUrl && botApiSecret) {
   console.warn("Durable group message deletion worker is disabled: configure FOOTBALL_API_URL and BOT_API_SECRET.");
 }
 
+await bot.api.deleteWebhook({ drop_pending_updates: false });
 const botIdentity = await bot.api.getMe();
 botTelegramId = botIdentity.id;
 console.info("Football Empire Bot authenticated as @" + (botIdentity.username ?? botIdentity.id));
