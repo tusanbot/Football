@@ -15,6 +15,23 @@ export async function createMarketListing(userId: string, playerId: string, aski
     if (!player) throw new MarketError("PLAYER_NOT_FOUND");
     if (player.origin !== "GENERATED") throw new MarketError("SPECIAL_PLAYERS_NOT_TRADEABLE");
     if (player.status !== "ACTIVE") throw new MarketError("PLAYER_NOT_AVAILABLE");
+    const activeRuntime = await tx.footballMatch.findFirst({
+      where: {
+        status: { in: ["SCHEDULED", "IN_PROGRESS"] },
+        OR: [{ homeClubId: club.id }, { awayClubId: club.id }],
+        runtime: { isNot: null },
+      },
+      select: { id: true },
+    });
+    if (activeRuntime) throw new MarketError("MARKET_LOCKED_DURING_MATCH");
+    const eligiblePlayers = await tx.player.findMany({
+      where: { clubId: club.id, status: "ACTIVE", suspensionMatchesRemaining: 0 },
+      select: { id: true, position: true },
+    });
+    const remainingPlayers = eligiblePlayers.filter((candidate) => candidate.id !== player.id);
+    if (remainingPlayers.length < 11 || !remainingPlayers.some((candidate) => candidate.position === "GK")) {
+      throw new MarketError("MINIMUM_ACTIVE_SQUAD_REQUIRED");
+    }
     const changed = await tx.player.updateMany({
       where: { id: player.id, clubId: club.id, status: "ACTIVE", origin: "GENERATED" },
       data: { status: "LISTED", lineupSlot: null },
