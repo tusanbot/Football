@@ -16,6 +16,7 @@ test("Prisma conversion inventories the complete game schema", () => {
   assert.ok(totals.bigIntColumns > 0);
   assert.ok(totals.jsonColumns > 0);
   assert.ok(totals.arrayColumns > 0);
+  assert.equal(totals.unsupportedFields, 0);
   assert.match(converted.sql, /CREATE TABLE IF NOT EXISTS "Wallet"/);
   assert.match(converted.sql, /CREATE TABLE IF NOT EXISTS "LedgerTransaction"/);
   assert.match(converted.sql, /FOREIGN KEY/);

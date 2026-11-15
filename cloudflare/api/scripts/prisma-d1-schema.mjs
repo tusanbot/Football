@@ -292,7 +292,7 @@ export function buildInventory(parsed, sourceHash) {
       enums: Object.keys(parsed.enums).length,
       scalarColumns: allFields.length,
       relations: models.reduce((sum, model) => sum + model.relationFields, 0),
-      unsupportedFields: models.flatMap((model) => model.fields.filter((field) => !field.isScalar && !field.isRelation)).length,
+      unsupportedFields: parsed.models.flatMap((model) => model.fields.filter((field) => !field.isScalar && !field.isRelation)).length,
       indexes: models.reduce((sum, model) => sum + model.indexes.length, 0),
       compoundUniqueConstraints: models.reduce((sum, model) => sum + model.uniqueConstraints.filter((item) => item.fields.length > 1).length, 0),
       bigIntColumns: allFields.filter((field) => field.prismaType.replace(/[?\[\]]/g, "") === "BigInt").length,
