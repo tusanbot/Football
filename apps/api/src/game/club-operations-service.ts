@@ -339,7 +339,14 @@ export async function recruitAcademyProspect(userId: string, prospectId: string,
   return prisma.$transaction(async (tx) => {
     const club = await tx.club.findUnique({ where: { ownerId: userId } });
     if (!club) throw new ClubOperationsError("CLUB_NOT_FOUND");
-    if (await replayCheck(tx, userId, club.id, idempotencyKey, reason)) return { prospectId, replayed: true };
+    if (await replayCheck(tx, userId, club.id, idempotencyKey, reason)) {
+      const previous = await tx.ledgerTransaction.findUniqueOrThrow({ where: { idempotencyKey: `club-op:${idempotencyKey}` }, select: { amount: true } });
+      const prospect = await tx.academyProspect.findFirst({ where: { id: prospectId, clubId: club.id }, select: { recruitedPlayerId: true } });
+      const player = prospect?.recruitedPlayerId
+        ? await tx.player.findUnique({ where: { id: prospect.recruitedPlayerId }, select: { id: true, firstName: true, lastName: true, position: true, overall: true, potential: true } })
+        : null;
+      return { prospectId, ...(player ? { player } : {}), cost: previous.amount.toString(), replayed: true };
+    }
     const prospect = await tx.academyProspect.findFirst({ where: { id: prospectId, clubId: club.id, status: "AVAILABLE" } });
     if (!prospect) throw new ClubOperationsError("PROSPECT_NOT_AVAILABLE");
     await debitCash(tx, userId, club.id, prospect.recruitmentCost, idempotencyKey, reason, "ACADEMY_RECRUITMENT", `Recruited ${prospect.firstName} ${prospect.lastName}`, now);
