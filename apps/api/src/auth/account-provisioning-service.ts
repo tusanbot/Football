@@ -33,11 +33,21 @@ export async function provisionTelegramAccount(identity: TelegramAccountIdentity
         return updated;
       }
 
+      const starterSettings = await tx.gameSetting.findMany({
+        where: { key: { in: ["economy.starterCash", "economy.starterGold"] } },
+        select: { key: true, value: true },
+      });
+      const configuredAmount = (key: string, fallback: number, maximum: number) => {
+        const value = starterSettings.find(setting => setting.key === key)?.value;
+        return typeof value === "number" && Number.isSafeInteger(value) && value >= 0 && value <= maximum ? value : fallback;
+      };
+      const starterCash = configuredAmount("economy.starterCash", 20_000, 1_000_000_000);
+      const starterGold = configuredAmount("economy.starterGold", 50, 1_000_000);
       const created = await tx.user.create({
         data: {
           telegramId, username, displayName,
           club: { create: { name: `${firstName} FC`, slug: `club-${telegramId}` } },
-          wallets: { create: [{ asset: "CASH", balance: 20_000n }, { asset: "GOLD", balance: 50n }] },
+          wallets: { create: [{ asset: "CASH", balance: BigInt(starterCash) }, { asset: "GOLD", balance: BigInt(starterGold) }] },
         },
         select: {
           id: true, telegramId: true, displayName: true,
@@ -46,12 +56,11 @@ export async function provisionTelegramAccount(identity: TelegramAccountIdentity
         },
       });
 
-      await tx.ledgerTransaction.createMany({
-        data: [
-          { idempotencyKey: `starter:${telegramId}:CASH`, userId: created.id, asset: "CASH", direction: "CREDIT", amount: 20_000n, reason: "STARTER_GRANT", referenceType: "STARTER_GRANT", referenceId: created.id },
-          { idempotencyKey: `starter:${telegramId}:GOLD`, userId: created.id, asset: "GOLD", direction: "CREDIT", amount: 50n, reason: "STARTER_GRANT", referenceType: "STARTER_GRANT", referenceId: created.id },
-        ],
-      });
+      const starterLedger = [
+        ...(starterCash > 0 ? [{ idempotencyKey: `starter:${telegramId}:CASH`, userId: created.id, asset: "CASH" as const, direction: "CREDIT" as const, amount: BigInt(starterCash), reason: "STARTER_GRANT", referenceType: "STARTER_GRANT", referenceId: created.id }] : []),
+        ...(starterGold > 0 ? [{ idempotencyKey: `starter:${telegramId}:GOLD`, userId: created.id, asset: "GOLD" as const, direction: "CREDIT" as const, amount: BigInt(starterGold), reason: "STARTER_GRANT", referenceType: "STARTER_GRANT", referenceId: created.id }] : []),
+      ];
+      if (starterLedger.length) await tx.ledgerTransaction.createMany({ data: starterLedger });
       if (created.club) await ensureStarterSquad(tx, created.club.id);
       return created;
     }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
