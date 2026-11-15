@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import type { CSSProperties } from "react";
+import { createTelegramSession } from "../../../lib/telegram-session.js";
 
 type Plan = {
   formation: string;
@@ -25,22 +26,22 @@ const label:CSSProperties={display:"block",fontSize:13,color:"#c3cfdd",marginBot
 
 export default function FallbackPlanPage(){
   const [initData,setInitData]=useState("");
+  const [sessionToken,setSessionToken]=useState("");
   const [data,setData]=useState<PlanResponse|null>(null);
   const [busy,setBusy]=useState(false);
   const [error,setError]=useState("");
   const [notice,setNotice]=useState("");
-  const headers={"content-type":"application/json","x-telegram-init-data":initData};
+  const headers={"content-type":"application/json",...(sessionToken?{authorization:"Bearer "+sessionToken}:{})};
   const load=useCallback(async()=>{
-    if(!initData)return;
-    const auth=await fetch(API+"/v1/auth/telegram",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({initData})});
-    if(!auth.ok)throw new Error("احراز هویت تلگرام ناموفق بود.");
+    if(!sessionToken)return;
     const response=await fetch(API+"/v1/matches/fallback-plan",{headers});
     const result=await response.json();
     if(!response.ok)throw new Error(result.error??"دریافت برنامه جایگزین ناموفق بود.");
     setData(result);
-  },[initData]);
+  },[sessionToken,headers]);
   useEffect(()=>{setInitData(window.Telegram?.WebApp?.initData??"");window.Telegram?.WebApp?.ready?.();window.Telegram?.WebApp?.expand?.();},[]);
-  useEffect(()=>{if(initData)void load().catch(e=>setError(e instanceof Error?e.message:"خطای ارتباط"));},[initData,load]);
+  useEffect(()=>{if(!initData)return;let active=true;void createTelegramSession(API,initData).then(token=>{if(active)setSessionToken(token);}).catch(e=>{if(active)setError(e instanceof Error?e.message:"احراز هویت ناموفق بود.");});return()=>{active=false;};},[initData]);
+  useEffect(()=>{if(sessionToken)void load().catch(e=>setError(e instanceof Error?e.message:"خطای ارتباط"));},[sessionToken,load]);
   function change(key:keyof Plan,value:string){setData(current=>current?{...current,plan:{...current.plan,[key]:value}}:current);}
   async function save(){
     if(!data)return;
