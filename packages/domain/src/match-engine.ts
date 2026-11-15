@@ -79,10 +79,11 @@ function weightedPlayer(players: MatchPlayer[], weight: (player: MatchPlayer) =>
 
 /** Deterministic, reproducible 90-minute match simulation. Persist the seed with the fixture. */
 export function simulateFootballMatch(input: {
-  seed: string; home: MatchSide; away: MatchSide;
+  seed: string; home: MatchSide; away: MatchSide; rules?: MatchRules;
 }): MatchSimulation {
   if (input.home.clubId === input.away.clubId) throw new Error("MATCH_TEAMS_MUST_DIFFER");
   const rng = random(hashSeed(input.seed));
+  const rules = input.rules ?? DEFAULT_MATCH_RULES;
   const homeStrength = sideStrength(input.home);
   const awayStrength = sideStrength(input.away);
   const homeXg = clamp(1.25 + (homeStrength.attack - awayStrength.defense) / 48 + (homeStrength.average - awayStrength.average) / 95 + 0.18, 0.25, 3.8);
@@ -151,7 +152,7 @@ export function simulateFootballMatch(input: {
     const injuryChance = clamp(0.13 + (side.tactics.pressing === "HIGH_PRESS" ? 0.04 : side.tactics.pressing === "LOW_BLOCK" ? -0.02 : 0) - side.coachMedicalSkill * 0.0007, 0.03, 0.2);
     let injuredPlayer: MatchPlayer | null = null;
     let injuryMinute = 0;
-    if (rng() < injuryChance) {
+    if (rules.injuriesEnabled && rng() < injuryChance) {
       injuredPlayer = choose(side.players.filter((p) => p.position !== "GK"), rng);
       injuryMinute = 8 + Math.floor(rng() * 80);
       addEvent({ minute: injuryMinute, type: "INJURY", teamId: side.clubId, playerId: injuredPlayer.id, detail: "Player suffered an in-match injury." });
@@ -165,11 +166,18 @@ export function simulateFootballMatch(input: {
     const role = (position: PlayerPosition) => position === "GK" ? "GK"
       : ["CB", "LB", "RB"].includes(position) ? "DEF"
         : ["CDM", "CM", "CAM"].includes(position) ? "MID" : "ATT";
-    const performSubstitution = (outgoing: MatchPlayer, minute: number) => {
+    const usedInPlayWindows = new Set<number>();
+    const performSubstitution = (outgoing: MatchPlayer, minute: number, forced = false) => {
       const incoming = bench
         .filter((candidate) => !usedBench.has(candidate.id) && role(candidate.position) === role(outgoing.position))
         .sort((a, b) => b.overall - a.overall || a.id.localeCompare(b.id))[0];
       if (!incoming) return false;
+      const isInPlay = minute > 45;
+      if (isInPlay && !usedInPlayWindows.has(minute)) {
+        if (usedInPlayWindows.size >= rules.maxInPlayWindows) return false;
+        usedInPlayWindows.add(minute);
+      }
+      if (usedBench.size >= rules.maxSubstitutions) return false;
       usedBench.add(incoming.id);
       substitutedOut.add(outgoing.id);
       const outgoingLine = performances.get(outgoing.id)!;
@@ -197,19 +205,23 @@ export function simulateFootballMatch(input: {
     };
 
     if (injuredPlayer && !sentOff.has(injuredPlayer.id)) {
-      performSubstitution(injuredPlayer, Math.min(89, Math.max(8, injuryMinute)));
+      performSubstitution(injuredPlayer, Math.min(89, Math.max(8, injuryMinute)), true);
     }
     const availableOutfield = side.players.filter((player) =>
       player.position !== "GK" && !sentOff.has(player.id) && !substitutedOut.has(player.id)
       && player.id !== injuredPlayer?.id,
     );
-    const desiredSubstitutions = Math.min(5, 2 + Math.floor(rng() * 2));
-    let additional = Math.max(0, desiredSubstitutions - (injuredPlayer && usedBench.size ? 1 : 0));
-    while (additional > 0 && availableOutfield.length > 0) {
+    const desiredSubstitutions = Math.min(rules.maxSubstitutions, 2 + Math.floor(rng() * 2));
+    let additional = Math.max(0, desiredSubstitutions - usedBench.size);
+    const windowMinutes = [60, 75, 85].filter((minute) => !usedInPlayWindows.has(minute))
+      .slice(0, Math.max(0, rules.maxInPlayWindows - usedInPlayWindows.size));
+    let windowIndex = 0;
+    while (additional > 0 && availableOutfield.length > 0 && windowMinutes.length > 0) {
       const index = Math.floor(rng() * availableOutfield.length);
       const outgoing = availableOutfield.splice(index, 1)[0]!;
-      const minute = 60 + Math.floor(rng() * 26);
+      const minute = windowMinutes[windowIndex % windowMinutes.length]!;
       if (performSubstitution(outgoing, minute)) additional--;
+      else windowIndex++;
     }
     const forcedExitMinutes = new Map<string, number>();
     for (const event of events.filter((item) => item.teamId === side.clubId && (item.type === "RED_CARD" || item.type === "INJURY"))) {
