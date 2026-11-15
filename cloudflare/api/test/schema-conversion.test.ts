@@ -53,7 +53,7 @@ test("relation defaults preserve Prisma referential actions", () => {
     " parentId String?",
     " parent Parent? @relation(fields: [parentId], references: [id])",
     "}"
-  ].join("\\n"));
+  ].join("\n"));
   assert.match(converted.sql, /ON DELETE RESTRICT ON UPDATE CASCADE/);
   assert.match(converted.sql, /ON DELETE SET NULL ON UPDATE CASCADE/);
 });

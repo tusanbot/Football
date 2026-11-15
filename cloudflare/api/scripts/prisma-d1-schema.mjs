@@ -48,8 +48,8 @@ function parseField(line, modelNames, enumNames) {
       ? splitList(relationArgs.match(/\bfields\s*:\s*\[([^\]]*)\]/)[1]) : [],
     references: (relationArgs.match(/\breferences\s*:\s*\[([^\]]*)\]/) || [])[1]
       ? splitList(relationArgs.match(/\breferences\s*:\s*\[([^\]]*)\]/)[1]) : [],
-    onDelete: (relationArgs.match(/\bonDelete\s*:\s*(\w+)/) || [])[1] || (isOptional ? "SetNull" : "Restrict"),
-    onUpdate: (relationArgs.match(/\bonUpdate\s*:\s*(\w+)/) || [])[1] || "Cascade"
+    onDelete: (relationArgs.match(/\bonDelete\s*:\s*(\w+)/) || [])[1] || "NoAction",
+    onUpdate: (relationArgs.match(/\bonUpdate\s*:\s*(\w+)/) || [])[1] || "NoAction"
   } : null;
   const defaultArgs = readBalancedArgument(tail, "@default(");
   const dbType = (tail.match(/@db\.([A-Za-z_]\w*)(?:\((\d+)\))?/) || []);
