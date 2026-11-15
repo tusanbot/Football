@@ -41,7 +41,7 @@ export async function registerTelegramGroup(input: { telegramUserId: string; tel
       create: { groupId: group.id, userId: user.id, role: input.role },
       update: { role: input.role }, select: { role: true },
     });
-    const registeredManagers = await tx.groupMembership.count({ where: { groupId: group.id } });
+    const registeredManagers = await tx.groupMembership.count({ where: { groupId: group.id, role: { in: ["OWNER", "ADMIN"] } } });
     return { group, role: membership.role, registeredManagers, minimumMembers };
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 }
@@ -64,7 +64,7 @@ export async function joinTelegramGroup(input: { telegramUserId: string; telegra
       create: { groupId: group.id, userId: user.id, role: "MEMBER" }, update: {}, select: { role: true },
     });
     await tx.telegramGroup.update({ where: { id: group.id }, data: { memberCount: input.memberCount, lastMemberCountCheckAt: new Date() } });
-    const registeredManagers = await tx.groupMembership.count({ where: { groupId: group.id } });
+    const registeredManagers = await tx.groupMembership.count({ where: { groupId: group.id, role: { in: ["OWNER", "ADMIN"] } } });
     return { group, role: membership.role, registeredManagers, alreadyJoined: Boolean(existing), memberCount: input.memberCount };
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 }
@@ -202,13 +202,14 @@ export async function getTelegramGroupSummary(telegramUserId: string, telegramGr
   if (!user) throw new GroupServiceError("ACCOUNT_NOT_FOUND");
   const group = await prisma.telegramGroup.findUnique({
     where: { telegramId: telegramGroupId },
-    select: { id: true, telegramId: true, title: true, memberCount: true, isActive: true, points: true, _count: { select: { memberships: true } }, memberships: { where: { userId: user.id }, select: { role: true } } },
+    select: { id: true, telegramId: true, title: true, memberCount: true, isActive: true, points: true, memberships: { where: { userId: user.id }, select: { role: true } } },
   });
   if (!group) throw new GroupServiceError("GROUP_NOT_REGISTERED");
   const membership = group.memberships[0];
   if (!membership) throw new GroupServiceError("NOT_GROUP_MEMBER");
+  const registeredManagers = await prisma.groupMembership.count({ where: { groupId: group.id, role: { in: ["OWNER", "ADMIN"] } } });
   return {
     group: { id: group.id, telegramId: group.telegramId, title: group.title, memberCount: group.memberCount, isActive: group.isActive, points: group.points.toString() },
-    role: membership.role, registeredManagers: group._count.memberships, minimumMembers: MIN_TELEGRAM_MEMBERS,
+    role: membership.role, registeredManagers, minimumMembers: MIN_TELEGRAM_MEMBERS,
   };
 }
