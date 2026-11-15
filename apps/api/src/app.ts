@@ -18,6 +18,7 @@ import { registerGiftCodeRoutes } from "./gift-code-routes.js";
 import { registerTelegramMessageDeletionRoutes } from "./telegram-message-deletion-routes.js";
 import { registerLeagueNoticeRoutes } from "./league-notice-routes.js";
 import { registerAdminGroupBroadcastRoutes } from "./admin-group-broadcast-routes.js";
+import { registerBotRuntimeRoutes } from "./bot-runtime-routes.js";
 import { registerPublicClubRoutes } from "./public-club-routes.js";
 import { registerPublicPlayerRecordRoutes } from "./players/public-record-routes.js";
 import { registerSeasonAwardRoutes } from "./game/season-award-routes.js";
@@ -99,6 +100,7 @@ export function buildApp() {
   registerTelegramMessageDeletionRoutes(app);
   registerLeagueNoticeRoutes(app);
   registerAdminGroupBroadcastRoutes(app);
+  registerBotRuntimeRoutes(app);
   registerPublicClubRoutes(app);
   registerPublicPlayerRecordRoutes(app);
   registerSeasonAwardRoutes(app);

@@ -1804,6 +1804,13 @@ const apiReadiness = await fetch(new URL("/ready", apiUrl), { signal: AbortSigna
 if (!apiReadiness.ok) throw new Error("Football Empire API is not ready (HTTP " + apiReadiness.status + "). Start and verify the API before the Bot.");
 await bot.api.deleteWebhook({ drop_pending_updates: false });
 const botIdentity = await bot.api.getMe();
+const identityCheck = await fetch(new URL("/v1/bot/verify-identity", apiUrl), {
+  method: "POST",
+  headers: { "content-type": "application/json", "x-football-bot-secret": botApiSecret },
+  body: JSON.stringify({ telegramBotId: botIdentity.id }),
+  signal: AbortSignal.timeout(15_000),
+});
+if (!identityCheck.ok) throw new Error("The API and Bot Telegram tokens do not identify the same Bot (HTTP " + identityCheck.status + ").");
 botTelegramId = botIdentity.id;
 console.info("Football Empire Bot authenticated as @" + (botIdentity.username ?? botIdentity.id));
 const stopBot = () => {
