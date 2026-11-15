@@ -7,6 +7,7 @@ import {
   isPersistentGroupReply,
   PRIVATE_MENU_ROWS,
   resolvePrivateMenuCommand,
+  formatApiError,
 } from "./telegram-ux.js";
 
 const token = process.env.TELEGRAM_BOT_TOKEN;
@@ -83,7 +84,7 @@ async function api<T>(path: string, telegramId: number, method = "GET", body?: u
   const data = await response.json() as T & { error?: string; details?: Record<string, string> };
   if (!response.ok) {
     const range = data.details?.minimumWeeklyWage ? ` (acceptable weekly wage: ${cash(data.details.minimumWeeklyWage)}–${cash(data.details.maximumWeeklyWage ?? data.details.minimumWeeklyWage)} Cash)` : "";
-    throw new Error((data.error ?? `API request failed (${response.status})`) + range);
+    throw new Error(formatApiError(data.error ?? `HTTP_${response.status}`) + range);
   }
   return data;
 }
@@ -93,7 +94,7 @@ async function publicApi<T>(path: string): Promise<T> {
   if (!apiUrl) throw new Error("FOOTBALL_API_URL is not configured.");
   const response = await fetch(new URL(path, apiUrl), { signal: AbortSignal.timeout(15_000) });
   const data = await response.json() as T & { error?: string };
-  if (!response.ok) throw new Error(data.error ?? "Public API request failed.");
+  if (!response.ok) throw new Error(formatApiError(data.error ?? `HTTP_${response.status}`));
   return data;
 }
 
@@ -331,7 +332,7 @@ function privateMenuKeyboard() {
   if (webAppUrl) keyboard.webApp("ورود به بازی", webAppUrl);
   return keyboard.resized().persistent();
 }
-function cash(value: string) { return BigInt(value).toLocaleString("en-US"); }
+function cash(value: string) { return BigInt(value).toLocaleString("fa-IR"); }
 function playerName(player: ApiPlayer) { return `${player.firstName} ${player.lastName}`; }
 
 bot.command("start", async (ctx) => {
