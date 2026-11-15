@@ -2,6 +2,7 @@ import type { FastifyInstance, FastifyReply } from "fastify";
 import { z } from "zod";
 import type { MatchTacticalInstruction } from "@football/domain";
 import { requireTelegramUser } from "../auth/require-telegram-user.js";
+import { getMatchFallbackPlan, saveMatchFallbackPlan, MatchFallbackPlanError } from "./match-fallback-service.js";
 import {
   MatchServiceError, createFriendlyMatch, createLeague, getLeague, joinLeague,
   listClubMatches, listMatchOpponents, listOpenLeagues, simulateScheduledMatch, startLeague, submitMatchCheckpointDecision,
@@ -12,6 +13,10 @@ function sendMatchError(reply: FastifyReply, error: unknown) {
   if (typeof error === "object" && error !== null && "code" in error
     && (error.code === "P2034" || error.code === "P2002")) {
     return reply.code(409).send({ error: "CONCURRENT_MODIFICATION" });
+  }
+  if (error instanceof MatchFallbackPlanError) {
+    const status = error.code === "CLUB_NOT_FOUND" ? 404 : error.code === "FALLBACK_PLAN_VERSION_CONFLICT" ? 409 : 400;
+    return reply.code(status).send({ error: error.code });
   }
   if (!(error instanceof MatchServiceError)) throw error;
   const notFound = ["CLUB_NOT_FOUND", "OPPONENT_NOT_FOUND", "COMPETITION_NOT_FOUND", "MATCH_NOT_FOUND"];
@@ -26,6 +31,30 @@ function sendMatchError(reply: FastifyReply, error: unknown) {
   return reply.code(status).send({ error: error.code, ...(error.details ? { details: error.details } : {}) });
 }
 export function registerMatchRoutes(app: FastifyInstance) {
+  app.get("/v1/matches/fallback-plan", async (request, reply) => {
+    const user = await requireTelegramUser(request);
+    if (!user) return reply.code(401).send({ error: "UNAUTHENTICATED" });
+    try { return await getMatchFallbackPlan(user.id); }
+    catch (error) { return sendMatchError(reply, error); }
+  });
+  app.put("/v1/matches/fallback-plan", async (request, reply) => {
+    const user = await requireTelegramUser(request);
+    if (!user) return reply.code(401).send({ error: "UNAUTHENTICATED" });
+    const body = z.object({
+      expectedVersion: z.number().int().min(1),
+      plan: z.object({
+        formation: z.enum(["4-3-3", "4-4-2", "3-5-2", "4-2-3-1"]),
+        mentality: z.enum(["DEFENSIVE", "BALANCED", "ATTACKING"]),
+        pressing: z.enum(["LOW_BLOCK", "MID_BLOCK", "HIGH_PRESS"]),
+        tempo: z.enum(["SLOW", "NORMAL", "FAST"]),
+        passingStyle: z.enum(["SHORT", "MIXED", "DIRECT"]),
+      }).strict(),
+    }).strict().safeParse(request.body);
+    if (!body.success) return reply.code(400).send({ error: "INVALID_FALLBACK_PLAN" });
+    try { return await saveMatchFallbackPlan(user.id, body.data.plan, body.data.expectedVersion); }
+    catch (error) { return sendMatchError(reply, error); }
+  });
+
   app.get("/v1/matches/opponents", async (request, reply) => {
     const user = await requireTelegramUser(request);
     if (!user) return reply.code(401).send({ error: "UNAUTHENTICATED" });
