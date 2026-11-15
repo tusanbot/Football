@@ -1653,12 +1653,14 @@ bot.command("clubprofile", async (ctx) => {
 
 bot.on(["chat_member","my_chat_member"],async ctx=>{
  if(ctx.chat.type!=="group"&&ctx.chat.type!=="supergroup")return;
+ const botChange="my_chat_member" in ctx.update?ctx.update.my_chat_member:null;
+ const memberChange="chat_member" in ctx.update?ctx.update.chat_member:null;
+ const botStatus=botChange?.new_chat_member.status;
+ const botPresent=botStatus?["creator","administrator"].includes(botStatus):undefined;
  try{
-  const memberCount=await ctx.api.getChatMemberCount(ctx.chat.id);
-  const botChange="my_chat_member" in ctx.update?ctx.update.my_chat_member:null;
-  const memberChange="chat_member" in ctx.update?ctx.update.chat_member:null;
-  const botStatus=botChange?.new_chat_member.status;
-  const botPresent=botStatus?["creator","administrator"].includes(botStatus):undefined;
+  let memberCount:number;
+  try{memberCount=await ctx.api.getChatMemberCount(ctx.chat.id);}
+  catch(error){if(botPresent===false)memberCount=0;else throw error;}
   await apiSystem("/v1/groups/system/member-count",{telegramGroupId:String(ctx.chat.id),memberCount,...(botPresent!==undefined?{botPresent}:{})});
   if(memberChange){
    const member=memberChange.new_chat_member;
