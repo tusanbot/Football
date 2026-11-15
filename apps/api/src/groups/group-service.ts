@@ -47,7 +47,8 @@ export async function registerTelegramGroup(input: { telegramUserId: string; tel
 }
 
 export async function joinTelegramGroup(input: { telegramUserId: string; telegramGroupId: string; memberCount: number }) {
-  if (input.memberCount < MIN_TELEGRAM_MEMBERS) {
+  const minimumMembers = await getIntegerSetting(prisma as unknown as Prisma.TransactionClient, "groups.minimumMembers", MIN_TELEGRAM_MEMBERS, 5, 1000);
+  if (input.memberCount < minimumMembers) {
     await prisma.telegramGroup.updateMany({ where: { telegramId: input.telegramGroupId }, data: { memberCount: input.memberCount, isActive: false, lastMemberCountCheckAt: new Date() } });
     throw new GroupServiceError("GROUP_MINIMUM_MEMBERS_REQUIRED");
   }
@@ -142,16 +143,17 @@ export async function recordGroupGameActivity(i:{telegramUserId:string;telegramG
  return prisma.$transaction(async tx=>{
   const {user,group}=await groupMember(tx,i.telegramUserId,i.telegramGroupId);
   const day=utcDayStart().toISOString().slice(0,10),key="group-game:"+group.id+":"+user.id+":"+day+":"+i.activityType+":"+i.referenceId;
+  const dailyCap=await getIntegerSetting(tx,"groups.dailyPointCap",GROUP_DAILY_POINT_CAP,0,100_000);
   const old=await tx.groupPointLedger.findUnique({where:{idempotencyKey:key},select:{amount:true}});
   if(old)return {awarded:false,replayed:true,award:old.amount.toString(),points:group.points.toString(),dailyCap};
-  const [dailyCap,requestedPoints]=await Promise.all([getIntegerSetting(tx,"groups.dailyPointCap",GROUP_DAILY_POINT_CAP,0,100_000),getIntegerSetting(tx,GROUP_ACTIVITY_SETTING_KEYS[i.activityType],GROUP_ACTIVITY_POINTS[i.activityType],0,1000)]);
+  const requestedPoints=await getIntegerSetting(tx,GROUP_ACTIVITY_SETTING_KEYS[i.activityType],GROUP_ACTIVITY_POINTS[i.activityType],0,1000);
   const earned=await earnedGroupPointsToday(tx,group.id,user.id),remaining=BigInt(dailyCap)-earned;
   if(remaining<=0n)return {awarded:false,replayed:false,capped:true,award:"0",points:group.points.toString(),dailyCap};
   if(requestedPoints===0)return {awarded:false,replayed:false,disabled:true,award:"0",points:group.points.toString(),dailyCap};
   const requested=BigInt(requestedPoints),award=requested<remaining?requested:remaining;
   await tx.groupPointLedger.create({data:{idempotencyKey:key,groupId:group.id,userId:user.id,amount:award,source:"GAME_ACTIVITY",description:"Verified group game action: "+i.activityType}});
   const updated=await tx.telegramGroup.update({where:{id:group.id},data:{points:{increment:award}},select:{points:true}});
-  return {awarded:true,replayed:false,award:award.toString(),points:updated.points.toString(),dailyCap:GROUP_DAILY_POINT_CAP};
+  return {awarded:true,replayed:false,award:award.toString(),points:updated.points.toString(),dailyCap};
  },{isolationLevel:Prisma.TransactionIsolationLevel.Serializable});
 }
 export async function listMyTelegramGroups(userId:string) {
