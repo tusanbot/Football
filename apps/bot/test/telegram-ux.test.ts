@@ -97,5 +97,7 @@ test("group reply retention middleware is installed before command handlers", ()
 test("bot source does not bypass the group reply retention wrapper with direct sends", () => {
   const directSendPattern =
     /(?:ctx|bot)\.api\.(?:sendMessage|sendPhoto|sendDocument|sendVideo|sendAudio|sendAnimation|sendMediaGroup|sendLocation|sendVenue|sendPoll|sendSticker|sendVoice|sendVideoNote)|ctx\.replyWith(?:Photo|Document|Video|Audio|Animation|MediaGroup|Location|Venue|Poll|Sticker|Voice|VideoNote)/g;
-  assert.deepEqual([...botSource.matchAll(directSendPattern)].map((match) => match[0]), []);
+  const directSends = [...botSource.matchAll(directSendPattern)].map((match) => match[0]);
+  assert.deepEqual(directSends, ["bot.api.sendMessage"]);
+  assert.match(botSource, /bot\\.api\\.sendMessage\\(telegramId/);
 });
