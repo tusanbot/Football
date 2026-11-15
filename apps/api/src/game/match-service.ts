@@ -157,7 +157,7 @@ export async function createFriendlyMatch(userId: string, opponentClubId: string
 
     const overlap = await tx.footballMatch.findFirst({
       where: {
-        status: "SCHEDULED",
+        status: { in: ["SCHEDULED", "IN_PROGRESS"] },
         scheduledAt: {
           gte: new Date(scheduledAt.getTime() - 2 * 60 * 60_000),
           lte: new Date(scheduledAt.getTime() + 2 * 60 * 60_000),
