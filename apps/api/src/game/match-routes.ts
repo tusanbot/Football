@@ -5,7 +5,7 @@ import { requireTelegramUser } from "../auth/require-telegram-user.js";
 import { getMatchFallbackPlan, saveMatchFallbackPlan, MatchFallbackPlanError } from "./match-fallback-service.js";
 import {
   MatchServiceError, createFriendlyMatch, createLeague, getLeague, joinLeague,
-  listClubMatches, listMatchOpponents, listOpenLeagues, simulateScheduledMatch, startLeague, submitMatchCheckpointDecision, updateCompetitionRules, updateCompetitionRules,
+  listClubMatches, listMatchOpponents, listOpenLeagues, simulateScheduledMatch, startLeague, submitMatchCheckpointDecision, updateCompetitionRules,
 } from "./match-service.js";
 
 const keySchema = z.string().regex(/^[A-Za-z0-9:_-]{12,128}$/);
@@ -34,7 +34,7 @@ function sendMatchError(reply: FastifyReply, error: unknown) {
   const notFound = ["CLUB_NOT_FOUND", "OPPONENT_NOT_FOUND", "COMPETITION_NOT_FOUND", "MATCH_NOT_FOUND"];
   const conflicts = [
     "IDEMPOTENCY_CONFLICT", "CLUB_ALREADY_HAS_MATCH_IN_WINDOW", "COMPETITION_NOT_OPEN",
-    "COMPETITION_FULL", "ONLY_CREATOR_CAN_START", "LEAGUE_NEEDS_FOUR_TEAMS",
+    "COMPETITION_FULL", "ONLY_CREATOR_CAN_START", "COMPETITION_RULES_LOCKED", "LEAGUE_NEEDS_FOUR_TEAMS",
     "ALL_TEAMS_NEED_VALID_LINEUPS", "NOT_COMPETITION_MEMBER", "NOT_MATCH_PARTICIPANT",
     "MATCH_NOT_SCHEDULED", "MATCH_NOT_DUE", "MATCH_ALREADY_SIMULATED", "CONCURRENT_MODIFICATION",
     "MATCH_CHECKPOINT_CLOSED", "MATCH_CHECKPOINT_NOT_FOUND",
