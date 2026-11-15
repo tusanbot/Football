@@ -637,9 +637,31 @@ export async function simulateScheduledMatch(userId: string, matchId: string, no
       : null;
     if (match.scheduledAt > now) throw new MatchServiceError("MATCH_NOT_DUE", { scheduledAt: match.scheduledAt.toISOString() });
     const matchRules = validateMatchRules(match.rulesSnapshot ?? competition?.rules ?? defaultMatchRules(match.type));
-    const homeSide = toSide(home);
-    const awaySide = toSide(away);
-    const generated = simulateFootballMatch({ seed: match.seed, home: homeSide, away: awaySide, rules: matchRules });
+    const kickoffSnapshot = runtime?.kickoffSnapshot as unknown as { home?: MatchSide; away?: MatchSide } | null;
+    if (isRuntimeSettlement && (!kickoffSnapshot?.home || !kickoffSnapshot?.away)) {
+      throw new MatchServiceError("MATCH_KICKOFF_SNAPSHOT_MISSING");
+    }
+    const homeSide = isRuntimeSettlement
+      ? { ...kickoffSnapshot!.home!, ticketPrice: BigInt(String(kickoffSnapshot!.home!.ticketPrice)) }
+      : toSide(home);
+    const awaySide = isRuntimeSettlement
+      ? { ...kickoffSnapshot!.away!, ticketPrice: BigInt(String(kickoffSnapshot!.away!.ticketPrice)) }
+      : toSide(away);
+    const homeForfeit = !isValidMatchSide(homeSide);
+    const awayForfeit = !isValidMatchSide(awaySide);
+    const forfeit = !isRuntimeSettlement && (homeForfeit || awayForfeit);
+    const generated = forfeit
+      ? {
+          homeScore: homeForfeit ? 0 : 3,
+          awayScore: awayForfeit ? 0 : 3,
+          events: [],
+          performances: [],
+          attendance: 0,
+          ticketRevenue: 0n,
+          homeExpectedGoals: 0,
+          awayExpectedGoals: 0,
+        } as ReturnType<typeof simulateFootballMatch>
+      : simulateFootballMatch({ seed: match.seed, home: homeSide, away: awaySide, rules: matchRules });
     const runtimeEvents = runtimeState?.segment.events;
     const runtimePlayerStats = new Map((runtimeState?.segment.playerStats ?? [])
       .map((item) => [item.playerId, item]));
@@ -694,7 +716,7 @@ export async function simulateScheduledMatch(userId: string, matchId: string, no
       aggregateAwayScore += firstLeg.homeScore;
     }
     const decidingTie = !isTwoLegCup || match.leg === 2;
-    const penalties = decidingTie && matchRules.penaltiesOnDraw && aggregateHomeScore === aggregateAwayScore
+    const penalties = !forfeit && decidingTie && matchRules.penaltiesOnDraw && aggregateHomeScore === aggregateAwayScore
       ? simulatePenaltyShootout({ seed: match.seed, home: homeSide, away: awaySide })
       : null;
     const winnerClubId = !decidingTie ? null
@@ -719,16 +741,20 @@ export async function simulateScheduledMatch(userId: string, matchId: string, no
       });
       if (runtimeCompleted.count !== 1) throw new MatchServiceError("MATCH_RUNTIME_CONCURRENT_MODIFICATION");
     }
-    await tx.matchEvent.createMany({ data: result.events.map((event) => ({
-      matchId: match.id, sequence: event.sequence, minute: event.minute, type: event.type,
-      teamId: event.teamId, playerId: event.playerId, relatedPlayerId: event.relatedPlayerId ?? null, detail: event.detail,
-    })) });
-    await tx.playerMatchPerformance.createMany({ data: result.performances.map((line) => ({
-      matchId: match.id, playerId: line.playerId, clubId: line.clubId,
-      minutesPlayed: line.minutesPlayed, goals: line.goals, assists: line.assists, shots: line.shots,
-      passes: line.passes, tackles: line.tackles, yellowCards: line.yellowCards,
-      redCards: line.redCards, rating: line.rating, fitnessLoss: line.fitnessLoss,
-    })) });
+    if (result.events.length) {
+      await tx.matchEvent.createMany({ data: result.events.map((event) => ({
+        matchId: match.id, sequence: event.sequence, minute: event.minute, type: event.type,
+        teamId: event.teamId, playerId: event.playerId, relatedPlayerId: event.relatedPlayerId ?? null, detail: event.detail,
+      })) });
+    }
+    if (result.performances.length) {
+      await tx.playerMatchPerformance.createMany({ data: result.performances.map((line) => ({
+        matchId: match.id, playerId: line.playerId, clubId: line.clubId,
+        minutesPlayed: line.minutesPlayed, goals: line.goals, assists: line.assists, shots: line.shots,
+        passes: line.passes, tackles: line.tackles, yellowCards: line.yellowCards,
+        redCards: line.redCards, rating: line.rating, fitnessLoss: line.fitnessLoss,
+      })) });
+    }
     const injuredIds = new Set(result.events.filter((event) => event.type === "INJURY").map((event) => event.playerId));
     const playerById = new Map(
       [...homeSide.players, ...(homeSide.bench ?? []), ...awaySide.players, ...(awaySide.bench ?? [])]
@@ -756,14 +782,16 @@ export async function simulateScheduledMatch(userId: string, matchId: string, no
     }
     // Existing suspensions are served by completing this fixture. New red cards
     // are then assigned a one-match suspension for the next eligible fixture.
-    const previouslySuspended = await tx.player.findMany({
+    const previouslySuspended = forfeit ? [] : await tx.player.findMany({
       where: { clubId: { in: [home.id, away.id] }, suspensionMatchesRemaining: { gt: 0 } },
       select: { clubId: true },
     });
-    await tx.player.updateMany({
-      where: { clubId: { in: [home.id, away.id] }, suspensionMatchesRemaining: { gt: 0 } },
-      data: { suspensionMatchesRemaining: { decrement: 1 } },
-    });
+    if (!forfeit) {
+      await tx.player.updateMany({
+        where: { clubId: { in: [home.id, away.id] }, suspensionMatchesRemaining: { gt: 0 } },
+        data: { suspensionMatchesRemaining: { decrement: 1 } },
+      });
+    }
     const redCardEvents = result.events.filter((event) => event.type === "RED_CARD");
     const sentOffPlayerIds = [...new Set(redCardEvents.map((event) => event.playerId))];
     if (sentOffPlayerIds.length && matchRules.redCardSuspensionMatches > 0) {
