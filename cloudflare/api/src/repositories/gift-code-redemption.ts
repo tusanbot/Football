@@ -72,10 +72,6 @@ export class GiftCodeRedemptionRepository {
     if (cash === null || gold === null || points === null || cash < 0n || gold < 0n || points < 0n) {
       throw new RangeError("Gift code rewards must be non-negative signed 64-bit integers");
     }
-    if (gift.rewardType !== "GROUP_POINTS" && points !== 0n) {
-      // Keep legacy reward semantics explicit: group points are only issued by GROUP_POINTS codes.
-      throw new TypeError("Non-group gift codes cannot issue group points");
-    }
     if (gift.rewardType === "GROUP_POINTS" && !input.telegramGroupId) throw new GiftCodeGroupRequiredError();
 
     const group = gift.rewardType === "GROUP_POINTS"
