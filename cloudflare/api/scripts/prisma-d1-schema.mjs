@@ -308,7 +308,11 @@ export function buildInventory(parsed, sourceHash) {
 
 export function convertPrismaSchema(source) {
   const parsed = parsePrismaSchema(source);
-  const sourceHash = createHash("sha256").update(source).digest("hex");
+  // Connection URLs are runtime/deployment configuration, not D1 schema structure.
+  // Excluding the datasource block keeps the generated SQLite snapshot stable when
+  // DATABASE_URL / DIRECT_URL settings change without changing any Prisma models.
+  const structuralSource = source.replace(/^datasource\\s+\\w+\\s*\\{[\\s\\S]*?^\\s*\\}\\s*$/m, "").trim();
+  const sourceHash = createHash("sha256").update(structuralSource).digest("hex");
   return {
     inventory: buildInventory(parsed, sourceHash),
     sql: generateD1Schema(parsed, sourceHash)
