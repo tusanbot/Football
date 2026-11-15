@@ -936,7 +936,7 @@ bot.command("cup", async (ctx) => {
 });
 bot.command("competitionrules", async (ctx) => {
   if (!ctx.from || ctx.chat.type !== "private") return;
-  const parts = String(ctx.match ?? "").trim().split(/\\s+/).filter(Boolean);
+  const parts = String(ctx.match ?? "").trim().split(/\s+/).filter(Boolean);
   const competitionId = parts.shift();
   if (!competitionId) return ctx.reply("Usage: /competitionrules COMPETITION_ID subs=5 windows=3 injuries=on red=1 yellow=3 yellowban=1 penalties=on");
   try {
@@ -954,7 +954,7 @@ bot.command("competitionrules", async (ctx) => {
       const [key, value] = part.split("=");
       if (key === "injuries" && (value === "on" || value === "off")) rules.injuriesEnabled = value === "on";
       else if (key === "penalties" && (value === "on" || value === "off")) rules.penaltiesOnDraw = value === "on";
-      else if (key && value && keys[key] && /^\\d+$/.test(value)) {
+      else if (key && value && keys[key] && /^\d+$/.test(value)) {
         (rules[keys[key]] as number) = Number(value);
       } else return ctx.reply("Invalid rule: " + part);
     }
