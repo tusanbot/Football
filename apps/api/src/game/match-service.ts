@@ -156,6 +156,7 @@ export async function createLeague(userId: string, name: string, maxTeams: numbe
   if (format === "LEAGUE" && (maxTeams < 4 || maxTeams > 10)) throw new MatchServiceError("INVALID_LEAGUE_SIZE");
   const club = await getOwnedClub(userId);
   const rules = validateMatchRules(inputRules ?? defaultMatchRules(format));
+  if (format === "LEAGUE" && rules.penaltiesOnDraw) throw new MatchServiceError("PENALTIES_NOT_ALLOWED_FOR_LEAGUE");
   const existing = await prisma.competition.findUnique({ where: { idempotencyKey } });
   if (existing) {
     // Rules may be edited after creation; replaying the original create command
@@ -182,6 +183,7 @@ export async function updateCompetitionRules(userId: string, competitionId: stri
     if (!competition) throw new MatchServiceError("COMPETITION_NOT_FOUND");
     if (competition.createdByClubId !== club.id) throw new MatchServiceError("ONLY_CREATOR_CAN_START");
     if (competition.status !== "REGISTRATION") throw new MatchServiceError("COMPETITION_RULES_LOCKED");
+    if (competition.format !== "CUP" && rules.penaltiesOnDraw) throw new MatchServiceError("PENALTIES_NOT_ALLOWED_FOR_LEAGUE");
     await tx.competition.update({ where: { id: competitionId }, data: { rules } });
     return { competitionId, rules };
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
