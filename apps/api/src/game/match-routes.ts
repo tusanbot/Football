@@ -62,7 +62,7 @@ export function registerMatchRoutes(app: FastifyInstance) {
         tempo: z.enum(["SLOW", "NORMAL", "FAST"]),
         passingStyle: z.enum(["SHORT", "MIXED", "DIRECT"]),
       }).strict(),
-    }).strict().safeParse(request.body);
+    }).strict().refine((value) => value.format === "CUP" || value.cupLegs === 1, { message: "INVALID_CUP_LEGS" }).safeParse(request.body);
     if (!body.success) return reply.code(400).send({ error: "INVALID_FALLBACK_PLAN" });
     try { return await saveMatchFallbackPlan(user.id, body.data.plan, body.data.expectedVersion); }
     catch (error) { return sendMatchError(reply, error); }
@@ -142,10 +142,10 @@ export function registerMatchRoutes(app: FastifyInstance) {
     if (!user) return reply.code(401).send({ error: "UNAUTHENTICATED" });
     const body = z.object({
       name: z.string().trim().min(3).max(40), maxTeams: z.number().int().min(4).max(10),
-      format: z.enum(["LEAGUE", "CUP"]).default("LEAGUE"), rules: competitionRulesSchema.optional(), idempotencyKey: keySchema,
+      format: z.enum(["LEAGUE", "CUP"]).default("LEAGUE"), cupLegs: z.number().int().min(1).max(2).default(1), rules: competitionRulesSchema.optional(), idempotencyKey: keySchema,
     }).safeParse(request.body);
     if (!body.success) return reply.code(400).send({ error: "INVALID_COMPETITION" });
-    try { return await createLeague(user.id, body.data.name, body.data.maxTeams, body.data.idempotencyKey, body.data.format, body.data.rules); }
+    try { return await createLeague(user.id, body.data.name, body.data.maxTeams, body.data.idempotencyKey, body.data.format, body.data.rules, body.data.cupLegs); }
     catch (error) { return sendMatchError(reply, error); }
   });
   app.put("/v1/competitions/:id/rules", async (request, reply) => {
