@@ -39,6 +39,8 @@ export function buildApp() {
   });
 
   app.addHook("onSend", async (_request, reply, payload) => {
+    reply.header("cache-control", "no-store");
+    reply.header("pragma", "no-cache");
     reply.header("x-content-type-options", "nosniff");
     reply.header("x-frame-options", "DENY");
     reply.header("referrer-policy", "no-referrer");
