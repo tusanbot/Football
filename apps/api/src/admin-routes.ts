@@ -2,6 +2,7 @@ import type {FastifyInstance,FastifyReply,FastifyRequest} from "fastify";
 import {z} from "zod";
 import {prisma} from "./db.js";
 import {requireTelegramUser} from "./auth/require-telegram-user.js";
+import {consumeAllianceActionRateLimit} from "./groups/alliance-rate-limit.js";
 type AdminPermission="read"|"players"|"clubs"|"matches"|"competitions"|"economy"|"groups"|"moderation"|"gifts";
 const ROLE_PERMISSIONS:Record<string,AdminPermission[]>={superadmin:["read","players","clubs","matches","competitions","economy","groups","moderation","gifts"],football:["read","players","clubs","matches","competitions"],economy:["read","economy","gifts"],moderator:["read","groups","moderation"]};
 async function adminRoleFor(telegramId:string){const superAdmins=(process.env.GAME_ADMIN_TELEGRAM_IDS??"").split(",").map(x=>x.trim()).filter(Boolean);if(superAdmins.includes(telegramId))return "superadmin";const assigned=await prisma.adminRoleAssignment.findUnique({where:{telegramId},select:{role:true,active:true}});if(assigned)return assigned.active&&Object.prototype.hasOwnProperty.call(ROLE_PERMISSIONS,assigned.role)?assigned.role:null;try{const map=JSON.parse(process.env.GAME_ADMIN_ROLE_MAP??"{}") as Record<string,string>;const role=map[telegramId];return role&&Object.prototype.hasOwnProperty.call(ROLE_PERMISSIONS,role)?role:null;}catch{return null;}}
