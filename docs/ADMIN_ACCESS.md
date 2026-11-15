@@ -39,3 +39,7 @@ All admin commands run in private chat and use the same server-side permission c
 ## Central settings and finance
 
 Settings are persisted as JSON values in `GameSetting`, are editable only by super-admins, and retain the updating administrator and timestamp. The finance summary aggregates wallet ledger entries, club finance entries, and group-point ledger activity over a selectable period. Game-engine consumers still need to read each setting key before a saved value can change runtime behavior; do not assume an unconsumed key alters game rules.
+
+## Production startup checks
+
+The API process validates required environment variables before listening. Set `DATABASE_URL` (PostgreSQL), `TELEGRAM_BOT_TOKEN`, a random `BOT_API_SECRET` of at least 32 characters, and exact comma-separated `CORS_ORIGIN` values (HTTPS only in production). The Bot process requires `FOOTBALL_API_URL`, the same `BOT_API_SECRET`, and in production an HTTPS `TELEGRAM_WEB_APP_URL`. The API exposes `/health` for liveness and `/ready` for readiness; readiness checks required configuration and a live database connection. Never expose `BOT_API_SECRET` or `TELEGRAM_BOT_TOKEN` to browser code.

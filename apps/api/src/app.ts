@@ -39,6 +39,23 @@ export function buildApp() {
     credentials: true,
   });
 
+  app.get("/ready", async (_request, reply) => {
+    const missing = [
+      ...(!process.env.DATABASE_URL ? ["DATABASE_URL"] : []),
+      ...(!process.env.TELEGRAM_BOT_TOKEN ? ["TELEGRAM_BOT_TOKEN"] : []),
+      ...(!process.env.BOT_API_SECRET || process.env.BOT_API_SECRET.length < 32 ? ["BOT_API_SECRET"] : []),
+      ...(!process.env.CORS_ORIGIN?.split(",").some((origin) => origin.trim()) ? ["CORS_ORIGIN"] : []),
+    ];
+    if (missing.length) return reply.code(503).send({ status: "not_ready", missing });
+    try {
+      await prisma.$queryRaw`SELECT 1`;
+      return { status: "ready", service: "football-empire-api" };
+    } catch (error) {
+      request.log.error({ error }, "Readiness database check failed");
+      return reply.code(503).send({ status: "not_ready", missing: ["DATABASE_CONNECTION"] });
+    }
+  });
+
   app.get("/health", async (_request, reply) =>
     reply.code(200).send(
       healthResponse.parse({
