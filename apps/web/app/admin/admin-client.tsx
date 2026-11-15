@@ -10,7 +10,6 @@ const sectionGroups=[
  {key:"economy",title:"اقتصاد",items:[["items","آیتم‌ها"],["gift-codes","کدهای هدیه"],["wallet-ledger","گردش کیف پول"],["group-ledger","گردش امتیاز گروه"],["finance-summary","گزارش مالی"]]},
  {key:"system",title:"مدیریت و امنیت",items:[["users","کاربران"],["roles","نقش مدیران"],["settings","تنظیمات بازی"],["audit","سوابق مدیران"],["broadcast","پیام مدیریتی"]]},
 ];
-const sections=sectionGroups.flatMap(group=>group.items);
 type R=Record<string,any>;
 export default function AdminClient(){const [init,setInit]=useState(""),[sessionToken,setSessionToken]=useState(""),[section,setSection]=useState("players"),[menuGroup,setMenuGroup]=useState("game"),[rows,setRows]=useState<R[]>([]),[counts,setCounts]=useState<R>({}),[q,setQ]=useState(""),[msg,setMsg]=useState(""),[busy,setBusy]=useState(false);
 useEffect(()=>{setInit(window.Telegram?.WebApp?.initData??"");window.Telegram?.WebApp?.ready?.();window.Telegram?.WebApp?.expand?.();},[]);
