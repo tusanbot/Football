@@ -147,7 +147,7 @@ export async function listPyramidLeagues(userId: string) {
 }
 
 export async function getPyramidLeagueDetails(userId: string, leagueId: string) {
-  const club = await ownedClub(userId);
+  await ownedClub(userId);
   const league = await prisma.pyramidLeague.findUnique({
     where: { id: leagueId },
     include: {
