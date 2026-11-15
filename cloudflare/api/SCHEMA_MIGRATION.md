@@ -86,3 +86,12 @@ The Python CI validator executes this exact SQL sequence against SQLite, includi
 Both operations use caller-supplied stable IDs and idempotency keys. Replays are verified against persisted records rather than blindly treated as success. Wallet amounts are decimal strings within signed 64-bit range; unsafe JavaScript Number inputs are rejected.
 
 The Worker still does not expose these repositories through public routes. The current tests validate repository statement composition and input invariants; SQLite end-to-end SQL tests and live D1 contention/load tests remain required before enabling traffic.
+
+
+## Gift-code redemption atomicity
+
+`src/repositories/gift-code-redemption.ts` implements the D1-side gift-code redemption transaction. It keeps Telegram's live actor verification outside the financial batch (the calling API layer must perform that check first), then rechecks the persisted group activation/suspension and membership rows inside the redemption INSERT. The same INSERT also checks code activation/window, global redemption capacity and per-user capacity before reserving a redemption.
+
+The batch then increments the redemption counter, writes CASH/GOLD credit ledger entries and wallet upserts, and, for group-point codes, increments the group balance and writes the `GIFT_CODE` point-ledger row. Every dependent write is gated by SQLite `changes()` and the CHECK-constrained `fe_write_guard`, so a missing/invalid prerequisite or overflow aborts the whole D1 batch. Amounts are read as decimal strings and bound as decimal strings to preserve signed-64-bit precision.
+
+Idempotent replay verifies the requesting user, canonical code, group and persisted reward amounts; reuse of a key for a different redemption is rejected. The repository is not wired to public Worker routes: the Worker remains fail-closed until API route parity, authentication, rate limiting and integration gates are complete. Current repository tests use a fake D1 statement adapter to verify statement composition and replay/input behavior; executing the repository SQL against SQLite and live D1 concurrency/load testing remain outstanding.
