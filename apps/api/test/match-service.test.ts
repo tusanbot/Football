@@ -376,6 +376,11 @@ test("durable match worker advances checkpoints, resumes on two early decisions 
       event.type === "SUBSTITUTION" && event.minute === injuryEvent.minute && event.detail.includes("Forced injury")));
     assert.equal(firstState.substitutions.home.substitutionsUsed, 1);
     assert.equal(firstState.substitutions.home.inPlayWindowsUsed, 1);
+    const listedMatches = await listClubMatches(clubs[0]!.userId);
+    const listedRuntime = listedMatches.matches.find((item) => item.id === created.match.id)?.runtime;
+    assert.equal(listedRuntime?.mySubstitutionsUsed, firstState.substitutions.home.substitutionsUsed);
+    assert.equal(listedRuntime?.lineups?.home.players.length, 11);
+    assert.ok(listedRuntime?.lineups?.home.tactics.mentality);
     assert.ok(firstState.substitutions.home.sentOffIds.includes(redCardEvent.playerId));
     const halfTime = await prisma.matchTacticalCheckpoint.findUniqueOrThrow({
       where: { matchId_checkpointKey: { matchId: created.match.id, checkpointKey: "minute-45" } },
