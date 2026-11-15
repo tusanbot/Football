@@ -11,6 +11,27 @@ const querySchema=z.object({q:z.string().trim().max(100).optional(),season:z.coe
 export function registerAdminRoutes(app:FastifyInstance){
 app.get("/v1/admin/overview",async(req,reply)=>{if(!await authorize(req,reply))return;const [users,clubs,players,groups,challenges,leagues,items,giftCodes,flags,alliances,matches,walletTransactions,groupTransactions]=await Promise.all([prisma.user.count(),prisma.club.count(),prisma.player.count(),prisma.telegramGroup.count(),prisma.groupChallenge.count(),prisma.competition.count(),prisma.groupRewardItem.count(),prisma.giftCode.count(),prisma.allianceSeason.count({where:{reviewStatus:"FLAGGED"}}),prisma.alliance.count(),prisma.footballMatch.count(),prisma.ledgerTransaction.count(),prisma.groupPointLedger.count()]);return{counts:{users,clubs,players,groups,challenges,leagues,items,giftCodes,flags,alliances,matches,walletTransactions,groupTransactions}};});
 app.get("/v1/admin/group-targets",async(req,reply)=>{const actor=await authorize(req,reply);if(!actor)return;if(actor.adminRole!=="superadmin")return reply.code(403).send({error:"SUPERADMIN_REQUIRED"});const groups=await prisma.telegramGroup.findMany({where:{isActive:true,isSuspended:false},select:{telegramId:true,title:true},orderBy:{createdAt:"asc"},take:5000});return{groups};});
+app.post("/v1/admin/group-broadcasts/:id/retry-failed",async(req,reply)=>{
+const actor=await authorize(req,reply,"moderation");if(!actor)return;
+if(actor.adminRole!=="superadmin")return reply.code(403).send({error:"SUPERADMIN_REQUIRED"});
+if(!await consumeAllianceActionRateLimit({telegramUserId:actor.telegramId,telegramGroupId:"global",action:"admin-group-broadcast-retry",limit:10}))return reply.code(429).send({error:"ADMIN_RATE_LIMITED",retryAfterSeconds:60});
+const params=z.object({id:z.string().min(1).max(128)}).safeParse(req.params);
+const body=z.object({idempotencyKey:z.string().min(12).max(128)}).safeParse(req.body);
+if(!params.success||!body.success)return reply.code(400).send({error:"INVALID_BROADCAST_RETRY"});
+try{
+const result=await prisma.$transaction(async tx=>{
+const updated=await tx.adminGroupBroadcastDelivery.updateMany({where:{broadcastId:params.data.id,deliveredAt:null,deliveryAttempts:{gte:8}},data:{deliveryAttempts:0,availableAt:new Date(),deliveryClaimToken:null,deliveryLockedUntil:null,deliveryLastError:null}});
+if(!updated.count)throw new Error("NO_FAILED_DELIVERIES");
+await tx.adminAuditLog.create({data:{actorTelegramId:actor.telegramId,action:"retry-group-broadcast",targetType:"group-broadcast",targetId:params.data.id,idempotencyKey:"admin-group-broadcast-retry:"+body.data.idempotencyKey,metadata:{retried:updated.count}}});
+return{retried:updated.count};
+});
+return result;
+}catch(error){
+if(error instanceof Error&&error.message==="NO_FAILED_DELIVERIES")return reply.code(409).send({error:error.message});
+if(typeof error==="object"&&error!==null&&"code"in error&&error.code==="P2002")return reply.code(409).send({error:"DUPLICATE_OR_IDEMPOTENCY_CONFLICT"});
+throw error;
+}
+});
 app.get("/v1/admin/group-broadcasts",async(req,reply)=>{
 const actor=await authorize(req,reply,"moderation");if(!actor)return;
 if(actor.adminRole!=="superadmin")return reply.code(403).send({error:"SUPERADMIN_REQUIRED"});
