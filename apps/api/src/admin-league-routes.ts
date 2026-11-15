@@ -254,7 +254,7 @@ export function registerAdminLeagueRoutes(app: FastifyInstance) {
     const parsed = z.object({
       action: z.enum(["league-status", "withdraw-application", "extend-promotion-deadline", "update-award"]),
       targetId: z.string().min(1).max(128),
-      status: z.enum(["ACTIVE", "CANCELLED"]).optional(),
+      status: z.literal("CANCELLED").optional(),
       hours: z.number().int().min(1).max(72).optional(),
       awardName: z.string().trim().min(2).max(80).optional(),
       awardType: z.string().trim().min(2).max(40).optional(),
@@ -271,7 +271,6 @@ export function registerAdminLeagueRoutes(app: FastifyInstance) {
           if (!input.status) throw new Error("STATUS_REQUIRED");
           const league = await tx.pyramidLeague.findUnique({ where: { id: input.targetId }, include: { competition: { include: { _count: { select: { entries: true } } } } } });
           if (!league) throw new Error("TARGET_NOT_FOUND");
-          if (input.status === "ACTIVE" && league.competition._count.entries !== 8) throw new Error("LEAGUE_MUST_HAVE_EIGHT_TEAMS");
           if (league.competition.status === "COMPLETED") throw new Error("COMPLETED_LEAGUE_LOCKED");
           await tx.competition.update({ where: { id: league.competitionId }, data: { status: input.status } });
           targetType = "pyramid-league";
