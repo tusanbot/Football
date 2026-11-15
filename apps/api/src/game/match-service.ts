@@ -665,7 +665,9 @@ export async function simulateScheduledMatch(userId: string, matchId: string, no
       for (const event of result.events.filter((item) => item.type === "YELLOW_CARD")) {
         yellowCounts.set(event.playerId, (yellowCounts.get(event.playerId) ?? 0) + 1);
       }
+      const yellowSuspendedClubIds = new Set<string>();
       for (const [playerId, currentCount] of yellowCounts) {
+        if (sentOffPlayerIds.includes(playerId)) continue;
         const previousCount = await tx.matchEvent.count({
           where: { playerId, type: "YELLOW_CARD", matchId: { not: match.id }, match: { competitionId: match.competitionId } },
         });
@@ -675,7 +677,12 @@ export async function simulateScheduledMatch(userId: string, matchId: string, no
             where: { id: playerId, status: "ACTIVE" },
             data: { suspensionMatchesRemaining: { increment: matchRules.yellowCardSuspensionMatches } },
           });
+          const card = result.events.find((event) => event.type === "YELLOW_CARD" && event.playerId === playerId);
+          if (card) yellowSuspendedClubIds.add(card.teamId);
         }
+      }
+      for (const clubId of yellowSuspendedClubIds) {
+        lineupChangedClubIds.add(clubId);
       }
     }
     const lineupChangedClubIds = new Set([
