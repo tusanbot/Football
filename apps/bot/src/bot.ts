@@ -1,6 +1,6 @@
 import "dotenv/config";
 import { randomUUID } from "node:crypto";
-import { Bot, Keyboard } from "grammy";
+import { Bot, InlineKeyboard, Keyboard } from "grammy";
 import {
   GROUP_REPLY_DELETE_DELAY_MS,
   isPersistentGroupReply,
@@ -686,13 +686,109 @@ bot.command("friendly", async (ctx) => {
 bot.command("matches", async (ctx) => {
   if (!ctx.from || ctx.chat.type !== "private") return;
   try {
-    const result = await api<{ matches: Array<{ id: string; type: string; status: string; scheduledAt: string; homeClub: { name: string }; awayClub: { name: string }; homeScore: number | null; awayScore: number | null; homePenalties: number | null; awayPenalties: number | null; attendance: number; events: Array<{ minute: number; type: string; playerName: string; relatedPlayerName: string | null }> }> }>("/v1/matches", ctx.from.id);
+    const result = await api<{ matches: Array<{
+      id: string; type: string; status: string; scheduledAt: string;
+      homeClub: { id: string; name: string }; awayClub: { id: string; name: string };
+      homeScore: number | null; awayScore: number | null; homePenalties: number | null; awayPenalties: number | null;
+      runtime: { status: string; currentMinute: number; nextActionAt: string | null } | null;
+      checkpoints: Array<{ checkpointKey: string; minute: number; status: string; decisionDeadlineAt: string; homeDecisionSubmitted: boolean; awayDecisionSubmitted: boolean }>;
+      events: Array<{ minute: number; type: string; playerName: string; relatedPlayerName: string | null }>;
+    }> } >("/v1/matches", ctx.from.id);
+    const keyboard = new InlineKeyboard();
+    let hasActions = false;
     const lines = result.matches.map((match) => {
       const goals = match.events.filter((event) => event.type === "GOAL").map((event) => String(event.minute) + "′ " + event.playerName + (event.relatedPlayerName ? " (assist: " + event.relatedPlayerName + ")" : ""));
-      return `• ${match.homeClub.name} ${match.homeScore ?? "–"} : ${match.awayScore ?? "–"} ${match.awayClub.name}${match.homePenalties !== null ? " (pens " + match.homePenalties + "–" + match.awayPenalties + ")" : ""}\n  ${match.type} · ${match.status} · ${new Date(match.scheduledAt).toLocaleString("en-US")}\n  ${goals.join(" · ")}\n  ID: ${match.id}`;
+      const open = match.checkpoints.find((checkpoint) => checkpoint.status === "OPEN");
+      if (open) {
+        hasActions = true;
+        keyboard.text("دفاعی · " + open.minute, "mc:" + match.id + ":" + open.checkpointKey + ":DEFENSIVE")
+          .text("متعادل", "mc:" + match.id + ":" + open.checkpointKey + ":BALANCED")
+          .text("هجومی", "mc:" + match.id + ":" + open.checkpointKey + ":ATTACKING").row();
+      }
+      return "• " + match.homeClub.name + " " + (match.homeScore ?? "–") + " : " + (match.awayScore ?? "–") + " " + match.awayClub.name
+        + (match.homePenalties !== null ? " (pens " + match.homePenalties + "–" + match.awayPenalties + ")" : "")
+        + "\n  " + match.type + " · " + (match.runtime ? "دقیقه " + match.runtime.currentMinute + " · " + match.runtime.status : match.status)
+        + " · " + new Date(match.scheduledAt).toLocaleString("fa-IR")
+        + (open ? "\n  تصمیم تاکتیکی تا " + new Date(open.decisionDeadlineAt).toLocaleTimeString("fa-IR") + " · " + open.checkpointKey : "")
+        + "\n  " + goals.join(" · ") + "\n  ID: " + match.id;
     });
-    await ctx.reply("Your matches:\n" + (lines.join("\n\n") || "No matches scheduled yet."));
-  } catch (error) { await ctx.reply(`Could not load matches: ${error instanceof Error ? error.message : "unknown error"}`); }
+    await ctx.reply("مسابقات شما:\n" + (lines.join("\n\n") || "هنوز مسابقه‌ای ندارید.")
+      + (hasActions ? "\n\nبرای انتخاب سریع ذهنیت، از دکمه‌های زیر استفاده کنید. برای تنظیم کامل تاکتیک از /tactic و برای تعویض از /sub استفاده کنید." : ""),
+      hasActions ? { reply_markup: keyboard } : {});
+  } catch (error) { await ctx.reply("Could not load matches: " + (error instanceof Error ? error.message : "unknown error")); }
+});
+
+bot.callbackQuery(/^mc:/, async (ctx) => {
+  if (!ctx.from || ctx.chat?.type !== "private") return ctx.answerCallbackQuery({ text: "این عملیات فقط در گفت‌وگوی خصوصی در دسترس است." });
+  const parts = ctx.callbackQuery.data.split(":");
+  const matchId = parts[1] ?? "";
+  const checkpointKey = parts[2] ?? "";
+  const mentality = parts[3] ?? "";
+  if (!matchId || !/^minute-(45|60|75)$/.test(checkpointKey) || !["DEFENSIVE", "BALANCED", "ATTACKING"].includes(mentality)) {
+    return ctx.answerCallbackQuery({ text: "داده دکمه معتبر نیست." });
+  }
+  try {
+    await api("/v1/matches/" + encodeURIComponent(matchId) + "/checkpoints/" + encodeURIComponent(checkpointKey) + "/decisions",
+      ctx.from.id, "POST", {
+        idempotencyKey: "bot-match-" + ctx.from.id + "-" + ctx.update.update_id,
+        instruction: { mentality },
+      });
+    await ctx.answerCallbackQuery({ text: "تصمیم تاکتیکی ثبت شد." });
+    await ctx.reply("ذهنیت " + ({ DEFENSIVE: "دفاعی", BALANCED: "متعادل", ATTACKING: "هجومی" } as Record<string,string>)[mentality]
+      + " برای مسابقه در دقیقه " + checkpointKey.replace("minute-", "") + " ثبت شد.");
+  } catch (error) {
+    await ctx.answerCallbackQuery({ text: "ثبت تصمیم ناموفق بود." });
+    await ctx.reply("ثبت تصمیم ناموفق بود: " + (error instanceof Error ? error.message : "خطای نامشخص"));
+  }
+});
+
+bot.command("tactic", async (ctx) => {
+  if (!ctx.from || ctx.chat.type !== "private") return;
+  const parts = String(ctx.match ?? "").trim().split(/\\s+/).filter(Boolean);
+  const matchId = parts.shift() ?? "";
+  const checkpointKey = parts.shift() ?? "";
+  if (!matchId || !/^minute-(45|60|75)$/.test(checkpointKey)) {
+    return ctx.reply("استفاده: /tactic MATCH_ID minute-45 mentality=ATTACKING pressing=HIGH_PRESS tempo=FAST passingStyle=DIRECT formation=4-3-3");
+  }
+  const allowed: Record<string,string[]> = {
+    formation: ["4-3-3","4-4-2","3-5-2","4-2-3-1"],
+    mentality: ["DEFENSIVE","BALANCED","ATTACKING"],
+    pressing: ["LOW_BLOCK","MID_BLOCK","HIGH_PRESS"],
+    tempo: ["SLOW","NORMAL","FAST"],
+    passingStyle: ["SHORT","MIXED","DIRECT"],
+  };
+  const instruction: Record<string,string> = {};
+  for (const part of parts) {
+    const separator = part.indexOf("=");
+    if (separator < 1) return ctx.reply("هر تنظیم باید به شکل key=value باشد.");
+    const key = part.slice(0, separator);
+    const value = part.slice(separator + 1).toUpperCase();
+    if (!allowed[key]?.includes(value)) return ctx.reply("تنظیم نامعتبر: " + part);
+    instruction[key] = value;
+  }
+  if (!Object.keys(instruction).length) return ctx.reply("حداقل یک تنظیم تاکتیکی وارد کنید.");
+  try {
+    await api("/v1/matches/" + encodeURIComponent(matchId) + "/checkpoints/" + encodeURIComponent(checkpointKey) + "/decisions",
+      ctx.from.id, "POST", { idempotencyKey: "bot-tactic-" + ctx.from.id + "-" + ctx.update.update_id, instruction });
+    await ctx.reply("تنظیمات تاکتیکی ثبت شد.");
+  } catch (error) { await ctx.reply("ثبت تاکتیک ناموفق بود: " + (error instanceof Error ? error.message : "unknown error")); }
+});
+
+bot.command("sub", async (ctx) => {
+  if (!ctx.from || ctx.chat.type !== "private") return;
+  const parts = String(ctx.match ?? "").trim().split(/\\s+/).filter(Boolean);
+  const matchId = parts.shift() ?? "";
+  const checkpointKey = parts.shift() ?? "";
+  if (!matchId || !/^minute-(45|60|75)$/.test(checkpointKey) || parts.length < 2 || parts.length > 10 || parts.length % 2 !== 0) {
+    return ctx.reply("استفاده: /sub MATCH_ID minute-45 OUTGOING_PLAYER_ID INCOMING_PLAYER_ID [OUT_ID IN_ID ...] (حداکثر ۵ تعویض)");
+  }
+  const substitutions = [];
+  for (let i = 0; i < parts.length; i += 2) substitutions.push({ outgoingPlayerId: parts[i], incomingPlayerId: parts[i + 1] });
+  try {
+    await api("/v1/matches/" + encodeURIComponent(matchId) + "/checkpoints/" + encodeURIComponent(checkpointKey) + "/decisions",
+      ctx.from.id, "POST", { idempotencyKey: "bot-sub-" + ctx.from.id + "-" + ctx.update.update_id, instruction: { substitutions } });
+    await ctx.reply(substitutions.length + " تعویض برای این وقفه ثبت شد؛ اعتبار بازیکنان و سقف‌های مسابقه در سرور بررسی می‌شوند.");
+  } catch (error) { await ctx.reply("ثبت تعویض ناموفق بود: " + (error instanceof Error ? error.message : "unknown error")); }
 });
 
 bot.command("play", async (ctx) => {
