@@ -80,9 +80,12 @@ export async function awardDailyGroupActivity(input: { telegramUserId: string; t
     const earned = await earnedGroupPointsToday(tx, group.id, user.id);
     if (earned >= BigInt(dailyCap)) return { awarded: false, replayed: false, capped: true, points: group.points.toString(), award: "0" };
     if (reward === 0n) return { awarded: false, replayed: false, disabled: true, points: group.points.toString(), award: "0" };
-    await tx.groupPointLedger.create({ data: { idempotencyKey, groupId: group.id, userId: user.id, amount: reward, source: "DAILY_ACTIVITY", description: "Daily member activity" } });
-    const updated = await tx.telegramGroup.update({ where: { id: group.id }, data: { points: { increment: reward } }, select: { points: true } });
-    return { awarded: true, replayed: false, points: updated.points.toString(), award: reward.toString(), dailyCap };
+    const remaining = BigInt(dailyCap) - earned;
+    const award = reward < remaining ? reward : remaining;
+    if (award <= 0n) return { awarded: false, replayed: false, capped: true, points: group.points.toString(), award: "0" };
+    await tx.groupPointLedger.create({ data: { idempotencyKey, groupId: group.id, userId: user.id, amount: award, source: "DAILY_ACTIVITY", description: "Daily member activity" } });
+    const updated = await tx.telegramGroup.update({ where: { id: group.id }, data: { points: { increment: award } }, select: { points: true } });
+    return { awarded: true, replayed: false, points: updated.points.toString(), award: award.toString(), dailyCap };
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 }
 
