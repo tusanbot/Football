@@ -64,7 +64,7 @@ export function registerGameRoutes(app: FastifyInstance) {
         players: {
           where: { lineupSlot: { not: null }, status: "ACTIVE" },
           orderBy: { lineupSlot: "asc" },
-          select: { id: true, firstName: true, lastName: true, position: true, overall: true, morale: true, fitness: true, lineupSlot: true },
+          select: { id: true, firstName: true, lastName: true, position: true, overall: true, morale: true, fitness: true, lineupSlot: true, suspensionMatchesRemaining: true },
         },
       },
     });
@@ -92,7 +92,7 @@ export function registerGameRoutes(app: FastifyInstance) {
     }
 
     const players = await prisma.player.findMany({
-      where: { id: { in: parsed.data.playerIds }, clubId: club.id, status: "ACTIVE" },
+      where: { id: { in: parsed.data.playerIds }, clubId: club.id, status: "ACTIVE", suspensionMatchesRemaining: 0 },
       select: { id: true, position: true, overall: true },
     });
     if (players.length !== 11) return reply.code(400).send({ error: "LINEUP_PLAYERS_INVALID" });
@@ -167,7 +167,7 @@ export function registerGameRoutes(app: FastifyInstance) {
     const players = await prisma.player.findMany({
       where: { clubId: club.id, status: { in: ["ACTIVE", "INJURED", "CONTRACT_EXPIRED"] } },
       orderBy: [{ status: "asc" }, { position: "asc" }, { overall: "desc" }],
-      select: { id: true, firstName: true, lastName: true, nationality: true, age: true, position: true, overall: true, potential: true, attributes: true, wage: true, contractDays: true, morale: true, fitness: true, origin: true, status: true, lineupSlot: true },
+      select: { id: true, firstName: true, lastName: true, nationality: true, age: true, position: true, overall: true, potential: true, attributes: true, wage: true, contractDays: true, morale: true, fitness: true, origin: true, status: true, lineupSlot: true, suspensionMatchesRemaining: true },
     });
     return { players: players.map((player) => ({ ...player, wage: player.wage.toString() })), count: players.length };
   });
