@@ -505,6 +505,7 @@ model FootballMatch {
   @@index([homeClubId, scheduledAt, status])
   @@index([awayClubId, scheduledAt, status])
   @@index([competitionId, round])
+  @@index([competitionId, round, tieId])
   @@index([status, scheduledAt])
 }
 
