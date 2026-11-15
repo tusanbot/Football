@@ -155,10 +155,11 @@ test("competition rule validation rejects impossible limits and accepts customiz
   };
   assert.deepEqual(validateMatchRules(custom), custom);
   assert.throws(() => validateMatchRules({ ...custom, maxInPlayWindows: 5 }), /INVALID_MATCH_RULES/);
+  assert.throws(() => validateMatchRules({ ...custom, maxSubstitutions: 6 }), /INVALID_MATCH_RULES/);
   assert.throws(() => validateMatchRules({ ...custom, yellowCardsToSuspend: 0 }), /INVALID_YELLOW_CARD_SUSPENSION_RULES/);
   assert.throws(() => applyMatchSubstitutions({
     state: state(), changes: [{ outgoingPlayerId: "p1", incomingPlayerId: "b1" }],
     checkpoint: "HALF_TIME", checkpointId: "invalid-rule-cap", source: "MANAGER",
-    rules: { maxSubstitutions: 8, maxInPlayWindows: 3 },
+    rules: { maxSubstitutions: 6, maxInPlayWindows: 3 },
   }), /INVALID_MATCH_SUBSTITUTION_RULES/);
 });
