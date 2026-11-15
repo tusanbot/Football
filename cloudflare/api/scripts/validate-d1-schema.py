@@ -42,6 +42,7 @@ connection.execute(
     'INSERT INTO "Wallet" ("id", "userId", "asset", "balance", "version", "createdAt", "updatedAt") VALUES (?, ?, ?, ?, ?, ?, ?)',
     ("wallet-test-id", "wallet-test-user", "CASH", 100, 0, "2026-11-15T00:00:00.000Z", "2026-11-15T00:00:00.000Z"),
 )
+connection.commit()
 
 def atomic_wallet_delta(ledger_id, key, direction, amount):
     connection.execute("BEGIN")
