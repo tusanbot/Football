@@ -39,7 +39,7 @@ export function buildApp() {
     credentials: true,
   });
 
-  app.get("/ready", async (_request, reply) => {
+  app.get("/ready", async (request, reply) => {
     const missing = [
       ...(!process.env.DATABASE_URL ? ["DATABASE_URL"] : []),
       ...(!process.env.TELEGRAM_BOT_TOKEN ? ["TELEGRAM_BOT_TOKEN"] : []),

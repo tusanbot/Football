@@ -6,7 +6,7 @@ const required = ["DATABASE_URL", "TELEGRAM_BOT_TOKEN", "BOT_API_SECRET", "CORS_
 const missing = required.filter((key) => !process.env[key]?.trim());
 if (missing.length) throw new Error("Missing required runtime configuration: " + missing.join(", "));
 if ((process.env.BOT_API_SECRET ?? "").length < 32) throw new Error("BOT_API_SECRET must contain at least 32 characters.");
-if (!/^postgres(?:ql)?:\\/\\//.test(process.env.DATABASE_URL ?? "")) throw new Error("DATABASE_URL must use PostgreSQL.");
+if (!(process.env.DATABASE_URL?.startsWith("postgres://") || process.env.DATABASE_URL?.startsWith("postgresql://"))) throw new Error("DATABASE_URL must use PostgreSQL.");
 const corsOrigins = (process.env.CORS_ORIGIN ?? "").split(",").map((origin) => origin.trim()).filter(Boolean);
 for (const origin of corsOrigins) {
   let parsed: URL;
