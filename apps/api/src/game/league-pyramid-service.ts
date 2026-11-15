@@ -122,6 +122,7 @@ export async function listPyramidLeagues(userId: string) {
       where: { clubId: club.id, season }, orderBy: { appliedAt: "desc" }, take: 20,
     }),
     prisma.pyramidLeagueEntry.findFirst({ where: { clubId: club.id, league: { season } }, include: { league: true } }),
+    prisma.leaguePromotionOffer.findMany({ where: { clubId: club.id, status: "PENDING" }, include: { league: { select: { tier: true, season: true } } }, orderBy: { offeredAt: "desc" } }),
   ]);
   const queueCounts = await prisma.pyramidLeagueApplication.groupBy({
     by: ["tier"], where: { season, status: "QUEUED" }, _count: { _all: true },
