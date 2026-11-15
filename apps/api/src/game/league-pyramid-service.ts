@@ -397,6 +397,19 @@ export async function markLeagueNoticesRead(userId: string) {
 
 
 export async function processDuePromotionOffers(now = new Date(), limit = 50) {
+  const pendingLeagues = await prisma.pyramidLeague.findMany({
+    where: { promotionProcessedAt: null, competition: { status: "COMPLETED" } },
+    orderBy: { createdAt: "asc" }, take: limit, select: { competitionId: true },
+  });
+  let completedLeagues = 0;
+  for (const pending of pendingLeagues) {
+    try {
+      const result = await processPyramidLeagueCompletion(pending.competitionId, now);
+      if (result.processed) completedLeagues += 1;
+    } catch (error) {
+      console.warn("Could not finalize pyramid league:", pending.competitionId, error);
+    }
+  }
   const due = await prisma.leaguePromotionOffer.findMany({
     where: { status: "PENDING", expiresAt: { lte: now } },
     orderBy: { expiresAt: "asc" }, take: limit,
