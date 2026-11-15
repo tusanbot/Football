@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { prisma } from "../src/db.js";
-import { applyForPyramidLeague, createFriendlyChallenge, getPyramidLeagueDetails } from "../src/game/league-pyramid-service.js";
+import { applyForPyramidLeague, createFriendlyChallenge, getPyramidLeagueDetails, processDuePromotionOffers, processPyramidLeagueCompletion, respondToPromotion } from "../src/game/league-pyramid-service.js";
 
 const positions = ["GK", "RB", "CB", "CB", "LB", "CDM", "CM", "CAM", "RW", "ST", "LW"] as const;
 
@@ -163,3 +163,75 @@ test("group friendly challenges can only be accepted by another member of that T
   }
 });
 
+
+
+test("league completion awards the top three, relegates two and replaces declined promotion", async (t) => {
+  if (!process.env.DATABASE_URL) {
+    t.skip("DATABASE_URL is only configured in the ephemeral PostgreSQL CI job.");
+    return;
+  }
+  const suffix = randomUUID().replaceAll("-", "");
+  const clubs: Array<{ userId: string; clubId: string }> = [];
+  let competitionId: string | undefined;
+  try {
+    for (let index = 0; index < 8; index++) clubs.push(await makePyramidClub(suffix, index));
+    const now = new Date("2027-11-15T12:00:00.000Z");
+    const competition = await prisma.competition.create({
+      data: {
+        idempotencyKey: "pyramid-finish-" + suffix,
+        name: "Test Regional League",
+        season: 2027,
+        format: "LEAGUE",
+        status: "COMPLETED",
+        maxTeams: 8,
+        createdByClubId: clubs[0]!.clubId,
+        completedAt: now,
+        entries: {
+          create: clubs.map((club, index) => ({
+            clubId: club.clubId, played: 7, won: 7 - index, drawn: 0, lost: index,
+            goalsFor: 21 - index * 2, goalsAgainst: index, points: (7 - index) * 3,
+          })),
+        },
+      },
+    });
+    competitionId = competition.id;
+    const league = await prisma.pyramidLeague.create({
+      data: {
+        competitionId: competition.id, tier: 3, season: 2027, groupNumber: 1,
+        entries: { create: clubs.map((club) => ({ clubId: club.clubId })) },
+      },
+    });
+    const completion = await processPyramidLeagueCompletion(competition.id, now);
+    assert.equal(completion.processed, true);
+    assert.equal(await prisma.leagueAward.count({ where: { leagueId: league.id } }), 3);
+    assert.equal(await prisma.leaguePromotionOffer.count({ where: { leagueId: league.id, status: "PENDING" } }), 2);
+    assert.equal(await prisma.pyramidLeagueEntry.count({ where: { leagueId: league.id, finalPosition: { in: [7, 8] } } }), 2);
+    const relegatedValue = await prisma.player.findFirstOrThrow({ where: { clubId: clubs[7]!.clubId }, select: { marketValue: true } });
+    assert.ok(relegatedValue.marketValue < 1000n);
+    const offers = await prisma.leaguePromotionOffer.findMany({ where: { leagueId: league.id }, orderBy: { finalPosition: "asc" } });
+    const declined = offers.find((offer) => offer.finalPosition === 1)!;
+    await respondToPromotion(clubs[0]!.userId, declined.id, false, new Date(now.getTime() + 60 * 60_000));
+    const replacement = await prisma.leaguePromotionOffer.findFirstOrThrow({ where: { leagueId: league.id, clubId: clubs[2]!.clubId } });
+    assert.equal(replacement.finalPosition, 3);
+    assert.equal(await prisma.leagueNotice.count({ where: { userId: { in: [clubs[0]!.userId, clubs[2]!.userId] }, kind: { in: ["PROMOTION_DECLINED", "PROMOTION_REPLACEMENT"] } } }), 2);
+    const auto = await processDuePromotionOffers(new Date(now.getTime() + 27 * 60 * 60_000));
+    assert.equal(auto.accepted, 2);
+    assert.equal(await prisma.pyramidLeagueApplication.count({ where: { tier: 4, season: 2028, status: "QUEUED", clubId: { in: [clubs[1]!.clubId, clubs[2]!.clubId] } } }), 2);
+    const promotedValue = await prisma.player.findFirstOrThrow({ where: { clubId: clubs[1]!.clubId }, select: { marketValue: true } });
+    assert.ok(promotedValue.marketValue > 1000n);
+  } finally {
+    const clubIds = clubs.map((club) => club.clubId);
+    const userIds = clubs.map((club) => club.userId);
+    if (competitionId) await prisma.competition.deleteMany({ where: { id: competitionId } });
+    if (clubIds.length) {
+      await prisma.pyramidLeagueApplication.deleteMany({ where: { clubId: { in: clubIds } } });
+      await prisma.player.deleteMany({ where: { clubId: { in: clubIds } } });
+      await prisma.club.deleteMany({ where: { id: { in: clubIds } } });
+    }
+    if (userIds.length) {
+      await prisma.ledgerTransaction.deleteMany({ where: { userId: { in: userIds } } });
+      await prisma.wallet.deleteMany({ where: { userId: { in: userIds } } });
+      await prisma.user.deleteMany({ where: { id: { in: userIds } } });
+    }
+  }
+});
