@@ -5,7 +5,7 @@ import worker, { MatchCoordinator } from "../src/index.js";
 const pending: Promise<unknown>[] = [];
 const context = { waitUntil(promise: Promise<unknown>) { pending.push(promise); } };
 const configuredEnv = {
-  DATABASE_URL: "postgresql://test:test@127.0.0.1:5432/football_empire",
+  DATABASE_URL: "postgresql://postgres:postgres@127.0.0.1:5432/football_empire",
   TELEGRAM_BOT_TOKEN: "123456:abcdefghijklmnopqrstuvwxyz0123456789",
   BOT_API_SECRET: "test-secret-".padEnd(40, "x"),
   CORS_ORIGIN: "https://web.example.test",
