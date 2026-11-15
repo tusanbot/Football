@@ -302,7 +302,7 @@ export async function processPyramidLeagueCompletion(competitionId: string, now 
 }
 
 export async function listLeagueNotices(userId: string) {
-  const notices = await prisma.leagueNotice.findMany({ where: { userId, readAt: null }, orderBy: { createdAt: "desc" }, take: 20 });
+  const notices = await prisma.leagueNotice.findMany({ where: { userId, readAt: null }, select: { id: true, kind: true, title: true, body: true, referenceId: true, createdAt: true }, orderBy: { createdAt: "desc" }, take: 20 });
   return { notices };
 }
 
