@@ -167,8 +167,8 @@ export function registerGameRoutes(app: FastifyInstance) {
     const players = await prisma.player.findMany({
       where: { clubId: club.id, status: { in: ["ACTIVE", "INJURED", "CONTRACT_EXPIRED"] } },
       orderBy: [{ status: "asc" }, { position: "asc" }, { overall: "desc" }],
-      select: { id: true, firstName: true, lastName: true, nationality: true, age: true, position: true, overall: true, potential: true, attributes: true, wage: true, contractDays: true, morale: true, fitness: true, origin: true, status: true, lineupSlot: true, suspensionMatchesRemaining: true },
+      select: { id: true, firstName: true, lastName: true, nationality: true, age: true, position: true, overall: true, potential: true, marketValue: true, attributes: true, wage: true, contractDays: true, morale: true, fitness: true, origin: true, status: true, lineupSlot: true, suspensionMatchesRemaining: true },
     });
-    return { players: players.map((player) => ({ ...player, wage: player.wage.toString() })), count: players.length };
+    return { players: players.map((player) => ({ ...player, marketValue: player.marketValue.toString(), wage: player.wage.toString() })), count: players.length };
   });
 }
