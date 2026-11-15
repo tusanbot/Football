@@ -142,11 +142,11 @@ export async function getOpenMarketListings() {
     take: 50,
     select: {
       id: true, askingPrice: true, expiresAt: true, createdAt: true,
-      player: { select: { id: true, firstName: true, lastName: true, nationality: true, age: true, position: true, overall: true, potential: true, wage: true } },
+      player: { select: { id: true, firstName: true, lastName: true, nationality: true, age: true, position: true, overall: true, potential: true, marketValue: true, wage: true } },
       sellerClub: { select: { id: true, name: true } },
     },
   }).then((items) => items.map((item) => ({
     ...item, askingPrice: item.askingPrice.toString(),
-    player: { ...item.player, wage: item.player.wage.toString() },
+    player: { ...item.player, marketValue: item.player.marketValue.toString(), wage: item.player.wage.toString() },
   })));
 }
