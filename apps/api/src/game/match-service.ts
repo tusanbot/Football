@@ -322,7 +322,7 @@ export async function listClubMatches(userId: string) {
       include: {
         homeClub: { select: { id: true, name: true } }, awayClub: { select: { id: true, name: true } },
         events: { orderBy: { sequence: "asc" } },
-        runtime: { select: { status: true, currentMinute: true, nextActionAt: true, completedAt: true } },
+        runtime: { select: { status: true, currentMinute: true, nextActionAt: true, completedAt: true, simulationState: true, kickoffSnapshot: true } },
         checkpoints: {
           orderBy: { minute: "asc" },
           select: {
@@ -347,11 +347,23 @@ export async function listClubMatches(userId: string) {
   return {
     matches: matches.map((match) => ({
       id: match.id, type: match.type, status: match.status, simulationVersion: match.simulationVersion, scheduledAt: match.scheduledAt.toISOString(),
-      runtime: match.runtime ? {
-        status: match.runtime.status, currentMinute: match.runtime.currentMinute,
-        nextActionAt: match.runtime.nextActionAt?.toISOString() ?? null,
-        completedAt: match.runtime.completedAt?.toISOString() ?? null,
-      } : null,
+      runtime: match.runtime ? (() => {
+        const simulation = match.runtime.simulationState as unknown as {
+          segment?: { home?: { side?: MatchSide }; away?: { side?: MatchSide } };
+        } | null;
+        const kickoff = match.runtime.kickoffSnapshot as unknown as { home?: MatchSide; away?: MatchSide } | null;
+        const home = simulation?.segment?.home?.side ?? kickoff?.home;
+        const away = simulation?.segment?.away?.side ?? kickoff?.away;
+        return {
+          status: match.runtime.status, currentMinute: match.runtime.currentMinute,
+          nextActionAt: match.runtime.nextActionAt?.toISOString() ?? null,
+          completedAt: match.runtime.completedAt?.toISOString() ?? null,
+          lineups: home && away ? {
+            home: { formation: home.formation, players: home.players, bench: home.bench ?? [] },
+            away: { formation: away.formation, players: away.players, bench: away.bench ?? [] },
+          } : null,
+        };
+      })() : null,
       checkpoints: match.checkpoints.map((checkpoint) => ({
         checkpointKey: checkpoint.checkpointKey, kind: checkpoint.kind, minute: checkpoint.minute,
         status: checkpoint.status, openedAt: checkpoint.openedAt.toISOString(),
