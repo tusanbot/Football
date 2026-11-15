@@ -534,8 +534,7 @@ export async function simulateScheduledMatch(userId: string, matchId: string, no
               .reduce((minute, event) => Math.min(minute, event.minute), 90);
             const wasStarter = [...homeSide.players, ...awaySide.players].some((player) => player.id === line.playerId);
             const minutesPlayed = Math.max(0, exitedAt - (wasStarter ? 0 : enteredAt));
-            const originalMinutes = Math.max(1, line.minutesPlayed);
-            const fraction = minutesPlayed / originalMinutes;
+            const fraction = minutesPlayed / 90;
             return {
               ...line, minutesPlayed, goals, assists,
               shots: Math.max(goals, Math.round(line.shots * fraction)),
