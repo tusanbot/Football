@@ -66,7 +66,7 @@ export function registerPublicClubRoutes(app: FastifyInstance) {
     const query = z.object({ q: z.string().trim().max(40).optional(), limit: z.coerce.number().int().min(1).max(100).default(50) }).safeParse(request.query);
     if (!query.success) return reply.code(400).send({ error: "INVALID_CLUB_QUERY" });
     const clubs = await prisma.club.findMany({
-      where: query.data.q ? { name: { contains: query.data.q } } : undefined,
+      ...(query.data.q ? { where: { name: { contains: query.data.q } } } : {}),
       take: 200,
       select: {
         id: true, name: true, level: true, reputation: true, logoMime: true,
