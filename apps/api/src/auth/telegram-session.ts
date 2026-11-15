@@ -13,7 +13,7 @@ function signature(payload: string, secret: string): string {
 }
 
 export function createTelegramSessionToken(telegramId: string, secret: string, now = new Date()): { token: string; expiresAt: string } {
-  if (!/^\d{1,20}$/.test(telegramId) || secret.length < 32) throw new Error("INVALID_SESSION_CONFIGURATION");
+  if (!/^\d{1,20}$/.test(telegramId) || BigInt(telegramId) <= 0n || secret.length < 32) throw new Error("INVALID_SESSION_CONFIGURATION");
   const issuedAt = Math.floor(now.getTime() / 1000);
   const expiresAt = issuedAt + TELEGRAM_SESSION_TTL_SECONDS;
   const payload = Buffer.from(JSON.stringify({ sub: telegramId, iat: issuedAt, exp: expiresAt })).toString("base64url");
@@ -31,7 +31,7 @@ export function verifyTelegramSessionToken(token: string, secret: string, now = 
   try { payload = JSON.parse(Buffer.from(parts[0]!, "base64url").toString("utf8")); } catch { return null; }
   if (!payload || typeof payload !== "object") return null;
   const claims = payload as { sub?: unknown; iat?: unknown; exp?: unknown };
-  if (typeof claims.sub !== "string" || !/^\d{1,20}$/.test(claims.sub)
+  if (typeof claims.sub !== "string" || !/^\d{1,20}$/.test(claims.sub) || BigInt(claims.sub) <= 0n
     || !Number.isSafeInteger(claims.iat) || !Number.isSafeInteger(claims.exp)) return null;
   const issuedAt = claims.iat as number;
   const expiresAt = claims.exp as number;
