@@ -10,7 +10,7 @@ type Match = {
  id:string; type:string; status:string; scheduledAt:string;
  homeClub:{id:string;name:string}; awayClub:{id:string;name:string};
  homeScore:number|null; awayScore:number|null; homePenalties:number|null; awayPenalties:number|null;
- runtime:{status:string;currentMinute:number;nextActionAt:string|null;completedAt:string|null}|null;
+ runtime:{status:string;currentMinute:number;nextActionAt:string|null;completedAt:string|null;lineups:{home:{formation:string;players:Array<{id:string;name:string;position:string;overall:number}>;bench:Array<{id:string;name:string;position:string;overall:number}>};away:{formation:string;players:Array<{id:string;name:string;position:string;overall:number}>;bench:Array<{id:string;name:string;position:string;overall:number}>}}|null}|null;
  checkpoints:Checkpoint[]; events:MatchEvent[];
 };
 type Instruction = { formation:string; mentality:string; pressing:string; tempo:string; passingStyle:string; substitutions:Array<{outgoingPlayerId:string;incomingPlayerId:string}> };
@@ -112,6 +112,18 @@ export default function MatchCenter(){
      <button style={{...buttonStyle,width:"100%",marginTop:15}} disabled={busy==="decision"||(clubId!==activeMatch.homeClub.id&&clubId!==activeMatch.awayClub.id)} onClick={()=>void submitDecision()}>{busy==="decision"?"در حال ثبت…":"ثبت تصمیم تاکتیکی"}</button>
     </article>}
     <article style={cardStyle}><h2 style={{fontSize:18,marginTop:0}}>خط زمانی مسابقه</h2>{activeMatch.events.length?activeMatch.events.map((event,index)=><div key={index} style={{borderTop:"1px solid #263b52",padding:"10px 0",fontSize:13}}><strong style={{color:"#9ce8c5"}}>{event.minute}′ · {labels[event.type]??event.type}</strong><div style={{color:"#c3cfdd",marginTop:4}}>{event.detail||event.playerName}{event.relatedPlayerName?" · "+event.relatedPlayerName:""}</div></div>):<p style={{color:"#9fb0c5",fontSize:13}}>رویداد مهمی ثبت نشده است.</p>}</article>
+    {activeMatch.runtime?.lineups&&<article style={cardStyle}>
+     <h2 style={{fontSize:18,marginTop:0}}>ترکیب و نیمکت</h2>
+     <div className="match-lineup-grid">
+      {[{title:activeMatch.homeClub.name,side:activeMatch.runtime.lineups.home},{title:activeMatch.awayClub.name,side:activeMatch.runtime.lineups.away}].map(({title,side})=><div key={title} style={{minWidth:0}}>
+       <strong>{title} · {side.formation}</strong>
+       <p style={{color:"#9ce8c5",fontSize:12,margin:"9px 0 5px"}}>بازیکنان داخل زمین</p>
+       {side.players.map((player,index)=><div key={player.id} style={{display:"flex",justifyContent:"space-between",gap:8,borderTop:"1px solid #263b52",padding:"6px 0",fontSize:12}}><span>{index+1}. {player.name} · {player.position}</span><strong>{player.overall}</strong></div>)}
+       <p style={{color:"#9ce8c5",fontSize:12,margin:"12px 0 5px"}}>نیمکت</p>
+       {side.bench.map(player=><div key={player.id} style={{display:"flex",justifyContent:"space-between",gap:8,borderTop:"1px solid #263b52",padding:"6px 0",fontSize:12}}><span>{player.name} · {player.position}</span><strong>{player.overall}</strong></div>)}
+      </div>)}
+     </div>
+    </article>}
    </section>}
   </div>}
   <p style={{color:"#72869d",fontSize:11,textAlign:"center",marginTop:20}}>وضعیت مسابقات هر ۵ ثانیه از سرور به‌روزرسانی می‌شود؛ زمان و نتیجه فقط توسط سرور تعیین می‌شود.</p>
