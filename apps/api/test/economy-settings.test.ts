@@ -19,8 +19,8 @@ test("starter wallet grants use centrally configured economy values", async (t) 
     await prisma.gameSetting.upsert({ where: { key: "economy.starterGold" }, create: { key: "economy.starterGold", value: 17 }, update: { value: 17 } });
     const account = await provisionTelegramAccount({ telegramId, displayName: "Starter Settings Test", firstName: "Starter" });
     userId = account.id;
-    assert.equal(account.wallets.find(wallet => wallet.asset === "CASH")?.balance, "12345");
-    assert.equal(account.wallets.find(wallet => wallet.asset === "GOLD")?.balance, "17");
+    assert.equal(account.wallets.find(wallet => wallet.asset === "CASH")?.balance, 12345n);
+    assert.equal(account.wallets.find(wallet => wallet.asset === "GOLD")?.balance, 17n);
     const ledger = await prisma.ledgerTransaction.findMany({ where: { userId, referenceType: "STARTER_GRANT" }, orderBy: { asset: "asc" } });
     assert.deepEqual(ledger.map(row => row.amount.toString()).sort(), ["17", "12345"]);
   } finally {
