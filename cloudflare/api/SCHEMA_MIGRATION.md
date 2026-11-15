@@ -46,3 +46,17 @@ Wallet, ledger, purchases, rewards, transfers, and club/alliance finance must no
 - No API route or bot traffic was switched.
 - No webhook, DNS, or production deployment was changed.
 - The Worker readiness and game routes remain fail-closed.
+
+
+## Wallet and ledger atomicity
+
+The generated migration creates the private \`fe_write_guard\` table. The D1 wallet repository uses a four-statement \`DB.batch()\` sequence:
+
+1. Insert the immutable ledger row with \`ON CONFLICT(idempotencyKey) DO NOTHING\`.
+2. Update the wallet only when SQLite \`changes()\` confirms that statement 1 inserted exactly one row, and only when credit/debit and signed-64-bit overflow conditions are satisfied.
+3. Insert the result of \`changes()\` into \`fe_write_guard\`, whose CHECK constraint accepts only \`1\`. This turns a missing wallet, duplicate idempotency key, insufficient funds, or overflow into a SQL error.
+4. Delete the guard row.
+
+D1 executes a batch sequentially as a transaction and rolls back the entire batch when a statement fails. The repository resolves a failed batch by checking for an existing idempotency key first, then classifying wallet-not-found, insufficient-funds, or overflow. It never performs an application-side read/modify/write balance update.
+
+The Python CI validator executes this exact SQL sequence against SQLite, including duplicate replay, insufficient debit, successful debit/credit and overflow cases. This is a local SQL-semantics test; a live D1 concurrency/load test is still required before production cutover.
