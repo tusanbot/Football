@@ -3,6 +3,13 @@ import { prisma } from "../db.js";
 import { MatchServiceError, startLeague } from "../game/match-service.js";
 import { buildAllianceSeasonStandings, type AllianceSeasonLedgerEntry, type AllianceSeasonGroupInput } from "./alliance-security.js";
 
+const ALLIANCE_DEFAULT_SEASON_DAYS = 30;
+async function getAllianceSeasonDuration(tx: Prisma.TransactionClient) {
+  const setting = await tx.gameSetting.findUnique({ where: { key: "alliances.defaultSeasonDurationDays" }, select: { value: true } });
+  const value = typeof setting?.value === "number" ? setting.value : NaN;
+  return Number.isSafeInteger(value) && value >= 7 && value <= 90 ? value : ALLIANCE_DEFAULT_SEASON_DAYS;
+}
+
 export class AllianceServiceError extends Error {
   constructor(readonly code: string) { super(code); this.name = "AllianceServiceError"; }
 }
@@ -223,8 +230,9 @@ export async function startAllianceChampionship(i: { telegramUserId: string; tel
   } catch (error) { if (error instanceof MatchServiceError) throw new AllianceServiceError(error.code); throw error; }
 }
 
-export async function startAllianceSeason(i: { telegramUserId: string; telegramGroupId: string; durationDays: number }) {
+export async function startAllianceSeason(i: { telegramUserId: string; telegramGroupId: string; durationDays?: number }) {
   return prisma.$transaction(async tx => {
+    const durationDays = i.durationDays ?? await getAllianceSeasonDuration(tx);
     const { group } = await manager(tx, i.telegramUserId, i.telegramGroupId);
     const membership = await tx.allianceGroup.findUnique({ where: { groupId: group.id }, include: { alliance: { include: { seasons: { orderBy: { number: "desc" }, take: 1 } } } } });
     if (!membership || membership.role !== "FOUNDER") throw new AllianceServiceError("ALLIANCE_FOUNDER_REQUIRED");
@@ -234,7 +242,7 @@ export async function startAllianceSeason(i: { telegramUserId: string; telegramG
     if (active?.reviewStatus === "FLAGGED") throw new AllianceServiceError("SEASON_REVIEW_REQUIRED");
     const number = (active?.number ?? 0) + 1;
     const season = await tx.allianceSeason.create({ data: { allianceId: membership.allianceId, number, startsAt: new Date(), endsAt: new Date(Date.now() + i.durationDays * 86400000) } });
-    await audit(tx, { allianceId: membership.allianceId, actorTelegramId: i.telegramUserId, groupTelegramId: group.telegramId, action: "SEASON_STARTED", metadata: { seasonId: season.id, number, durationDays: i.durationDays } });
+    await audit(tx, { allianceId: membership.allianceId, actorTelegramId: i.telegramUserId, groupTelegramId: group.telegramId, action: "SEASON_STARTED", metadata: { seasonId: season.id, number, durationDays } });
     return { season, replayed: false };
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 }
@@ -413,9 +421,10 @@ export async function adminReviewAllianceSeasonInTransaction(
 
 export async function adminStartAllianceSeasonInTransaction(
   tx: Prisma.TransactionClient,
-  input: { telegramUserId: string; allianceId: string; durationDays: number },
+  input: { telegramUserId: string; allianceId: string; durationDays?: number },
 ) {
-  if (!Number.isInteger(input.durationDays) || input.durationDays < 7 || input.durationDays > 90) throw new AllianceServiceError("INVALID_SEASON_DURATION");
+  const durationDays = input.durationDays ?? await getAllianceSeasonDuration(tx);
+  if (!Number.isInteger(durationDays) || durationDays < 7 || durationDays > 90) throw new AllianceServiceError("INVALID_SEASON_DURATION");
   const alliance = await tx.alliance.findUnique({ where: { id: input.allianceId }, select: { id: true, status: true } });
   if (!alliance) throw new AllianceServiceError("ALLIANCE_NOT_FOUND");
   if (alliance.status !== "ACTIVE") throw new AllianceServiceError("ALLIANCE_INACTIVE");
@@ -430,11 +439,11 @@ export async function adminStartAllianceSeasonInTransaction(
   const number = (previous?.number ?? 0) + 1;
   const now = new Date();
   const season = await tx.allianceSeason.create({
-    data: { allianceId: alliance.id, number, startsAt: now, endsAt: new Date(now.getTime() + input.durationDays * 86400000) },
+    data: { allianceId: alliance.id, number, startsAt: now, endsAt: new Date(now.getTime() + durationDays * 86400000) },
   });
   await audit(tx, {
     allianceId: alliance.id, actorTelegramId: input.telegramUserId, groupTelegramId: founder.group.telegramId,
-    action: "ADMIN_SEASON_STARTED", metadata: { seasonId: season.id, number, durationDays: input.durationDays },
+    action: "ADMIN_SEASON_STARTED", metadata: { seasonId: season.id, number, durationDays },
   });
   return { season, replayed: false };
 }

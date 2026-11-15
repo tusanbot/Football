@@ -66,7 +66,7 @@ export function registerAllianceRoutes(app: FastifyInstance) {
     if(!p.success||!b.success)return reply.code(400).send({error:"INVALID_TREASURY_CONTRIBUTION"});
     try{return await contributeAllianceTreasury({telegramUserId:id,...p.data,amount:BigInt(b.data.amount),idempotencyKey:b.data.idempotencyKey});}catch(e){return sendError(reply,e);}
   });
-  app.post("/v1/alliances/:telegramGroupId/seasons", async (request, reply) => { const id=await actor(request,reply); if(!id)return; const p=z.object({telegramGroupId:groupId}).safeParse(request.params), b=z.object({durationDays:z.number().int().min(7).max(90)}).safeParse(request.body); if(!p.success||!b.success)return reply.code(400).send({error:"INVALID_SEASON"}); try{return await startAllianceSeason({telegramUserId:id,...p.data,...b.data});}catch(e){return sendError(reply,e);} });
+  app.post("/v1/alliances/:telegramGroupId/seasons", async (request, reply) => { const id=await actor(request,reply); if(!id)return; const p=z.object({telegramGroupId:groupId}).safeParse(request.params), b=z.object({durationDays:z.number().int().min(7).max(90).optional()}).safeParse(request.body); if(!p.success||!b.success)return reply.code(400).send({error:"INVALID_SEASON"}); try{return await startAllianceSeason({telegramUserId:id,...p.data,...b.data});}catch(e){return sendError(reply,e);} });
   app.post("/v1/alliances/:telegramGroupId/seasons/:seasonId/review", async (request, reply) => {
     const id=await actor(request,reply); if(!id)return;
     const p=z.object({telegramGroupId:groupId,seasonId:z.string().min(1).max(64)}).safeParse(request.params);
