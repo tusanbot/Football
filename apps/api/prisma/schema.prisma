@@ -245,6 +245,7 @@ model Player {
   ageDays         Int            @default(0)
   trainingFocus   TrainingFocus  @default(BALANCED)
   injuryUntil     DateTime?
+  suspensionMatchesRemaining Int @default(0)
   lastTrainedAt   DateTime?
   specialPlayerId String?
   createdAt       DateTime       @default(now())
