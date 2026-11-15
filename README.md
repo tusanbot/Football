@@ -56,7 +56,7 @@ A Telegram-first football management MMO. Telegram Bot, Telegram Mini App and Te
 
 ## Cloudflare migration
 
-The approved target architecture and non-production Worker foundation are documented in [cloudflare/README.md](cloudflare/README.md). The API Worker currently provides health checks only and deliberately returns HTTP 503 for game routes until the D1 schema, atomic repository layer, authentication and route parity are implemented. The existing PostgreSQL API and polling Bot remain the active development runtime; no deployment or data cutover is performed by this repository change.
+The approved target architecture and non-production Worker foundation are documented in [cloudflare/README.md](cloudflare/README.md). The API Worker reuses the complete Fastify route set and Prisma application services against PostgreSQL through a request-scoped client. D1 remains a separate, incomplete migration track and is not used for game traffic. The Node.js API and polling Bot remain supported development runtimes; no deployment or data cutover is performed by this repository change.
 
 ## Delivery status
 
@@ -84,8 +84,8 @@ Bot-to-API requests use BOT_API_SECRET plus the Telegram sender ID; keep the sec
 
 ## Database setup
 
-1. Configure `DATABASE_URL` for PostgreSQL.
-2. Apply committed migrations with `pnpm db:migrate:deploy`.
+1. Configure `DATABASE_URL` for runtime traffic and `DIRECT_URL` for Prisma CLI migrations. For local PostgreSQL, both may use the same URL. For Supabase, use a runtime connection supported by `pg` and a direct or session-pooled connection for migrations; do not run schema migrations through a transaction pooler.
+2. Validate the schema and migration connection with `pnpm --filter @football/api exec prisma validate` and apply committed migrations with `pnpm db:migrate:deploy`.
 3. Seed the curated special-player catalog with `pnpm --filter @football/api db:seed:special`.
 
 The seed is safe to rerun: it upserts catalog records by stable slug. Run migrations and seed only against the intended development/staging database until a production rollout is explicitly approved.
@@ -101,7 +101,7 @@ The seed is safe to rerun: it upserts catalog records by stable slug. Run migrat
 
 ## Pre-production checklist
 
-1. Set unique production values for DATABASE_URL, TELEGRAM_BOT_TOKEN, BOT_API_SECRET, CORS_ORIGIN, GAME_ADMIN_TELEGRAM_IDS, FOOTBALL_API_URL, NEXT_PUBLIC_API_URL and TELEGRAM_WEB_APP_URL. Production web/API origins must use HTTPS.
+1. Set unique production values for DATABASE_URL, DIRECT_URL, TELEGRAM_BOT_TOKEN, BOT_API_SECRET, CORS_ORIGIN, GAME_ADMIN_TELEGRAM_IDS, FOOTBALL_API_URL, NEXT_PUBLIC_API_URL and TELEGRAM_WEB_APP_URL. Production web/API origins must use HTTPS.
 2. Apply migrations once to the intended database with pnpm db:migrate:deploy, then run pnpm --filter @football/api db:seed:special.
 3. Start the API and confirm GET /ready returns HTTP 200 before starting the Bot.
 4. Start exactly one Bot process for that database. It verifies the Bot token against the API, acquires the database polling lease, switches Telegram to long polling, and renews the lease. Do not configure a webhook for this polling deployment.
