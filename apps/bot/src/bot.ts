@@ -934,6 +934,43 @@ bot.command("cup", async (ctx) => {
     await ctx.reply("Knockout cup created: " + result.competition.name + "\nID: " + result.competition.id + "\nBracket: " + result.competition.maxTeams + " clubs. Fill all places before starting.");
   } catch (error) { await ctx.reply("Could not create cup: " + (error instanceof Error ? error.message : "unknown error")); }
 });
+bot.command("competitionrules", async (ctx) => {
+  if (!ctx.from || ctx.chat.type !== "private") return;
+  const parts = String(ctx.match ?? "").trim().split(/\\s+/).filter(Boolean);
+  const competitionId = parts.shift();
+  if (!competitionId) return ctx.reply("Usage: /competitionrules COMPETITION_ID subs=5 windows=3 injuries=on red=1 yellow=3 yellowban=1 penalties=on");
+  try {
+    const current = await api<{ competition: { rules: {
+      maxSubstitutions:number; maxInPlayWindows:number; injuriesEnabled:boolean;
+      redCardSuspensionMatches:number; yellowCardsToSuspend:number;
+      yellowCardSuspensionMatches:number; penaltiesOnDraw:boolean;
+    } } }>("/v1/competitions/" + competitionId, ctx.from.id);
+    const rules = { ...current.competition.rules };
+    const keys: Record<string, keyof typeof rules> = {
+      subs:"maxSubstitutions", windows:"maxInPlayWindows", red:"redCardSuspensionMatches",
+      yellow:"yellowCardsToSuspend", yellowban:"yellowCardSuspensionMatches",
+    };
+    for (const part of parts) {
+      const [key, value] = part.split("=");
+      if (key === "injuries" && (value === "on" || value === "off")) rules.injuriesEnabled = value === "on";
+      else if (key === "penalties" && (value === "on" || value === "off")) rules.penaltiesOnDraw = value === "on";
+      else if (key && value && keys[key] && /^\\d+$/.test(value)) {
+        (rules[keys[key]] as number) = Number(value);
+      } else return ctx.reply("Invalid rule: " + part);
+    }
+    const saved = await api<{ rules: typeof rules }>("/v1/competitions/" + competitionId + "/rules", ctx.from.id, "PUT", rules);
+    await ctx.reply("Competition rules saved. Substitutions: " + saved.rules.maxSubstitutions
+      + ", in-play windows: " + saved.rules.maxInPlayWindows
+      + ", injuries: " + (saved.rules.injuriesEnabled ? "on" : "off")
+      + ", red-card ban: " + saved.rules.redCardSuspensionMatches
+      + ", yellow-card threshold: " + saved.rules.yellowCardsToSuspend
+      + ", yellow-card ban: " + saved.rules.yellowCardSuspensionMatches
+      + ", penalties on draw: " + (saved.rules.penaltiesOnDraw ? "on" : "off") + ".");
+  } catch (error) {
+    await ctx.reply("Could not update competition rules: " + (error instanceof Error ? error.message : "unknown error"));
+  }
+});
+
 bot.command("leagues", async (ctx) => {
   if (!ctx.from || ctx.chat.type !== "private") return;
   try {
