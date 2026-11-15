@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { prisma } from "../src/db.js";
-import { AllianceServiceError, closeAllianceSeason, reviewAllianceSeason, startAllianceSeason } from "../src/groups/alliance-service.js";
+import { AllianceServiceError, adminCloseAllianceSeasonInTransaction, adminReviewAllianceSeasonInTransaction, closeAllianceSeason, reviewAllianceSeason, startAllianceSeason } from "../src/groups/alliance-service.js";
 import { consumeAllianceActionRateLimit } from "../src/groups/alliance-rate-limit.js";
 
 test("alliance season close enforces its end date, calculates seasonal net points and holds suspicious payouts for authorized review", async t => {
@@ -87,7 +87,22 @@ test("alliance season close enforces its end date, calculates seasonal net point
     assert.equal(replay.replayed, true);
     const nextSeason = await startAllianceSeason({ telegramUserId: reviewerTelegramId, telegramGroupId: groupTelegramId, durationDays: 30 });
     assert.equal(nextSeason.season.number, 2);
-    assert.equal(await prisma.allianceAuditLog.count({ where: { allianceId } }) >= 3, true);
+    await prisma.alliance.update({ where: { id: allianceId }, data: { treasuryPoints: 500n } });
+    await prisma.allianceSeason.update({ where: { id: nextSeason.season.id }, data: { startsAt, endsAt: new Date(now.getTime() - 1000) } });
+    await prisma.groupPointLedger.create({
+      data: { idempotencyKey: "admin-season-score-" + suffix, groupId, userId: reviewer.id, amount: 100n, source: "GAME_ACTIVITY", description: "admin season close security test", createdAt: new Date(now.getTime() - 2 * 86400000) },
+    });
+    const adminClosed = await prisma.$transaction(tx => adminCloseAllianceSeasonInTransaction(tx, { telegramUserId: reviewerTelegramId, seasonId: nextSeason.season.id }));
+    assert.equal(adminClosed.reviewStatus, "FLAGGED");
+    assert.equal(adminClosed.replayed, false);
+    const adminReviewed = await prisma.$transaction(tx => adminReviewAllianceSeasonInTransaction(tx, {
+      telegramUserId: reviewerTelegramId, telegramUserDbId: reviewer.id, seasonId: nextSeason.season.id, decision: "APPROVE",
+    }));
+    assert.equal(adminReviewed.season.reviewStatus, "APPROVED");
+    assert.equal(adminReviewed.prize, "500");
+    assert.equal((await prisma.alliance.findUniqueOrThrow({ where: { id: allianceId } })).treasuryPoints, 0n);
+    assert.equal((await prisma.telegramGroup.findUniqueOrThrow({ where: { id: groupId } })).points, 1000n);
+    assert.equal(await prisma.allianceAuditLog.count({ where: { allianceId } }) >= 5, true);
   } finally {
     if (previousReviewers === undefined) delete process.env.ALLIANCE_REVIEWER_TELEGRAM_IDS;
     else process.env.ALLIANCE_REVIEWER_TELEGRAM_IDS = previousReviewers;
