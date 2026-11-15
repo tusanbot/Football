@@ -167,7 +167,7 @@ export function simulateFootballMatch(input: {
       : ["CB", "LB", "RB"].includes(position) ? "DEF"
         : ["CDM", "CM", "CAM"].includes(position) ? "MID" : "ATT";
     const usedInPlayWindows = new Set<number>();
-    const performSubstitution = (outgoing: MatchPlayer, minute: number, forced = false) => {
+    const performSubstitution = (outgoing: MatchPlayer, minute: number) => {
       const incoming = bench
         .filter((candidate) => !usedBench.has(candidate.id) && role(candidate.position) === role(outgoing.position))
         .sort((a, b) => b.overall - a.overall || a.id.localeCompare(b.id))[0];
@@ -205,7 +205,7 @@ export function simulateFootballMatch(input: {
     };
 
     if (injuredPlayer && !sentOff.has(injuredPlayer.id)) {
-      performSubstitution(injuredPlayer, Math.min(89, Math.max(8, injuryMinute)), true);
+      performSubstitution(injuredPlayer, Math.min(89, Math.max(8, injuryMinute)));
     }
     const availableOutfield = side.players.filter((player) =>
       player.position !== "GK" && !sentOff.has(player.id) && !substitutedOut.has(player.id)
