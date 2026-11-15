@@ -441,5 +441,5 @@ export async function processDuePromotionOffers(now = new Date(), limit = 50) {
     }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
     if (didAccept) accepted += 1;
   }
-  return { processed: due.length, accepted };
+  return { completedLeagues, processed: due.length, accepted };
 }
