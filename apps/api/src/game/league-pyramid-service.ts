@@ -569,14 +569,15 @@ export async function grantPurchasedChallengeCredits(userId: string, quantity: n
 
 export async function getFriendlyChallengeInfo(token: string) {
   const challenge = await prisma.friendlyChallenge.findUnique({
-    where: { token }, include: { club: { select: { name: true, level: true, reputation: true } }, group: { select: { title: true } } },
+    where: { token }, include: { club: { select: { name: true, level: true, reputation: true } }, group: { select: { title: true, telegramId: true, isActive: true, isSuspended: true } } },
   });
   if (!challenge) throw new PyramidLeagueError("FRIENDLY_CHALLENGE_NOT_FOUND");
   if (challenge.status === "OPEN" && challenge.expiresAt <= new Date()) {
     await prisma.friendlyChallenge.updateMany({ where: { id: challenge.id, status: "OPEN" }, data: { status: "EXPIRED" } });
     throw new PyramidLeagueError("FRIENDLY_CHALLENGE_EXPIRED");
   }
-  return { id: challenge.id, token: challenge.token, status: challenge.status, expiresAt: challenge.expiresAt.toISOString(), creatorClub: challenge.club, groupTitle: challenge.group?.title ?? null };
+  if (challenge.group && (!challenge.group.isActive || challenge.group.isSuspended)) throw new PyramidLeagueError("GROUP_INACTIVE");
+  return { id: challenge.id, token: challenge.token, status: challenge.status, expiresAt: challenge.expiresAt.toISOString(), creatorClub: challenge.club, groupTitle: challenge.group?.title ?? null, groupTelegramId: challenge.group?.telegramId ?? null };
 }
 
 export async function markLeagueNoticesRead(userId: string) {
