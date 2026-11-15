@@ -319,3 +319,93 @@ export async function reviewAllianceSeason(i: { telegramUserId: string; telegram
     return { season: updated, reviewStatus: updated.reviewStatus, replayed: false, ...payout };
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 }
+
+
+export async function adminCloseAllianceSeasonInTransaction(
+  tx: Prisma.TransactionClient,
+  input: { telegramUserId: string; seasonId: string },
+) {
+  const season = await tx.allianceSeason.findUnique({ where: { id: input.seasonId } });
+  if (!season) throw new AllianceServiceError("SEASON_NOT_FOUND");
+  if (season.status === "COMPLETED") return { season, standings: season.standings, replayed: true, reviewStatus: season.reviewStatus };
+  if (season.status !== "ACTIVE") throw new AllianceServiceError("NO_ACTIVE_SEASON");
+  const now = new Date();
+  if (season.endsAt > now) throw new AllianceServiceError("SEASON_NOT_ENDED");
+  const founder = await tx.allianceGroup.findFirst({
+    where: { allianceId: season.allianceId, role: "FOUNDER" },
+    include: { group: { select: { id: true, title: true, telegramId: true } } },
+  });
+  if (!founder) throw new AllianceServiceError("ALLIANCE_FOUNDER_REQUIRED");
+  const memberships = await tx.allianceGroup.findMany({
+    where: { allianceId: season.allianceId },
+    include: { group: { select: { id: true, title: true } } },
+  });
+  const ledger = await tx.groupPointLedger.findMany({
+    where: {
+      groupId: { in: memberships.map(x => x.groupId) },
+      createdAt: { gte: season.startsAt, lt: season.endsAt },
+      source: { in: ["DAILY_ACTIVITY", "GAME_ACTIVITY", "CHALLENGE_REWARD", "LEAGUE_REWARD"] },
+    },
+    select: { groupId: true, userId: true, amount: true, source: true, createdAt: true },
+  });
+  const groups: AllianceSeasonGroupInput[] = memberships.map(x => ({ groupId: x.groupId, group: x.group.title, joinedAt: x.joinedAt }));
+  const entries: AllianceSeasonLedgerEntry[] = ledger.map(x => ({ groupId: x.groupId, userId: x.userId, amount: x.amount, source: x.source, createdAt: x.createdAt }));
+  const calculated = buildAllianceSeasonStandings(groups, entries, season.startsAt, season.endsAt);
+  const reviewStatus = calculated.securityFlags.length ? "FLAGGED" : "APPROVED";
+  const changed = await tx.allianceSeason.updateMany({
+    where: { id: season.id, status: "ACTIVE" },
+    data: {
+      status: "COMPLETED", closedAt: now, standings: calculated.standings,
+      securityFlags: calculated.securityFlags as unknown as Prisma.InputJsonValue, reviewStatus,
+    },
+  });
+  if (!changed.count) throw new AllianceServiceError("SEASON_ALREADY_SETTLED");
+  await audit(tx, {
+    allianceId: season.allianceId, actorTelegramId: input.telegramUserId,
+    groupTelegramId: founder.group.telegramId, action: "ADMIN_SEASON_CLOSED",
+    metadata: { seasonId: season.id, reviewStatus, securityFlags: calculated.securityFlags.length },
+  });
+  let payout = { winner: null as string | null, prize: "0" };
+  if (reviewStatus === "APPROVED") {
+    const paid = await payAllianceSeasonPrize(tx, season.allianceId, season.id, season.number, calculated.standings);
+    payout = { winner: paid.winner, prize: paid.prize };
+    if (paid.prize !== "0") await audit(tx, {
+      allianceId: season.allianceId, actorTelegramId: input.telegramUserId,
+      groupTelegramId: founder.group.telegramId, action: "SEASON_PRIZE_PAID",
+      metadata: { seasonId: season.id, winner: paid.winner, prize: paid.prize },
+    });
+  }
+  const updated = await tx.allianceSeason.findUniqueOrThrow({ where: { id: season.id } });
+  return { season: updated, standings: calculated.standings, replayed: false, reviewStatus, securityFlags: calculated.securityFlags, ...payout, alertGroupTelegramId: founder.group.telegramId };
+}
+
+export async function adminReviewAllianceSeasonInTransaction(
+  tx: Prisma.TransactionClient,
+  input: { telegramUserId: string; telegramUserDbId: string; seasonId: string; decision: "APPROVE" | "REJECT" },
+) {
+  const season = await tx.allianceSeason.findUnique({ where: { id: input.seasonId } });
+  if (!season) throw new AllianceServiceError("SEASON_NOT_FOUND");
+  if (season.reviewStatus === "APPROVED" || season.reviewStatus === "REJECTED") return { season, replayed: true, prize: "0" };
+  if (season.status !== "COMPLETED" || season.reviewStatus !== "FLAGGED") throw new AllianceServiceError("SEASON_NOT_FLAGGED");
+  const founder = await tx.allianceGroup.findFirst({
+    where: { allianceId: season.allianceId, role: "FOUNDER" },
+    include: { group: { select: { telegramId: true } } },
+  });
+  if (!founder) throw new AllianceServiceError("ALLIANCE_FOUNDER_REQUIRED");
+  const updated = await tx.allianceSeason.update({
+    where: { id: season.id },
+    data: { reviewStatus: input.decision === "APPROVE" ? "APPROVED" : "REJECTED", reviewedAt: new Date(), reviewedByUserId: input.telegramUserDbId },
+  });
+  let payout = { winner: null as string | null, prize: "0" };
+  if (input.decision === "APPROVE") {
+    const standings = (season.standings ?? []) as unknown as Array<{ groupId: string; group: string; points: string }>;
+    const paid = await payAllianceSeasonPrize(tx, season.allianceId, season.id, season.number, standings);
+    payout = { winner: paid.winner, prize: paid.prize };
+  }
+  await audit(tx, {
+    allianceId: season.allianceId, actorTelegramId: input.telegramUserId,
+    groupTelegramId: founder.group.telegramId, action: "ADMIN_SEASON_REVIEWED",
+    metadata: { seasonId: season.id, decision: input.decision, prize: payout.prize },
+  });
+  return { season: updated, replayed: false, ...payout };
+}
