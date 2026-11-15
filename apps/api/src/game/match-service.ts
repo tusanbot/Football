@@ -636,7 +636,7 @@ export async function simulateScheduledMatch(userId: string, matchId: string, no
         await tx.player.updateMany({
           where: { id: line.playerId, clubId: line.clubId, status: "ACTIVE" },
           data: {
-            status: "INJURED", injuryUntil: new Date(now.getTime() + 5 * DAY_MS),
+            status: "INJURED", injuryUntil: new Date(now.getTime() + matchRules.injuryDurationDays * DAY_MS),
             lineupSlot: null, fitness: Math.max(0, player.fitness - 15 - line.fitnessLoss),
           },
         });
