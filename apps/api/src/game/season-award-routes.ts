@@ -86,6 +86,11 @@ export function registerSeasonAwardRoutes(app: FastifyInstance) {
       return selected ? [selected] : [];
     });
 
+    const manualAwards = await prisma.seasonPlayerAward.findMany({
+      where: { season },
+      include: { player: { select: { id: true, firstName: true, lastName: true, position: true, club: { select: { name: true } } } } },
+      orderBy: [{ awardType: "asc" }, { createdAt: "asc" }],
+    });
     const matches = await prisma.footballMatch.count({
       where: { status: "COMPLETED", competition: { is: { season } } },
     });
@@ -100,6 +105,11 @@ export function registerSeasonAwardRoutes(app: FastifyInstance) {
         playerOfSeason: top(byRating[0]),
         teamOfSeason,
       },
+      manualAwards: manualAwards.map((award) => ({
+        id: award.id, awardType: award.awardType, awardName: award.awardName, reason: award.reason,
+        playerId: award.player.id, playerName: [award.player.firstName, award.player.lastName].filter(Boolean).join(" "),
+        position: award.player.position, clubName: award.player.club.name,
+      })),
       leaders: {
         scorers: byGoals.slice(0, 10),
         assists: byAssists.slice(0, 10),

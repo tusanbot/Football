@@ -248,6 +248,7 @@ model Club {
   awayMatches FootballMatch[] @relation("MatchAwayClub")
   competitionEntries CompetitionEntry[]
   matchPerformances PlayerMatchPerformance[]
+  seasonAwards SeasonPlayerAward[]
   matchTacticalDecisions MatchTacticalDecision[]
   pyramidLeagueEntries PyramidLeagueEntry[]
   pyramidLeagueApplications PyramidLeagueApplication[]
@@ -1178,4 +1179,22 @@ model GameSetting {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   @@index([updatedAt])
+}
+
+
+model SeasonPlayerAward {
+  id String @id @default(cuid())
+  season Int
+  playerId String
+  awardType String
+  awardName String
+  reason String?
+  createdByTelegramId String
+  updatedByTelegramId String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  player Player @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  @@unique([season, playerId, awardType])
+  @@index([season, awardType])
+  @@index([playerId, season])
 }
