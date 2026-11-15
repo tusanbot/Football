@@ -825,6 +825,48 @@ bot.command("sub", async (ctx) => {
   } catch (error) { await ctx.reply("ثبت تعویض ناموفق بود: " + (error instanceof Error ? error.message : "unknown error")); }
 });
 
+bot.command("fallback", async (ctx) => {
+  if (!ctx.from || ctx.chat.type !== "private") return;
+  try {
+    const result = await api<{plan:{formation:string;mentality:string;pressing:string;tempo:string;passingStyle:string};version:number;isCustom:boolean}>(
+      "/v1/matches/fallback-plan", ctx.from.id);
+    const p=result.plan;
+    await ctx.reply("برنامه جایگزین مسابقه شما" + (result.isCustom ? " · سفارشی" : " · پیش‌فرض تاکتیک باشگاه")
+      + "\\nآرایش: "+p.formation+"\\nذهنیت: "+p.mentality+"\\nپرس: "+p.pressing
+      +"\\nسرعت: "+p.tempo+"\\nپاس: "+p.passingStyle
+      +"\\nنسخه: "+result.version
+      +"\\nبرای تغییر: /setfallback formation=4-4-2 mentality=DEFENSIVE pressing=LOW_BLOCK tempo=SLOW passingStyle=SHORT");
+  } catch (error) {
+    await ctx.reply("دریافت برنامه جایگزین ناموفق بود: "+(error instanceof Error?error.message:"unknown error"));
+  }
+});
+
+bot.command("setfallback", async (ctx) => {
+  if (!ctx.from || ctx.chat.type !== "private") return;
+  const allowed:Record<string,string[]> = {
+    formation:["4-3-3","4-4-2","3-5-2","4-2-3-1"],
+    mentality:["DEFENSIVE","BALANCED","ATTACKING"],
+    pressing:["LOW_BLOCK","MID_BLOCK","HIGH_PRESS"],
+    tempo:["SLOW","NORMAL","FAST"],
+    passingStyle:["SHORT","MIXED","DIRECT"],
+  };
+  const changes:Record<string,string>={};
+  for(const part of String(ctx.match??"").trim().split(/\\s+/).filter(Boolean)){
+    const i=part.indexOf("=");
+    if(i<1)return ctx.reply("هر تنظیم باید به شکل key=value باشد.");
+    const key=part.slice(0,i),value=part.slice(i+1).toUpperCase();
+    if(!allowed[key]?.includes(value))return ctx.reply("مقدار نامعتبر: "+part);
+    changes[key]=value;
+  }
+  if(!Object.keys(changes).length)return ctx.reply("استفاده: /setfallback formation=4-4-2 mentality=DEFENSIVE pressing=LOW_BLOCK tempo=SLOW passingStyle=SHORT");
+  try{
+    const current=await api<{plan:Record<string,string>;version:number}>("/v1/matches/fallback-plan",ctx.from.id);
+    const plan={...current.plan,...changes};
+    const saved=await api<{version:number}>("/v1/matches/fallback-plan",ctx.from.id,"PUT",{expectedVersion:current.version,plan});
+    await ctx.reply("برنامه جایگزین ذخیره شد. نسخه "+saved.version+"؛ از مسابقه بعدی که شروع شود اعمال خواهد شد.");
+  }catch(error){await ctx.reply("ذخیره برنامه جایگزین ناموفق بود: "+(error instanceof Error?error.message:"unknown error"));}
+});
+
 bot.command("play", async (ctx) => {
   if (!ctx.from || ctx.chat.type !== "private") return;
   const matchId = String(ctx.match ?? "").trim().split(/\s+/)[0];
