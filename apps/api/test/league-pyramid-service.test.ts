@@ -138,7 +138,7 @@ test("group friendly challenges can only be accepted by another member of that T
     await prisma.groupMembership.create({ data: { groupId: group.id, userId: creator.userId, role: "MEMBER" } });
     const invite = await createFriendlyChallenge(creator.userId, 100n, new Date("2026-11-15T12:00:00.000Z"), group.telegramId);
     await assert.rejects(
-      import("../src/game/league-pyramid-service.js").then((service) => service.acceptFriendlyChallenge(opponent.userId, invite.challenge.token)),
+      import("../src/game/league-pyramid-service.js").then((service) => service.acceptFriendlyChallenge(opponent.userId, invite.challenge.token, new Date("2026-11-15T13:00:00.000Z"))),
       (error: unknown) => error instanceof Error && error.message === "GROUP_MEMBERSHIP_REQUIRED",
     );
     await prisma.groupMembership.create({ data: { groupId: group.id, userId: opponent.userId, role: "MEMBER" } });
