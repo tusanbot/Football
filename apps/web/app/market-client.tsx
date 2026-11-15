@@ -532,15 +532,15 @@ export default function MarketPage() {
         </div>)}
       </div>
       <div className="market-card">
-        <h2>ایجاد لیگ جدید</h2>
+        <h2>{editingRulesFor ? "ویرایش قوانین رقابت" : "ایجاد رقابت جدید"}</h2>
         <p>لیگ دوره‌ای تک‌مرحله‌ای بسازید. پس از ثبت‌نام حداقل چهار باشگاه، مدیر لیگ می‌تواند برنامه مسابقات را تولید کند.</p>
         <label>نام لیگ<input value={leagueName} maxLength={40} onChange={(event) => setLeagueName(event.target.value)} placeholder="مثلاً لیگ دوستان توسن"/></label>
-        <label>نوع رقابت<select value={competitionFormat} onChange={(event) => { setCompetitionFormat(event.target.value); setLeagueCapacity(event.target.value === "CUP" ? "4" : "8"); }}><option value="LEAGUE">لیگ دوره‌ای</option><option value="CUP">جام حذفی</option></select></label>
+        <label>نوع رقابت<select value={competitionFormat} onChange={(event) => { setCompetitionFormat(event.target.value); setLeagueCapacity(event.target.value === "CUP" ? "4" : "8"); setCompetitionRules(r=>({...r,penaltiesOnDraw:event.target.value === "CUP"})); }}><option value="LEAGUE">لیگ دوره‌ای</option><option value="CUP">جام حذفی</option></select></label>
         <label>تعداد باشگاه‌ها<select value={leagueCapacity} onChange={(event) => setLeagueCapacity(event.target.value)}>{(competitionFormat === "CUP" ? ["4", "8"] : ["4", "6", "8", "10"]).map((size) => <option key={size} value={size}>{size} باشگاه</option>)}</select></label>
         <h3>قوانین اختصاصی رقابت</h3>
         <div className="development-stats">
           <label>سقف تعویض<input type="number" min="0" max="7" value={competitionRules.maxSubstitutions} onChange={e=>setCompetitionRules(r=>({...r,maxSubstitutions:Number(e.target.value),maxInPlayWindows:Math.min(r.maxInPlayWindows,Number(e.target.value))}))}/></label>
-          <label>پنجره تعویض حین بازی<input type="number" min="0" max="5" maxLength={1} value={competitionRules.maxInPlayWindows} onChange={e=>setCompetitionRules(r=>({...r,maxInPlayWindows:Number(e.target.value)}))}/></label>
+          <label>پنجره تعویض حین بازی<input type="number" min="0" max="3" maxLength={1} value={competitionRules.maxInPlayWindows} onChange={e=>setCompetitionRules(r=>({...r,maxInPlayWindows:Number(e.target.value)}))}/></label>
           <label>محرومیت کارت قرمز (بازی)<input type="number" min="0" max="5" value={competitionRules.redCardSuspensionMatches} onChange={e=>setCompetitionRules(r=>({...r,redCardSuspensionMatches:Number(e.target.value)}))}/></label>
           <label>تعداد کارت زرد تا محرومیت<input type="number" min="0" max="10" value={competitionRules.yellowCardsToSuspend} onChange={e=>setCompetitionRules(r=>({...r,yellowCardsToSuspend:Number(e.target.value),yellowCardSuspensionMatches:Number(e.target.value)===0?0:r.yellowCardSuspensionMatches}))}/></label>
           <label>محرومیت کارت زرد (بازی)<input type="number" min="0" max="5" value={competitionRules.yellowCardSuspensionMatches} onChange={e=>setCompetitionRules(r=>({...r,yellowCardSuspensionMatches:Number(e.target.value)}))}/></label>
