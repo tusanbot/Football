@@ -3,7 +3,7 @@ import { buildApp } from "./app.js";
 import { processDueMatchRuntimes } from "./game/match-service.js";
 import { processDuePromotionOffers } from "./game/league-pyramid-service.js";
 import { prisma } from "./db.js";
-import { isValidTelegramBotToken, parseAdminTelegramIds } from "./runtime-config.js";
+import { isValidTelegramBotToken, parseAdminTelegramIds, parseCorsOrigins } from "./runtime-config.js";
 const required = ["DATABASE_URL", "TELEGRAM_BOT_TOKEN", "BOT_API_SECRET", "CORS_ORIGIN", "GAME_ADMIN_TELEGRAM_IDS"] as const;
 const missing = required.filter((key) => !process.env[key]?.trim());
 if (missing.length) throw new Error("Missing required runtime configuration: " + missing.join(", "));
@@ -12,14 +12,7 @@ if (!isValidTelegramBotToken(process.env.TELEGRAM_BOT_TOKEN ?? "")) throw new Er
 const adminIds = parseAdminTelegramIds(process.env.GAME_ADMIN_TELEGRAM_IDS);
 if (!adminIds.length) throw new Error("GAME_ADMIN_TELEGRAM_IDS must contain at least one numeric Telegram user ID.");
 if (!(process.env.DATABASE_URL?.startsWith("postgres://") || process.env.DATABASE_URL?.startsWith("postgresql://"))) throw new Error("DATABASE_URL must use PostgreSQL.");
-const corsOrigins = (process.env.CORS_ORIGIN ?? "").split(",").map((origin) => origin.trim()).filter(Boolean);
-for (const origin of corsOrigins) {
-  let parsed: URL;
-  try { parsed = new URL(origin); } catch { throw new Error("CORS_ORIGIN contains an invalid origin."); }
-  if (parsed.origin !== origin || (process.env.NODE_ENV === "production" && parsed.protocol !== "https:")) {
-    throw new Error("CORS_ORIGIN must contain exact origins; production origins must use HTTPS.");
-  }
-}
+parseCorsOrigins(process.env.CORS_ORIGIN);
 const port = Number(process.env.API_PORT ?? 4000);
 if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error("API_PORT must be an integer between 1 and 65535.");
 const host = process.env.API_HOST ?? "0.0.0.0";
