@@ -128,6 +128,11 @@ test("league registration, round-robin fixtures and final standings are transact
     const started = await startLeague(clubs[0]!.userId, competitionId, new Date());
     assert.equal(started.teams, 4);
     assert.equal(started.fixturesCreated, 6);
+    await assert.rejects(
+      updateCompetitionRules(clubs[0]!.userId, competitionId, customRules),
+      (error: unknown) => typeof error === "object" && error !== null && "code" in error
+        && error.code === "COMPETITION_RULES_LOCKED",
+    );
     const startReplay = await startLeague(clubs[0]!.userId, competitionId, new Date());
     assert.equal(startReplay.replayed, true);
     assert.equal(startReplay.fixturesCreated, 6);
