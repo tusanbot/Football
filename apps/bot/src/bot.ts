@@ -744,7 +744,7 @@ bot.callbackQuery(/^mc:/, async (ctx) => {
 
 bot.command("tactic", async (ctx) => {
   if (!ctx.from || ctx.chat.type !== "private") return;
-  const parts = String(ctx.match ?? "").trim().split(/\\s+/).filter(Boolean);
+  const parts = String(ctx.match ?? "").trim().split(/\s+/).filter(Boolean);
   const matchId = parts.shift() ?? "";
   const checkpointKey = parts.shift() ?? "";
   if (!matchId || !/^minute-(45|60|75)$/.test(checkpointKey)) {
@@ -776,7 +776,7 @@ bot.command("tactic", async (ctx) => {
 
 bot.command("sub", async (ctx) => {
   if (!ctx.from || ctx.chat.type !== "private") return;
-  const parts = String(ctx.match ?? "").trim().split(/\\s+/).filter(Boolean);
+  const parts = String(ctx.match ?? "").trim().split(/\s+/).filter(Boolean);
   const matchId = parts.shift() ?? "";
   const checkpointKey = parts.shift() ?? "";
   if (!matchId || !/^minute-(45|60|75)$/.test(checkpointKey) || parts.length < 2 || parts.length > 10 || parts.length % 2 !== 0) {
