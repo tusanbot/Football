@@ -821,8 +821,13 @@ export async function enqueueDueMatchRuntimes(now = new Date(), limit = 50) {
           nextActionAt: fixture.scheduledAt,
           kickoffSnapshot: jsonSafe({ home, away }),
           fallbackPlan: jsonSafe({
-            home: { formation: home.formation, ...home.tactics },
-            away: { formation: away.formation, ...away.tactics },
+            // Freeze each club's independently configured fallback plan at kickoff.
+            home: fixture.homeClub.matchFallbackPlan
+              ? fixture.homeClub.matchFallbackPlan
+              : { formation: home.formation, ...home.tactics },
+            away: fixture.awayClub.matchFallbackPlan
+              ? fixture.awayClub.matchFallbackPlan
+              : { formation: away.formation, ...away.tactics },
           }),
         }],
         skipDuplicates: true,
