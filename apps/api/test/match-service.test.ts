@@ -190,6 +190,7 @@ test("knockout cup fills its bracket, advances winners and crowns a champion", a
       where: { competitionId, round: 1 }, orderBy: { scheduledAt: "asc" },
     });
     assert.equal(firstRound.length, 2);
+    assert.ok(firstRound.every((fixture) => (fixture.rulesSnapshot as { penaltiesOnDraw:boolean }).penaltiesOnDraw));
     for (const fixture of firstRound) {
       const owner = clubs.find((club) => club.clubId === fixture.homeClubId || club.clubId === fixture.awayClubId)!;
       await simulateScheduledMatch(owner.userId, fixture.id, new Date(fixture.scheduledAt.getTime() + 60_000));
