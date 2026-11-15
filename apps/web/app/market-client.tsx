@@ -294,7 +294,8 @@ export default function MarketPage() {
       const response = await fetch(API + "/v1/friendly-challenges", { method: "POST", headers, body: "{}" });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error ?? "ساخت چالش ناموفق بود.");
-      const shareText = data.shareUrl ?? ("کد دعوت: " + data.challenge.token + " · دستور پذیرش در ربات: /acceptchallenge " + data.challenge.token);\n      setChallengeShareUrl(shareText);
+      const shareText = data.shareUrl ?? ("کد دعوت: " + data.challenge.token + " · دستور پذیرش در ربات: /acceptchallenge " + data.challenge.token);
+      setChallengeShareUrl(shareText);
       setMessage("چالش دوستانه ایجاد شد؛ سهمیه مصرف‌شده: " + (data.asset === "FREE" ? "رایگان" : data.asset === "GOLD" ? data.goldCost + " گلد" : "اعتبار خریداری‌شده") + ".");
       if (navigator.clipboard?.writeText) { try { await navigator.clipboard.writeText(shareText); } catch { /* clipboard permission is optional */ } }
       await load();
