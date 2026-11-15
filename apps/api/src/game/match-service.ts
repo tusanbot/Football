@@ -57,6 +57,10 @@ const matchClubInclude = {
   },
 };
 type LoadedClub = Prisma.ClubGetPayload<{ include: typeof matchClubInclude }>;
+function isValidMatchSide(side: MatchSide): boolean {
+  return side.players.length === 11 && side.players.some((player) => player.position === "GK");
+}
+
 function toSide(club: LoadedClub): MatchSide {
   const eligiblePlayers = club.players.filter((player) => player.suspensionMatchesRemaining === 0);
   const starters = eligiblePlayers.filter((player) => player.lineupSlot !== null)
@@ -66,13 +70,15 @@ function toSide(club: LoadedClub): MatchSide {
   const selected = [...starters];
   if (!selected.some((player) => player.position === "GK")) {
     const reserveKeeper = bench.find((player) => player.position === "GK");
-    if (reserveKeeper) selected.push(reserveKeeper);
+    if (reserveKeeper) {
+      if (selected.length >= 11) selected[10] = reserveKeeper;
+      else selected.push(reserveKeeper);
+    }
   }
   for (const player of bench) {
     if (selected.length >= 11) break;
     if (!selected.some((item) => item.id === player.id)) selected.push(player);
   }
-  if (selected.length < 11) throw new MatchServiceError("BOTH_CLUBS_NEED_VALID_LINEUPS");
   return {
     clubId: club.id, clubName: club.name, formation: club.formation, tactics: asTactics(club),
     stadiumCapacity: calculateStadiumCapacity(club.stadiumLevel),
@@ -153,7 +159,8 @@ export async function createFriendlyMatch(userId: string, opponentClubId: string
     ]);
     if (!home || !away) throw new MatchServiceError("OPPONENT_NOT_FOUND");
     if (home.players.length < 11 || away.players.length < 11) throw new MatchServiceError("BOTH_CLUBS_NEED_VALID_LINEUPS");
-    toSide(home); toSide(away);
+    const homeSide = toSide(home); const awaySide = toSide(away);
+    if (!isValidMatchSide(homeSide) || !isValidMatchSide(awaySide)) throw new MatchServiceError("BOTH_CLUBS_NEED_VALID_LINEUPS");
 
     const overlap = await tx.footballMatch.findFirst({
       where: {
