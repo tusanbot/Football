@@ -242,7 +242,8 @@ export async function startLeague(userId: string, competitionId: string, now = n
         const idempotencyKey = `cup:${competition.id}:r1:${homeClubId}:${awayClubId}`;
         return {
           homeClubId, awayClubId, round: 1, type: "CUP" as const,
-          competitionId, scheduledAt: new Date(now.getTime() + 3 * DAY_MS),
+          competitionId, rulesSnapshot: validateMatchRules(competition.rules ?? defaultMatchRules("CUP")),
+          scheduledAt: new Date(now.getTime() + 3 * DAY_MS),
           seed: idempotencyKey, idempotencyKey,
         };
       });
