@@ -4,14 +4,13 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { CSSProperties } from "react";
 import { createTelegramSession } from "../../lib/telegram-session";
 
-type Player = { id:string; firstName:string; lastName:string; position:string; overall:number; lineupSlot:number|null; status?:string };
 type MatchEvent = { minute:number; type:string; detail:string; playerName:string; relatedPlayerName:string|null };
 type Checkpoint = { checkpointKey:string; kind:string; minute:number; status:string; openedAt:string; decisionDeadlineAt:string; nextSegmentAt:string; resolvedAt:string|null; homeDecisionSubmitted:boolean; awayDecisionSubmitted:boolean };
 type Match = {
  id:string; type:string; status:string; scheduledAt:string;
  homeClub:{id:string;name:string}; awayClub:{id:string;name:string};
  homeScore:number|null; awayScore:number|null; homePenalties:number|null; awayPenalties:number|null;
- runtime:{status:string;currentMinute:number;nextActionAt:string|null;completedAt:string|null;lineups:{home:{formation:string;players:Array<{id:string;name:string;position:string;overall:number}>;bench:Array<{id:string;name:string;position:string;overall:number}>};away:{formation:string;players:Array<{id:string;name:string;position:string;overall:number}>;bench:Array<{id:string;name:string;position:string;overall:number}>}}|null}|null;
+ runtime:{status:string;currentMinute:number;nextActionAt:string|null;completedAt:string|null;mySubstitutionsUsed:number;lineups:{home:{formation:string;tactics:{mentality:string;pressing:string;tempo:string;passingStyle:string};players:Array<{id:string;name:string;position:string;overall:number}>;bench:Array<{id:string;name:string;position:string;overall:number}>};away:{formation:string;tactics:{mentality:string;pressing:string;tempo:string;passingStyle:string};players:Array<{id:string;name:string;position:string;overall:number}>;bench:Array<{id:string;name:string;position:string;overall:number}>}}|null}|null;
  checkpoints:Checkpoint[]; events:MatchEvent[];
 };
 type Instruction = { formation:string; mentality:string; pressing:string; tempo:string; passingStyle:string; substitutions:Array<{outgoingPlayerId:string;incomingPlayerId:string}> };
@@ -26,7 +25,6 @@ export default function MatchCenter(){
  const [sessionToken,setSessionToken]=useState("");
  const [clubId,setClubId]=useState("");
  const [matches,setMatches]=useState<Match[]>([]);
- const [players,setPlayers]=useState<Player[]>([]);
  const [busy,setBusy]=useState("");
  const [notice,setNotice]=useState("");
  const [error,setError]=useState("");
@@ -40,26 +38,43 @@ export default function MatchCenter(){
  const headers=useMemo(()=>({"content-type":"application/json",...(sessionToken?{authorization:"Bearer "+sessionToken}:{})}),[sessionToken]);
  const load=useCallback(async()=>{
   if(!sessionToken)return;
-  const [meResponse,matchResponse,playerResponse]=await Promise.all([
-   fetch(API+"/v1/me",{headers}),fetch(API+"/v1/matches",{headers}),fetch(API+"/v1/club/players",{headers})
+  const [meResponse,matchResponse]=await Promise.all([
+   fetch(API+"/v1/me",{headers}),fetch(API+"/v1/matches",{headers})
   ]);
   if(!meResponse.ok||!matchResponse.ok)throw new Error("دریافت اطلاعات مسابقات ناموفق بود.");
   const me=await meResponse.json();const matchData=await matchResponse.json();
   setClubId(me.club?.id??"");setMatches(matchData.matches??[]);
-  if(playerResponse.ok)setPlayers((await playerResponse.json()).players??[]);
  },[headers,sessionToken]);
  useEffect(()=>{setInitData(window.Telegram?.WebApp?.initData??"");window.Telegram?.WebApp?.ready?.();window.Telegram?.WebApp?.expand?.();},[]);
  useEffect(()=>{if(!initData)return;let active=true;void createTelegramSession(API,initData).then(token=>{if(active)setSessionToken(token);}).catch(e=>{if(active)setError(e instanceof Error?e.message:"احراز هویت ناموفق بود.");});return()=>{active=false;};},[initData]);
  useEffect(()=>{if(!sessionToken)return;let alive=true;const refresh=()=>load().catch(e=>{if(alive)setError(e instanceof Error?e.message:"خطای ارتباط");});void refresh();const timer=setInterval(()=>void refresh(),5000);return()=>{alive=false;clearInterval(timer);};},[sessionToken,load]);
  const activeMatch=matches.find(m=>m.id===selected)??matches.find(m=>m.checkpoints.some(c=>c.status==="OPEN"))??matches[0];
  const openCheckpoint=activeMatch?.checkpoints.find(c=>c.status==="OPEN");
- const activePlayers=players.filter(p=>p.status==="ACTIVE");
- const starters=activePlayers.filter(p=>p.lineupSlot!==null);
- const bench=activePlayers.filter(p=>p.lineupSlot===null);
- function addSub(){if(subs.length<5)setSubs(current=>[...current,{outgoingPlayerId:"",incomingPlayerId:""}]);}
+ const activeSide=activeMatch?.runtime?.lineups
+  ? clubId===activeMatch.homeClub.id ? activeMatch.runtime.lineups.home
+    : clubId===activeMatch.awayClub.id ? activeMatch.runtime.lineups.away : null
+  : null;
+ const starters=activeSide?.players??[];
+ const bench=activeSide?.bench??[];
+ const usedSubstitutions=activeMatch?.runtime?.mySubstitutionsUsed??0;
+ const remainingSubstitutions=Math.max(0,5-usedSubstitutions);
+ const activeMatchId=activeMatch?.id??"";
+ const openCheckpointKey=openCheckpoint?.checkpointKey??"";
+ const sideFormation=activeSide?.formation??"";
+ const sideMentality=activeSide?.tactics.mentality??"";
+ const sidePressing=activeSide?.tactics.pressing??"";
+ const sideTempo=activeSide?.tactics.tempo??"";
+ const sidePassingStyle=activeSide?.tactics.passingStyle??"";
+ useEffect(()=>{
+  if(!activeMatchId||!openCheckpointKey||!sideFormation)return;
+  setFormation(sideFormation);setMentality(sideMentality);setPressing(sidePressing);
+  setTempo(sideTempo);setPassingStyle(sidePassingStyle);setSubs([]);
+ },[activeMatchId,openCheckpointKey,sideFormation,sideMentality,sidePressing,sideTempo,sidePassingStyle]);
+ function addSub(){if(subs.length<remainingSubstitutions)setSubs(current=>[...current,{outgoingPlayerId:"",incomingPlayerId:""}]);}
  function updateSub(index:number,key:"outgoingPlayerId"|"incomingPlayerId",value:string){setSubs(current=>current.map((s,i)=>i===index?{...s,[key]:value}:s));}
  async function submitDecision(){
   if(!activeMatch||!openCheckpoint)return;
+  if(subs.length>remainingSubstitutions)return setError("سقف پنج تعویض در کل مسابقه تکمیل شده است.");
   if(subs.some(s=>!s.outgoingPlayerId||!s.incomingPlayerId))return setError("برای هر تعویض، بازیکن خارج‌شونده و واردشونده را انتخاب کنید.");
   if(subs.some(s=>s.outgoingPlayerId===s.incomingPlayerId))return setError("بازیکن ورودی و خروجی نمی‌توانند یکسان باشند.");
   setBusy("decision");setError("");setNotice("");
@@ -104,9 +119,9 @@ export default function MatchCenter(){
       <label>سرعت بازی<select style={selectStyle} value={tempo} onChange={e=>setTempo(e.target.value)}>{["SLOW","NORMAL","FAST"].map(v=><option key={v}>{v}</option>)}</select></label>
       <label className="match-tactic-wide">سبک پاس<select style={selectStyle} value={passingStyle} onChange={e=>setPassingStyle(e.target.value)}>{["SHORT","MIXED","DIRECT"].map(v=><option key={v}>{v}</option>)}</select></label>
      </div>
-     <div style={{marginTop:14}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}><strong>تعویض‌ها ({subs.length}/۵)</strong><button type="button" className="secondary" onClick={addSub} disabled={subs.length>=5}>افزودن تعویض</button></div>
+     <div style={{marginTop:14}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}><strong>تعویض‌ها ({usedSubstitutions+subs.length}/۵)</strong><button type="button" className="secondary" onClick={addSub} disabled={subs.length>=remainingSubstitutions}>افزودن تعویض</button></div>
       {subs.map((sub,index)=><div className="match-tactics-grid" key={index} style={{marginTop:8}}>
-       <select aria-label="بازیکن خارج‌شونده" style={selectStyle} value={sub.outgoingPlayerId} onChange={e=>updateSub(index,"outgoingPlayerId",e.target.value)}><option value="">بازیکن خارج‌شونده</option>{starters.map(p=><option key={p.id} value={p.id}>{p.firstName} {p.lastName} · {p.position}</option>)}</select>
+       <select aria-label="بازیکن خارج‌شونده" style={selectStyle} value={sub.outgoingPlayerId} onChange={e=>updateSub(index,"outgoingPlayerId",e.target.value)}><option value="">بازیکن خارج‌شونده</option>{starters.map(p=><option key={p.id} value={p.id}>{p.name} · {p.position}</option>)}</select>
        <select aria-label="بازیکن واردشونده" style={selectStyle} value={sub.incomingPlayerId} onChange={e=>updateSub(index,"incomingPlayerId",e.target.value)}><option value="">بازیکن واردشونده</option>{bench.map(p=><option key={p.id} value={p.id}>{p.firstName} {p.lastName} · {p.position}</option>)}</select>
       </div>)}
      </div>
