@@ -206,6 +206,8 @@ model Club {
   ownerId    String   @unique
   name       String
   slug       String   @unique
+  logoData   String?  @db.Text
+  logoMime   String?  @db.VarChar(32)
   level      Int      @default(1)
   reputation Int      @default(0)
   formation  String   @default("4-3-3")

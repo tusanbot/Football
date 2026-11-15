@@ -1,6 +1,6 @@
 import "dotenv/config";
 import { randomUUID } from "node:crypto";
-import { Bot, InlineKeyboard, Keyboard } from "grammy";
+import { Bot, InlineKeyboard, Keyboard, type Context } from "grammy";
 import {
   GROUP_REPLY_DELETE_DELAY_MS,
   isPersistentGroupReply,
@@ -68,6 +68,39 @@ async function api<T>(path: string, telegramId: number, method = "GET", body?: u
   return data;
 }
 
+
+async function publicApi<T>(path: string): Promise<T> {
+  if (!apiUrl) throw new Error("FOOTBALL_API_URL is not configured.");
+  const response = await fetch(new URL(path, apiUrl));
+  const data = await response.json() as T & { error?: string };
+  if (!response.ok) throw new Error(data.error ?? "Public API request failed.");
+  return data;
+}
+
+async function saveTelegramClubLogo(ctx: Context, fileId: string, mimeType: string, fileSize?: number) {
+  if (!ctx.from || ctx.chat?.type !== "private") return;
+  if (!["image/jpeg", "image/png", "image/webp"].includes(mimeType)) {
+    await ctx.reply("فرمت لوگو باید JPG، PNG یا WEBP باشد.");
+    return;
+  }
+  if (fileSize && fileSize > 512 * 1024) {
+    await ctx.reply("حجم لوگو نباید بیشتر از ۵۱۲ کیلوبایت باشد. تصویر را به‌صورت Photo ارسال یا فشرده کنید.");
+    return;
+  }
+  try {
+    const telegramFile = await ctx.api.getFile(fileId);
+    if (!telegramFile.file_path) throw new Error("TELEGRAM_FILE_PATH_MISSING");
+    const downloaded = await fetch("https://api.telegram.org/file/bot" + token + "/" + telegramFile.file_path);
+    if (!downloaded.ok) throw new Error("TELEGRAM_FILE_DOWNLOAD_FAILED");
+    const bytes = Buffer.from(await downloaded.arrayBuffer());
+    if (bytes.length > 512 * 1024) throw new Error("LOGO_TOO_LARGE");
+    await api("/v1/club/logo", ctx.from.id, "PUT", { mimeType, base64: bytes.toString("base64") });
+    await ctx.reply("لوگوی باشگاه با موفقیت به‌روزرسانی شد.");
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "خطای نامشخص";
+    await ctx.reply(message === "LOGO_TOO_LARGE" ? "حجم لوگو بیشتر از ۵۱۲ کیلوبایت است." : "ثبت لوگو ناموفق بود: " + message);
+  }
+}
 
 async function awardGroupActivity(ctx: { chat: { type: string; id: number }; from: { id: number } | undefined }, activityType: "CHALLENGE_JOIN"|"CHALLENGE_CREATE"|"LEAGUE_JOIN"|"LEAGUE_CREATE"|"MATCH_PLAYED", referenceId: string) {
  if(!ctx.from||!(ctx.chat.type==="group"||ctx.chat.type==="supergroup"))return;
@@ -1279,6 +1312,46 @@ bot.command("alliance-contribute",async ctx=>{
   const amount=String(ctx.match??"").trim(); if(!/^\\d{1,12}$/.test(amount)||BigInt(amount)<=BigInt(0))return ctx.reply("استفاده: /alliance-contribute AMOUNT");
   try{const d=await api<{treasuryPoints:string}>("/v1/alliances/"+encodeURIComponent(String(ctx.chat.id))+"/treasury/contribute",ctx.from.id,"POST",{amount,idempotencyKey:"alliance_contrib_"+randomUUID().replace(/-/g,"")});await ctx.reply("مشارکت در خزانه اتحاد ثبت شد. موجودی خزانه: "+cash(d.treasuryPoints)+" امتیاز.");}
   catch(e){await ctx.reply("واریز ناموفق بود: "+(e instanceof Error?e.message:"unknown"));}
+});
+
+bot.command("setlogo", async (ctx) => {
+  if (!ctx.from || ctx.chat.type !== "private") return;
+  await ctx.reply("برای انتخاب لوگوی باشگاه، تصویر را در همین گفت‌وگوی خصوصی ارسال کنید یا از یک گفت‌وگوی دیگر برای ربات فوروارد کنید. فرمت‌های JPG، PNG و WEBP تا حجم ۵۱۲ کیلوبایت پذیرفته می‌شوند.");
+});
+bot.on("message:photo", async (ctx) => {
+  if (!ctx.from || ctx.chat.type !== "private") return;
+  const photo = ctx.message.photo.at(-1);
+  if (!photo) return;
+  await saveTelegramClubLogo(ctx, photo.file_id, "image/jpeg", photo.file_size);
+});
+bot.on("message:document", async (ctx) => {
+  if (!ctx.from || ctx.chat.type !== "private") return;
+  const document = ctx.message.document;
+  if (!document.mime_type?.startsWith("image/")) return;
+  await saveTelegramClubLogo(ctx, document.file_id, document.mime_type, document.file_size);
+});
+
+bot.command("clubs", async (ctx) => {
+  try {
+    const result = await publicApi<{ clubs: Array<{ id: string; name: string; level: number; championships: number; podiums: number; logoUrl: string | null }> }>("/v1/clubs/public");
+    const lines = result.clubs.slice(0, 12).map((club, index) =>
+      (index + 1) + ". " + club.name + " · شناسه " + club.id + " · سطح " + club.level + " · " + club.championships + " قهرمانی · " + club.podiums + " سکو" + (club.logoUrl ? " · دارای لوگو" : ""));
+    await ctx.reply("باشگاه‌های Football Empire\n\n" + (lines.join("\n") || "هنوز باشگاهی ثبت نشده است.") + "\n\nبرای مشاهده پروفایل: /clubprofile CLUB_ID");
+  } catch (error) { await ctx.reply("دریافت فهرست باشگاه‌ها ناموفق بود: " + (error instanceof Error ? error.message : "خطای نامشخص")); }
+});
+bot.command("clubprofile", async (ctx) => {
+  const id = String(ctx.match ?? "").trim().split(/\s+/)[0];
+  if (!id) return ctx.reply("استفاده: /clubprofile CLUB_ID");
+  try {
+    const profile = await publicApi<{ club: { id: string; name: string; level: number; reputation: number; logoUrl: string | null }; stats: { seasons: number; appearances: number; championships: number; podiums: number; promotions: number; relegations: number }; tiers: Array<{ tierName: string; appearances: number; championships: number }>; leagues: Array<{ season: number; tierName: string; groupNumber: number; finalPosition: number | null; awards: Array<{ awardName: string }> }> }>("/v1/clubs/" + encodeURIComponent(id) + "/profile");
+    const s = profile.stats;
+    const caption = profile.club.name + "\nسطح باشگاه: " + profile.club.level + " · اعتبار: " + profile.club.reputation +
+      "\nفصل‌ها: " + s.seasons + " · قهرمانی: " + s.championships + " · سکو: " + s.podiums +
+      "\nصعود: " + s.promotions + " · سقوط: " + s.relegations +
+      "\n\n" + profile.leagues.slice(0, 8).map((row) => "فصل " + row.season + " · " + row.tierName + " · گروه " + row.groupNumber + " · رتبه " + (row.finalPosition ?? "—") + (row.awards.length ? " · " + row.awards.map((award) => award.awardName).join("، ") : "")).join("\n");
+    if (profile.club.logoUrl && apiUrl) await ctx.replyWithPhoto(new URL(profile.club.logoUrl, apiUrl).toString(), { caption: caption.slice(0, 1024) });
+    else await ctx.reply(caption || "پروفایل باشگاه خالی است.");
+  } catch (error) { await ctx.reply("دریافت پروفایل باشگاه ناموفق بود: " + (error instanceof Error ? error.message : "خطای نامشخص")); }
 });
 
 bot.on(["chat_member","my_chat_member"],async ctx=>{

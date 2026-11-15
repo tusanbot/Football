@@ -118,6 +118,21 @@ button:disabled { opacity: .55; cursor: not-allowed; }
 .operation-row .secondary { flex: 0 0 auto; }
 .finance-credit { color: #8ce0b9; white-space: nowrap; }
 .finance-debit { color: #ffb6c0; white-space: nowrap; }
+
+.club-directory { display: grid; gap: 8px; margin-top: 14px; }
+.club-directory-item { display: flex; width: 100%; align-items: center; gap: 12px; text-align: right; border: 1px solid #30465e; border-radius: 12px; padding: 10px; color: #f4f7fb; background: #0b1727; cursor: pointer; }
+.club-directory-item > span:last-child { display: grid; gap: 4px; }
+.club-directory-item small { color: #9fb0c5; font-size: 12px; }
+.club-directory-item img, .public-club-profile img { width: 48px; height: 48px; object-fit: contain; border-radius: 10px; background: #fff; padding: 3px; }
+.club-rank { width: 26px; color: #9ce8c5; font-weight: 800; text-align: center; }
+.club-logo-placeholder { display: inline-grid; place-items: center; width: 48px; height: 48px; flex: 0 0 48px; border-radius: 10px; color: #9ce8c5; background: #19344a; font-size: 22px; font-weight: 900; }
+.club-logo-placeholder.large { width: 72px; height: 72px; flex-basis: 72px; font-size: 30px; }
+.public-club-profile { display: flex; align-items: center; gap: 14px; margin-bottom: 14px; }
+.public-club-profile h2 { margin: 0; }
+.public-club-profile p { margin: 5px 0 0; color: #9fb0c5; }
+.logo-upload-control { display: block; width: 100%; margin: 12px 0; border: 1px dashed #55718b; border-radius: 10px; padding: 12px; color: #9ce8c5; text-align: center; font-weight: 700; cursor: pointer; }
+.logo-upload-control input { display: block; width: 100%; margin-top: 9px; color: #c3cfdd; font-size: 12px; }
+.club-logo-management { border-top: 1px solid #263b52; margin-top: 14px; padding-top: 12px; }
 @media (max-width: 760px) {
   .operations-grid { grid-template-columns: 1fr; }
 }

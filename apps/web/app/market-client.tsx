@@ -35,6 +35,14 @@ type PyramidLeagueOverview = {
   promotionOffers:Array<{id:string;fromTier:number;targetTier:number;season:number;finalPosition:number}>;
   history:Array<{id:string;tier:number;tierName:string;season:number;groupNumber:number;name:string;status:string;teams:number}>;
 };
+type PublicClub = { id: string; name: string; level: number; reputation: number; championships: number; podiums: number; promotions: number; relegations: number; logoUrl: string | null };
+type PublicClubProfile = {
+  club: { id: string; name: string; slug: string; level: number; reputation: number; logoUrl: string | null; createdAt: string };
+  stats: { seasons: number; appearances: number; championships: number; podiums: number; promotions: number; relegations: number };
+  tiers: Array<{ tier: number; tierName: string; appearances: number; championships: number; podiums: number; promotions: number; relegations: number }>;
+  movements: Array<{ season: number; tierName: string; position: number; movement: "PROMOTION" | "RELEGATION"; targetTier: number | null }>;
+  leagues: Array<{ id: string; season: number; tierName: string; groupNumber: number; finalPosition: number | null; awards: Array<{ awardName: string }> }>;
+};
 type PyramidClubHistory = {
   club: { id: string; name: string };
   stats: { seasons: number; appearances: number; championships: number; podiums: number; promotions: number; relegations: number };
@@ -120,6 +128,9 @@ export default function MarketPage() {
   const [pyramidLeagues, setPyramidLeagues] = useState<PyramidLeagueOverview | null>(null);
   const [pyramidDetail, setPyramidDetail] = useState<PyramidLeagueDetails | null>(null);
   const [pyramidClubHistory, setPyramidClubHistory] = useState<PyramidClubHistory | null>(null);
+  const [publicClubs, setPublicClubs] = useState<PublicClub[]>([]);
+  const [publicClubProfile, setPublicClubProfile] = useState<PublicClubProfile | null>(null);
+  const [logoBusy, setLogoBusy] = useState(false);
   const [challengeShareUrl, setChallengeShareUrl] = useState("");
   const [groups, setGroups] = useState<Array<{telegramGroupId:string;title:string;role:string;memberCount:number;isActive:boolean;points:string}>>([]);
   const [selectedGroupTelegramId, setSelectedGroupTelegramId] = useState("");
@@ -168,7 +179,7 @@ export default function MarketPage() {
   const [busy, setBusy] = useState("");
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
-  const [tab, setTab] = useState<"market" | "club" | "operations" | "lineup" | "development" | "matches" | "groups" | "special">("market");
+  const [tab, setTab] = useState<"market" | "club" | "operations" | "lineup" | "development" | "matches" | "groups" | "special" | "clubs">("market");
 
   const headers = useMemo(() => ({ "content-type": "application/json", "x-telegram-init-data": initData }), [initData]);
 
@@ -207,6 +218,8 @@ export default function MarketPage() {
     if (pyramidResponse.ok) setPyramidLeagues(await pyramidResponse.json());
     const clubHistoryResponse = await fetch(API + "/v1/pyramid-leagues/history", { headers });
     if (clubHistoryResponse.ok) setPyramidClubHistory(await clubHistoryResponse.json());
+    const publicClubsResponse = await fetch(API + "/v1/clubs/public");
+    if (publicClubsResponse.ok) setPublicClubs((await publicClubsResponse.json()).clubs);
     if (groupResponse.ok) {
       const groupData = await groupResponse.json();
       const nextGroups = groupData.groups ?? [];
@@ -288,6 +301,61 @@ export default function MarketPage() {
   }
 
 
+  async function viewPublicClub(id: string) {
+    setBusy("public-club-" + id); setError("");
+    try {
+      const response = await fetch(API + "/v1/clubs/" + encodeURIComponent(id) + "/profile");
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error ?? "دریافت پروفایل باشگاه ناموفق بود.");
+      setPublicClubProfile(data as PublicClubProfile);
+    } catch (e) { setError(e instanceof Error ? e.message : "خطای نامشخص"); }
+    finally { setBusy(""); }
+  }
+
+  async function uploadClubLogo(file: File) {
+    setLogoBusy(true); setError(""); setMessage("");
+    try {
+      if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) throw new Error("فرمت تصویر باید JPG، PNG یا WEBP باشد.");
+      const bitmap = await createImageBitmap(file);
+      const scale = Math.min(1, 512 / Math.max(bitmap.width, bitmap.height));
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+      canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+      const context = canvas.getContext("2d");
+      if (!context) throw new Error("پردازش تصویر در این مرورگر پشتیبانی نمی‌شود.");
+      context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+      bitmap.close();
+      const blob = await new Promise<Blob>((resolve, reject) => canvas.toBlob((value) => value ? resolve(value) : reject(new Error("تبدیل تصویر ناموفق بود.")), "image/webp", 0.88));
+      if (blob.size > 512 * 1024) throw new Error("حجم لوگوی فشرده‌شده باید حداکثر ۵۱۲ کیلوبایت باشد.");
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => typeof reader.result === "string" ? resolve(reader.result) : reject(new Error("خواندن تصویر ناموفق بود."));
+        reader.onerror = () => reject(new Error("خواندن تصویر ناموفق بود."));
+        reader.readAsDataURL(blob);
+      });
+      const response = await fetch(API + "/v1/club/logo", { method: "PUT", headers, body: JSON.stringify({ mimeType: blob.type || "image/webp", base64: dataUrl.split(",")[1] }) });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error ?? "ثبت لوگو ناموفق بود.");
+      setMessage("لوگوی باشگاه با موفقیت ثبت شد.");
+      await load();
+      if (publicClubProfile && publicClubProfile.club.id === pyramidClubHistory?.club.id) await viewPublicClub(publicClubProfile.club.id);
+    } catch (e) { setError(e instanceof Error ? e.message : "خطای نامشخص"); }
+    finally { setLogoBusy(false); }
+  }
+
+  async function removeClubLogo() {
+    setLogoBusy(true); setError("");
+    try {
+      const response = await fetch(API + "/v1/club/logo", { method: "DELETE", headers });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error ?? "حذف لوگو ناموفق بود.");
+      setMessage("لوگوی باشگاه حذف شد.");
+      await load();
+      if (publicClubProfile) await viewPublicClub(publicClubProfile.club.id);
+    } catch (e) { setError(e instanceof Error ? e.message : "خطای نامشخص"); }
+    finally { setLogoBusy(false); }
+  }
+
   async function viewPyramidLeague(id: string) {
     setBusy("pyramid-league-view"); setError("");
     try {
@@ -327,8 +395,61 @@ export default function MarketPage() {
       <button className={tab === "matches" ? "active" : ""} onClick={() => setTab("matches")}>مسابقات و لیگ</button>
       <button className={tab === "groups" ? "active" : ""} onClick={() => setTab("groups")}>گروه‌ها و جوایز</button>
       <button className={tab === "special" ? "active" : ""} onClick={() => setTab("special")}>ستاره‌های ویژه</button>
+      <button className={tab === "clubs" ? "active" : ""} onClick={() => setTab("clubs")}>باشگاه‌ها و افتخارات</button>
     </nav>
     {message && <div className="notice success">{message}</div>}{error && <div className="notice error">{error}</div>}
+
+    {tab === "clubs" && <section className="club-market">
+      <div className="market-card">
+        <h2>تالار افتخارات باشگاه‌ها</h2>
+        <p>پرافتخارترین باشگاه‌ها بر اساس قهرمانی‌ها، سکوها و صعودهای ثبت‌شده مرتب شده‌اند.</p>
+        <div className="club-directory">
+          {publicClubs.map((club, index) => <button className="club-directory-item" key={club.id} onClick={() => void viewPublicClub(club.id)}>
+            <span className="club-rank">{index + 1}</span>
+            {club.logoUrl ? <img src={API + club.logoUrl} alt={"لوگوی " + club.name} /> : <span className="club-logo-placeholder">{club.name.slice(0, 1)}</span>}
+            <span><strong>{club.name}</strong><small>سطح {club.level} · {club.championships} قهرمانی · {club.podiums} سکو</small></span>
+          </button>)}
+          {publicClubs.length === 0 && <p className="muted">هنوز باشگاهی برای نمایش ثبت نشده است.</p>}
+        </div>
+      </div>
+      {pyramidClubHistory?.club.id && <div className="market-card">
+        <h2>باشگاه من</h2>
+        <p className="muted">مدیریت لوگو و مشاهده صفحه عمومی باشگاه خودتان.</p>
+        <button className="secondary" disabled={!!busy} onClick={() => void viewPublicClub(pyramidClubHistory.club.id)}>مشاهده پروفایل باشگاه من</button>
+        <label className="logo-upload-control">انتخاب لوگو از گوشی
+          <input type="file" accept="image/png,image/jpeg,image/webp" disabled={logoBusy} onChange={(event) => { const file = event.currentTarget.files?.[0]; if (file) void uploadClubLogo(file); event.currentTarget.value = ""; }} />
+        </label>
+        <button className="secondary" disabled={logoBusy} onClick={() => void removeClubLogo()}>حذف لوگوی فعلی</button>
+      </div>}
+      {publicClubProfile && <div className="market-card">
+        <div className="public-club-profile">
+          {publicClubProfile.club.logoUrl ? <img src={API + publicClubProfile.club.logoUrl} alt={"لوگوی " + publicClubProfile.club.name} /> : <div className="club-logo-placeholder large">{publicClubProfile.club.name.slice(0, 1)}</div>}
+          <div><h2>{publicClubProfile.club.name}</h2><p>سطح {publicClubProfile.club.level} · اعتبار {publicClubProfile.club.reputation}</p></div>
+        </div>
+        <div className="development-stats">
+          <div><span>فصل‌ها</span><strong>{publicClubProfile.stats.seasons}</strong></div>
+          <div><span>حضور</span><strong>{publicClubProfile.stats.appearances}</strong></div>
+          <div><span>قهرمانی</span><strong>{publicClubProfile.stats.championships}</strong></div>
+          <div><span>سکو</span><strong>{publicClubProfile.stats.podiums}</strong></div>
+          <div><span>صعود</span><strong>{publicClubProfile.stats.promotions}</strong></div>
+          <div><span>سقوط</span><strong>{publicClubProfile.stats.relegations}</strong></div>
+        </div>
+        <h3>افتخارات در سطوح مختلف</h3>
+        {publicClubProfile.tiers.map((tier) => <div className="operation-row" key={tier.tier}><strong>{tier.tierName}</strong><small>{tier.appearances} حضور · {tier.championships} قهرمانی · {tier.podiums} سکو</small></div>)}
+        <h3>تاریخچه فصل‌ها</h3>
+        {publicClubProfile.leagues.map((league) => <div className="operation-row" key={league.id}>
+          <div><strong>فصل {league.season} · {league.tierName} · گروه {league.groupNumber}</strong><small>رتبه {league.finalPosition ?? "—"}</small>{league.awards.map((award, index) => <small key={index}>{award.awardName}</small>)}</div>
+        </div>)}
+        {publicClubProfile.club.id === pyramidClubHistory?.club.id && <div className="club-logo-management">
+          <h3>لوگوی باشگاه</h3>
+          <p className="muted">برای ارسال از تلگرام، دستور /setlogo را در ربات بزنید و تصویر را ارسال یا فوروارد کنید.</p>
+          <label className="logo-upload-control">انتخاب لوگو از گوشی
+            <input type="file" accept="image/png,image/jpeg,image/webp" disabled={logoBusy} onChange={(event) => { const file = event.currentTarget.files?.[0]; if (file) void uploadClubLogo(file); event.currentTarget.value = ""; }} />
+          </label>
+          {publicClubProfile.club.logoUrl && <button className="secondary" disabled={logoBusy} onClick={() => void removeClubLogo()}>حذف لوگوی باشگاه</button>}
+        </div>}
+      </div>}
+    </section>}
 
     {tab === "market" && <section className="market-grid">
       {listings.length === 0 && <div className="empty-state">در حال حاضر آگهی فعالی وجود ندارد.</div>}
