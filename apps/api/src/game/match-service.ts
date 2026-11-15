@@ -359,8 +359,8 @@ export async function listClubMatches(userId: string) {
           nextActionAt: match.runtime.nextActionAt?.toISOString() ?? null,
           completedAt: match.runtime.completedAt?.toISOString() ?? null,
           lineups: home && away ? {
-            home: { formation: home.formation, players: home.players, bench: home.bench ?? [] },
-            away: { formation: away.formation, players: away.players, bench: away.bench ?? [] },
+            home: { formation: home.formation, players: home.players.map(({ id, name, position, overall }) => ({ id, name, position, overall })), bench: (home.bench ?? []).map(({ id, name, position, overall }) => ({ id, name, position, overall })) },
+            away: { formation: away.formation, players: away.players.map(({ id, name, position, overall }) => ({ id, name, position, overall })), bench: (away.bench ?? []).map(({ id, name, position, overall }) => ({ id, name, position, overall })) },
           } : null,
         };
       })() : null,
