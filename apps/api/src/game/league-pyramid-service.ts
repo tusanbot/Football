@@ -111,7 +111,7 @@ export async function applyForPyramidLeague(userId: string, tier: number, now = 
 export async function listPyramidLeagues(userId: string) {
   const club = await ownedClub(userId);
   const season = new Date().getUTCFullYear() + 1;
-  const [leagues, applications, currentEntry, promotionOffers] = await Promise.all([
+  const [leagues, applications, currentEntry, promotionOffers, historyLeagues] = await Promise.all([
     prisma.pyramidLeague.findMany({
       where: { season }, include: {
         competition: { select: { id: true, name: true, status: true, startsAt: true, completedAt: true } },
@@ -123,6 +123,7 @@ export async function listPyramidLeagues(userId: string) {
     }),
     prisma.pyramidLeagueEntry.findFirst({ where: { clubId: club.id, league: { season } }, include: { league: true } }),
     prisma.leaguePromotionOffer.findMany({ where: { clubId: club.id, status: "PENDING" }, include: { league: { select: { tier: true, season: true } } }, orderBy: { offeredAt: "desc" } }),
+    prisma.pyramidLeague.findMany({ where: { season: { lt: season } }, include: { competition: { select: { name: true, status: true } }, entries: { select: { clubId: true } } }, orderBy: [{ season: "desc" }, { tier: "asc" }, { groupNumber: "asc" }], take: 100 }),
   ]);
   const queueCounts = await prisma.pyramidLeagueApplication.groupBy({
     by: ["tier"], where: { season, status: "QUEUED" }, _count: { _all: true },
@@ -145,6 +146,7 @@ export async function listPyramidLeagues(userId: string) {
     }),
     currentLeagueId: currentEntry?.leagueId ?? null,
     promotionOffers: promotionOffers.map((offer) => ({ id: offer.id, fromTier: offer.league.tier, targetTier: offer.targetTier, season: offer.league.season, finalPosition: offer.finalPosition })),
+    history: historyLeagues.map((league) => ({ id: league.id, tier: league.tier, tierName: leagueTier(league.tier).name, season: league.season, groupNumber: league.groupNumber, name: league.competition.name, status: league.competition.status, teams: league.entries.length })),
   };
 }
 
