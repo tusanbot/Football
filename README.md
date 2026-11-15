@@ -84,6 +84,9 @@ Bot-to-API requests use BOT_API_SECRET plus the Telegram sender ID; keep the sec
 
 ## Database setup
 
+For Supabase PostgreSQL connection setup, security boundaries, and first initialization, see [docs/SUPABASE-POSTGRESQL.md](docs/SUPABASE-POSTGRESQL.md).
+
+
 1. Configure `DATABASE_URL` for runtime traffic and `DIRECT_URL` for Prisma CLI migrations. For local PostgreSQL, both may use the same URL. For Supabase, use a runtime connection supported by `pg` and a direct or session-pooled connection for migrations; do not run schema migrations through a transaction pooler.
 2. Validate the schema and migration connection with `pnpm --filter @football/api exec prisma validate` and apply committed migrations with `pnpm db:migrate:deploy`.
 3. Seed the curated special-player catalog with `pnpm --filter @football/api db:seed:special`.
