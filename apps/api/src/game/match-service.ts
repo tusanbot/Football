@@ -150,26 +150,28 @@ export async function createFriendlyMatch(userId: string, opponentClubId: string
   });
   return { match, replayed: false };
 }
-export async function createLeague(userId: string, name: string, maxTeams: number, idempotencyKey: string, format: "LEAGUE" | "CUP" = "LEAGUE", inputRules?: MatchRules) {
+export async function createLeague(userId: string, name: string, maxTeams: number, idempotencyKey: string, format: "LEAGUE" | "CUP" = "LEAGUE", inputRules?: MatchRules, cupLegs = 1) {
   keyValid(idempotencyKey);
   if (format === "CUP" && ![4, 8].includes(maxTeams)) throw new MatchServiceError("CUP_SIZE_MUST_BE_FOUR_OR_EIGHT");
   if (format === "LEAGUE" && (maxTeams < 4 || maxTeams > 10)) throw new MatchServiceError("INVALID_LEAGUE_SIZE");
+  if (!Number.isInteger(cupLegs) || ![1, 2].includes(cupLegs) || (format === "LEAGUE" && cupLegs !== 1)) throw new MatchServiceError("INVALID_CUP_LEGS");
   const club = await getOwnedClub(userId);
   const rules = validateMatchRules(inputRules ?? defaultMatchRules(format));
   if (format === "LEAGUE" && rules.penaltiesOnDraw) throw new MatchServiceError("PENALTIES_NOT_ALLOWED_FOR_LEAGUE");
+  if (format === "CUP" && !rules.penaltiesOnDraw) throw new MatchServiceError("CUP_REQUIRES_PENALTIES");
   const existing = await prisma.competition.findUnique({ where: { idempotencyKey } });
   if (existing) {
     // Rules may be edited after creation; replaying the original create command
     // must return that competition rather than treating its current rules as a new payload.
     if (existing.createdByClubId !== club.id || existing.name !== name
-      || existing.maxTeams !== maxTeams || existing.format !== format) {
+      || existing.maxTeams !== maxTeams || existing.format !== format || existing.cupLegs !== cupLegs) {
       throw new MatchServiceError("IDEMPOTENCY_CONFLICT");
     }
     return { competition: existing, replayed: true };
   }
   const competition = await prisma.competition.create({
     data: {
-      idempotencyKey, name, season: new Date().getUTCFullYear(), format, maxTeams, rules, createdByClubId: club.id,
+      idempotencyKey, name, season: new Date().getUTCFullYear(), format, maxTeams, cupLegs, rules, createdByClubId: club.id,
       entries: { create: { clubId: club.id } },
     },
   });
@@ -184,6 +186,7 @@ export async function updateCompetitionRules(userId: string, competitionId: stri
     if (competition.createdByClubId !== club.id) throw new MatchServiceError("ONLY_CREATOR_CAN_START");
     if (competition.status !== "REGISTRATION") throw new MatchServiceError("COMPETITION_RULES_LOCKED");
     if (competition.format !== "CUP" && rules.penaltiesOnDraw) throw new MatchServiceError("PENALTIES_NOT_ALLOWED_FOR_LEAGUE");
+    if (competition.format === "CUP" && !rules.penaltiesOnDraw) throw new MatchServiceError("CUP_REQUIRES_PENALTIES");
     await tx.competition.update({ where: { id: competitionId }, data: { rules } });
     return { competitionId, rules };
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
@@ -244,21 +247,27 @@ export async function startLeague(userId: string, competitionId: string, now = n
       const firstRoundFixtures = Array.from({ length: teams.length / 2 }, (_, index) => {
         const homeClubId = teams[index]!;
         const awayClubId = teams[teams.length - 1 - index]!;
-        const idempotencyKey = `cup:${competition.id}:r1:${homeClubId}:${awayClubId}`;
-        return {
-          homeClubId, awayClubId, round: 1, type: "CUP" as const,
-          competitionId, rulesSnapshot: validateMatchRules(competition.rules ?? defaultMatchRules("CUP")),
-          scheduledAt: new Date(now.getTime() + 3 * DAY_MS),
-          seed: idempotencyKey, idempotencyKey,
-        };
-      });
+        const tieId = `cup:${competition.id}:r1:t${index + 1}`;
+        return Array.from({ length: competition.cupLegs }, (_, legIndex) => {
+          const leg = legIndex + 1;
+          const legHome = leg === 1 ? homeClubId : awayClubId;
+          const legAway = leg === 1 ? awayClubId : homeClubId;
+          const idempotencyKey = tieId + `:leg${leg}`;
+          return {
+            homeClubId: legHome, awayClubId: legAway, round: 1, type: "CUP" as const,
+            competitionId, rulesSnapshot: validateMatchRules(competition.rules ?? defaultMatchRules("CUP")),
+            tieId, leg, scheduledAt: new Date(now.getTime() + (2 + leg * 3) * DAY_MS),
+            seed: idempotencyKey, idempotencyKey,
+          };
+        });
+      }).flat();
       await tx.footballMatch.createMany({ data: firstRoundFixtures });
       const updated = await tx.competition.updateMany({
         where: { id: competitionId, status: "REGISTRATION" },
         data: { status: "ACTIVE", startsAt: firstRoundFixtures[0]!.scheduledAt },
       });
       if (updated.count !== 1) throw new MatchServiceError("COMPETITION_NOT_OPEN");
-      return { fixturesCreated: firstRoundFixtures.length, rounds: Math.log2(teams.length), teams: teams.length, replayed: false };
+      return { fixturesCreated: firstRoundFixtures.length, rounds: Math.log2(teams.length), teams: teams.length, cupLegs: competition.cupLegs, replayed: false };
     }
     const slots: Array<string | null> = [...teams];
     if (slots.length % 2) slots.push(null);
