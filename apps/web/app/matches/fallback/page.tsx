@@ -68,7 +68,7 @@ export default function FallbackPlanPage(){
         <small style={{color:"#9fb0c5"}}>نسخه {data.version}</small>
       </div>
       {fields.map(field=><label key={field.key} style={label}>{field.label}<select style={select} value={data.plan[field.key]} onChange={e=>change(field.key,e.target.value)}>{field.options.map(value=><option key={value} value={value}>{value}</option>)}</select></label>)}
-      <button onClick={()=>void save()} disabled={busy} style={{width:"100%",border:0,borderRadius:9,padding:13,background:"#63d3a5",color:"#092018",fontWeight:800,cursor:"pointer",opacity:busy?.65:1}}>{busy?"در حال ذخیره…":"ذخیره برنامه جایگزین"}</button>
+      <button onClick={()=>void save()} disabled={busy} style={{width:"100%",border:0,borderRadius:9,padding:13,background:"#63d3a5",color:"#092018",fontWeight:800,cursor:"pointer",opacity:busy ? 0.65 : 1}}>{busy?"در حال ذخیره…":"ذخیره برنامه جایگزین"}</button>
     </section>}
     <aside style={{...card,color:"#9fb0c5",fontSize:13,lineHeight:1.9}}>
       <strong style={{color:"#f4f7fb"}}>نحوه اعمال برنامه</strong>
