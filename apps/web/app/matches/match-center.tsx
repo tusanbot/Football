@@ -16,6 +16,13 @@ type Match = {
 type Instruction = { formation:string; mentality:string; pressing:string; tempo:string; passingStyle:string; substitutions:Array<{outgoingPlayerId:string;incomingPlayerId:string}> };
 const API=process.env.NEXT_PUBLIC_API_URL??"http://localhost:4000";
 const labels:Record<string,string>={GOAL:"گل",YELLOW_CARD:"کارت زرد",RED_CARD:"کارت قرمز",INJURY:"مصدومیت",SUBSTITUTION:"تعویض"};
+const matchStatusLabels:Record<string,string>={SCHEDULED:"برنامه‌ریزی‌شده",IN_PROGRESS:"در حال برگزاری",COMPLETED:"پایان‌یافته",CANCELLED:"لغوشده"};
+const runtimeStatusLabels:Record<string,string>={QUEUED:"در صف اجرا",RUNNING:"در حال برگزاری",AWAITING_CHECKPOINT:"فرصت تصمیم تاکتیکی",COMPLETED:"پایان‌یافته"};
+const matchTypeLabels:Record<string,string>={FRIENDLY:"دوستانه",LEAGUE:"لیگ",CUP:"جام حذفی"};
+const mentalityLabels:Record<string,string>={DEFENSIVE:"دفاعی",BALANCED:"متعادل",ATTACKING:"هجومی"};
+const pressingLabels:Record<string,string>={LOW_BLOCK:"دفاع فشرده",MID_BLOCK:"پرس میانه",HIGH_PRESS:"پرس از جلو"};
+const tempoLabels:Record<string,string>={SLOW:"آرام",NORMAL:"معمولی",FAST:"سریع"};
+const passingLabels:Record<string,string>={SHORT:"کوتاه",MIXED:"ترکیبی",DIRECT:"مستقیم"};
 const selectStyle:CSSProperties={width:"100%",padding:"10px",borderRadius:9,border:"1px solid #30465e",background:"#0b1727",color:"#f4f7fb"};
 const cardStyle:CSSProperties={border:"1px solid #263b52",background:"#111f32",borderRadius:16,padding:16,marginBottom:12};
 const buttonStyle:CSSProperties={border:0,borderRadius:9,padding:"11px 15px",background:"#63d3a5",color:"#092018",fontWeight:800,cursor:"pointer"};
@@ -105,19 +112,19 @@ export default function MatchCenter(){
     </button>)}
    </section>
    {activeMatch&&<section>
-    <article style={cardStyle}><div style={{color:"#9fb0c5",fontSize:12}}>{activeMatch.type} · {activeMatch.status}</div>
+    <article style={cardStyle}><div style={{color:"#9fb0c5",fontSize:12}}>{matchTypeLabels[activeMatch.type]??activeMatch.type} · {matchStatusLabels[activeMatch.status]??activeMatch.status}</div>
      <h2 style={{fontSize:22,margin:"8px 0"}}>{activeMatch.homeClub.name} {activeMatch.homeScore??"–"} : {activeMatch.awayScore??"–"} {activeMatch.awayClub.name}</h2>
      <div style={{display:"flex",justifyContent:"space-between",color:"#9ce8c5",fontSize:13}}><span>دقیقه {activeMatch.runtime?.currentMinute??0}</span><span>{activeMatch.runtime?.status??activeMatch.status}</span></div>
      <div style={{height:7,background:"#263b52",borderRadius:10,overflow:"hidden",marginTop:10}}><div style={{height:"100%",width:Math.min(100,(activeMatch.runtime?.currentMinute??0)/90*100)+"%",background:"#63d3a5"}}/></div>
     </article>
     {openCheckpoint&&<article style={cardStyle}><h2 style={{marginTop:0,fontSize:18}}>تصمیم تاکتیکی · دقیقه {openCheckpoint.minute}</h2>
-     <p style={{color:"#9fb0c5",fontSize:13}}>مهلت پاسخ: {new Date(openCheckpoint.decisionDeadlineAt).toLocaleTimeString("fa-IR")} · {clubId===activeMatch.homeClub.id?(openCheckpoint.homeDecisionSubmitted?"تصمیم شما ثبت شده":"هنوز تصمیم شما ثبت نشده"):clubId===activeMatch.awayClub.id?(openCheckpoint.awayDecisionSubmitted?"تصمیم شما ثبت شده":"هنوز تصمیم شما ثبت نشده"):"باشگاه شما در این مسابقه نیست"}</p>
+     <p style={{color:"#9fb0c5",fontSize:13}}>مهلت پاسخ تا {new Date(openCheckpoint.decisionDeadlineAt).toLocaleTimeString("fa-IR")}؛ در صورت بی‌پاسخی، برنامه ذخیره‌شده یا تاکتیک پیش‌فرض اعمال می‌شود و مسابقه خودکار ادامه می‌یابد. {clubId===activeMatch.homeClub.id?(openCheckpoint.homeDecisionSubmitted?"تصمیم شما ثبت شده":"تصمیم شما هنوز ثبت نشده"):clubId===activeMatch.awayClub.id?(openCheckpoint.awayDecisionSubmitted?"تصمیم شما ثبت شده":"تصمیم شما هنوز ثبت نشده"):"باشگاه شما در این مسابقه نیست"}</p>
      <div className="match-tactics-grid">
       <label>آرایش<select style={selectStyle} value={formation} onChange={e=>setFormation(e.target.value)}>{["4-3-3","4-4-2","3-5-2","4-2-3-1"].map(v=><option key={v}>{v}</option>)}</select></label>
-      <label>ذهنیت<select style={selectStyle} value={mentality} onChange={e=>setMentality(e.target.value)}>{["DEFENSIVE","BALANCED","ATTACKING"].map(v=><option key={v}>{v}</option>)}</select></label>
-      <label>پرس<select style={selectStyle} value={pressing} onChange={e=>setPressing(e.target.value)}>{["LOW_BLOCK","MID_BLOCK","HIGH_PRESS"].map(v=><option key={v}>{v}</option>)}</select></label>
-      <label>سرعت بازی<select style={selectStyle} value={tempo} onChange={e=>setTempo(e.target.value)}>{["SLOW","NORMAL","FAST"].map(v=><option key={v}>{v}</option>)}</select></label>
-      <label className="match-tactic-wide">سبک پاس<select style={selectStyle} value={passingStyle} onChange={e=>setPassingStyle(e.target.value)}>{["SHORT","MIXED","DIRECT"].map(v=><option key={v}>{v}</option>)}</select></label>
+      <label>ذهنیت<select style={selectStyle} value={mentality} onChange={e=>setMentality(e.target.value)}>{["DEFENSIVE","BALANCED","ATTACKING"].map(v=><option key={v} value={v}>{mentalityLabels[v]}</option>)}</select></label>
+      <label>پرس<select style={selectStyle} value={pressing} onChange={e=>setPressing(e.target.value)}>{["LOW_BLOCK","MID_BLOCK","HIGH_PRESS"].map(v=><option key={v} value={v}>{pressingLabels[v]}</option>)}</select></label>
+      <label>سرعت بازی<select style={selectStyle} value={tempo} onChange={e=>setTempo(e.target.value)}>{["SLOW","NORMAL","FAST"].map(v=><option key={v} value={v}>{tempoLabels[v]}</option>)}</select></label>
+      <label className="match-tactic-wide">سبک پاس<select style={selectStyle} value={passingStyle} onChange={e=>setPassingStyle(e.target.value)}>{["SHORT","MIXED","DIRECT"].map(v=><option key={v} value={v}>{passingLabels[v]}</option>)}</select></label>
      </div>
      <div style={{marginTop:14}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}><strong>تعویض‌ها ({usedSubstitutions+subs.length}/۵)</strong><button type="button" className="secondary" onClick={addSub} disabled={subs.length>=remainingSubstitutions}>افزودن تعویض</button></div>
       {subs.map((sub,index)=><div className="match-tactics-grid" key={index} style={{marginTop:8}}>
@@ -127,7 +134,7 @@ export default function MatchCenter(){
      </div>
      <button style={{...buttonStyle,width:"100%",marginTop:15}} disabled={busy==="decision"||(clubId!==activeMatch.homeClub.id&&clubId!==activeMatch.awayClub.id)} onClick={()=>void submitDecision()}>{busy==="decision"?"در حال ثبت…":"ثبت تصمیم تاکتیکی"}</button>
     </article>}
-    <article style={cardStyle}><h2 style={{fontSize:18,marginTop:0}}>خط زمانی مسابقه</h2>{activeMatch.events.length?activeMatch.events.map((event,index)=><div key={index} style={{borderTop:"1px solid #263b52",padding:"10px 0",fontSize:13}}><strong style={{color:"#9ce8c5"}}>{event.minute}′ · {labels[event.type]??event.type}</strong><div style={{color:"#c3cfdd",marginTop:4}}>{event.detail||event.playerName}{event.relatedPlayerName?" · "+event.relatedPlayerName:""}</div></div>):<p style={{color:"#9fb0c5",fontSize:13}}>رویداد مهمی ثبت نشده است.</p>}</article>
+    <article style={cardStyle}><h2 style={{fontSize:18,marginTop:0}}>خط زمانی مسابقه</h2>{activeMatch.events.length?activeMatch.events.map((event,index)=><div key={index} style={{borderTop:"1px solid #263b52",padding:"10px 0",fontSize:13}}><strong style={{color:"#9ce8c5"}}>{event.minute}′ · {labels[event.type]??event.type}</strong><div style={{color:"#c3cfdd",marginTop:4}}>{event.playerName||labels[event.type]||event.type}{event.relatedPlayerName?" · "+(event.type==="SUBSTITUTION"?"ورود: ":"پاس گل: ")+event.relatedPlayerName:""}</div></div>):<p style={{color:"#9fb0c5",fontSize:13}}>رویداد مهمی ثبت نشده است.</p>}</article>
     {activeMatch.runtime?.lineups&&<article style={cardStyle}>
      <h2 style={{fontSize:18,marginTop:0}}>ترکیب و نیمکت</h2>
      <div className="match-lineup-grid">
