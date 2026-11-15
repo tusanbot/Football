@@ -5,7 +5,10 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
+  // Runtime traffic uses DATABASE_URL (Supabase pooler / Hyperdrive).
+  // Prisma migration commands use DIRECT_URL to avoid transaction-pooler DDL limitations.
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 enum WalletAsset {
