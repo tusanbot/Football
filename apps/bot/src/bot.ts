@@ -29,6 +29,7 @@ if (webAppUrl) {
   if (process.env.NODE_ENV === "production" && webAppEndpoint.protocol !== "https:") throw new Error("TELEGRAM_WEB_APP_URL must use HTTPS in production.");
 }
 const bot = new Bot(token);
+let botTelegramId: number | undefined;
 const backgroundTimers: NodeJS.Timeout[] = [];
 
 bot.use(async (ctx, next) => {
@@ -590,6 +591,9 @@ bot.command("group-register", async (ctx) => {
   try {
     const memberCount = await ctx.api.getChatMemberCount(ctx.chat.id);
     if (memberCount < 10) return ctx.reply("This group needs at least 10 Telegram members to activate Football Empire. Current members: " + memberCount + ".");
+    if (!botTelegramId) return ctx.reply("Bot identity is not initialized. Please try again shortly.");
+    const botMember = await ctx.api.getChatMember(ctx.chat.id, botTelegramId);
+    if (botMember.status !== "creator" && botMember.status !== "administrator") return ctx.reply("برای فعال‌سازی کامل، ربات باید مدیر گروه باشد و دسترسی بررسی اعضا داشته باشد.");
     const member = await ctx.api.getChatMember(ctx.chat.id, ctx.from.id);
     const role = member.status === "creator" ? "OWNER" : member.status === "administrator" ? "ADMIN" : null;
     if (!role) return ctx.reply("Only a group owner or administrator can register this group.");
@@ -1654,7 +1658,7 @@ bot.on(["chat_member","my_chat_member"],async ctx=>{
   const botChange="my_chat_member" in ctx.update?ctx.update.my_chat_member:null;
   const memberChange="chat_member" in ctx.update?ctx.update.chat_member:null;
   const botStatus=botChange?.new_chat_member.status;
-  const botPresent=botStatus?["creator","administrator","member"].includes(botStatus):undefined;
+  const botPresent=botStatus?["creator","administrator"].includes(botStatus):undefined;
   await apiSystem("/v1/groups/system/member-count",{telegramGroupId:String(ctx.chat.id),memberCount,...(botPresent!==undefined?{botPresent}:{})});
   if(memberChange){
    const member=memberChange.new_chat_member;
@@ -1686,6 +1690,7 @@ if (apiUrl && botApiSecret) {
 }
 
 const botIdentity = await bot.api.getMe();
+botTelegramId = botIdentity.id;
 console.info("Football Empire Bot authenticated as @" + (botIdentity.username ?? botIdentity.id));
 const stopBot = () => {
   for (const timer of backgroundTimers) clearInterval(timer);
