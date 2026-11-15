@@ -28,6 +28,21 @@ type MatchRecord = {
 type MatchRulesForm = { maxSubstitutions:number; maxInPlayWindows:number; injuriesEnabled:boolean; injuryDurationDays:number; redCardSuspensionMatches:number; yellowCardsToSuspend:number; yellowCardSuspensionMatches:number; penaltiesOnDraw:boolean };
 type OpenLeague = { id: string; name: string; season: number; format: string; status: string; cupLegs:number; maxTeams: number; teams: number; joined: boolean; isCreator: boolean; creator: string; rules:MatchRulesForm };
 type ClubCompetition = { id: string; name: string; season: number; format: string; status: string };
+type PyramidLeagueOverview = {
+  season: number;
+  tiers: Array<{ tier:number; key:string; name:string; waitingTeams:number; myApplication:string|null; leagues:Array<{id:string;competitionId:string;name:string;status:string;startsAt:string|null;teams:number;clubs:string[];isMyLeague:boolean}> }>;
+  currentLeagueId:string|null;
+  promotionOffers:Array<{id:string;fromTier:number;targetTier:number;season:number;finalPosition:number}>;
+};
+type PyramidLeagueDetails = {
+  league:{id:string;tier:number;tierName:string;season:number;groupNumber:number;name:string;status:string;startsAt:string|null};
+  standings:Array<{clubId:string;clubName:string;points:number;goalDifference:number;goalsFor:number;goalsAgainst:number;played:number;won:number;drawn:number;lost:number;position:number}>;
+  topScorers:Array<{playerId:string;playerName:string;clubName:string;goals:number}>;
+  topAssists:Array<{playerId:string;playerName:string;clubName:string;assists:number}>;
+  matches:Array<{id:string;round:number|null;scheduledAt:string;status:string;homeClub:{name:string};awayClub:{name:string};homeScore:number|null;awayScore:number|null}>;
+  awards:Array<{placement:number;awardName:string;awardType:string;clubName:string}>;
+};
+
 type LeagueDetails = {
   competition: { id: string; name: string; season: number; format: string; cupLegs:number; status: string; startsAt: string | null };
   standings: Array<{ position: number; clubId: string; clubName: string; played: number; won: number; drawn: number; lost: number; goalsFor: number; goalsAgainst: number; goalDifference: number; points: number }>;
@@ -94,6 +109,9 @@ export default function MarketPage() {
   const [openLeagues, setOpenLeagues] = useState<OpenLeague[]>([]);
   const [clubCompetitions, setClubCompetitions] = useState<ClubCompetition[]>([]);
   const [leagueDetail, setLeagueDetail] = useState<LeagueDetails | null>(null);
+  const [pyramidLeagues, setPyramidLeagues] = useState<PyramidLeagueOverview | null>(null);
+  const [pyramidDetail, setPyramidDetail] = useState<PyramidLeagueDetails | null>(null);
+  const [challengeShareUrl, setChallengeShareUrl] = useState("");
   const [groups, setGroups] = useState<Array<{telegramGroupId:string;title:string;role:string;memberCount:number;isActive:boolean;points:string}>>([]);
   const [selectedGroupTelegramId, setSelectedGroupTelegramId] = useState("");
   const [groupWorkspace, setGroupWorkspace] = useState<GroupWorkspace | null>(null);
@@ -169,13 +187,15 @@ export default function MarketPage() {
       fetch(API + "/v1/matches/opponents", { headers }),
       fetch(API + "/v1/competitions", { headers }),
       fetch(API + "/v1/groups/mine", { headers }),
+      fetch(API + "/v1/pyramid-leagues", { headers }),
     ]);
-    const [p, w, m, own, s, l, d, o, matchResponse, opponentResponse, leagueResponse, groupResponse] = requests;
+    const [p, w, m, own, s, l, d, o, matchResponse, opponentResponse, leagueResponse, groupResponse, pyramidResponse] = requests;
     if (p.ok) setPlayers((await p.json()).players);
     if (o.ok) { const clubOperations = (await o.json()).club as ClubOperations; setOperations(clubOperations); setTicketPriceInput(clubOperations.ticketPrice); }
     if (matchResponse.ok) { const data = await matchResponse.json(); setMatches(data.matches ?? []); setClubCompetitions(data.competitions ?? []); }
     if (opponentResponse.ok) setOpponents((await opponentResponse.json()).opponents ?? []);
     if (leagueResponse.ok) setOpenLeagues((await leagueResponse.json()).competitions ?? []);
+    if (pyramidResponse.ok) setPyramidLeagues(await pyramidResponse.json());
     if (groupResponse.ok) {
       const groupData = await groupResponse.json();
       const nextGroups = groupData.groups ?? [];
@@ -252,6 +272,32 @@ export default function MarketPage() {
       const data = await response.json();
       if (!response.ok) throw new Error(data.error ?? "دریافت جدول لیگ ناموفق بود.");
       setLeagueDetail(data as LeagueDetails);
+    } catch (e) { setError(e instanceof Error ? e.message : "خطای نامشخص"); }
+    finally { setBusy(""); }
+  }
+
+
+  async function viewPyramidLeague(id: string) {
+    setBusy("pyramid-league-view"); setError("");
+    try {
+      const response = await fetch(API + "/v1/pyramid-leagues/" + encodeURIComponent(id), { headers });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error ?? "دریافت اطلاعات لیگ ناموفق بود.");
+      setPyramidDetail(data as PyramidLeagueDetails);
+    } catch (e) { setError(e instanceof Error ? e.message : "خطای نامشخص"); }
+    finally { setBusy(""); }
+  }
+
+  async function createFriendlyChallengeLink() {
+    setBusy("friendly-challenge"); setError(""); setMessage("");
+    try {
+      const response = await fetch(API + "/v1/friendly-challenges", { method: "POST", headers, body: "{}" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error ?? "ساخت چالش ناموفق بود.");
+      setChallengeShareUrl(data.shareUrl ?? "");
+      setMessage("چالش دوستانه ایجاد شد؛ سهمیه مصرف‌شده: " + (data.asset === "FREE" ? "رایگان" : data.asset === "GOLD" ? data.goldCost + " گلد" : "اعتبار خریداری‌شده") + ".");
+      if (data.shareUrl && navigator.clipboard?.writeText) await navigator.clipboard.writeText(data.shareUrl);
+      await load();
     } catch (e) { setError(e instanceof Error ? e.message : "خطای نامشخص"); }
     finally { setBusy(""); }
   }
@@ -510,7 +556,46 @@ export default function MarketPage() {
         </div>)}
       </div>
     </section>}
-    {tab === "matches" && <section className="club-market">
+    
+{tab === "matches" && <section className="club-market">
+      <div className="market-card">
+        <h2>لیگ‌های سراسری و مسیر صعود</h2>
+        <p>هر لیگ دقیقاً ۸ تیم دارد و تا تکمیل ظرفیت آغاز نمی‌شود. دو تیم برتر صعود می‌کنند و دو تیم انتهای جدول سقوط خواهند کرد. این ساختار مستقل از لیگ‌های محلی گروه‌های تلگرام است.</p>
+        <button className="secondary" disabled={!!busy} onClick={() => void load()}>به‌روزرسانی هرم لیگ‌ها</button>
+        {pyramidLeagues && <p className="muted">فصل {pyramidLeagues.season} · درخواست ورود جدید از لیگ پایه انجام می‌شود.</p>}
+        {pyramidLeagues?.tiers.map((tier) => <div className="operation-row" key={tier.tier}>
+          <div><strong>{tier.name}</strong><small>صف انتظار: {tier.waitingTeams}/8 تیم {tier.myApplication ? " · وضعیت درخواست شما: " + tier.myApplication : ""}</small>
+            {tier.leagues.map((league) => <small key={league.id}>{league.name} · {league.teams}/8 تیم · {league.status} {league.isMyLeague ? " · لیگ شما" : ""}</small>)}
+          </div>
+          {tier.tier === 1 && !tier.myApplication && <button className="secondary" disabled={!!busy} onClick={() => void action("pyramid-apply", "/v1/pyramid-leagues/apply", "POST", {tier:1})}>درخواست ورود به لیگ پایه</button>}
+          {tier.leagues.filter((league) => league.isMyLeague).map((league) => <button key={league.id} className="secondary" disabled={!!busy} onClick={() => void viewPyramidLeague(league.id)}>جزئیات لیگ</button>)}
+        </div>)}
+        {pyramidLeagues?.promotionOffers.map((offer) => <div className="operation-row" key={offer.id}>
+          <div><strong>پیشنهاد صعود به {pyramidLeagues.tiers.find((tier) => tier.tier === offer.targetTier)?.name ?? "سطح بالاتر"}</strong><small>رتبه {offer.finalPosition} · فصل {offer.season}</small></div>
+          <button disabled={!!busy} onClick={() => void action("promotion-accept-"+offer.id, "/v1/pyramid-leagues/promotions/"+offer.id+"/respond", "POST", {accept:true})}>پذیرش صعود</button>
+          <button className="secondary" disabled={!!busy} onClick={() => void action("promotion-decline-"+offer.id, "/v1/pyramid-leagues/promotions/"+offer.id+"/respond", "POST", {accept:false})}>انصراف</button>
+        </div>)}
+      </div>
+      {pyramidDetail && <div className="market-card">
+        <h2>{pyramidDetail.league.name} · {pyramidDetail.league.tierName}</h2>
+        <p>فصل {pyramidDetail.league.season} · وضعیت {pyramidDetail.league.status}</p>
+        <h3>جدول و امتیازات</h3>
+        <div className="finance-summary">{pyramidDetail.standings.map((row) => <div key={row.clubId}><span>{row.position}. {row.clubName}</span><strong>{row.points} امتیاز · {row.played} بازی · {row.won} برد · {row.drawn} مساوی · {row.lost} باخت · تفاضل {row.goalDifference}</strong></div>)}</div>
+        <h3>بهترین گلزنان</h3>
+        {pyramidDetail.topScorers.map((row) => <div className="operation-row" key={row.playerId}><span>{row.playerName} · {row.clubName}</span><strong>{row.goals} گل</strong></div>)}
+        <h3>بهترین پاسورها</h3>
+        {pyramidDetail.topAssists.map((row) => <div className="operation-row" key={row.playerId}><span>{row.playerName} · {row.clubName}</span><strong>{row.assists} پاس گل</strong></div>)}
+        <h3>جام و مدال‌ها</h3>
+        {pyramidDetail.awards.map((award) => <div className="operation-row" key={award.placement}><span>{award.awardName}</span><strong>{award.clubName}</strong></div>)}
+        <h3>مسابقات این لیگ</h3>
+        {pyramidDetail.matches.map((match) => <div className="operation-row" key={match.id}><span>{match.homeClub.name} {match.homeScore ?? "–"} : {match.awayScore ?? "–"} {match.awayClub.name}</span><small>هفته {match.round ?? "—"} · {match.status}</small></div>)}
+      </div>}
+      <div className="market-card">
+        <h2>دعوت به چالش دوستانه</h2>
+        <p>روزانه ۳ چالش رایگان دارید؛ پس از آن حداکثر ۲ چالش با گلد ایجاد می‌شود. لینک را در گروه یا برای بازیکنان دیگر بفرستید تا هرکدام زودتر پذیرفتند مسابقه ثبت شود.</p>
+        <button disabled={!!busy} onClick={() => void createFriendlyChallengeLink()}>ساخت لینک چالش دوستانه</button>
+        {challengeShareUrl && <p className="notice success">لینک چالش: <a href={challengeShareUrl} target="_blank" rel="noreferrer">{challengeShareUrl}</a> (در صورت پشتیبانی، کپی هم شد.)</p>}
+      </div>
       <div className="market-card">
         <h2>مسابقات دوستانه</h2>
         <button className="secondary" disabled={!!busy} onClick={() => void load()}>به‌روزرسانی مسابقات</button>
