@@ -55,3 +55,28 @@ The API process validates required environment variables, establishes a PostgreS
 6. Ensure the Bot is an administrator in every group where live membership checks, alliance workflows, or group broadcasts are required.
 7. Confirm the Mini App URL, Bot username, CORS origins, webhook/polling mode, and public API URL match the production domain. Back up PostgreSQL before every migration.
 8. Run a smoke test: Telegram login, account provisioning, club creation, match simulation/checkpoint, league registration, group join, group gift redemption, private notice delivery, group broadcast delivery, and admin audit log.
+
+
+## Production commands
+
+Run these from the repository root with Node.js 22 and pnpm 10:
+
+```bash
+pnpm install --frozen-lockfile
+pnpm db:generate
+pnpm db:migrate:deploy
+pnpm verify
+```
+
+Set `NEXT_PUBLIC_API_URL` to the public HTTPS API origin before building the Web app. Set `CORS_ORIGIN` to the exact HTTPS Web origin. Generate the shared secret with `openssl rand -hex 32`; use the same value for API and Bot. Do not reuse the example placeholder.
+
+Build artifacts and process commands:
+
+```bash
+pnpm build
+pnpm start:api
+pnpm start:bot
+pnpm start:web
+```
+
+Run the three start commands as separate supervised processes (systemd, PM2, or the hosting platform's process manager). The API must become ready before the Bot starts. The Web app is built with `pnpm build`; `start:web` serves that build. The API listens on `API_HOST:API_PORT` (defaults `0.0.0.0:4000`). Verify the public API `/health` and `/ready` endpoints, then open the Mini App through the Bot's `TELEGRAM_WEB_APP_URL`.
