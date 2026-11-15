@@ -54,6 +54,15 @@ test("the Worker adapts Fetch requests to the existing Fastify application", asy
   await Promise.all(pending.splice(0));
 });
 
+test("readiness executes a real PostgreSQL query through the Worker Prisma adapter", async () => {
+  const response = await worker.fetch(new Request("https://api.example.test/ready"), configuredEnv, context);
+  assert.equal(response.status, 200);
+  const body = await response.json() as { status: string; service: string };
+  assert.equal(body.status, "ready");
+  assert.equal(body.service, "football-empire-api");
+  await Promise.all(pending.splice(0));
+});
+
 test("Telegram auth route uses the shared Fastify route validation", async () => {
   const response = await worker.fetch(new Request("https://api.example.test/v1/auth/telegram", {
     method: "POST",

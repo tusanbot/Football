@@ -3,6 +3,7 @@ import { buildApp } from "../../../apps/api/src/app.js";
 import { createPrismaClient, prisma, withPrismaClient } from "../../../apps/api/src/db.js";
 import { processDueMatchRuntimes } from "../../../apps/api/src/game/match-service.js";
 import { processDuePromotionOffers } from "../../../apps/api/src/game/league-pyramid-service.js";
+import { isValidTelegramBotToken, parseAdminTelegramIds, parseCorsOrigins } from "../../../apps/api/src/runtime-config.js";
 
 interface MatchCoordinatorNamespace {
   idFromName(name: string): unknown;
@@ -35,11 +36,23 @@ const json = (body: unknown, status = 200) => new Response(JSON.stringify(body),
 function dbUrl(env: Env): string | null { return env.HYPERDRIVE?.connectionString ?? env.DATABASE_URL ?? null; }
 function missingConfig(env: Env): string[] {
   const missing: string[] = [];
-  if (!dbUrl(env)) missing.push("HYPERDRIVE or DATABASE_URL");
-  if (!env.TELEGRAM_BOT_TOKEN) missing.push("TELEGRAM_BOT_TOKEN");
+  const database = dbUrl(env);
+  if (!database) missing.push("HYPERDRIVE or DATABASE_URL");
+  else if (!/^postgres(?:ql)?:\/\//i.test(database)) missing.push("DATABASE_URL_INVALID");
+  if (!isValidTelegramBotToken(env.TELEGRAM_BOT_TOKEN ?? "")) missing.push("TELEGRAM_BOT_TOKEN");
   if (!env.BOT_API_SECRET || env.BOT_API_SECRET.length < 32 || /^(replace-with|change-me|your-)/i.test(env.BOT_API_SECRET)) missing.push("BOT_API_SECRET");
-  if (!env.CORS_ORIGIN) missing.push("CORS_ORIGIN");
-  if (!env.GAME_ADMIN_TELEGRAM_IDS) missing.push("GAME_ADMIN_TELEGRAM_IDS");
+  if (!parseAdminTelegramIds(env.GAME_ADMIN_TELEGRAM_IDS).length) missing.push("GAME_ADMIN_TELEGRAM_IDS");
+  try {
+    const production = env.ENVIRONMENT !== "development";
+    const origins = parseCorsOrigins(env.CORS_ORIGIN, production);
+    if (!origins.length) missing.push("CORS_ORIGIN");
+    if (!production && origins.some((origin) => {
+      const parsed = new URL(origin);
+      return parsed.protocol === "http:" && !["localhost", "127.0.0.1", "::1"].includes(parsed.hostname);
+    })) missing.push("CORS_ORIGIN_INVALID");
+  } catch {
+    missing.push("CORS_ORIGIN_INVALID");
+  }
   return missing;
 }
 function configureEnv(env: Env): void {
