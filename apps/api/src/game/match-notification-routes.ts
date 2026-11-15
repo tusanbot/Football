@@ -18,13 +18,14 @@ function authenticateSystemBot(request: FastifyRequest, reply: FastifyReply): bo
 export function registerMatchNotificationRoutes(app: FastifyInstance) {
   app.post("/v1/bot/match-checkpoints/claim", async (request, reply) => {
     if (!authenticateSystemBot(request, reply)) return;
-    const parsed = z.object({ limit: z.number().int().min(1).max(100).default(25) }).safeParse(request.body ?? {});
+    const parsed = z.object({ limit: z.number().int().min(1).max(100).default(25), checkpointId: z.string().min(1).max(64).optional() }).safeParse(request.body ?? {});
     if (!parsed.success) return reply.code(400).send({ error: "INVALID_MATCH_NOTIFICATION_CLAIM" });
     const now = new Date();
     const retryBefore = new Date(now.getTime() - 30_000);
     const notifications = await prisma.$transaction(async (tx) => {
       const checkpoints = await tx.matchTacticalCheckpoint.findMany({
         where: {
+          ...(parsed.data.checkpointId ? { id: parsed.data.checkpointId } : {}),
           status: "OPEN",
           decisionDeadlineAt: { gt: now },
           OR: [
