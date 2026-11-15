@@ -294,9 +294,9 @@ export default function MarketPage() {
       const response = await fetch(API + "/v1/friendly-challenges", { method: "POST", headers, body: "{}" });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error ?? "ساخت چالش ناموفق بود.");
-      setChallengeShareUrl(data.shareUrl ?? "");
+      const shareText = data.shareUrl ?? ("کد دعوت: " + data.challenge.token + " · دستور پذیرش در ربات: /acceptchallenge " + data.challenge.token);\n      setChallengeShareUrl(shareText);
       setMessage("چالش دوستانه ایجاد شد؛ سهمیه مصرف‌شده: " + (data.asset === "FREE" ? "رایگان" : data.asset === "GOLD" ? data.goldCost + " گلد" : "اعتبار خریداری‌شده") + ".");
-      if (data.shareUrl && navigator.clipboard?.writeText) await navigator.clipboard.writeText(data.shareUrl);
+      if (navigator.clipboard?.writeText) { try { await navigator.clipboard.writeText(shareText); } catch { /* clipboard permission is optional */ } }
       await load();
     } catch (e) { setError(e instanceof Error ? e.message : "خطای نامشخص"); }
     finally { setBusy(""); }
@@ -594,7 +594,7 @@ export default function MarketPage() {
         <h2>دعوت به چالش دوستانه</h2>
         <p>روزانه ۳ چالش رایگان دارید؛ پس از آن حداکثر ۲ چالش با گلد ایجاد می‌شود. لینک را در گروه یا برای بازیکنان دیگر بفرستید تا هرکدام زودتر پذیرفتند مسابقه ثبت شود.</p>
         <button disabled={!!busy} onClick={() => void createFriendlyChallengeLink()}>ساخت لینک چالش دوستانه</button>
-        {challengeShareUrl && <p className="notice success">لینک چالش: <a href={challengeShareUrl} target="_blank" rel="noreferrer">{challengeShareUrl}</a> (در صورت پشتیبانی، کپی هم شد.)</p>}
+        {challengeShareUrl && <div className="notice success"><p>دعوت چالش: {challengeShareUrl}</p>{challengeShareUrl.startsWith("https://") && <a href={challengeShareUrl} target="_blank" rel="noreferrer">باز کردن لینک چالش</a>}<button className="secondary" onClick={() => void navigator.clipboard?.writeText(challengeShareUrl)}>کپی دعوت</button></div>}
       </div>
       <div className="market-card">
         <h2>مسابقات دوستانه</h2>
