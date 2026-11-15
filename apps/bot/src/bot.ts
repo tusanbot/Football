@@ -191,10 +191,10 @@ async function pollMatchCheckpointNotifications() {
         .text("هجومی", "mc:" + notification.matchId + ":" + notification.checkpointKey + ":ATTACKING");
       try {
         await bot.api.sendMessage(telegramId,
-          "وقفه تاکتیکی مسابقه شما باز شد.\\n"
+          "وقفه تاکتیکی مسابقه شما باز شد.\n"
           + notification.clubName + " مقابل " + notification.opponentName
-          + "\\nدقیقه " + notification.minute + " · مهلت تا " + new Date(notification.deadlineAt).toLocaleTimeString("fa-IR")
-          + "\\nبرای انتخاب سریع ذهنیت یکی از گزینه‌ها را بزنید. برای سایر تنظیمات از /tactic و برای تعویض از /sub استفاده کنید.",
+          + "\nدقیقه " + notification.minute + " · مهلت تا " + new Date(notification.deadlineAt).toLocaleTimeString("fa-IR")
+          + "\nبرای انتخاب سریع ذهنیت یکی از گزینه‌ها را بزنید. برای سایر تنظیمات از /tactic و برای تعویض از /sub استفاده کنید.",
           { reply_markup: keyboard });
         await acknowledge(true);
       } catch (sendError) {
