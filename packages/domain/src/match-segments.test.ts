@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { advanceMatchSegment, type MatchSegmentState } from "./match-segments.js";
+import { DEFAULT_MATCH_RULES } from "./match-rules.js";
 import type { MatchSide } from "./match-engine.js";
 
 function side(clubId: string, overall: number): MatchSide {
@@ -168,4 +169,43 @@ test("segmented player statistics track minutes and output across injury substit
   assert.equal(secondStats.get(injury.playerId)?.minutesPlayed, injury.minute);
   assert.ok((secondStats.get(forced.relatedPlayerId!)?.minutesPlayed ?? 0) >= 45 - injury.minute);
   assert.ok((secondStats.get(forced.relatedPlayerId!)?.minutesPlayed ?? 0) <= 60 - injury.minute);
+});
+
+
+test("competition rules can disable injuries without changing the segment boundaries", () => {
+  const result = advanceMatchSegment({
+    seed: "rules-disable-injury-seed",
+    state: initialState(),
+    toMinute: 45,
+    rules: { ...DEFAULT_MATCH_RULES, injuriesEnabled: false },
+  });
+  assert.equal(result.state.currentMinute, 45);
+  assert.equal(result.events.some((event) => event.type === "INJURY"), false);
+});
+
+test("custom substitution caps are applied to manager and forced substitutions", () => {
+  const home = withBench(side("custom-home", 75));
+  const away = withBench(side("custom-away", 65));
+  const initial: MatchSegmentState = {
+    currentMinute: 0, nextSequence: 1,
+    home: { side: home, score: 0, expectedGoals: 0 },
+    away: { side: away, score: 0, expectedGoals: 0 },
+    events: [],
+  };
+  const result = advanceMatchSegment({
+    seed: "custom-rule-substitution-seed", state: initial, toMinute: 45,
+    homeSubstitutions: {
+      onPitch: home.players.map(({id,position})=>({id,position})),
+      bench: (home.bench ?? []).map(({id,position})=>({id,position})),
+      substitutionsUsed: 0, inPlayWindowsUsed: 0, substitutedOutIds: [], sentOffIds: [], usedCheckpointIds: [],
+    },
+    awaySubstitutions: {
+      onPitch: away.players.map(({id,position})=>({id,position})),
+      bench: (away.bench ?? []).map(({id,position})=>({id,position})),
+      substitutionsUsed: 0, inPlayWindowsUsed: 0, substitutedOutIds: [], sentOffIds: [], usedCheckpointIds: [],
+    },
+    rules: { ...DEFAULT_MATCH_RULES, maxSubstitutions: 1, maxInPlayWindows: 1 },
+  });
+  assert.equal(result.state.currentMinute, 45);
+  assert.ok(result.homeSubstitutions.substitutionsUsed <= 1);
 });
