@@ -1882,10 +1882,10 @@ const identityCheck = await fetch(new URL("/v1/bot/verify-identity", apiUrl), {
   signal: AbortSignal.timeout(15_000),
 });
 if (!identityCheck.ok) throw new Error("The API and Bot Telegram tokens do not identify the same Bot (HTTP " + identityCheck.status + ").");
-const lease = await apiSystem<{ acquired: boolean }>("/v1/bot/runtime/lease", { instanceId: botRuntimeInstanceId, action: "acquire" });
-if (!lease.acquired) throw new Error("Another Football Empire Bot process already owns the Telegram polling lease.");
 const webhookInfo = await bot.api.getWebhookInfo();
 assertLongPollingWebhookClear(webhookInfo.url);
+const lease = await apiSystem<{ acquired: boolean }>("/v1/bot/runtime/lease", { instanceId: botRuntimeInstanceId, action: "acquire" });
+if (!lease.acquired) throw new Error("Another Football Empire Bot process already owns the Telegram polling lease.");
 const deletionQueueTimer = setInterval(() => { void pollGroupMessageDeletionQueue(); }, 5_000);
 backgroundTimers.push(deletionQueueTimer);
 const matchNotificationTimer = setInterval(() => { void pollMatchCheckpointNotifications(); }, 5_000);
