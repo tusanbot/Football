@@ -283,7 +283,7 @@ async function adjustPlayerValues(tx: Prisma.TransactionClient, clubId: string, 
 
 export async function respondToPromotion(userId: string, offerId: string, accept: boolean, now = new Date()) {
   const club = await ownedClub(userId);
-  return prisma.$transaction(async (tx) => {
+  return withSerializableRetry(() => prisma.$transaction(async (tx) => {
     const offer = await tx.leaguePromotionOffer.findUnique({
       where: { id: offerId },
       include: { league: { include: { competition: { include: { entries: { include: { club: { select: { id: true, ownerId: true } } } } } } } } },
@@ -330,7 +330,7 @@ export async function respondToPromotion(userId: string, offerId: string, accept
       }
     }
     return { offer: updated, accepted: false, replacementClubId: null };
-  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }));
 }
 
 export async function processPyramidLeagueCompletion(competitionId: string, now = new Date()) {
