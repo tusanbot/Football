@@ -12,7 +12,8 @@ if (!isValidTelegramBotToken(process.env.TELEGRAM_BOT_TOKEN ?? "")) throw new Er
 const adminIds = parseAdminTelegramIds(process.env.GAME_ADMIN_TELEGRAM_IDS);
 if (!adminIds.length) throw new Error("GAME_ADMIN_TELEGRAM_IDS must contain at least one numeric Telegram user ID.");
 if (!(process.env.DATABASE_URL?.startsWith("postgres://") || process.env.DATABASE_URL?.startsWith("postgresql://"))) throw new Error("DATABASE_URL must use PostgreSQL.");
-parseCorsOrigins(process.env.CORS_ORIGIN);
+const corsOrigins = parseCorsOrigins(process.env.CORS_ORIGIN);
+if (!corsOrigins.length) throw new Error("CORS_ORIGIN must contain at least one allowed origin.");
 const port = Number(process.env.API_PORT ?? 4000);
 if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error("API_PORT must be an integer between 1 and 65535.");
 const host = process.env.API_HOST ?? "0.0.0.0";
