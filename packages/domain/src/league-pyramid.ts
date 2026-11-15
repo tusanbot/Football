@@ -4,7 +4,7 @@ export const LEAGUE_TIERS = [
   { level: 3, key: "REGIONAL", name: "لیگ منطقه‌ای", promotionMultiplierBps: 12_000 },
   { level: 4, key: "SEMI_PRO", name: "لیگ نیمه‌حرفه‌ای", promotionMultiplierBps: 13_000 },
   { level: 5, key: "PRO", name: "لیگ حرفه‌ای", promotionMultiplierBps: 14_500 },
-  { level: 6, key: "ELITE", name: "لیگ فوق‌حرفه‌ای", promotionMultiplierBps: 16_000 },
+  { level: 6, key: "ELITE", name: "لیگ برتر (فوق‌حرفه‌ای)", promotionMultiplierBps: 16_000 },
   { level: 7, key: "CHAMPIONS", name: "لیگ قهرمانان", promotionMultiplierBps: 18_000 },
 ] as const;
 
