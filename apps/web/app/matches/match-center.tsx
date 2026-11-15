@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import type { CSSProperties } from "react";
 
 type Player = { id:string; firstName:string; lastName:string; position:string; overall:number; lineupSlot:number|null; status?:string };
 type MatchEvent = { minute:number; type:string; detail:string; playerName:string; relatedPlayerName:string|null };
@@ -15,9 +16,9 @@ type Match = {
 type Instruction = { formation:string; mentality:string; pressing:string; tempo:string; passingStyle:string; substitutions:Array<{outgoingPlayerId:string;incomingPlayerId:string}> };
 const API=process.env.NEXT_PUBLIC_API_URL??"http://localhost:4000";
 const labels:Record<string,string>={GOAL:"گل",YELLOW_CARD:"کارت زرد",RED_CARD:"کارت قرمز",INJURY:"مصدومیت",SUBSTITUTION:"تعویض"};
-const selectStyle:React.CSSProperties={width:"100%",padding:"10px",borderRadius:9,border:"1px solid #30465e",background:"#0b1727",color:"#f4f7fb"};
-const cardStyle:React.CSSProperties={border:"1px solid #263b52",background:"#111f32",borderRadius:16,padding:16,marginBottom:12};
-const buttonStyle:React.CSSProperties={border:0,borderRadius:9,padding:"11px 15px",background:"#63d3a5",color:"#092018",fontWeight:800,cursor:"pointer"};
+const selectStyle:CSSProperties={width:"100%",padding:"10px",borderRadius:9,border:"1px solid #30465e",background:"#0b1727",color:"#f4f7fb"};
+const cardStyle:CSSProperties={border:"1px solid #263b52",background:"#111f32",borderRadius:16,padding:16,marginBottom:12};
+const buttonStyle:CSSProperties={border:0,borderRadius:9,padding:"11px 15px",background:"#63d3a5",color:"#092018",fontWeight:800,cursor:"pointer"};
 
 export default function MatchCenter(){
  const [initData,setInitData]=useState("");
