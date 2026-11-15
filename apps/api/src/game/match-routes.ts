@@ -237,7 +237,9 @@ export function registerMatchRoutes(app: FastifyInstance) {
     const user = await requireTelegramUser(request);
     if (!user) return reply.code(401).send({ error: "UNAUTHENTICATED" });
     try {
-      const result = await createFriendlyChallenge(user.id);
+      const body = z.object({ groupTelegramId: z.string().regex(/^-?\d{1,20}$/).optional() }).strict().safeParse(request.body ?? {});
+      if (!body.success) return reply.code(400).send({ error: "INVALID_FRIENDLY_CHALLENGE" });
+      const result = await createFriendlyChallenge(user.id, 100n, new Date(), body.data.groupTelegramId);
       const botUsername = process.env.TELEGRAM_BOT_USERNAME?.replace(/^@/, "");
       return { ...result, shareUrl: botUsername ? `https://t.me/${botUsername}?start=challenge_${result.challenge.token}` : null };
     } catch (error) { return sendMatchError(reply, error); }
