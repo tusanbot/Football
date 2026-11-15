@@ -75,7 +75,7 @@ export default function MatchCenter(){
  return <main style={{maxWidth:980,minHeight:"100vh",margin:"0 auto",padding:"22px 14px 48px",color:"#f4f7fb",direction:"rtl",fontFamily:"Arial,Tahoma,sans-serif"}}>
   <header style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:12,marginBottom:20}}>
    <div><p style={{color:"#70d9ad",fontSize:11,fontWeight:800,letterSpacing:".12em",margin:0}}>FOOTBALL EMPIRE</p><h1 style={{fontSize:28,margin:"6px 0"}}>مرکز مسابقات</h1><p style={{color:"#9fb0c5",margin:0,fontSize:13}}>گزارش زنده، خط زمانی و تصمیم‌های تاکتیکی</p></div>
-   <a href="/" style={{color:"#9ce8c5",textDecoration:"none",border:"1px solid #36536b",borderRadius:9,padding:"9px 12px",whiteSpace:"nowrap"}}>بازگشت</a>
+   <div style={{display:"flex",gap:8,flexWrap:"wrap"}}><a href="/matches/fallback" style={{color:"#9ce8c5",textDecoration:"none",border:"1px solid #36536b",borderRadius:9,padding:"9px 12px",whiteSpace:"nowrap"}}>برنامه جایگزین</a><a href="/" style={{color:"#9ce8c5",textDecoration:"none",border:"1px solid #36536b",borderRadius:9,padding:"9px 12px",whiteSpace:"nowrap"}}>بازگشت</a></div>
   </header>
   {notice&&<p style={{background:"#15362f",color:"#9ce8c5",padding:12,borderRadius:9}}>{notice}</p>}
   {error&&<p style={{background:"#3a2027",color:"#ffb6c0",padding:12,borderRadius:9}}>{error}</p>}
