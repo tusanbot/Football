@@ -494,14 +494,57 @@ export async function createFriendlyChallenge(
 export async function acceptFriendlyChallenge(userId: string, token: string, now = new Date()) {
   const opponent = await ownedClub(userId);
   return prisma.$transaction(async (tx) => {
-    const challenge = await tx.friendlyChallenge.findUnique({ where: { token }, include: { club: { select: { id: true } }, group: { select: { id: true } } } });
+    const challenge = await tx.friendlyChallenge.findUnique({
+      where: { token },
+      include: { club: { select: { id: true } }, group: { select: { id: true, isActive: true, isSuspended: true } } },
+    });
     if (!challenge) throw new PyramidLeagueError("FRIENDLY_CHALLENGE_NOT_FOUND");
     if (challenge.creatorUserId === userId) throw new PyramidLeagueError("CANNOT_ACCEPT_OWN_CHALLENGE");
-    if (challenge.status !== "OPEN" || challenge.expiresAt <= now) throw new PyramidLeagueError("FRIENDLY_CHALLENGE_EXPIRED");
+
+    if (challenge.status === "ACCEPTED" && challenge.matchId) {
+      const existingMatch = await tx.footballMatch.findUnique({ where: { id: challenge.matchId } });
+      if (!existingMatch || existingMatch.awayClubId !== opponent.id) {
+        throw new PyramidLeagueError("FRIENDLY_CHALLENGE_ALREADY_ACCEPTED");
+      }
+      return { match: existingMatch, replayed: true };
+    }
+    if (challenge.status !== "OPEN" || challenge.expiresAt <= now) {
+      throw new PyramidLeagueError("FRIENDLY_CHALLENGE_EXPIRED");
+    }
+
     if (challenge.groupId) {
-      const membership = await tx.groupMembership.findUnique({ where: { groupId_userId: { groupId: challenge.groupId, userId } }, select: { id: true } });
+      if (!challenge.group?.isActive || challenge.group.isSuspended) throw new PyramidLeagueError("GROUP_INACTIVE");
+      const membership = await tx.groupMembership.findUnique({
+        where: { groupId_userId: { groupId: challenge.groupId, userId } }, select: { id: true },
+      });
       if (!membership) throw new PyramidLeagueError("GROUP_MEMBERSHIP_REQUIRED");
     }
+
+    const creatorClub = await tx.club.findUnique({
+      where: { id: challenge.creatorClubId },
+      select: { id: true, players: { where: { status: "ACTIVE" }, select: { position: true } } },
+    });
+    if (!creatorClub || creatorClub.players.length < 11 || !creatorClub.players.some((player) => player.position === "GK")) {
+      throw new PyramidLeagueError("ALL_TEAMS_NEED_VALID_LINEUPS");
+    }
+
+    const clubIds = [challenge.creatorClubId, opponent.id];
+    const overlap = await tx.footballMatch.findFirst({
+      where: {
+        status: "SCHEDULED",
+        scheduledAt: { gte: new Date(now.getTime() - 2 * 60 * 60_000), lte: new Date(now.getTime() + 2 * 60 * 60_000) },
+        OR: [{ homeClubId: { in: clubIds } }, { awayClubId: { in: clubIds } }],
+      },
+      select: { id: true },
+    });
+    if (overlap) throw new PyramidLeagueError("CLUB_ALREADY_HAS_MATCH_IN_WINDOW");
+
+    const claimed = await tx.friendlyChallenge.updateMany({
+      where: { id: challenge.id, status: "OPEN", expiresAt: { gt: now } },
+      data: { status: "ACCEPTED" },
+    });
+    if (claimed.count !== 1) throw new PyramidLeagueError("FRIENDLY_CHALLENGE_ALREADY_ACCEPTED");
+
     const match = await tx.footballMatch.create({
       data: {
         idempotencyKey: `challenge:${challenge.id}`, type: "FRIENDLY", homeClubId: challenge.creatorClubId,
@@ -509,11 +552,10 @@ export async function acceptFriendlyChallenge(userId: string, token: string, now
         rulesSnapshot: { ...LEAGUE_RULES, penaltiesOnDraw: false },
       },
     });
-    await tx.friendlyChallenge.update({ where: { id: challenge.id }, data: { status: "ACCEPTED", matchId: match.id } });
-    return { match };
+    await tx.friendlyChallenge.update({ where: { id: challenge.id }, data: { matchId: match.id } });
+    return { match, replayed: false };
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 }
-
 export async function grantPurchasedChallengeCredits(userId: string, quantity: number) {
   if (!Number.isInteger(quantity) || quantity < 1 || quantity > 100) throw new PyramidLeagueError("INVALID_CHALLENGE_CREDIT_QUANTITY");
   const day = new Date(); day.setUTCHours(0, 0, 0, 0);
