@@ -32,8 +32,7 @@ function missingConfig(env: Env): string[] {
   return missing;
 }
 function configureEnv(env: Env): void {
-  process.env.NODE_ENV = "production";
-  process.env.DATABASE_URL = dbUrl(env) ?? "";
+   process.env.DATABASE_URL = dbUrl(env) ?? "";
   process.env.TELEGRAM_BOT_TOKEN = env.TELEGRAM_BOT_TOKEN ?? "";
   process.env.BOT_API_SECRET = env.BOT_API_SECRET ?? "";
   process.env.CORS_ORIGIN = env.CORS_ORIGIN ?? "";

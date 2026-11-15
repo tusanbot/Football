@@ -2,7 +2,16 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import worker from "../src/index.js";
 
-const context = { waitUntil() {} };
+const pending: Promise<unknown>[] = [];
+const context = { waitUntil(promise: Promise<unknown>) { pending.push(promise); } };
+const configuredEnv = {
+  DATABASE_URL: "postgresql://test:test@127.0.0.1:5432/football_empire",
+  TELEGRAM_BOT_TOKEN: "123456:abcdefghijklmnopqrstuvwxyz0123456789",
+  BOT_API_SECRET: "test-secret-".padEnd(40, "x"),
+  CORS_ORIGIN: "https://web.example.test",
+  GAME_ADMIN_TELEGRAM_IDS: "123456789",
+  ENVIRONMENT: "development",
+};
 
 test("health endpoint works without database configuration", async () => {
   const response = await worker.fetch(new Request("https://api.example.test/health"), {}, context);
@@ -26,10 +35,18 @@ test("readiness fails closed and reports missing runtime configuration", async (
   assert.ok(body.missing.includes("GAME_ADMIN_TELEGRAM_IDS"));
 });
 
-test("game routes stay closed until server-side configuration exists", async () => {
-  const response = await worker.fetch(new Request("https://api.example.test/v1/me"), {}, context);
-  assert.equal(response.status, 503);
-  const body = await response.json() as { status: string; missing: string[] };
-  assert.equal(body.status, "not_ready");
-  assert.ok(body.missing.length >= 5);
+test("the Worker adapts Fetch requests to the existing Fastify application", async () => {
+  const response = await worker.fetch(new Request("https://api.example.test/not-a-route"), configuredEnv, context);
+  assert.equal(response.status, 404);
+  await Promise.all(pending.splice(0));
+});
+
+test("Telegram auth route uses the shared Fastify route validation", async () => {
+  const response = await worker.fetch(new Request("https://api.example.test/v1/auth/telegram", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ initData: "" }),
+  }), configuredEnv, context);
+  assert.equal(response.status, 400);
+  await Promise.all(pending.splice(0));
 });
