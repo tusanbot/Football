@@ -188,7 +188,7 @@ export function generateD1Schema(parsed, sourceHash) {
   const modelByName = new Map(parsed.models.map((model) => [model.name, model]));
   const statements = [
     "-- Generated from apps/api/prisma/schema.prisma. Do not edit by hand.",
-    "-- BigInt uses SQLite INTEGER; D1 code MUST bind decimal strings and read CAST(column AS TEXT).",
+    "-- BigInt uses signed 64-bit SQLite INTEGER; D1 code MUST bind decimal strings and read CAST(column AS TEXT).",
     "-- cuid()/uuid() and @updatedAt remain application-managed.",
     "-- Review this migration against the PostgreSQL migration history before applying.",
     ""
