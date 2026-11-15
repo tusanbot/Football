@@ -110,11 +110,11 @@ test("reserve goalkeeper replaces an outfield starter when the selected XI has n
   const clubs: Array<{ userId: string; clubId: string }> = [];
   try {
     clubs.push(await makeClub(suffix, 0), await makeClub(suffix, 1));
-    const roster = await prisma.player.findMany({ where: { clubId: clubs[0]!.clubId }, orderBy: { createdAt: "asc" }, select: { id: true, position: true } });
-    const startingKeeper = roster.find((player) => player.position === "GK" && player.id === roster[0]!.id)!;
-    const reserveOutfield = roster.find((player) => player.position !== "GK" && roster.indexOf(player) >= 11)!;
+    const roster = await prisma.player.findMany({ where: { clubId: clubs[0]!.clubId }, select: { id: true, position: true, lineupSlot: true } });
+    const startingKeeper = roster.find((player) => player.position === "GK" && player.lineupSlot !== null)!;
+    const reserveOutfield = roster.find((player) => player.position !== "GK" && player.lineupSlot === null)!;
     await prisma.player.update({ where: { id: startingKeeper.id }, data: { lineupSlot: null } });
-    await prisma.player.update({ where: { id: reserveOutfield.id }, data: { lineupSlot: 1 } });
+    await prisma.player.update({ where: { id: reserveOutfield.id }, data: { lineupSlot: startingKeeper.lineupSlot } });
     const scheduledAt = new Date(Date.now() + 60_000);
     const created = await createFriendlyMatch(clubs[0]!.userId, clubs[1]!.clubId, "keeper-reserve-" + suffix, scheduledAt);
     const processed = await processDueMatchRuntimes("keeper-reserve-test", new Date(scheduledAt.getTime() + 1_000));
