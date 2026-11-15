@@ -290,7 +290,19 @@ export async function respondToPromotion(userId: string, offerId: string, accept
     });
     if (!offer) throw new PyramidLeagueError("PROMOTION_OFFER_NOT_FOUND");
     if (offer.clubId !== club.id) throw new PyramidLeagueError("NOT_PROMOTION_OFFER_OWNER");
-    if (offer.status !== "PENDING") throw new PyramidLeagueError("PROMOTION_OFFER_ALREADY_RESOLVED");
+    if (offer.status !== "PENDING") {
+      const sameDecision = (accept && offer.status === "ACCEPTED") || (!accept && offer.status === "DECLINED");
+      if (!sameDecision) throw new PyramidLeagueError("PROMOTION_OFFER_ALREADY_RESOLVED");
+      if (accept) {
+        return { offer, accepted: true, targetTier: offer.targetTier, season: offer.league.season + 1, createdLeague: null, replayed: true };
+      }
+      const replacement = await tx.leaguePromotionOffer.findFirst({
+        where: { leagueId: offer.leagueId, finalPosition: { gt: 2 }, status: { in: ["PENDING", "ACCEPTED"] } },
+        orderBy: { offeredAt: "asc" }, select: { id: true, clubId: true },
+      });
+      return { offer, accepted: false, replayed: true,
+        ...(replacement ? { replacementOfferId: replacement.id, replacementClubId: replacement.clubId } : { replacementClubId: null }) };
+    }
     if (offer.expiresAt <= now) throw new PyramidLeagueError("PROMOTION_OFFER_EXPIRED");
     const updated = await tx.leaguePromotionOffer.update({ where: { id: offerId }, data: { status: accept ? "ACCEPTED" : "DECLINED", resolvedAt: now } });
     const sourceTier = offer.league.tier;
@@ -304,7 +316,7 @@ export async function respondToPromotion(userId: string, offerId: string, accept
       await adjustPlayerValues(tx, club.id, sourceTier, offer.targetTier);
       await addNotice(tx, userId, "PROMOTION_ACCEPTED", "صعود تأیید شد", `تیم شما به ${leagueTier(offer.targetTier).name} صعود کرد و در صف تشکیل لیگ فصل ${season} قرار گرفت.`, offer.id);
       const createdLeague = await assignQueueIfReady(tx, offer.targetTier, season, now);
-      return { offer: updated, accepted: true, targetTier: offer.targetTier, season, createdLeague };
+      return { offer: updated, accepted: true, targetTier: offer.targetTier, season, createdLeague, replayed: false };
     }
     await addNotice(tx, userId, "PROMOTION_DECLINED", "انصراف از صعود ثبت شد", "انصراف شما ثبت شد؛ تیم بعدی جدول برای دریافت سهمیه صعود بررسی می‌شود.", offer.id);
     const existingOffers = await tx.leaguePromotionOffer.findMany({ where: { leagueId: offer.leagueId }, select: { finalPosition: true, status: true, clubId: true } });
@@ -324,12 +336,12 @@ export async function respondToPromotion(userId: string, offerId: string, accept
             const nextOffer = await tx.leaguePromotionOffer.create({ data: { leagueId: offer.leagueId, clubId: next.clubId, targetTier: offer.targetTier, finalPosition: nextPosition, expiresAt: new Date(now.getTime() + 24 * 60 * 60_000) } });
             await addNotice(tx, nextUser.id, "PROMOTION_REPLACEMENT", "فرصت صعود به شما رسید", "به‌دلیل انصراف تیم بالاتر، سهمیه صعود به تیم شما پیشنهاد شده است. برای پذیرش یا رد، وارد بخش لیگ‌ها شوید.", nextOffer.id);
             await addNotice(tx, userId, "PROMOTION_REPLACEMENT_NOTIFIED", "تیم جایگزین مطلع شد", "تیم بعدی جدول از پیشنهاد صعود مطلع شد.", nextOffer.id);
-            return { offer: updated, accepted: false, replacementOfferId: nextOffer.id, replacementClubId: next.clubId };
+            return { offer: updated, accepted: false, replacementOfferId: nextOffer.id, replacementClubId: next.clubId, replayed: false };
           }
         }
       }
     }
-    return { offer: updated, accepted: false, replacementClubId: null };
+    return { offer: updated, accepted: false, replacementClubId: null, replayed: false };
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }));
 }
 
