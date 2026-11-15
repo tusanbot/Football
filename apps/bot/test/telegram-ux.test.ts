@@ -103,5 +103,6 @@ test("bot source does not bypass the group reply retention wrapper with direct s
   assert.deepEqual(directSends, ["bot.api.sendMessage", "bot.api.sendMessage", "bot.api.sendMessage"]);
   assert.equal((botSource.match(/bot\.api\.sendMessage\(telegramId/g) ?? []).length, 2);
   assert.ok(botSource.includes("bot.api.sendMessage(Number(delivery.telegramGroupId), delivery.message)"));
-  assert.ok(botSource.includes("/v1/bot/admin-group-broadcasts/complete"));
+  assert.ok(botSource.includes("/v1/bot/admin-group-broadcasts/"));
+  assert.ok(botSource.includes(" + delivery.id + "/complete"));
 });
