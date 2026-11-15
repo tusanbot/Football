@@ -6,7 +6,7 @@ import { getMatchFallbackPlan, saveMatchFallbackPlan, MatchFallbackPlanError } f
 import {
   createFriendlyMatch, createLeague, getLeague, joinLeague, listClubMatches,
   simulateScheduledMatch, startLeague, submitMatchCheckpointDecision, claimDueMatchRuntimes,
-  releaseMatchRuntimeLease, processDueMatchRuntimes,
+  releaseMatchRuntimeLease, processDueMatchRuntimes, updateCompetitionRules,
 } from "../src/game/match-service.js";
 
 const positions = ["GK","RB","CB","CB","LB","CDM","CM","CAM","RW","ST","LW"] as const;
@@ -114,6 +114,13 @@ test("league registration, round-robin fixtures and final standings are transact
     assert.equal(created.replayed, false);
     const replay = await createLeague(clubs[0]!.userId, created.competition.name, 4, `league-create-${suffix}`);
     assert.equal(replay.replayed, true);
+    const customRules = {
+      maxSubstitutions: 4, maxInPlayWindows: 2, injuriesEnabled: false,
+      redCardSuspensionMatches: 2, yellowCardsToSuspend: 4,
+      yellowCardSuspensionMatches: 2, penaltiesOnDraw: false,
+    };
+    const savedRules = await updateCompetitionRules(clubs[0]!.userId, competitionId, customRules);
+    assert.deepEqual(savedRules.rules, customRules);
     for (const member of clubs.slice(1)) {
       const joined = await joinLeague(member.userId, competitionId);
       assert.equal(joined.joined, true);
@@ -127,6 +134,7 @@ test("league registration, round-robin fixtures and final standings are transact
     const fixtures = await prisma.footballMatch.findMany({ where: { competitionId }, orderBy: { scheduledAt: "asc" } });
     assert.equal(fixtures.length, 6);
     for (const fixture of fixtures) {
+      assert.deepEqual(fixture.rulesSnapshot, customRules);
       const owner = clubs.find((club) => club.clubId === fixture.homeClubId || club.clubId === fixture.awayClubId)!;
       await simulateScheduledMatch(owner.userId, fixture.id, new Date(fixture.scheduledAt.getTime() + 60_000));
     }
@@ -168,6 +176,7 @@ test("knockout cup fills its bracket, advances winners and crowns a champion", a
     );
     competitionId = created.competition.id;
     assert.equal(created.competition.format, "CUP");
+    assert.equal((created.competition.rules as { penaltiesOnDraw:boolean }).penaltiesOnDraw, true);
     for (const member of clubs.slice(1)) await joinLeague(member.userId, competitionId);
     const started = await startLeague(clubs[0]!.userId, competitionId, new Date());
     assert.equal(started.fixturesCreated, 2);
