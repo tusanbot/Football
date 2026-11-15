@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { prisma } from "../src/db.js";
-import { applyForPyramidLeague, createFriendlyChallenge, getPyramidLeagueDetails, processDuePromotionOffers, processPyramidLeagueCompletion, respondToPromotion } from "../src/game/league-pyramid-service.js";
+import { applyForPyramidLeague, createFriendlyChallenge, getPyramidLeagueDetails, processDuePromotionOffers, processPyramidLeagueCompletion, respondToPromotion, grantPurchasedChallengeCredits } from "../src/game/league-pyramid-service.js";
 
 const positions = ["GK", "RB", "CB", "CB", "LB", "CDM", "CM", "CAM", "RW", "ST", "LW"] as const;
 
@@ -256,5 +256,41 @@ test("league completion awards the top three, relegates two and replaces decline
       await prisma.wallet.deleteMany({ where: { userId: { in: userIds } } });
       await prisma.user.deleteMany({ where: { id: { in: userIds } } });
     }
+  }
+});
+
+
+test("friendly challenges use purchased credits when the daily Gold balance is insufficient", async (t) => {
+  if (!process.env.DATABASE_URL) {
+    t.skip("DATABASE_URL is only configured in the ephemeral PostgreSQL CI job.");
+    return;
+  }
+  const suffix = randomUUID().replaceAll("-", "");
+  const club = await makePyramidClub(suffix, 0);
+  const now = new Date("2026-11-15T12:00:00.000Z");
+  try {
+    for (let index = 0; index < 3; index++) {
+      await createFriendlyChallenge(club.userId, 100n, now, undefined, "friendly-fallback-free-" + suffix + "-" + index);
+    }
+    await prisma.wallet.update({ where: { userId_asset: { userId: club.userId, asset: "GOLD" } }, data: { balance: 0n } });
+    await grantPurchasedChallengeCredits(club.userId, 1, now);
+    const result = await createFriendlyChallenge(club.userId, 100n, now, undefined, "friendly-fallback-purchased-" + suffix);
+    assert.equal(result.asset, "PURCHASED");
+    assert.equal(result.goldCost, "0");
+    const usage = await prisma.challengeDailyUsage.findUniqueOrThrow({
+      where: { userId_usageDate: { userId: club.userId, usageDate: new Date("2026-11-15T00:00:00.000Z") } },
+    });
+    assert.equal(usage.freeUsed, 3);
+    assert.equal(usage.goldUsed, 0);
+    assert.equal(usage.purchasedCredits, 0);
+    assert.equal((await prisma.wallet.findUniqueOrThrow({ where: { userId_asset: { userId: club.userId, asset: "GOLD" } } })).balance, 0n);
+  } finally {
+    await prisma.friendlyChallenge.deleteMany({ where: { creatorUserId: club.userId } });
+    await prisma.challengeDailyUsage.deleteMany({ where: { userId: club.userId } });
+    await prisma.ledgerTransaction.deleteMany({ where: { userId: club.userId } });
+    await prisma.player.deleteMany({ where: { clubId: club.clubId } });
+    await prisma.club.deleteMany({ where: { id: club.clubId } });
+    await prisma.wallet.deleteMany({ where: { userId: club.userId } });
+    await prisma.user.deleteMany({ where: { id: club.userId } });
   }
 });
