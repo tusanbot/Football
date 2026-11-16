@@ -41,10 +41,10 @@ try {
   `);
 
   const historyExists = await client.query(
-    "SELECT to_regclass('public._prisma_migrations') IS NOT NULL AS exists"
+    "SELECT to_regclass('public._prisma_migrations') IS NOT NULL AS history_table_present"
   );
   let history = [];
-  if (historyExists.rows[0].exists) {
+  if (historyExists.rows[0].history_table_present) {
     const result = await client.query(`
       SELECT migration_name, started_at, finished_at, rolled_back_at,
              applied_steps_count
@@ -96,7 +96,7 @@ try {
   for (const name of migrationNames) {
     const row = latestByName.get(name);
     if (!row) {
-      if (historyExists.rows[0].exists) pending.push(name);
+      if (historyExists.rows[0].history_table_present) pending.push(name);
       continue;
     }
     if (row.finished_at && !row.rolled_back_at) applied.push(name);
@@ -120,7 +120,7 @@ try {
     generated_at: new Date().toISOString(),
     audit_mode: "READ_ONLY",
     database: identity.rows[0],
-    migration_history_table_exists: historyExists.rows[0].exists,
+    migration_history_table_exists: historyExists.rows[0].history_table_present,
     migration_file_count: migrationNames.length,
     migration_files: migrationNames,
     applied_migrations: applied,
