@@ -72,8 +72,9 @@ function configureEnv(env: Env): void {
   process.env.CORS_ORIGIN = env.CORS_ORIGIN ?? "";
   process.env.GAME_ADMIN_TELEGRAM_IDS = env.GAME_ADMIN_TELEGRAM_IDS ?? "";
 }
-// Construct and compile Fastify during Worker startup. Its router uses
-// new Function while compiling routes, which requires allow_eval_during_startup.
+// Construct Fastify during Worker startup so route registration (and its
+// new Function calls) runs under allow_eval_during_startup. Do not await ready()
+// at module scope: Workers require top-level await to settle synchronously.
 const appInstance: ReturnType<typeof buildApp> = buildApp({ logger: false });
 appInstance.addHook("onRequest", (request, _reply, done) => {
   const rawContextId = request.headers["x-football-prisma-context"];
@@ -84,7 +85,6 @@ appInstance.addHook("onRequest", (request, _reply, done) => {
   }
   done();
 });
-await appInstance.ready();
 
 async function getApp(env: Env) {
   // Runtime bindings are copied into process.env per request after startup.
