@@ -4,8 +4,6 @@ on:
   push:
     branches:
       - ops/database-migration-audit
-    paths:
-      - .github/workflows/apply-football-migrations.yml
   workflow_dispatch:
 
 permissions:
