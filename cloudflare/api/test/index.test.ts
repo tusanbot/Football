@@ -33,6 +33,7 @@ test("health endpoint works without database configuration", async () => {
     status: "ok",
     service: "football-empire-cloudflare-api",
     mode: "fastify-prisma-runtime",
+    build: "2026-11-16-api-trigger-1",
   });
 });
 
