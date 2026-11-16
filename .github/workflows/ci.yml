@@ -81,6 +81,13 @@ jobs:
         run: pnpm --dir apps/web build:worker
         env:
           NEXT_PUBLIC_API_URL: https://api.example.invalid
+      - name: Archive Mini App Worker build
+        uses: actions/upload-artifact@v4
+        with:
+          name: football-empire-miniapp-worker
+          path: apps/web/.open-next/
+          if-no-files-found: error
+          retention-days: 7
       - name: Test Cloudflare API Worker runtime
         run: pnpm exec tsx --test cloudflare/api/test/*.test.ts
       # D1 is an explicitly separate, incomplete migration track. PostgreSQL is
