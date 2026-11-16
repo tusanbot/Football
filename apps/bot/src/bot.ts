@@ -370,6 +370,14 @@ function playerName(player: ApiPlayer) { return `${player.firstName} ${player.la
 
 async function sendMiniAppEntry(ctx: Context) {
   if (ctx.chat?.type !== "private" || !webAppUrl) return;
+  await ctx.api.setChatMenuButton({
+    chat_id: ctx.chat.id,
+    menu_button: {
+      type: "web_app",
+      text: "باز کردن بازی",
+      web_app: { url: webAppUrl },
+    },
+  });
   await ctx.reply("برای ورود به نسخه گرافیکی بازی، دکمه زیر را انتخاب کنید.", {
     reply_markup: new InlineKeyboard().webApp("ورود به Football Empire", webAppUrl),
   });
