@@ -108,6 +108,7 @@ Run these only after the API and Mini App are deployed to the intended staging o
 The following were verified during the current readiness audit:
 
 - The API Worker exists and has a Hyperdrive binding plus the required API secret names configured. Its latest recorded deployment is older than the current source branch; this branch's new readiness gate has not been deployed.
+- The currently deployed API Worker still has `ENVIRONMENT=development`; switch it to `production` only during the approved production release. The Wrangler config now sets `keep_vars: true` so dashboard variables are not silently overwritten before they are brought under source control.
 - The `football` Worker currently contains a placeholder `Hello world` handler and reports no static assets. It is **not** the compiled Mini App.
 - No Cloudflare Workers Builds configuration was found for the existing `football` or `football-empire-api` script names.
 - The Bot long-polling process has not been started, and no separate persistent Node.js Bot runtime has been selected/configured in the deployment environment.
