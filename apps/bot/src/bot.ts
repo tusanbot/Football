@@ -409,7 +409,7 @@ bot.command("start", async (ctx) => {
       `باشگاه: ${account.club?.name ?? "هنوز ساخته نشده"} · سطح ${account.club?.level ?? 1}\n` +
       `موجودی آغازین: ${cash(cashBalance)} کش · ${cash(goldBalance)} طلا\n\n` +
       `مدیریت باشگاه از همین ربات یا نسخه مینی‌اپ امکان‌پذیر است. برای شروع، یکی از گزینه‌های منوی پایین را انتخاب کنید.\n\n` +
-      `دستورهای پرکاربرد: /club /wallet /players /lineup /matches /leagues /market /help`,
+      `دستورهای پرکاربرد: /club /wallet /store /inventory /players /lineup /matches /leagues /market /help`,
       { reply_markup: keyboard },
     );
   } catch (error) {
@@ -792,6 +792,7 @@ bot.command("help", async (ctx) => ctx.reply(
   "/alliance-season-review SEASON_ID approve|reject — بررسی جایزه مشکوک (ویژه بازبین مجاز)\n\n" +
   "🏆 بازار و آمار\n" +
   "/market — بازار نقل‌وانتقالات\n/sell PLAYER_ID PRICE و /buy LISTING_ID — فروش و خرید بازیکن\n" +
+   "/store — فروشگاه آیتم و بازیکن\n/buyitem ITEM_KEY [QUANTITY] — خرید آیتم\n/inventory — انبار آیتم‌ها\n/useitem ITEM_KEY PLAYER_ID — استفاده از آیتم\n" +
   "/special و /pack epic|legendary|icon — بازیکنان ویژه و بسته‌های جذب\n/redeem CODE — استفاده از کد هدیه\n" +
   "/records [goals|assists|appearances|rating] — رکوردهای تاریخی\n/seasonawards [YEAR] — جوایز و تیم منتخب فصل\n" +
   "/clubs و /clubprofile CLUB_ID — باشگاه‌های عمومی و پروفایل\n/clubcompare ID1 ID2 — مقایسه دو باشگاه\n\n" +
