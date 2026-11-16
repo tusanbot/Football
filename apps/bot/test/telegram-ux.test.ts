@@ -21,7 +21,7 @@ test("group replies use a one-minute transient retention window", () => {
 
 test("every private keyboard button resolves to a registered no-argument command", () => {
   const expected = [
-    "club", "wallet", "players", "lineup", "development", "operations",
+    "club", "wallet", "store", "inventory", "players", "lineup", "development", "operations",
     "finance", "scout", "opponents", "matches", "fallback", "leagues", "market",
     "special", "seasonawards", "records", "help", "menu",
   ];
@@ -111,9 +111,9 @@ test("bot source does not bypass the group reply retention wrapper with direct s
 });
 
 test("private menu stays compact and every button remains uniquely routable", () => {
-  assert.equal(PRIVATE_MENU_ROWS.length, 9);
+  assert.equal(PRIVATE_MENU_ROWS.length, 10);
   assert.ok(PRIVATE_MENU_ROWS.every((row) => row.length === 2));
-  assert.equal(new Set(PRIVATE_MENU_ROWS.flat().map((item) => item.command)).size, 18);
+  assert.equal(new Set(PRIVATE_MENU_ROWS.flat().map((item) => item.command)).size, 20);
 });
 
 test("admin command argument parsing uses whitespace-aware splitting", () => {
