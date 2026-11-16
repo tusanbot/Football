@@ -75,7 +75,7 @@ function configureEnv(env: Env): void {
 // Construct Fastify during Worker startup so route registration (and its
 // new Function calls) runs under allow_eval_during_startup. Do not await ready()
 // at module scope: Workers require top-level await to settle synchronously.
-const appInstance: ReturnType<typeof buildApp> = buildApp({ logger: false });
+const appInstance: ReturnType<typeof buildApp> = buildApp({ logger: false, pluginTimeout: 0 });
 appInstance.addHook("onRequest", (request, _reply, done) => {
   const rawContextId = request.headers["x-football-prisma-context"];
   const contextId = Array.isArray(rawContextId) ? rawContextId[0] : rawContextId;
