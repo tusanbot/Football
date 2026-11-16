@@ -5,6 +5,7 @@ DECLARE
   missing_rls text;
   exposed_table text;
   exposed_sequence text;
+  exposed_function text;
 BEGIN
   SELECT string_agg(format('%I.%I', n.nspname, c.relname), ', ')
     INTO missing_rls
@@ -28,13 +29,34 @@ BEGIN
     RAISE EXCEPTION 'Public table grants remain: %', exposed_table;
   END IF;
 
-  SELECT string_agg(format('%I (%s)', object_name, grantee), ', ')
+  SELECT string_agg(format('%I (%s)', c.relname, role_name), ', ')
     INTO exposed_sequence
-  FROM information_schema.role_usage_grants
-  WHERE object_schema = 'public'
-    AND grantee IN ('anon', 'authenticated');
+  FROM pg_class c
+  JOIN pg_namespace n ON n.oid = c.relnamespace
+  CROSS JOIN LATERAL (VALUES ('anon'), ('authenticated')) AS roles(role_name)
+  WHERE n.nspname = 'public'
+    AND c.relkind = 'S'
+    AND (
+      has_sequence_privilege(roles.role_name, c.oid, 'USAGE')
+      OR has_sequence_privilege(roles.role_name, c.oid, 'SELECT')
+      OR has_sequence_privilege(roles.role_name, c.oid, 'UPDATE')
+    );
 
   IF exposed_sequence IS NOT NULL THEN
-    RAISE EXCEPTION 'Public sequence USAGE grants remain: %', exposed_sequence;
+    RAISE EXCEPTION 'Public sequence privileges remain: %', exposed_sequence;
   END IF;
-END $$;
+
+  SELECT string_agg(format('%I', p.proname), ', ')
+    INTO exposed_function
+  FROM pg_proc p
+  JOIN pg_namespace n ON n.oid = p.pronamespace
+  WHERE n.nspname = 'public'
+    AND (
+      has_function_privilege('anon', p.oid, 'EXECUTE')
+      OR has_function_privilege('authenticated', p.oid, 'EXECUTE')
+    );
+
+  IF exposed_function IS NOT NULL THEN
+    RAISE EXCEPTION 'Public function EXECUTE privileges remain: %', exposed_function;
+  END IF;
+END $;
