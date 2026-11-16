@@ -886,6 +886,46 @@ bot.command("club", async (ctx) => {
   }
 });
 
+bot.command("store", async (ctx) => {
+  if (!ctx.from || ctx.chat.type !== "private") return ctx.reply("فروشگاه شخصی را در گفت‌وگوی خصوصی با ربات باز کنید.");
+  try {
+    const data = await api<{ items: Array<{ key: string; name: string; description: string; asset: string; price: string }>; wallets: Array<{ asset: string; balance: string }> }>("/v1/store", ctx.from.id);
+    const balances = data.wallets.map((w) => (w.asset === "CASH" ? "کش" : "طلا") + ": " + cash(w.balance)).join(" · ");
+    const items = data.items.map((item) => item.key + " — " + item.name + "\n" + item.description + "\nقیمت: " + cash(item.price) + " " + (item.asset === "CASH" ? "Cash" : "Gold") + "\nخرید: /buyitem " + item.key).join("\n\n");
+    await ctx.reply("🛍 فروشگاه Football Empire\n" + balances + "\n\n" + items);
+  } catch (error) { await ctx.reply("دریافت فروشگاه ناموفق بود: " + (error instanceof Error ? error.message : "خطای نامشخص")); }
+});
+
+bot.command("buyitem", async (ctx) => {
+  if (!ctx.from || ctx.chat.type !== "private") return ctx.reply("خرید آیتم فقط در گفت‌وگوی خصوصی انجام می‌شود.");
+  const [itemKey, rawQuantity] = String(ctx.match ?? "").trim().split(/\\s+/);
+  if (!itemKey) return ctx.reply("روش استفاده: /buyitem ITEM_KEY [QUANTITY]");
+  const quantity = rawQuantity ? Number(rawQuantity) : 1;
+  if (!Number.isInteger(quantity) || quantity < 1 || quantity > 10) return ctx.reply("تعداد باید بین ۱ تا ۱۰ باشد.");
+  try {
+    const data = await api<{ purchase: { itemKey: string; quantity: number; balance: string; inventory: number; replayed: boolean } }>("/v1/store/purchase", ctx.from.id, "POST", { itemKey, quantity, idempotencyKey: "tg-store-" + ctx.from.id + "-" + ctx.update.update_id });
+    await ctx.reply("خرید انجام شد: " + data.purchase.itemKey + " × " + data.purchase.quantity + "\nموجودی کیف پول: " + cash(data.purchase.balance) + "\nتعداد در انبار: " + data.purchase.inventory);
+  } catch (error) { await ctx.reply("خرید ناموفق بود: " + (error instanceof Error ? error.message : "خطای نامشخص")); }
+});
+
+bot.command("inventory", async (ctx) => {
+  if (!ctx.from || ctx.chat.type !== "private") return ctx.reply("انبار شخصی را در گفت‌وگوی خصوصی باز کنید.");
+  try {
+    const data = await api<{ inventory: Array<{ itemKey: string; quantity: number }> }>("/v1/store", ctx.from.id);
+    await ctx.reply(data.inventory.length ? "🎒 انبار آیتم‌ها\n" + data.inventory.map((item) => item.itemKey + " × " + item.quantity).join("\n") + "\n\nاستفاده: /useitem ITEM_KEY PLAYER_ID" : "انبار شما خالی است.");
+  } catch (error) { await ctx.reply("دریافت انبار ناموفق بود: " + (error instanceof Error ? error.message : "خطای نامشخص")); }
+});
+
+bot.command("useitem", async (ctx) => {
+  if (!ctx.from || ctx.chat.type !== "private") return ctx.reply("استفاده از آیتم فقط در گفت‌وگوی خصوصی انجام می‌شود.");
+  const [itemKey, playerId] = String(ctx.match ?? "").trim().split(/\\s+/);
+  if (!itemKey || !playerId) return ctx.reply("روش استفاده: /useitem ITEM_KEY PLAYER_ID");
+  try {
+    const data = await api<{ usage: { itemKey: string; inventory: number; player?: { fitness: number; morale: number } } }>("/v1/store/use", ctx.from.id, "POST", { itemKey, playerId, idempotencyKey: "tg-use-" + ctx.from.id + "-" + ctx.update.update_id });
+    await ctx.reply("آیتم استفاده شد. آمادگی: " + (data.usage.player?.fitness ?? "—") + " · روحیه: " + (data.usage.player?.morale ?? "—") + " · باقی‌مانده: " + data.usage.inventory);
+  } catch (error) { await ctx.reply("استفاده از آیتم ناموفق بود: " + (error instanceof Error ? error.message : "خطای نامشخص")); }
+});
+
 bot.command("wallet", async (ctx) => {
   if (!ctx.from) return;
   if (ctx.chat.type !== "private") return ctx.reply("برای مشاهده موجودی، دستور /wallet را در گفت‌وگوی خصوصی اجرا کنید.");
