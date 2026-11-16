@@ -294,7 +294,7 @@ export async function scoutAcademy(userId: string, idempotencyKey: string, now =
       const previous = await tx.ledgerTransaction.findUniqueOrThrow({ where: { idempotencyKey: `club-op:${idempotencyKey}` }, select: { amount: true } });
       const prospects = await tx.academyProspect.findMany({
         where: { clubId: club.id, scoutingBatchKey: idempotencyKey },
-        orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+        orderBy: { id: "asc" },
         select: { id: true, firstName: true, lastName: true, age: true, position: true, overall: true, potential: true, recruitmentCost: true },
       });
       return {
@@ -322,6 +322,7 @@ export async function scoutAcademy(userId: string, idempotencyKey: string, now =
         scoutingBatchKey: idempotencyKey,
       };
     });
+    prospects.sort((a, b) => a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
     await tx.academyProspect.createMany({ data: prospects });
     return { prospects: prospects.map((prospect) => ({
       id: prospect.id, firstName: prospect.firstName, lastName: prospect.lastName,
