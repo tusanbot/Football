@@ -32,8 +32,8 @@ test("health endpoint works without database configuration", async () => {
   assert.deepEqual(await response.json(), {
     status: "ok",
     service: "football-empire-cloudflare-api",
-    mode: "fastify-prisma-runtime",
-    build: "2026-11-16-api-trigger-1",
+    mode: "hono-prisma-runtime",
+    build: "2026-11-16-hono-router-1",
   });
 });
 
