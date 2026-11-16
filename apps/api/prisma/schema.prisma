@@ -210,6 +210,9 @@ model User {
   leagueNotices LeagueNotice[]
   challengeDailyUsages ChallengeDailyUsage[]
   createdFriendlyChallenges FriendlyChallenge[]
+  storeInventory StoreInventoryItem[]
+  storePurchases StorePurchase[]
+  storeItemUses StoreItemUse[]
 }
 
 model Club {
@@ -301,6 +304,7 @@ model Player {
   contractRenewals PlayerContractRenewal[]
   matchPerformances PlayerMatchPerformance[]
   seasonAwards SeasonPlayerAward[]
+  storeItemUses StoreItemUse[]
 
   @@index([clubId, status])
   @@index([clubId, position])
@@ -1246,4 +1250,42 @@ model BotRuntimeLease {
   instanceId String
   lockedUntil DateTime
   updatedAt DateTime @updatedAt
+}
+
+model StoreInventoryItem {
+  id        String   @id @default(cuid())
+  userId    String
+  itemKey   String
+  quantity  Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@unique([userId, itemKey])
+  @@index([userId, updatedAt])
+}
+
+model StorePurchase {
+  id             String     @id @default(cuid())
+  idempotencyKey String     @unique
+  userId         String
+  itemKey        String
+  asset          WalletAsset
+  amount         BigInt
+  quantity       Int
+  createdAt      DateTime   @default(now())
+  user           User       @relation(fields: [userId], references: [id], onDelete: Restrict)
+  @@index([userId, createdAt])
+}
+
+model StoreItemUse {
+  id             String   @id @default(cuid())
+  idempotencyKey String   @unique
+  userId         String
+  itemKey        String
+  playerId       String
+  createdAt      DateTime @default(now())
+  user           User     @relation(fields: [userId], references: [id], onDelete: Restrict)
+  player         Player   @relation(fields: [playerId], references: [id], onDelete: Restrict)
+  @@index([userId, createdAt])
+  @@index([playerId, createdAt])
 }
