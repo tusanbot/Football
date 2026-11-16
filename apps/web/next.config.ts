@@ -1,3 +1,4 @@
+// Build trigger marker: no runtime behavior change.
 import type { NextConfig } from "next";
 
 if (process.env.NODE_ENV === "production") {
