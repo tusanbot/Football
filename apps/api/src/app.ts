@@ -1,5 +1,4 @@
 import Fastify from "fastify";
-import cors from "@fastify/cors";
 import { z } from "zod";
 import { registerTelegramAuthRoutes } from "./auth/routes.js";
 import { registerBotAuthRoutes } from "./auth/bot-routes.js";
@@ -49,18 +48,37 @@ export function buildApp(options: { logger?: boolean } = {}) {
     return payload;
   });
 
-  void app.register(cors, {
-    // Resolve the allowlist at request time because Worker bindings are only
-    // available inside request handlers; Fastify itself is compiled at startup.
-    origin: (origin, callback) => {
-      try {
-        const allowedOrigins = parseCorsOrigins(process.env.CORS_ORIGIN);
-        callback(null, !origin || allowedOrigins.includes(origin));
-      } catch (error) {
-        callback(error as Error, false);
+  // Implement CORS with native Fastify hooks instead of @fastify/cors.
+  // The plugin lifecycle can stall in the Cloudflare Workers runtime, preventing
+  // app.ready() and every app.inject() request from completing.
+  app.addHook("onRequest", async (request, reply) => {
+    const origin = request.headers.origin;
+    let allowedOrigins: string[];
+    try {
+      allowedOrigins = parseCorsOrigins(process.env.CORS_ORIGIN);
+    } catch {
+      allowedOrigins = [];
+    }
+    const originAllowed = !origin || allowedOrigins.includes(origin);
+
+    if (origin && originAllowed) {
+      reply
+        .header("access-control-allow-origin", origin)
+        .header("access-control-allow-credentials", "true")
+        .header("vary", "Origin");
+    }
+
+    if (request.method === "OPTIONS") {
+      if (!originAllowed) return reply.code(403).send();
+      const requestedHeaders = request.headers["access-control-request-headers"];
+      reply
+        .header("access-control-allow-methods", "GET, HEAD, POST, PUT, PATCH, DELETE, OPTIONS")
+        .header("access-control-max-age", "86400");
+      if (typeof requestedHeaders === "string" && requestedHeaders.length <= 2048) {
+        reply.header("access-control-allow-headers", requestedHeaders);
       }
-    },
-    credentials: true,
+      return reply.code(204).send();
+    }
   });
 
   app.get("/ready", async (request, reply) => {
