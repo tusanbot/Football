@@ -128,7 +128,7 @@ function describeRuntimeError(error: unknown): Record<string, unknown> {
   if (!(error instanceof Error)) return { type: typeof error, message: String(error).slice(0, 600) };
   const candidate = error as Error & { code?: unknown; meta?: unknown };
   const redact = (value: unknown) => String(value)
-    .replace(/postgres(?:ql)?:\\/\\/[^\\s"'\x60]+/gi, "[redacted-database-url]")
+    .replace(/postgres(?:ql)?:\/\/[^\s"']+/gi, "[redacted-database-url]")
     .slice(0, 800);
   const meta = candidate.meta && typeof candidate.meta === "object"
     ? Object.fromEntries(Object.entries(candidate.meta as Record<string, unknown>)
