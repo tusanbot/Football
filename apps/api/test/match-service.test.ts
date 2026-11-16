@@ -132,6 +132,7 @@ test("reserve goalkeeper replaces an outfield starter when the selected XI has n
     }
     const users = clubs.map((club) => club.userId);
     if (users.length) {
+      await prisma.ledgerTransaction.deleteMany({ where: { userId: { in: users } } });
       await prisma.wallet.deleteMany({ where: { userId: { in: users } } });
       await prisma.user.deleteMany({ where: { id: { in: users } } });
     }
@@ -174,6 +175,7 @@ test("a due fixture is settled as an automatic forfeit instead of retrying forev
     }
     const users = clubs.map((club) => club.userId);
     if (users.length) {
+      await prisma.ledgerTransaction.deleteMany({ where: { userId: { in: users } } });
       await prisma.wallet.deleteMany({ where: { userId: { in: users } } });
       await prisma.user.deleteMany({ where: { id: { in: users } } });
     }
