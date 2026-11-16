@@ -159,7 +159,7 @@ export default {
       try {
         await withPrismaClient(client, () => prisma.$queryRaw`SELECT 1`);
         ctx.waitUntil(client.$disconnect().catch((error: unknown) => console.error("Prisma readiness cleanup failed", error)));
-        return json({ status: "ready", service: "football-empire-cloudflare-api", database: "connected" });
+        return json({ status: "ready", service: "football-empire-api", database: "connected" });
       } catch (error) {
         console.error("Cloudflare API readiness database check failed", error);
         await client.$disconnect().catch(() => undefined);
