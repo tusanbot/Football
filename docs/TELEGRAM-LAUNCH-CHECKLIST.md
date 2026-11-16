@@ -62,6 +62,8 @@ The current PostgreSQL schema has 62 public tables. The security migration enabl
 
 The foreign-key performance migration adds indexes for the nine previously unindexed public foreign keys. The migrations are safe to re-run at the SQL level (`CREATE INDEX IF NOT EXISTS` and RLS enablement are idempotent), but Prisma must still run `pnpm db:migrate:deploy` so its migration history records them.
 
+The live development database has also been seeded with the 15 active curated special-player records. User, club, and player tables remain empty; no test accounts or game progress have been created.
+
 After the release branch is merged into the intended deployment branch and migrations have been deployed, verify:
 
 1. `/ready` returns HTTP 200 and `status: ready`.
