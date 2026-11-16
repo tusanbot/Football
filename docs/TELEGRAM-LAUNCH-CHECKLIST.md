@@ -22,7 +22,7 @@ The Bot does not use a Telegram webhook. It checks that no webhook is configured
 - Variable: `GAME_ADMIN_TELEGRAM_IDS` (comma-separated numeric Telegram IDs)
 - Variable: `ENVIRONMENT` (`development` during staging; production policy otherwise)
 
-The API readiness endpoint is `/ready`; health-only endpoint is `/health`. The readiness gate checks database connectivity, required schema migrations, RLS on every public table, and the absence of direct grants to `anon` and `authenticated`.
+The API production config is `cloudflare/api/wrangler.production.jsonc`; CI validates it with a Wrangler dry run. The API readiness endpoint is `/ready`; health-only endpoint is `/health`. The readiness gate checks database connectivity, required schema migrations, RLS on every public table, and the absence of direct grants to `anon` and `authenticated`.
 
 ### Mini App Worker: `football`
 
@@ -32,7 +32,7 @@ Build-time variable:
 
 This value is public and is compiled into the Next.js build. Do not put bot tokens, database credentials, or `BOT_API_SECRET` in `NEXT_PUBLIC_*` variables.
 
-The public Mini App URL must be HTTPS. Set the Bot runtime's `TELEGRAM_WEB_APP_URL` to this exact origin. The Mini App must be built with `pnpm --dir apps/web build:worker` and deployed as the compiled OpenNext Worker with its generated assets; a plain Worker returning `Hello world` is not a Mini App deployment.
+The public Mini App URL must be HTTPS. Set the Bot runtime's `TELEGRAM_WEB_APP_URL` to this exact origin. The Mini App production build is `pnpm --dir apps/web build:worker:production` (using `apps/web/wrangler.production.jsonc`) and must be deployed as the compiled OpenNext Worker with its generated assets; a plain Worker returning `Hello world` is not a Mini App deployment.
 
 ### Telegram Bot process
 
@@ -118,8 +118,8 @@ The following were verified during the current readiness audit:
 
 - The API Worker exists and has a Hyperdrive binding plus the required API secret names configured. Its latest recorded deployment is older than the current source branch; this branch's new readiness gate has not been deployed.
 - The currently deployed API Worker still has `ENVIRONMENT=development`; switch it to `production` only during the approved production release. The Wrangler config now sets `keep_vars: true` so dashboard variables are not silently overwritten before they are brought under source control.
-- The `football` Worker currently contains a placeholder `Hello world` handler and reports no static assets. It is **not** the compiled Mini App.
-- No Cloudflare Workers Builds configuration was found for the existing `football` or `football-empire-api` script names.
+- The `football` Worker currently contains a placeholder `Hello world` handler and reports no static assets. It is **not** the compiled Mini App. A production-targeted OpenNext Wrangler config now exists in source, but it has not been deployed.
+- No Cloudflare Workers Builds configuration was found for the existing `football` or `football-empire-api` script names. CI now builds the Mini App against the actual API URL and dry-runs both production Wrangler configs; no automatic Cloudflare deploy trigger is configured.
 - The Bot long-polling process has not been started, and no separate persistent Node.js Bot runtime has been selected/configured in the deployment environment.
 - A real end-to-end Telegram session has therefore not yet been verified.
 
