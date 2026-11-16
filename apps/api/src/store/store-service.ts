@@ -99,9 +99,9 @@ export async function useStoreItem(userId: string, itemKey: string, playerId: st
 
   try {
     return await prisma.$transaction(async (tx) => {
-      const prior = await tx.ledgerTransaction.findUnique({ where: { idempotencyKey: "store-use:" + idempotencyKey } });
+      const prior = await tx.storeItemUse.findUnique({ where: { idempotencyKey } });
       if (prior) {
-        if (prior.userId !== userId || prior.reason !== "STORE_ITEM_USE" || prior.referenceId !== playerId || prior.referenceType !== itemKey) {
+        if (prior.userId !== userId || prior.itemKey !== itemKey || prior.playerId !== playerId) {
           throw new StoreError("IDEMPOTENCY_CONFLICT");
         }
         const current = await tx.storeInventoryItem.findUnique({ where: { userId_itemKey: { userId, itemKey } }, select: { quantity: true } });
@@ -127,18 +127,7 @@ export async function useStoreItem(userId: string, itemKey: string, playerId: st
         },
         select: { fitness: true, morale: true },
       });
-      await tx.ledgerTransaction.create({
-        data: {
-          idempotencyKey: "store-use:" + idempotencyKey,
-          userId,
-          asset: item.asset,
-          direction: "DEBIT",
-          amount: 1n,
-          reason: "STORE_ITEM_USE",
-          referenceType: itemKey,
-          referenceId: playerId,
-        },
-      });
+      await tx.storeItemUse.create({ data: { idempotencyKey, userId, itemKey, playerId } });
       const remaining = await tx.storeInventoryItem.findUnique({
         where: { userId_itemKey: { userId, itemKey } },
         select: { quantity: true },
