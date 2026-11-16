@@ -1,4 +1,5 @@
 {
+  // Build trigger marker: no runtime behavior change.
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "football-empire-api-dev",
   "main": "src/index.ts",
