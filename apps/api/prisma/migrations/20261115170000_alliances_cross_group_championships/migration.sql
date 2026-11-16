@@ -74,3 +74,5 @@ ALTER TABLE "AllianceGroup" ADD CONSTRAINT "AllianceGroup_groupId_fkey" FOREIGN 
 ALTER TABLE "AllianceInvitation" ADD CONSTRAINT "AllianceInvitation_allianceId_fkey" FOREIGN KEY ("allianceId") REFERENCES "Alliance"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 ALTER TABLE "AllianceInvitation" ADD CONSTRAINT "AllianceInvitation_groupId_fkey" FOREIGN KEY ("groupId") REFERENCES "TelegramGroup"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 ALTER TABLE "Competition" ADD CONSTRAINT "Competition_allianceId_fkey" FOREIGN KEY ("allianceId") REFERENCES "Alliance"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+ALTER TABLE "AllianceSeason" ADD CONSTRAINT "AllianceSeason_allianceId_fkey" FOREIGN KEY ("allianceId") REFERENCES "Alliance"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "AllianceLedger" ADD CONSTRAINT "AllianceLedger_allianceId_fkey" FOREIGN KEY ("allianceId") REFERENCES "Alliance"("id") ON DELETE CASCADE ON UPDATE CASCADE;
