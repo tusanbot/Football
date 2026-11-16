@@ -86,9 +86,13 @@ appInstance.addHook("onRequest", (request, _reply, done) => {
   done();
 });
 
+let appReady: Promise<void> | undefined;
 async function getApp(env: Env) {
-  // Runtime bindings are copied into process.env per request after startup.
+  // Worker modules must settle synchronously, so complete Fastify's async
+  // plugin lifecycle lazily inside the first request, before app.inject().
   configureEnv(env);
+  appReady ??= appInstance.ready();
+  await appReady;
   return appInstance;
 }
 async function boundedPayload(request: Request): Promise<Buffer | undefined> {
@@ -243,7 +247,7 @@ export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
     if (request.method === "GET" && url.pathname === "/health") {
-      return json({ status: "ok", service: "football-empire-cloudflare-api", mode: "fastify-prisma-runtime", build: "2026-11-16-api-trigger-1" });
+      return json({ status: "ok", service: "football-empire-cloudflare-api", mode: "fastify-prisma-runtime", build: "2026-11-16-fastify-ready-2" });
     }
     if (request.method === "GET" && url.pathname === "/ready" && missingConfig(env).length) {
       return json({ status: "not_ready", service: "football-empire-cloudflare-api", missing: missingConfig(env) }, 503);
