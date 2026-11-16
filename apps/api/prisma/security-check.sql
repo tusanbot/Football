@@ -7,6 +7,14 @@ DECLARE
   exposed_sequence text;
   exposed_function text;
 BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_roles
+    WHERE rolname = current_user
+      AND (rolsuper OR rolbypassrls)
+  ) THEN
+    RAISE EXCEPTION 'The server-side migration/API role must bypass RLS';
+  END IF;
+
   SELECT string_agg(format('%I.%I', n.nspname, c.relname), ', ')
     INTO missing_rls
   FROM pg_class c
