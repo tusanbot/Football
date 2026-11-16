@@ -32,7 +32,6 @@ const healthResponse = z.object({
 });
 
 export function buildApp(options: { logger?: boolean } = {}) {
-  const corsOrigins = parseCorsOrigins(process.env.CORS_ORIGIN);
   const app = Fastify({
     logger: options.logger ?? process.env.NODE_ENV !== "test",
     requestIdHeader: "x-request-id",
@@ -51,7 +50,16 @@ export function buildApp(options: { logger?: boolean } = {}) {
   });
 
   void app.register(cors, {
-    origin: corsOrigins.length ? corsOrigins : false,
+    // Resolve the allowlist at request time because Worker bindings are only
+    // available inside request handlers; Fastify itself is compiled at startup.
+    origin: (origin, callback) => {
+      try {
+        const allowedOrigins = parseCorsOrigins(process.env.CORS_ORIGIN);
+        callback(null, !origin || allowedOrigins.includes(origin));
+      } catch (error) {
+        callback(error as Error, false);
+      }
+    },
     credentials: true,
   });
 
