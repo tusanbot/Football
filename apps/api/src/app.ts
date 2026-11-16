@@ -30,9 +30,10 @@ const healthResponse = z.object({
   version: z.string(),
 });
 
-export function buildApp(options: { logger?: boolean } = {}) {
+export function buildApp(options: { logger?: boolean; pluginTimeout?: number } = {}) {
   const app = Fastify({
     logger: options.logger ?? process.env.NODE_ENV !== "test",
+    pluginTimeout: options.pluginTimeout ?? 10_000,
     requestIdHeader: "x-request-id",
     bodyLimit: 1_048_576,
   });
