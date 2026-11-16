@@ -72,22 +72,23 @@ function configureEnv(env: Env): void {
   process.env.CORS_ORIGIN = env.CORS_ORIGIN ?? "";
   process.env.GAME_ADMIN_TELEGRAM_IDS = env.GAME_ADMIN_TELEGRAM_IDS ?? "";
 }
-let appInstance: ReturnType<typeof buildApp> | undefined;
-async function getApp(env: Env) {
-  configureEnv(env);
-  if (!appInstance) {
-    appInstance = buildApp({ logger: false });
-    appInstance.addHook("onRequest", (request, _reply, done) => {
-      const rawContextId = request.headers["x-football-prisma-context"];
-      const contextId = Array.isArray(rawContextId) ? rawContextId[0] : rawContextId;
-      if (typeof contextId !== "string" || !enterWorkerPrismaRequest(contextId)) {
-        done(new Error("PRISMA_REQUEST_CONTEXT_MISSING"));
-        return;
-      }
-      done();
-    });
+// Construct and compile Fastify during Worker startup. Its router uses
+// new Function while compiling routes, which requires allow_eval_during_startup.
+const appInstance: ReturnType<typeof buildApp> = buildApp({ logger: false });
+appInstance.addHook("onRequest", (request, _reply, done) => {
+  const rawContextId = request.headers["x-football-prisma-context"];
+  const contextId = Array.isArray(rawContextId) ? rawContextId[0] : rawContextId;
+  if (typeof contextId !== "string" || !enterWorkerPrismaRequest(contextId)) {
+    done(new Error("PRISMA_REQUEST_CONTEXT_MISSING"));
+    return;
   }
-  await appInstance.ready();
+  done();
+});
+await appInstance.ready();
+
+async function getApp(env: Env) {
+  // Runtime bindings are copied into process.env per request after startup.
+  configureEnv(env);
   return appInstance;
 }
 async function boundedPayload(request: Request): Promise<Buffer | undefined> {
