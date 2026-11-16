@@ -115,7 +115,7 @@ export function createWorkersApiRouter() {
   router.use("*", async (context, next) => {
     const origin = context.req.header("origin");
     let allowedOrigins: string[] = [];
-    try { allowedOrigins = parseCorsOrigins(process.env.CORS_ORIGIN); } catch { /* fail closed */ }
+    try { allowedOrigins = parseCorsOrigins(process.env.CORS_ORIGIN, process.env.ENVIRONMENT !== "development"); } catch { /* fail closed */ }
     if (origin && allowedOrigins.includes(origin)) {
       context.header("access-control-allow-origin", origin);
       context.header("access-control-allow-credentials", "true");
@@ -127,7 +127,7 @@ export function createWorkersApiRouter() {
     context.header("x-frame-options", "DENY");
     context.header("referrer-policy", "no-referrer");
     context.header("permissions-policy", "camera=(), microphone=(), geolocation=()");
-    if (process.env.NODE_ENV === "production") context.header("strict-transport-security", "max-age=31536000; includeSubDomains");
+    if (process.env.ENVIRONMENT !== "development") context.header("strict-transport-security", "max-age=31536000; includeSubDomains");
     if (context.req.method === "OPTIONS") {
       if (origin && !allowedOrigins.includes(origin)) return context.body(null, 403);
       context.header("access-control-allow-methods", "GET, HEAD, POST, PUT, PATCH, DELETE, OPTIONS");
