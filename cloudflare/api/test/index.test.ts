@@ -96,3 +96,13 @@ test("Worker router rejects disallowed cross-origin requests", async () => {
   assert.deepEqual(await response.json(), { error: "CORS_ORIGIN_NOT_ALLOWED" });
   await Promise.all(pending.splice(0));
 });
+
+test("production Worker requests receive strict transport security headers", async () => {
+  const response = await worker.fetch(
+    new Request("https://api.example.test/not-a-route"),
+    { ...configuredEnv, ENVIRONMENT: "production" },
+    context,
+  );
+  assert.equal(response.headers.get("strict-transport-security"), "max-age=31536000; includeSubDomains");
+  await Promise.all(pending.splice(0));
+});
