@@ -1,6 +1,8 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "../db.js";
 import { getStoreItem, STORE_CATALOG } from "./catalog.js";
+import { getOpenMarketListings } from "../players/market-service.js";
+import { getSpecialPackOffers } from "../players/special-acquisition-service.js";
 
 export class StoreError extends Error {
   constructor(public readonly code: string) {
@@ -12,14 +14,19 @@ export class StoreError extends Error {
 const validKey = /^[A-Za-z0-9:_-]{8,80}$/;
 
 export async function getStoreSnapshot(userId: string) {
-  const [wallets, inventory] = await Promise.all([
+  const [wallets, inventory, listings, specialPlayers] = await Promise.all([
     prisma.wallet.findMany({ where: { userId }, select: { asset: true, balance: true } }),
     prisma.storeInventoryItem.findMany({ where: { userId, quantity: { gt: 0 } }, orderBy: { updatedAt: "desc" }, select: { itemKey: true, quantity: true, updatedAt: true } }),
+    getOpenMarketListings(),
+    prisma.specialPlayer.findMany({ where: { active: true }, orderBy: [{ rarity: "desc" }, { overall: "desc" }], take: 60, select: { id: true, fullName: true, nationality: true, positions: true, rarity: true, overall: true, potential: true } }),
   ]);
   return {
     items: STORE_CATALOG.map(({ effect: _effect, ...item }) => item),
     wallets: wallets.map((wallet) => ({ asset: wallet.asset, balance: wallet.balance.toString() })),
     inventory,
+    playerListings: listings,
+    specialPlayers,
+    packOffers: getSpecialPackOffers(),
   };
 }
 
