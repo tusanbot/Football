@@ -121,6 +121,8 @@ export async function useStoreItem(userId: string, itemKey: string, playerId: st
         select: { id: true, fitness: true, morale: true },
       });
       if (!player) throw new StoreError("PLAYER_NOT_FOUND");
+      if (item.effect.fitness && player.fitness >= 100) throw new StoreError("PLAYER_STAT_ALREADY_MAX");
+      if (item.effect.morale && player.morale >= 100) throw new StoreError("PLAYER_STAT_ALREADY_MAX");
       const inventory = await tx.storeInventoryItem.updateMany({
         where: { userId, itemKey, quantity: { gt: 0 } },
         data: { quantity: { decrement: 1 } },
