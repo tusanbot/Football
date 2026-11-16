@@ -63,7 +63,7 @@ The compose service uses a persistent restart policy and a non-root container. I
 
 Run this as a supervised, persistent Node.js process. Do not run more than one Bot process against the same database. The PostgreSQL polling lease prevents concurrent polling; if the process loses its lease or cannot renew it, it stops.
 
-The Bot's `/start` and `/menu` flows provide a Web App launch button, and `/miniapp` sends the launch button directly. These buttons are private-chat only. The `/help` command documents the entry point.
+The Bot's `/start`, `/menu`, and `/miniapp` flows set a per-chat Telegram Web App menu button and provide an inline launch button. These buttons are private-chat only. A profile-wide Main Mini App button is a separate optional BotFather configuration. The `/help` command documents the entry point.
 
 ## Database release gate
 
