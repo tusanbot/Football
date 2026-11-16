@@ -51,13 +51,25 @@ test("CORS reflects only explicitly configured origins", async (t) => {
   assert.equal(denied.headers["access-control-allow-origin"], undefined);
 });
 
-test("invalid CORS configuration fails closed during app construction", () => {
+test("invalid CORS configuration fails closed at request time", async (t) => {
   const previous = process.env.CORS_ORIGIN;
   process.env.CORS_ORIGIN = "*";
-  try {
-    assert.throws(() => buildApp(), /CORS_ORIGIN/);
-  } finally {
+  const app = buildApp();
+  await app.ready();
+  t.after(async () => {
+    await app.close();
     if (previous === undefined) delete process.env.CORS_ORIGIN;
     else process.env.CORS_ORIGIN = previous;
-  }
+  });
+
+  const response = await app.inject({
+    method: "OPTIONS",
+    url: "/v1/me",
+    headers: {
+      origin: "https://game.example",
+      "access-control-request-method": "GET",
+    },
+  });
+  assert.equal(response.statusCode, 500);
+  assert.equal(response.headers["access-control-allow-origin"], undefined);
 });
