@@ -11,7 +11,6 @@ const API_ERROR_MESSAGES: Record<string, string> = {
   INVALID_QUANTITY: "تعداد درخواستی معتبر نیست.",
   ITEM_NOT_IN_INVENTORY: "این آیتم در انبار شما موجود نیست.",
   PLAYER_STAT_ALREADY_MAX: "ویژگی بازیکن به حداکثر رسیده و نیازی به این آیتم ندارد.",
-  IDEMPOTENCY_CONFLICT: "این درخواست قبلاً با اطلاعات متفاوت ثبت شده است.",
   INSUFFICIENT_GROUP_POINTS: "امتیاز خزانه گروه کافی نیست.",
   INSUFFICIENT_BALANCE: "موجودی برای این عملیات کافی نیست.",
   GROUP_NOT_REGISTERED: "این گروه هنوز در بازی ثبت نشده است.",
