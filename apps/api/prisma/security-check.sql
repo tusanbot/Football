@@ -59,4 +59,4 @@ BEGIN
   IF exposed_function IS NOT NULL THEN
     RAISE EXCEPTION 'Public function EXECUTE privileges remain: %', exposed_function;
   END IF;
-END $;
+END $$;
