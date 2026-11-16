@@ -10,5 +10,6 @@ coverage
 .env
 .env.*
 !.env.example
+!.env.bot.example
 *.log
 .DS_Store
