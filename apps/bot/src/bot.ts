@@ -890,10 +890,17 @@ bot.command("club", async (ctx) => {
 bot.command("store", async (ctx) => {
   if (!ctx.from || ctx.chat.type !== "private") return ctx.reply("فروشگاه شخصی را در گفت‌وگوی خصوصی با ربات باز کنید.");
   try {
-    const data = await api<{ items: Array<{ key: string; name: string; description: string; asset: string; price: string }>; wallets: Array<{ asset: string; balance: string }> }>("/v1/store", ctx.from.id);
+    const data = await api<{
+      items: Array<{ key: string; name: string; description: string; asset: string; price: string }>;
+      wallets: Array<{ asset: string; balance: string }>;
+      playerListings: Array<{ id: string; askingPrice: string; player: { firstName: string; lastName: string; overall: number }; sellerClub: { name: string } }>;
+      packOffers: Array<{ method: string; rarity: string; priceGold: string }>;
+    }>("/v1/store", ctx.from.id);
     const balances = data.wallets.map((w) => (w.asset === "CASH" ? "کش" : "طلا") + ": " + cash(w.balance)).join(" · ");
     const items = data.items.map((item) => item.key + " — " + item.name + "\n" + item.description + "\nقیمت: " + cash(item.price) + " " + (item.asset === "CASH" ? "Cash" : "Gold") + "\nخرید: /buyitem " + item.key).join("\n\n");
-    await ctx.reply("🛍 فروشگاه Football Empire\n" + balances + "\n\n" + items);
+    const players = data.playerListings.slice(0, 10).map((listing) => listing.player.firstName + " " + listing.player.lastName + " · OVR " + listing.player.overall + " · " + cash(listing.askingPrice) + " Cash\nفروشنده: " + listing.sellerClub.name + "\nخرید: /buy " + listing.id).join("\n\n");
+    const packs = data.packOffers.map((pack) => pack.method + " · " + cash(pack.priceGold) + " Gold\nخرید: /pack " + pack.method.replace("_pack", "")).join("\n");
+    await ctx.reply("🛍 فروشگاه Football Empire\n" + balances + "\n\nآیتم‌ها:\n" + items + "\n\nبازیکنان قابل خرید:\n" + (players || "فعلاً آگهی فعالی وجود ندارد.") + "\n\nبسته‌های ستاره:\n" + packs);
   } catch (error) { await ctx.reply("دریافت فروشگاه ناموفق بود: " + (error instanceof Error ? error.message : "خطای نامشخص")); }
 });
 
