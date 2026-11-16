@@ -49,7 +49,7 @@ test("readiness fails closed and reports missing runtime configuration", async (
   assert.ok(body.missing.includes("GAME_ADMIN_TELEGRAM_IDS"));
 });
 
-test("the Worker adapts Fetch requests to the existing Fastify application", async () => {
+test("the Worker dispatches Fetch requests through the shared API route handlers", async () => {
   const response = await worker.fetch(new Request("https://api.example.test/not-a-route"), configuredEnv, context);
   assert.equal(response.status, 404);
   await Promise.all(pending.splice(0));
@@ -64,7 +64,7 @@ test("readiness executes a real PostgreSQL query through the Worker Prisma adapt
   await Promise.all(pending.splice(0));
 });
 
-test("Telegram auth route uses the shared Fastify route validation", async () => {
+test("Telegram auth route retains the shared API request validation", async () => {
   const response = await worker.fetch(new Request("https://api.example.test/v1/auth/telegram", {
     method: "POST",
     headers: { "content-type": "application/json" },
