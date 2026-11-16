@@ -242,7 +242,7 @@ export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
     if (request.method === "GET" && url.pathname === "/health") {
-      return json({ status: "ok", service: "football-empire-cloudflare-api", mode: "fastify-prisma-runtime" });
+      return json({ status: "ok", service: "football-empire-cloudflare-api", mode: "fastify-prisma-runtime", build: "2026-11-16-api-trigger-1" });
     }
     if (request.method === "GET" && url.pathname === "/ready" && missingConfig(env).length) {
       return json({ status: "not_ready", service: "football-empire-cloudflare-api", missing: missingConfig(env) }, 503);
