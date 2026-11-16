@@ -176,9 +176,28 @@ export default {
       if (missing.length) return json({ status: "not_ready", service: "football-empire-cloudflare-api", missing }, 503);
       const client = createPrismaClient(dbUrl(env) ?? undefined, 1);
       try {
-        await withPrismaClient(client, () => prisma.$queryRaw`SELECT 1`);
+        const schemaChecks = await withPrismaClient(client, () => prisma.$queryRaw<Array<{ ready: boolean }>>`
+          SELECT
+            EXISTS (
+              SELECT 1 FROM "_prisma_migrations"
+              WHERE migration_name = '20261116120000_in_game_store'
+                AND finished_at IS NOT NULL
+                AND rolled_back_at IS NULL
+            )
+            AND to_regclass('"PyramidLeague"') IS NOT NULL
+            AND to_regclass('"LeaguePromotionOffer"') IS NOT NULL AS ready
+        `);
+        if (!schemaChecks[0]?.ready) {
+          ctx.waitUntil(client.$disconnect().catch((error: unknown) => console.error("Prisma readiness cleanup failed", error)));
+          return json({
+            status: "not_ready",
+            service: "football-empire-api",
+            database: "connected",
+            missing: ["DATABASE_SCHEMA_MIGRATIONS"],
+          }, 503);
+        }
         ctx.waitUntil(client.$disconnect().catch((error: unknown) => console.error("Prisma readiness cleanup failed", error)));
-        return json({ status: "ready", service: "football-empire-api", database: "connected" });
+        return json({ status: "ready", service: "football-empire-api", database: "connected", schema: "current" });
       } catch (error) {
         console.error("Cloudflare API readiness database check failed", error);
         await client.$disconnect().catch(() => undefined);
