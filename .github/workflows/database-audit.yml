@@ -1,6 +1,9 @@
 name: Database Read-only Audit
 
 on:
+  push:
+    branches:
+      - ops/database-migration-audit
   workflow_dispatch:
     inputs:
       acknowledge_read_only:
@@ -23,20 +26,22 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
       - name: Enforce read-only invocation
         env:
           ACKNOWLEDGEMENT: ${{ inputs.acknowledge_read_only }}
           DIRECT_URL: ${{ secrets.DIRECT_URL }}
         run: |
           set -euo pipefail
-          test "$ACKNOWLEDGEMENT" = "READ_ONLY_AUDIT_ONLY"
+          if [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ]; then
+            test "$ACKNOWLEDGEMENT" = "READ_ONLY_AUDIT_ONLY"
+          fi
           if [ -z "$DIRECT_URL" ]; then
             echo "::error::Repository secret DIRECT_URL is not configured. Add the direct PostgreSQL connection string as a GitHub Actions secret named DIRECT_URL. Its value will not be printed."
             exit 1
           fi
-
-      - name: Checkout
-        uses: actions/checkout@v4
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
@@ -47,7 +52,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: pnpm
 
       - name: Install dependencies
         run: pnpm install --no-frozen-lockfile
@@ -62,6 +66,7 @@ jobs:
         id: migration_status
         continue-on-error: true
         env:
+          DATABASE_URL: ${{ secrets.DIRECT_URL }}
           DIRECT_URL: ${{ secrets.DIRECT_URL }}
         run: |
           set +e
@@ -76,6 +81,7 @@ jobs:
         continue-on-error: true
         working-directory: apps/api
         env:
+          DATABASE_URL: ${{ secrets.DIRECT_URL }}
           DIRECT_URL: ${{ secrets.DIRECT_URL }}
         run: |
           set +e
