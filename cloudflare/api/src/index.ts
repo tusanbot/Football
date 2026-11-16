@@ -195,6 +195,12 @@ export default {
             )
             AND to_regclass('"PyramidLeague"') IS NOT NULL
             AND to_regclass('"LeaguePromotionOffer"') IS NOT NULL
+            AND (SELECT count(*) >= 15 FROM "SpecialPlayer" WHERE active = true)
+            AND EXISTS (
+              SELECT 1 FROM pg_roles
+              WHERE rolname = current_user
+                AND (rolsuper OR rolbypassrls)
+            )
             AND NOT EXISTS (
               SELECT 1
               FROM pg_class c
