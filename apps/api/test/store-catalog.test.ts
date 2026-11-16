@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { getStoreItem, STORE_CATALOG } from "../../src/store/catalog.js";
+import { getStoreItem, STORE_CATALOG } from "../src/store/catalog.js";
 
 test("store catalog exposes valid Cash and Gold consumables", () => {
   assert.equal(STORE_CATALOG.length, 3);
