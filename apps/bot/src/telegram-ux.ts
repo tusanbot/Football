@@ -63,6 +63,7 @@ export function isPersistentGroupReply(command: string | undefined, messageText:
 
 export const PRIVATE_MENU_ROWS = [
   [{ label: "🏟 باشگاه", command: "club" }, { label: "💰 کیف پول", command: "wallet" }],
+  [{ label: "🛍 فروشگاه", command: "store" }, { label: "🎒 انبار آیتم‌ها", command: "inventory" }],
   [{ label: "👥 بازیکنان", command: "players" }, { label: "📋 ترکیب", command: "lineup" }],
   [{ label: "📈 توسعه بازیکنان", command: "development" }, { label: "🏗 امکانات باشگاه", command: "operations" }],
   [{ label: "📊 امور مالی", command: "finance" }, { label: "🔎 استعدادیابی", command: "scout" }],
