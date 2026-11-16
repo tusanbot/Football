@@ -23,6 +23,7 @@ import { registerBotRuntimeRoutes } from "./bot-runtime-routes.js";
 import { registerPublicClubRoutes } from "./public-club-routes.js";
 import { registerPublicPlayerRecordRoutes } from "./players/public-record-routes.js";
 import { registerSeasonAwardRoutes } from "./game/season-award-routes.js";
+import { registerStoreRoutes } from "./store/store-routes.js";
 
 const healthResponse = z.object({
   status: z.literal("ok"),
@@ -108,6 +109,7 @@ export function buildApp() {
   registerPublicClubRoutes(app);
   registerPublicPlayerRecordRoutes(app);
   registerSeasonAwardRoutes(app);
+  registerStoreRoutes(app);
 
   app.get("/v1", async () => ({
     name: "Football Empire API",
