@@ -8,7 +8,8 @@ interface MatchCoordinatorNamespace { idFromName(name: string): unknown; get(id:
 interface MatchCoordinatorState { storage: { setAlarm(scheduledTime: number): Promise<void>; deleteAlarm(): Promise<void>; }; }
 interface Env {
   MATCH_COORDINATOR?: MatchCoordinatorNamespace; DATABASE_URL?: string; HYPERDRIVE?: { connectionString: string };
-  TELEGRAM_BOT_TOKEN?: string; BOT_API_SECRET?: string; CORS_ORIGIN?: string; GAME_ADMIN_TELEGRAM_IDS?: string; ENVIRONMENT?: string;
+  TELEGRAM_BOT_TOKEN?: string; BOT_API_SECRET?: string; CORS_ORIGIN?: string; GAME_ADMIN_TELEGRAM_IDS?: string;
+  ALLIANCE_REVIEWER_TELEGRAM_IDS?: string; GAME_ADMIN_ROLE_MAP?: string; ENVIRONMENT?: string;
 }
 interface ExecutionContext { waitUntil(promise: Promise<unknown>): void }
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), {
@@ -40,6 +41,8 @@ function configureEnv(env: Env): void {
   process.env.BOT_API_SECRET = env.BOT_API_SECRET ?? "";
   process.env.CORS_ORIGIN = env.CORS_ORIGIN ?? "";
   process.env.GAME_ADMIN_TELEGRAM_IDS = env.GAME_ADMIN_TELEGRAM_IDS ?? "";
+  process.env.ALLIANCE_REVIEWER_TELEGRAM_IDS = env.ALLIANCE_REVIEWER_TELEGRAM_IDS ?? "";
+  process.env.GAME_ADMIN_ROLE_MAP = env.GAME_ADMIN_ROLE_MAP ?? "";
 }
 const api = createWorkersApiRouter();
 
