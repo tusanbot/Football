@@ -150,7 +150,7 @@ jobs:
               throw new Error(`Generated Prisma diff is missing ${constraint}`);
             }
           }
-          const destructive = /\\b(?:DROP\\s+TABLE|DROP\\s+COLUMN|DELETE\\s+FROM|TRUNCATE(?:\\s+TABLE)?)\\b/i;
+          const destructive = /\b(?:DROP\s+TABLE|DROP\s+COLUMN|DELETE\s+FROM|TRUNCATE(?:\s+TABLE)?)\b/i;
           if (destructive.test(sql)) {
             throw new Error("Generated Prisma diff contains a destructive table/column/data operation; manual review is required.");
           }
