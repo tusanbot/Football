@@ -76,7 +76,7 @@ test("club facilities, academy, coach, sponsor income and finance ledger are tra
     const replayedScouting = await scoutAcademy(userId, `academy-scout-${suffix}`, now);
     assert.equal(replayedScouting.replayed, true);
     assert.equal(replayedScouting.prospects.length, 3);
-    assert.deepEqual(replayedScouting.prospects.map((prospect) => prospect.id).sort(), scouting.prospects.map((prospect) => prospect.id).sort());
+    assert.deepEqual(replayedScouting.prospects.map((prospect) => prospect.id), scouting.prospects.map((prospect) => prospect.id));
     assert.equal(replayedScouting.scoutingCost, scouting.scoutingCost);
     assert.equal((await prisma.wallet.findUniqueOrThrow({ where: { userId_asset: { userId, asset: "CASH" } } })).balance, afterScout.balance);
 
