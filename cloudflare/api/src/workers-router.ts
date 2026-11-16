@@ -123,8 +123,11 @@ export function createWorkersApiRouter() {
       const url = new URL(context.req.url);
       let body: unknown;
       if (!["GET", "HEAD"].includes(route.method) && context.req.raw.body) {
-        const raw = await context.req.raw.clone().text();
-        if (raw.length > 1_048_576) return context.json({ error: "PAYLOAD_TOO_LARGE" }, 413);
+        const contentLength = Number(context.req.header("content-length") ?? 0);
+        if (Number.isFinite(contentLength) && contentLength > 1_048_576) return context.json({ error: "PAYLOAD_TOO_LARGE" }, 413);
+        const bytes = await context.req.raw.clone().arrayBuffer();
+        if (bytes.byteLength > 1_048_576) return context.json({ error: "PAYLOAD_TOO_LARGE" }, 413);
+        const raw = new TextDecoder().decode(bytes);
         if (raw) {
           const contentType = context.req.header("content-type") ?? "";
           if (contentType.includes("application/json")) {
