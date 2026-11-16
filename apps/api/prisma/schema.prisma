@@ -402,6 +402,7 @@ model PlayerContractRenewal {
   player          Player   @relation(fields: [playerId], references: [id], onDelete: Restrict)
   @@index([clubId, createdAt])
   @@index([playerId, createdAt])
+  @@index([userId])
 }
 
 
@@ -557,6 +558,7 @@ model PyramidLeagueApplication {
   club Club @relation(fields: [clubId], references: [id], onDelete: Cascade)
   @@unique([clubId, tier, season])
   @@index([tier, season, status, appliedAt])
+  @@index([userId])
 }
 
 model LeaguePromotionOffer {
@@ -612,6 +614,7 @@ model FriendlyChallenge {
   @@index([groupId, status, expiresAt])
   @@index([status, expiresAt])
   @@index([creatorClubId, createdAt])
+  @@index([creatorUserId])
 }
 
 model ChallengeDailyUsage {
@@ -641,6 +644,7 @@ model CompetitionEntry {
   club          Club @relation(fields: [clubId], references: [id], onDelete: Cascade)
   @@unique([competitionId, clubId])
   @@index([competitionId, points, goalsFor])
+  @@index([clubId])
 }
 
 model FootballMatch {
@@ -845,6 +849,7 @@ model PlayerMarketListing {
   @@index([status, expiresAt, createdAt])
   @@index([sellerClubId, status])
   @@index([playerId, status])
+  @@index([buyerClubId])
 }
 
 model Wallet {
@@ -909,6 +914,7 @@ model GroupMembership {
   group    TelegramGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
   user     User          @relation(fields: [userId], references: [id], onDelete: Cascade)
   @@unique([groupId, userId])
+  @@index([userId])
 }
 
 model GroupChallenge {
@@ -947,6 +953,7 @@ model GroupMemberRewardBalance {
   group TelegramGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
   @@unique([groupId, userId])
+  @@index([userId])
 }
 
 model GroupPointLedger {
@@ -988,6 +995,7 @@ model GroupRewardGrant {
   item GroupRewardItem @relation(fields: [itemId], references: [id], onDelete: Restrict)
   @@index([groupId, createdAt])
   @@index([recipientUserId, createdAt])
+  @@index([itemId])
 }
 
 
@@ -1022,6 +1030,7 @@ model Alliance {
   ledger AllianceLedger[]
   auditLogs AllianceAuditLog[]
   @@index([status, createdAt])
+  @@index([createdByGroupId])
 }
 
 model AllianceGroup {
