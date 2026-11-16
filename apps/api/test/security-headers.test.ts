@@ -70,6 +70,6 @@ test("invalid CORS configuration fails closed at request time", async (t) => {
       "access-control-request-method": "GET",
     },
   });
-  assert.equal(response.statusCode, 500);
+  assert.equal(response.statusCode, 403);
   assert.equal(response.headers["access-control-allow-origin"], undefined);
 });

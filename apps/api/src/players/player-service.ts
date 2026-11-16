@@ -45,7 +45,7 @@ export async function ensureStarterSquad(tx: Prisma.TransactionClient, clubId: s
   })));
   if (!lineup) return;
 
-  await Promise.all(lineup.map((playerId, index) =>
-    tx.player.update({ where: { id: playerId }, data: { lineupSlot: index + 1 } }),
-  ));
+  for (const [index, playerId] of lineup.entries()) {
+    await tx.player.update({ where: { id: playerId }, data: { lineupSlot: index + 1 } });
+  }
 }
