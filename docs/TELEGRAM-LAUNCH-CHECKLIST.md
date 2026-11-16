@@ -68,6 +68,7 @@ The Bot's `/start`, `/menu`, and `/miniapp` flows set a per-chat Telegram Web Ap
 ## Database release gate
 
 The current PostgreSQL schema has 62 public tables. The security migration enables RLS on every public table, revokes direct table/sequence/function access from browser-facing Supabase roles, and locks down default privileges for future Prisma migrations. The API uses a server-side database connection; do not grant direct browser access to game tables.
+There are intentionally no RLS policies for `anon` or `authenticated`: direct browser access is not part of this architecture, and an enabled RLS table with no matching policy denies those roles. The Supabase Security Advisor's `rls_enabled_no_policy` INFO finding for these 62 tables is therefore expected; do not add broad `USING (true)` policies to silence it. The Performance Advisor's unused-index INFO findings are also expected before real game traffic; do not drop indexes based on zero usage yet.
 
 The foreign-key performance migration adds indexes for the nine previously unindexed public foreign keys. The migrations are safe to re-run at the SQL level (`CREATE INDEX IF NOT EXISTS` and RLS enablement are idempotent), but Prisma must still run `pnpm db:migrate:deploy` so its migration history records them.
 
