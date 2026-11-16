@@ -1,5 +1,27 @@
 import { Hono } from "hono";
-import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
+type LegacyRequest = {
+  method: string;
+  url: string;
+  headers: Record<string, string>;
+  params: Record<string, string>;
+  query: Record<string, string | string[]>;
+  body?: unknown;
+  routeOptions: { url: string };
+  log: {
+    error: (...args: unknown[]) => void;
+    warn: (...args: unknown[]) => void;
+    info: (...args: unknown[]) => void;
+    debug: (...args: unknown[]) => void;
+  };
+};
+type LegacyReply = {
+  code(status: number): LegacyReply;
+  status(status: number): LegacyReply;
+  header(name: string, value: string | number): LegacyReply;
+  headers(values: Record<string, string | number>): LegacyReply;
+  send(value?: unknown): LegacyReply;
+  readonly sent: boolean;
+};
 import { registerTelegramAuthRoutes } from "../../../apps/api/src/auth/routes.js";
 import { registerBotAuthRoutes } from "../../../apps/api/src/auth/bot-routes.js";
 import { registerGameRoutes } from "../../../apps/api/src/game/routes.js";
@@ -23,7 +45,7 @@ import { registerSeasonAwardRoutes } from "../../../apps/api/src/game/season-awa
 import { registerStoreRoutes } from "../../../apps/api/src/store/store-routes.js";
 import { parseCorsOrigins } from "../../../apps/api/src/runtime-config.js";
 
-type Handler = (request: FastifyRequest, reply: FastifyReply) => unknown | Promise<unknown>;
+type Handler = (request: LegacyRequest, reply: LegacyReply) => unknown | Promise<unknown>;
 type RouteDefinition = { method: string; path: string; handler: Handler };
 
 class RouteRegistry {
@@ -61,7 +83,7 @@ function queryObject(url: URL): Record<string, string | string[]> {
 
 export function createWorkersApiRouter() {
   const registry = new RouteRegistry();
-  const registrar = registry as unknown as FastifyInstance;
+  const registrar = registry as unknown as Parameters<typeof registerTelegramAuthRoutes>[0];
   registerTelegramAuthRoutes(registrar);
   registerBotAuthRoutes(registrar);
   registerGameRoutes(registrar);
@@ -153,7 +175,7 @@ export function createWorkersApiRouter() {
           info: (...args: unknown[]) => console.info(...args),
           debug: (...args: unknown[]) => console.debug(...args),
         },
-      } as unknown as FastifyRequest;
+      } satisfies LegacyRequest;
 
       let statusCode = 200;
       let sent = false;
@@ -166,7 +188,7 @@ export function createWorkersApiRouter() {
         headers(values: Record<string, string | number>) { for (const [name, value] of Object.entries(values)) responseHeaders.set(name, String(value)); return this; },
         send(value?: unknown) { sent = true; sentBody = value; return this; },
         get sent() { return sent; },
-      } as unknown as FastifyReply;
+      } satisfies LegacyReply;
 
       try {
         const result = await route.handler(request, reply);
