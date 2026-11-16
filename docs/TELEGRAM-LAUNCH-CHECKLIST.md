@@ -44,13 +44,22 @@ Required environment variables:
 - `FOOTBALL_API_URL=https://football-empire-api.mshmahyar9.workers.dev`
 - `TELEGRAM_WEB_APP_URL=https://football.mshmahyar9.workers.dev`
 
-Build and run:
+Build and run directly:
 
 ```bash
 pnpm install --frozen-lockfile
 pnpm --filter @football/bot build
 node apps/bot/dist/bot.js
 ```
+
+A host-neutral Docker runtime is also included. Copy `.env.bot.example` to `.env.bot`, fill the four values using the API Worker credentials and the two HTTPS URLs, then on the selected Node/Docker host run:
+
+```bash
+docker compose -f docker-compose.bot.yml up -d --build
+docker compose -f docker-compose.bot.yml logs -f telegram-bot
+```
+
+The compose service uses a persistent restart policy and a non-root container. It is intentionally not started by CI or by this preparation workflow.
 
 Run this as a supervised, persistent Node.js process. Do not run more than one Bot process against the same database. The PostgreSQL polling lease prevents concurrent polling; if the process loses its lease or cannot renew it, it stops.
 
