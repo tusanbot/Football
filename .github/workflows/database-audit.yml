@@ -39,7 +39,7 @@ jobs:
             test "$ACKNOWLEDGEMENT" = "READ_ONLY_AUDIT_ONLY"
           fi
           if [ -z "$DIRECT_URL" ]; then
-            echo "::error::Repository secret DIRECT_URL is not configured. Add the direct PostgreSQL connection string as a GitHub Actions secret named DIRECT_URL. Its value will not be printed."
+            echo "::error::Repository secret DIRECT_URL is not configured. Add a PostgreSQL direct-endpoint or Supabase session-mode pooler connection string as the GitHub Actions secret DIRECT_URL. Its value will not be printed."
             exit 1
           fi
 
@@ -133,6 +133,29 @@ jobs:
           echo "exit_code=$status" >> "$GITHUB_OUTPUT"
           echo "Prisma schema diff completed with exit code: $status"
           exit 0
+
+      - name: Verify generated schema diff and safety
+        run: |
+          set -euo pipefail
+          test "${{ steps.schema_diff.outputs.exit_code }}" = "0"
+          node --input-type=module <<'NODE'
+          import { readFileSync } from "node:fs";
+          const sql = readFileSync("database-schema-diff.sql", "utf8");
+          const required = [
+            "AllianceSeason_allianceId_fkey",
+            "AllianceLedger_allianceId_fkey",
+          ];
+          for (const constraint of required) {
+            if (!sql.includes(constraint)) {
+              throw new Error(`Generated Prisma diff is missing ${constraint}`);
+            }
+          }
+          const destructive = /\\b(?:DROP\\s+TABLE|DROP\\s+COLUMN|DELETE\\s+FROM|TRUNCATE(?:\\s+TABLE)?)\\b/i;
+          if (destructive.test(sql)) {
+            throw new Error("Generated Prisma diff contains a destructive table/column/data operation; manual review is required.");
+          }
+          console.log("Generated schema diff includes both Alliance foreign keys and no DROP TABLE/COLUMN, DELETE, or TRUNCATE operations.");
+          NODE
 
       - name: Add audit outcome to workflow summary
         if: always()
