@@ -53,9 +53,9 @@ export default function StoreClient() {
     if (playersResponse.ok) {
       const playerData = await playersResponse.json();
       setPlayers(playerData.players ?? []);
-      if (!selectedPlayer && playerData.players?.[0]) setSelectedPlayer(playerData.players[0].id);
+      setSelectedPlayer((current) => current || playerData.players?.[0]?.id || "");
     }
-  }, [selectedPlayer]);
+  }, []);
 
   useEffect(() => {
     let active = true;
