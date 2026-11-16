@@ -76,7 +76,7 @@ let appInstance: ReturnType<typeof buildApp> | undefined;
 async function getApp(env: Env) {
   configureEnv(env);
   if (!appInstance) {
-    appInstance = buildApp();
+    appInstance = buildApp({ logger: false });
     appInstance.addHook("onRequest", (request, _reply, done) => {
       const rawContextId = request.headers["x-football-prisma-context"];
       const contextId = Array.isArray(rawContextId) ? rawContextId[0] : rawContextId;

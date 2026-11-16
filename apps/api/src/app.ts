@@ -31,10 +31,10 @@ const healthResponse = z.object({
   version: z.string(),
 });
 
-export function buildApp() {
+export function buildApp(options: { logger?: boolean } = {}) {
   const corsOrigins = parseCorsOrigins(process.env.CORS_ORIGIN);
   const app = Fastify({
-    logger: process.env.NODE_ENV !== "test",
+    logger: options.logger ?? process.env.NODE_ENV !== "test",
     requestIdHeader: "x-request-id",
     bodyLimit: 1_048_576,
   });
