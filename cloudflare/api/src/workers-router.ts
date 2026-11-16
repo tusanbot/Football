@@ -39,7 +39,7 @@ class RouteRegistry {
 function jsonResponse(value: unknown, status: number, headers: Headers): Response {
   if (value instanceof Response) return value;
   if (value instanceof ArrayBuffer || ArrayBuffer.isView(value)) {
-    return new Response(value as BodyInit, { status, headers });
+    return new Response(value as unknown as BodyInit, { status, headers });
   }
   if (typeof value === "string") {
     if (!headers.has("content-type")) headers.set("content-type", "text/plain; charset=utf-8");
@@ -119,7 +119,7 @@ export function createWorkersApiRouter() {
   });
 
   for (const route of registry.routes) {
-    router.on(route.method, route.path, async (context) => {
+    router.on(route.method as "GET" | "POST" | "PUT" | "PATCH" | "DELETE", route.path, async (context) => {
       const url = new URL(context.req.url);
       let body: unknown;
       if (!["GET", "HEAD"].includes(route.method) && context.req.raw.body) {
