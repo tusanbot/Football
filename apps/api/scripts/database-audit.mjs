@@ -43,7 +43,7 @@ try {
   const historyExists = await client.query(
     "SELECT to_regclass('public._prisma_migrations') IS NOT NULL AS history_table_present"
   );
-  let history = [];
+  let history = null;
   if (historyExists.rows[0].history_table_present) {
     const result = await client.query(`
       SELECT migration_name, started_at, finished_at, rolled_back_at,
@@ -88,19 +88,22 @@ try {
     ORDER BY table_name
   `);
 
+  const historyTablePresent = historyExists.rows[0].history_table_present;
   const latestByName = new Map();
-  for (const row of history) latestByName.set(row.migration_name, row);
-  const applied = [];
-  const failed = [];
-  const pending = [];
-  for (const name of migrationNames) {
-    const row = latestByName.get(name);
-    if (!row) {
-      if (historyExists.rows[0].history_table_present) pending.push(name);
-      continue;
+  for (const row of history ?? []) latestByName.set(row.migration_name, row);
+  const applied = historyTablePresent ? [] : null;
+  const failed = historyTablePresent ? [] : null;
+  const pending = historyTablePresent ? [] : null;
+  if (historyTablePresent) {
+    for (const name of migrationNames) {
+      const row = latestByName.get(name);
+      if (!row) {
+        pending.push(name);
+        continue;
+      }
+      if (row.finished_at && !row.rolled_back_at) applied.push(name);
+      else failed.push(name);
     }
-    if (row.finished_at && !row.rolled_back_at) applied.push(name);
-    else failed.push(name);
   }
 
   const tableNames = new Set(tablesResult.rows.map((row) => row.table_name));
@@ -120,7 +123,7 @@ try {
     generated_at: new Date().toISOString(),
     audit_mode: "READ_ONLY",
     database: identity.rows[0],
-    migration_history_table_exists: historyExists.rows[0].history_table_present,
+    migration_history_table_exists: historyTablePresent,
     migration_file_count: migrationNames.length,
     migration_files: migrationNames,
     applied_migrations: applied,
@@ -158,9 +161,9 @@ const lines = [
   `- PostgreSQL: ${report.database.server_version}`,
   `- Prisma migration history table: ${report.migration_history_table_exists ? "present" : "missing"}`,
   `- Migration files in this branch: ${report.migration_file_count}`,
-  `- Applied migrations: ${report.applied_migrations.length}`,
+  `- Applied migrations: ${report.migration_history_table_exists ? report.applied_migrations.length : "unknown (no Prisma history table)"}`,
   `- Pending migrations: ${report.migration_history_table_exists ? report.pending_migrations.length : "unknown (no Prisma history table)"}`,
-  `- Failed/rolled-back migrations: ${report.failed_or_rolled_back_migrations.length}`,
+  `- Failed/rolled-back migrations: ${report.migration_history_table_exists ? report.failed_or_rolled_back_migrations.length : "unknown (no Prisma history table)"}`,
   `- Public tables: ${report.public_table_count}`,
   `- Public enums: ${report.public_enum_count}`,
   "",
