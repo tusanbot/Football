@@ -17,7 +17,7 @@ This is a compatibility runtime, not a D1 cutover. The generated D1 schema and D
 
 ## Cloudflare dashboard setup
 
-Connect both Workers to repository `tusanbot/Football`, branch `feat/cloudflare-worker-runtime`:
+Connect both Workers to repository `tusanbot/Football`, branch `feat/supabase-preflight-hardening`:
 
 | Setting | Web / Mini App | Game API |
 | --- | --- | --- |
@@ -29,7 +29,7 @@ Connect both Workers to repository `tusanbot/Football`, branch `feat/cloudflare-
 | Deploy command | `echo "Deployment disabled until approved"` | `echo "Deployment disabled until approved"` |
 | Non-production branch deploy | `echo "Preview deployment disabled until approved"` | `echo "Preview deployment disabled until approved"` |
 
-**Important:** Cloudflare Workers Builds defaults its deploy command to `npx wrangler deploy`. Set the safe `echo` commands above in Settings → Builds for both Workers; otherwise a connected Git push may deploy automatically. Keep the connected branch set to `feat/cloudflare-worker-runtime`. Do not enable automatic preview deployment yet.
+**Important:** Cloudflare Workers Builds defaults its deploy command to `npx wrangler deploy`. Set the safe `echo` commands above in Settings → Builds for both Workers; otherwise a connected Git push may deploy automatically. Keep the connected branch set to `feat/supabase-preflight-hardening`. Do not enable automatic preview deployment yet.
 
 Do not run Wrangler from the monorepo root. Each Worker needs its own root directory.
 
