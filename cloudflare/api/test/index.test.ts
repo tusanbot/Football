@@ -73,3 +73,26 @@ test("Telegram auth route uses the shared Fastify route validation", async () =>
   assert.equal(response.status, 400);
   await Promise.all(pending.splice(0));
 });
+
+test("Worker router handles allowed CORS preflight without opening a database connection", async () => {
+  const response = await worker.fetch(new Request("https://api.example.test/v1/store", {
+    method: "OPTIONS",
+    headers: {
+      origin: "https://web.example.test",
+      "access-control-request-method": "POST",
+      "access-control-request-headers": "authorization,content-type",
+    },
+  }), configuredEnv, context);
+  assert.equal(response.status, 204);
+  assert.equal(response.headers.get("access-control-allow-origin"), "https://web.example.test");
+  assert.equal(response.headers.get("access-control-allow-credentials"), "true");
+});
+
+test("Worker router rejects disallowed cross-origin requests", async () => {
+  const response = await worker.fetch(new Request("https://api.example.test/v1/store", {
+    headers: { origin: "https://attacker.example.test" },
+  }), configuredEnv, context);
+  assert.equal(response.status, 403);
+  assert.deepEqual(await response.json(), { error: "CORS_ORIGIN_NOT_ALLOWED" });
+  await Promise.all(pending.splice(0));
+});
