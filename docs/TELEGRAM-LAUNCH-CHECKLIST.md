@@ -22,7 +22,7 @@ The Bot does not use a Telegram webhook. It checks that no webhook is configured
 - Variable: `GAME_ADMIN_TELEGRAM_IDS` (comma-separated numeric Telegram IDs)
 - Variable: `ENVIRONMENT` (`development` during staging; production policy otherwise)
 
-The API production config is `cloudflare/api/wrangler.production.jsonc`; CI validates it with a Wrangler dry run. The API readiness endpoint is `/ready`; health-only endpoint is `/health`. The readiness gate checks database connectivity, required schema migrations, RLS on every public table, and the absence of direct grants to `anon` and `authenticated`.
+The API production config is `cloudflare/api/wrangler.production.jsonc`; CI validates it with a Wrangler dry run. The API readiness endpoint is `/ready`; health-only endpoint is `/health`. The readiness gate checks database connectivity, required schema migrations, at least 15 active special-player catalog records, a server-side database role that bypasses RLS, RLS on every public table, and the absence of direct table/sequence/function grants to `anon` and `authenticated`.
 
 ### Mini App Worker: `football`
 
