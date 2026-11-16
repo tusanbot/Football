@@ -368,6 +368,19 @@ function privateMenuKeyboard() {
 function cash(value: string) { return BigInt(value).toLocaleString("fa-IR"); }
 function playerName(player: ApiPlayer) { return `${player.firstName} ${player.lastName}`; }
 
+async function sendMiniAppEntry(ctx: Context) {
+  if (ctx.chat?.type !== "private" || !webAppUrl) return;
+  await ctx.reply("برای ورود به نسخه گرافیکی بازی، دکمه زیر را انتخاب کنید.", {
+    reply_markup: new InlineKeyboard().webApp("ورود به Football Empire", webAppUrl),
+  });
+}
+
+bot.command("miniapp", async (ctx) => {
+  if (!ctx.from || ctx.chat.type !== "private") return;
+  if (!webAppUrl) return ctx.reply("آدرس مینی‌اپ هنوز در تنظیمات ربات ثبت نشده است.");
+  await sendMiniAppEntry(ctx);
+});
+
 bot.command("start", async (ctx) => {
   if (!ctx.from) return;
   if (ctx.chat.type !== "private") {
@@ -412,6 +425,7 @@ bot.command("start", async (ctx) => {
       `دستورهای پرکاربرد: /club /wallet /store /inventory /players /lineup /matches /leagues /market /help`,
       { reply_markup: keyboard },
     );
+    await sendMiniAppEntry(ctx);
   } catch (error) {
     console.error("Telegram onboarding failed:", error);
     await ctx.reply("دریافت اطلاعات باشگاه انجام نشد. لطفاً چند لحظه دیگر دوباره تلاش کنید.");
@@ -760,6 +774,7 @@ bot.command("menu", async (ctx) => {
   await ctx.reply("منوی اصلی Football Empire آماده است. برای عملیات دارای ورودی، از /help راهنمای دستورها را ببینید.", {
     reply_markup: privateMenuKeyboard(),
   });
+  await sendMiniAppEntry(ctx);
 });
 
 bot.command("help", async (ctx) => ctx.reply(
@@ -796,6 +811,7 @@ bot.command("help", async (ctx) => ctx.reply(
   "/special و /pack epic|legendary|icon — بازیکنان ویژه و بسته‌های جذب\n/redeem CODE — استفاده از کد هدیه\n" +
   "/records [goals|assists|appearances|rating] — رکوردهای تاریخی\n/seasonawards [YEAR] — جوایز و تیم منتخب فصل\n" +
   "/clubs و /clubprofile CLUB_ID — باشگاه‌های عمومی و پروفایل\n/clubcompare ID1 ID2 — مقایسه دو باشگاه\n\n" +
+  "/miniapp — باز کردن نسخه گرافیکی Football Empire\n\n" +
   "برای بازگشت به منوی دکمه‌ای، /menu را ارسال کنید. امکانات اصلی از ربات و مینی‌اپ در دسترس‌اند."
 ));
 
