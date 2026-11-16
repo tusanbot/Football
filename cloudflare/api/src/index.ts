@@ -124,6 +124,26 @@ export class MatchCoordinator {
   }
 }
 
+function describeRuntimeError(error: unknown): Record<string, unknown> {
+  if (!(error instanceof Error)) return { type: typeof error, message: String(error).slice(0, 600) };
+  const candidate = error as Error & { code?: unknown; meta?: unknown };
+  const redact = (value: unknown) => String(value)
+    .replace(/postgres(?:ql)?:\\/\\/[^\\s"'\x60]+/gi, "[redacted-database-url]")
+    .slice(0, 800);
+  const meta = candidate.meta && typeof candidate.meta === "object"
+    ? Object.fromEntries(Object.entries(candidate.meta as Record<string, unknown>)
+      .filter(([key, value]) => ["modelName", "table", "column", "constraint", "code", "field_name"].includes(key)
+        && (typeof value === "string" || typeof value === "number" || typeof value === "boolean"))
+      .map(([key, value]) => [key, redact(value)]))
+    : undefined;
+  return {
+    name: error.name,
+    code: typeof candidate.code === "string" ? candidate.code : undefined,
+    message: redact(error.message),
+    ...(meta && Object.keys(meta).length ? { meta } : {}),
+  };
+}
+
 async function scheduledJobs(env: Env): Promise<void> {
   const missing = missingConfig(env);
   if (missing.length) { console.error("Scheduled game jobs skipped; missing configuration:", missing); return; }
@@ -177,6 +197,6 @@ export default {
     return response;
   },
   async scheduled(_controller: unknown, env: Env, ctx: ExecutionContext): Promise<void> {
-    ctx.waitUntil(scheduledJobs(env).catch((error: unknown) => console.error("Cloudflare scheduled game jobs failed", error)));
+    ctx.waitUntil(scheduledJobs(env).catch((error: unknown) => console.error("Cloudflare scheduled game jobs failed", describeRuntimeError(error))));
   },
 };
