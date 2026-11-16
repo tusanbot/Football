@@ -178,14 +178,58 @@ export default {
       try {
         const schemaChecks = await withPrismaClient(client, () => prisma.$queryRaw<Array<{ ready: boolean }>>`
           SELECT
-            EXISTS (
-              SELECT 1 FROM "_prisma_migrations"
-              WHERE migration_name = '20261116120000_in_game_store'
+            (
+              SELECT count(*) = 3
+              FROM "_prisma_migrations"
+              WHERE migration_name IN (
+                '20261116120000_in_game_store',
+                '20261117100000_lock_down_public_api',
+                '20261117110000_index_foreign_key_columns'
+              )
                 AND finished_at IS NOT NULL
                 AND rolled_back_at IS NULL
             )
             AND to_regclass('"PyramidLeague"') IS NOT NULL
-            AND to_regclass('"LeaguePromotionOffer"') IS NOT NULL AS ready
+            AND to_regclass('"LeaguePromotionOffer"') IS NOT NULL
+            AND NOT EXISTS (
+              SELECT 1
+              FROM pg_class c
+              JOIN pg_namespace n ON n.oid = c.relnamespace
+              WHERE n.nspname = 'public'
+                AND c.relkind IN ('r', 'p')
+                AND NOT c.relrowsecurity
+            )
+            AND NOT EXISTS (
+              SELECT 1
+              FROM information_schema.role_table_grants
+              WHERE table_schema = 'public'
+                AND grantee IN ('anon', 'authenticated')
+            )
+            AND NOT EXISTS (
+              SELECT 1
+              FROM pg_class c
+              JOIN pg_namespace n ON n.oid = c.relnamespace
+              WHERE n.nspname = 'public'
+                AND c.relkind = 'S'
+                AND (
+                  has_sequence_privilege('anon', c.oid, 'USAGE')
+                  OR has_sequence_privilege('anon', c.oid, 'SELECT')
+                  OR has_sequence_privilege('anon', c.oid, 'UPDATE')
+                  OR has_sequence_privilege('authenticated', c.oid, 'USAGE')
+                  OR has_sequence_privilege('authenticated', c.oid, 'SELECT')
+                  OR has_sequence_privilege('authenticated', c.oid, 'UPDATE')
+                )
+            )
+            AND NOT EXISTS (
+              SELECT 1
+              FROM pg_proc p
+              JOIN pg_namespace n ON n.oid = p.pronamespace
+              WHERE n.nspname = 'public'
+                AND (
+                  has_function_privilege('anon', p.oid, 'EXECUTE')
+                  OR has_function_privilege('authenticated', p.oid, 'EXECUTE')
+                )
+            ) AS ready
         `);
         if (!schemaChecks[0]?.ready) {
           ctx.waitUntil(client.$disconnect().catch((error: unknown) => console.error("Prisma readiness cleanup failed", error)));
