@@ -92,6 +92,11 @@ jobs:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/football_empire
       - name: Build Bot container image
         run: docker build -f apps/bot/Dockerfile -t football-empire-bot:ci .
+      - name: Validate Bot compose configuration
+        run: |
+          cp .env.bot.example .env.bot
+          docker compose -f docker-compose.bot.yml config --quiet
+          rm .env.bot
       - name: Build
         run: pnpm build
         env:
