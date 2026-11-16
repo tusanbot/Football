@@ -46,11 +46,20 @@ jobs:
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/football_empire
           DIRECT_URL: postgresql://postgres:postgres@localhost:5432/football_empire
+      - name: Prepare Supabase API roles for security migration tests
+        run: |
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "DO \$\$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'anon') THEN CREATE ROLE anon NOLOGIN; END IF; IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'authenticated') THEN CREATE ROLE authenticated NOLOGIN; END IF; END \$\$;"
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/football_empire
       - name: Apply migrations to ephemeral PostgreSQL
         run: pnpm db:migrate:deploy
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/football_empire
           DIRECT_URL: postgresql://postgres:postgres@localhost:5432/football_empire
+      - name: Verify public schema security
+        run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f apps/api/prisma/security-check.sql
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/football_empire
       - name: Seed special-player catalog in ephemeral PostgreSQL
         run: pnpm --filter @football/api db:seed:special
         env:
