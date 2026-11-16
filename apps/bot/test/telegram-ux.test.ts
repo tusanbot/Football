@@ -174,6 +174,8 @@ test("long-polling startup refuses an existing webhook without deleting it", () 
 test("private Bot entry points expose the Telegram Mini App launch button", () => {
   assert.ok(botSource.includes("async function sendMiniAppEntry(ctx: Context)"));
   assert.ok(botSource.includes('new InlineKeyboard().webApp("ورود به Football Empire", webAppUrl)'));
+  assert.ok(botSource.includes("ctx.api.setChatMenuButton({"));
+  assert.ok(botSource.includes('type: "web_app"'));
   assert.ok(botSource.includes('bot.command("miniapp"'));
   assert.ok(botSource.includes("await sendMiniAppEntry(ctx);"));
   assert.ok(botSource.includes("/miniapp — باز کردن نسخه گرافیکی Football Empire"));
