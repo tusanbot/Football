@@ -56,7 +56,7 @@ test("unknown private text is not converted into a command", () => {
 test("every registered group command has an explicit transient or persistent classification", () => {
   const staticGroupCommands = [...botSource.matchAll(/bot\.command\(\s*["']([^"']+)["']/g)]
     .map((match) => match[1])
-    .filter((command) => command === "group" || command.startsWith("group-") || command.startsWith("alliance"));
+    .filter((command) => command === "start" || command === "group" || command.startsWith("group-") || command.startsWith("alliance"));
   // These two aliases are registered from the alliance response loop rather than bot.command literals.
   const dynamicGroupCommands = ["alliance-accept", "alliance-decline"];
   for (const command of dynamicGroupCommands) {
@@ -130,6 +130,16 @@ test("private menu is categorized and each submenu has a return path", () => {
   assert.ok(botSource.includes("escapeHtml("));
   assert.ok(botSource.includes("فهرست بازیکنان باشگاه"));
   assert.ok(botSource.includes("جدول لیگ"));
+  assert.ok(botSource.includes('bot.callbackQuery(/^act:/'));
+  assert.ok(botSource.includes('bot.callbackQuery(/^shop:/'));
+  assert.ok(botSource.includes('bot.callbackQuery(/^league:/'));
+  assert.ok(botSource.includes('bot.callbackQuery(/^opp:/'));
+  assert.ok(botSource.includes('bot.command("clubedit"'));
+  assert.ok(botSource.includes("pendingClubNameEdits"));
+  assert.ok(botSource.includes('bot.callbackQuery(/^g:/'));
+  assert.ok(botSource.includes("groupStartKeyboard()"));
+  assert.ok(botSource.includes("shop:buy:"));
+  assert.ok(botSource.includes("league:join:"));
 });
 
 test("admin command argument parsing uses whitespace-aware splitting", () => {
