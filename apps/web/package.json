@@ -11,7 +11,8 @@
     "build:worker:production": "opennextjs-cloudflare build --config wrangler.production.jsonc",
     "preview:worker": "opennextjs-cloudflare build && opennextjs-cloudflare preview",
     "deploy:worker": "opennextjs-cloudflare build && opennextjs-cloudflare deploy",
-    "cf-typegen": "wrangler types --env-interface CloudflareEnv cloudflare-env.d.ts"
+    "cf-typegen": "wrangler types --env-interface CloudflareEnv cloudflare-env.d.ts",
+    "build:worker:staging": "opennextjs-cloudflare build --config wrangler.staging.jsonc"
   },
   "dependencies": {
     "next": "^15.2.3",
