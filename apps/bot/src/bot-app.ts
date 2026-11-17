@@ -343,7 +343,7 @@ async function pollMatchCheckpointNotifications() {
         await bot.api.sendMessage(telegramId,
           "وقفه تاکتیکی مسابقه شما باز شد.\n"
           + notification.clubName + " مقابل " + notification.opponentName
-          + "\nدقیقه " + notification.minute + " · مهلت تا " + new Date(notification.deadlineAt).toLocaleTimeString("fa-IR")
+          + "\nدقیقه " + notification.minute + " · مهلت تا " + new Date(notification.deadlineAt).toLocaleTimeString("fa-IR", { timeZone: "Asia/Tehran" })
           + "\nبرای انتخاب سریع ذهنیت یکی از گزینه‌ها را بزنید. برای سایر تنظیمات از /tactic و برای تعویض از /sub استفاده کنید.",
           { reply_markup: keyboard });
         await acknowledge(true);
@@ -413,7 +413,7 @@ async function dispatchMenuCommand(ctx: Context, command: string) {
   } as Parameters<typeof bot.handleUpdate>[0];
   await bot.handleUpdate(syntheticUpdate);
 }
-function cash(value: string) { return BigInt(value).toLocaleString("fa-IR"); }
+function cash(value: string) { return BigInt(value).toLocaleString("fa-IR", { timeZone: "Asia/Tehran" }); }
 function playerName(player: ApiPlayer) { return `${player.firstName} ${player.lastName}`; }
 function escapeHtml(value: unknown): string {
   return String(value ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
@@ -477,14 +477,21 @@ bot.command("start", async (ctx) => {
     if (startPayload.startsWith("challenge_")) {
       const tokenValue = startPayload.slice("challenge_".length);
       try {
-        const accepted = await api<{ match: { id: string; scheduledAt: string } }>(
-          `/v1/friendly-challenges/${encodeURIComponent(tokenValue)}/accept`, ctx.from.id, "POST", {},
+        const challenge = await api<{ creatorClub: { name: string; level: number }; expiresAt: string; status: string }>(
+          `/v1/friendly-challenges/${encodeURIComponent(tokenValue)}`, ctx.from.id,
         );
-        await ctx.reply("چالش دوستانه پذیرفته شد. مسابقه با شناسه " + accepted.match.id
-          + " ثبت شد و تا " + new Date(accepted.match.scheduledAt).toLocaleString("fa-IR") + " آغاز می‌شود.");
+        const keyboard = new InlineKeyboard().text("⚔️ پذیرش چالش و شروع مسابقه", "challenge:accept:" + tokenValue);
+        await ctx.reply(
+          "⚔️ <b>دعوت به مسابقه دوستانه</b>\\nباشگاه دعوت‌کننده: <b>" + escapeHtml(challenge.creatorClub.name)
+            + "</b> · سطح " + challenge.creatorClub.level
+            + "\\nاعتبار دعوت تا: " + new Date(challenge.expiresAt).toLocaleString("fa-IR", { timeZone: "Asia/Tehran" })
+            + "\\n\\nبرای شروع مسابقه، دکمه پذیرش را انتخاب کن.",
+          { parse_mode: "HTML", reply_markup: keyboard },
+        );
         return;
       } catch (error) {
-        await ctx.reply("پذیرش چالش ناموفق بود: " + (error instanceof Error ? error.message : "خطای نامشخص"));
+        await ctx.reply("دریافت دعوت چالش ناموفق بود: " + (error instanceof Error ? error.message : "خطای نامشخص"));
+        return;
       }
     }
 
@@ -905,7 +912,7 @@ bot.callbackQuery(/^opp:/, async (ctx) => {
         opponentClubId: clubId, idempotencyKey: "bot-friendly-" + ctx.from.id + "-" + ctx.update.update_id,
       });
       await ctx.answerCallbackQuery({ text: "مسابقه دوستانه ثبت شد." });
-      await ctx.reply("⚽ مسابقه دوستانه برنامه‌ریزی شد. زمان شروع: " + new Date(result.match.scheduledAt).toLocaleString("fa-IR") + "\nشناسه مسابقه: " + result.match.id);
+      await ctx.reply("⚽ مسابقه دوستانه برنامه‌ریزی شد. زمان شروع: " + new Date(result.match.scheduledAt).toLocaleString("fa-IR", { timeZone: "Asia/Tehran" }) + "\nشناسه مسابقه: " + result.match.id);
       return;
     }
     if (action === "challenge") {
@@ -916,7 +923,7 @@ bot.callbackQuery(/^opp:/, async (ctx) => {
       if (result.shareUrl) keyboard.url("📨 ارسال دعوت به حریف", "https://t.me/share/url?url=" + encodeURIComponent(result.shareUrl) + "&text=" + encodeURIComponent("برای مسابقه Football Empire دعوت شدی!"));
       await ctx.answerCallbackQuery({ text: "دعوت چالش آماده شد." });
       await ctx.reply(
-        "⚔️ دعوت چالش برای باشگاه انتخاب‌شده آماده است. لینک را برای مدیر آن باشگاه ارسال کن.\nاعتبار: " + new Date(result.challenge.expiresAt).toLocaleString("fa-IR") +
+        "⚔️ دعوت چالش برای باشگاه انتخاب‌شده آماده است. لینک را برای مدیر آن باشگاه ارسال کن.\nاعتبار: " + new Date(result.challenge.expiresAt).toLocaleString("fa-IR", { timeZone: "Asia/Tehran" }) +
         (result.shareUrl ? "\nلینک دعوت: " + result.shareUrl : "\nکد دعوت: " + result.challenge.token),
         result.shareUrl ? { reply_markup: keyboard } : {},
       );
@@ -926,6 +933,39 @@ bot.callbackQuery(/^opp:/, async (ctx) => {
   } catch (error) {
     await ctx.answerCallbackQuery({ text: "عملیات انجام نشد." }).catch(() => undefined);
     await ctx.reply("عملیات حریف ناموفق بود: " + (error instanceof Error ? error.message : "خطای نامشخص"));
+  }
+});
+
+bot.callbackQuery(/^challenge:accept:/, async (ctx) => {
+  if (!ctx.from) return ctx.answerCallbackQuery({ text: "کاربر معتبر نیست." });
+  const token = ctx.callbackQuery.data.slice("challenge:accept:".length);
+  if (!token) return ctx.answerCallbackQuery({ text: "لینک چالش معتبر نیست." });
+  try {
+    const info = await api<{ creatorClub: { name: string }; creatorTelegramId: string; groupTelegramId: string | null }>(
+      "/v1/friendly-challenges/" + encodeURIComponent(token), ctx.from.id,
+    );
+    const accepted = await api<{ match: { id: string; scheduledAt: string } }>(
+      "/v1/friendly-challenges/" + encodeURIComponent(token) + "/accept", ctx.from.id, "POST", {},
+    );
+    const when = new Date(accepted.match.scheduledAt).toLocaleString("fa-IR", { timeZone: "Asia/Tehran" });
+    const message = "⚔️ چالش پذیرفته شد!\\nباشگاه " + info.creatorClub.name
+      + " در برابر باشگاه شما قرار گرفت.\\nمسابقه وارد صف شروع خودکار شد.\\nشناسه: " + accepted.match.id
+      + "\\nزمان ثبت‌شده: " + when;
+    await ctx.answerCallbackQuery({ text: "چالش پذیرفته شد؛ مسابقه ثبت شد." });
+    await ctx.reply(message);
+    const creatorTelegramId = Number(info.creatorTelegramId);
+    if (Number.isSafeInteger(creatorTelegramId) && creatorTelegramId !== ctx.from.id) {
+      await ctx.api.sendMessage(creatorTelegramId, "⚔️ دعوت چالش شما پذیرفته شد!\\nحریف وارد مسابقه شد. شناسه مسابقه: " + accepted.match.id)
+        .catch((error) => console.warn("Could not notify challenge creator:", error));
+    }
+    if (ctx.chat.type === "group" || ctx.chat.type === "supergroup") {
+      await ctx.api.sendMessage(ctx.from.id, message).catch((error) => console.warn("Could not DM challenge accepter:", error));
+    }
+    try { await ctx.editMessageReplyMarkup({ reply_markup: new InlineKeyboard().text("✅ چالش پذیرفته شد", "challenge:accepted") }); }
+    catch { /* The original message may no longer be editable. */ }
+  } catch (error) {
+    await ctx.answerCallbackQuery({ text: "پذیرش چالش ناموفق بود." }).catch(() => undefined);
+    await ctx.reply("پذیرش چالش ناموفق بود: " + (error instanceof Error ? error.message : "خطای نامشخص"));
   }
 });
 
@@ -1077,7 +1117,7 @@ bot.callbackQuery(/^g:/, async (ctx) => {
       await ctx.answerCallbackQuery({ text: "دعوت چالش ساخته شد." });
       await ctx.reply(
         "⚔️ <b>دعوت چالش آماده است!</b>\nهزینه: " + (result.asset === "FREE" ? "رایگان" : result.asset === "GOLD" ? cash(result.goldCost) + " طلا" : "اعتبار چالش") +
-        "\nاعتبار تا: " + new Date(result.challenge.expiresAt).toLocaleString("fa-IR") +
+        "\nاعتبار تا: " + new Date(result.challenge.expiresAt).toLocaleString("fa-IR", { timeZone: "Asia/Tehran" }) +
         "\n\nدعوت را برای بازیکنی که می‌خواهی به چالش بکشی ارسال کن.",
         { parse_mode: "HTML", ...(result.shareUrl ? { reply_markup: keyboard } : {}) },
       );
@@ -1861,17 +1901,24 @@ bot.command("buy", async (ctx) => {
 bot.command("opponents", async (ctx) => {
   if (!ctx.from || ctx.chat.type !== "private") return;
   try {
-    const result = await api<{ opponents: Array<{ id: string; name: string; level: number; reputation: number }> }>("/v1/matches/opponents", ctx.from.id);
+    const search = String(ctx.match ?? "").trim();
+    const result = await api<{ opponents: Array<{ id: string; name: string; level: number; reputation: number; ownerUsername?: string | null }> }>(
+      "/v1/matches/opponents" + (search ? "?q=" + encodeURIComponent(search) : ""), ctx.from.id,
+    );
     const keyboard = new InlineKeyboard();
-    const lines = result.opponents.slice(0, 20).map((club) => {
+    const lines = result.opponents.slice(0, search ? 25 : 10).map((club) => {
       keyboard.text("⚽ بازی با " + club.name.slice(0, 20), "opp:match:" + club.id)
-        .text("⚔️ چالش", "opp:challenge:" + club.id).row();
-      return `<b>${escapeHtml(club.name)}</b> · سطح ${club.level} · اعتبار ${club.reputation}`;
+        .text("⚔️ دعوت", "opp:challenge:" + club.id).row();
+      return `<b>${escapeHtml(club.name)}</b> · سطح ${club.level} · اعتبار ${club.reputation}`
+        + (club.ownerUsername ? " · @" + escapeHtml(club.ownerUsername) : "");
     });
     await replyRich(
       ctx,
-      "👥 <b>حریفان آماده مسابقه</b>\n\n" + (lines.join("\n") || "فعلاً حریف واجد شرایطی وجود ندارد.") + "\n\nاز دکمه‌ها برای بازی دوستانه یا ساخت دعوت چالش استفاده کن.",
-      "حریفان آماده مسابقه\n" + result.opponents.slice(0, 20).map((club) => club.name + " · سطح " + club.level + " · اعتبار " + club.reputation).join("\n") + "\nبرای مسابقه از /friendly CLUB_ID استفاده کنید.",
+      "👥 <b>" + (search ? "نتایج جست‌وجوی حریف" : "۱۰ باشگاه فعال اخیر") + "</b>\\n\\n"
+        + (lines.join("\\n") || "حریف واجد شرایطی پیدا نشد.")
+        + "\\n\\nجست‌وجو با نام باشگاه یا شناسه تلگرام: /opponents QUERY",
+      "حریفان آماده مسابقه\\n" + result.opponents.map((club) => club.name + " · سطح " + club.level).join("\\n")
+        + "\\nجست‌وجو: /opponents نام باشگاه یا شناسه تلگرام",
       keyboard,
     );
   } catch (error) { await ctx.reply(`دریافت فهرست حریفان ناموفق بود: ${error instanceof Error ? error.message : "خطای نامشخص"}`); }
@@ -1885,7 +1932,7 @@ bot.command("friendly", async (ctx) => {
     const result = await api<{ match: { id: string; scheduledAt: string }; replayed: boolean }>("/v1/matches/friendly", ctx.from.id, "POST", {
       opponentClubId, idempotencyKey: `bot-friendly-${ctx.from.id}-${ctx.update.update_id}`,
     });
-    await ctx.reply(`مسابقه دوستانه برنامه‌ریزی شد. شناسه: ${result.match.id}\nزمان شروع: ${new Date(result.match.scheduledAt).toLocaleString("fa-IR")}\nمسابقه به‌صورت خودکار اجرا می‌شود؛ وضعیت را با /matches ببینید.`);
+    await ctx.reply(`مسابقه دوستانه برنامه‌ریزی شد. شناسه: ${result.match.id}\nزمان شروع: ${new Date(result.match.scheduledAt).toLocaleString("fa-IR", { timeZone: "Asia/Tehran" })}\nمسابقه به‌صورت خودکار اجرا می‌شود؛ وضعیت را با /matches ببینید.`);
   } catch (error) { await ctx.reply(`زمان‌بندی مسابقه دوستانه ناموفق بود: ${error instanceof Error ? error.message : "خطای نامشخص"}`); }
 });
 
@@ -1893,18 +1940,24 @@ bot.command("friendly", async (ctx) => {
 bot.command("challenge", async (ctx) => {
   if (!ctx.from) return;
   try {
+    const inGroup = ctx.chat.type === "group" || ctx.chat.type === "supergroup";
     const result = await api<{ challenge: { token: string; expiresAt: string }; asset: string; goldCost: string; shareUrl: string | null }>(
-      "/v1/friendly-challenges", ctx.from.id, "POST", { idempotencyKey: randomUUID(), ...((ctx.chat.type === "group" || ctx.chat.type === "supergroup") ? { groupTelegramId: String(ctx.chat.id) } : {}) },
+      "/v1/friendly-challenges", ctx.from.id, "POST",
+      { idempotencyKey: randomUUID(), ...(inGroup ? { groupTelegramId: String(ctx.chat.id) } : {}) },
     );
-    const invite = result.shareUrl ?? ("کد دعوت: " + result.challenge.token + "\nدستور پذیرش: /acceptchallenge " + result.challenge.token);
-    const message = "⚔️ دعوت چالش دوستانه آماده شد.\nهزینه: " + (result.asset === "FREE" ? "رایگان" : result.asset === "GOLD" ? result.goldCost + " گلد" : "اعتبار خریداری‌شده")
-      + "\nاعتبار تا: " + new Date(result.challenge.expiresAt).toLocaleString("fa-IR") + "\n\n" + invite
-      + "\n\nلینک را برای بازیکنی که می‌خواهی به مسابقه دعوت کنی ارسال کن.";
-    const keyboard = result.shareUrl
-      ? new InlineKeyboard().url("📨 ارسال دعوت به بازیکن", "https://t.me/share/url?url=" + encodeURIComponent(result.shareUrl) + "&text=" + encodeURIComponent("برای مسابقه Football Empire دعوت شدی!"))
-      : undefined;
-    const sent = await ctx.reply(message, keyboard ? { reply_markup: keyboard } : {});
-    if (ctx.chat.type === "group" || ctx.chat.type === "supergroup") await scheduleGroupReplyDeletion(ctx.chat.id, sent.message_id);
+    const shareUrl = result.shareUrl ?? (bot.botInfo?.username
+      ? "https://t.me/" + bot.botInfo.username + "?start=challenge_" + result.challenge.token : null);
+    const message = "⚔️ دعوت اختصاصی چالش دوستانه ساخته شد.\\nهزینه: "
+      + (result.asset === "FREE" ? "رایگان" : result.asset === "GOLD" ? result.goldCost + " طلا" : "اعتبار خریداری‌شده")
+      + "\\nاعتبار تا: " + new Date(result.challenge.expiresAt).toLocaleString("fa-IR", { timeZone: "Asia/Tehran" })
+      + (shareUrl ? "\\n\\nلینک اختصاصی: " + shareUrl : "\\n\\nنام کاربری ربات برای ساخت لینک تنظیم نشده است.");
+    const keyboard = new InlineKeyboard();
+    if (shareUrl) {
+      keyboard.url("📨 اشتراک‌گذاری لینک دعوت", "https://t.me/share/url?url=" + encodeURIComponent(shareUrl)
+        + "&text=" + encodeURIComponent("برای مسابقه Football Empire دعوت شدی!"));
+      if (inGroup) keyboard.row().text("⚔️ پذیرش چالش در همین گروه", "challenge:accept:" + result.challenge.token);
+    }
+    await ctx.reply(message, { reply_markup: keyboard });
   } catch (error) {
     await ctx.reply("ایجاد چالش ناموفق بود: " + (error instanceof Error ? error.message : "خطای نامشخص"));
   }
@@ -1918,7 +1971,7 @@ bot.command("acceptchallenge", async (ctx) => {
     const result = await api<{ match: { id: string; scheduledAt: string } }>(
       `/v1/friendly-challenges/${encodeURIComponent(tokenValue)}/accept`, ctx.from.id, "POST", {},
     );
-    await ctx.reply("چالش پذیرفته شد. مسابقه " + result.match.id + " در " + new Date(result.match.scheduledAt).toLocaleString("fa-IR") + " برنامه‌ریزی شد.");
+    await ctx.reply("چالش پذیرفته شد. مسابقه " + result.match.id + " در " + new Date(result.match.scheduledAt).toLocaleString("fa-IR", { timeZone: "Asia/Tehran" }) + " برنامه‌ریزی شد.");
   } catch (error) { await ctx.reply("پذیرش چالش ناموفق بود: " + (error instanceof Error ? error.message : "خطای نامشخص")); }
 });
 
@@ -2055,8 +2108,8 @@ bot.command("matches", async (ctx) => {
       return "• " + match.homeClub.name + " " + (match.homeScore ?? "–") + " : " + (match.awayScore ?? "–") + " " + match.awayClub.name
         + (match.homePenalties !== null ? " (pens " + match.homePenalties + "–" + match.awayPenalties + ")" : "")
         + "\n  " + match.type + " · " + (match.runtime ? "دقیقه " + match.runtime.currentMinute + " · " + match.runtime.status : match.status)
-        + " · " + new Date(match.scheduledAt).toLocaleString("fa-IR")
-        + (open ? "\n  تصمیم تاکتیکی تا " + new Date(open.decisionDeadlineAt).toLocaleTimeString("fa-IR") + " · " + open.checkpointKey : "")
+        + " · " + new Date(match.scheduledAt).toLocaleString("fa-IR", { timeZone: "Asia/Tehran" })
+        + (open ? "\n  تصمیم تاکتیکی تا " + new Date(open.decisionDeadlineAt).toLocaleTimeString("fa-IR", { timeZone: "Asia/Tehran" }) + " · " + open.checkpointKey : "")
         + "\n  " + goals.join(" · ") + "\n  ID: " + match.id;
     });
     await ctx.reply("مسابقات شما:\n" + (lines.join("\n\n") || "هنوز مسابقه‌ای ندارید.")
@@ -2458,7 +2511,7 @@ bot.command("records", async (ctx) => {
     );
     const title = ({ goals: "رتبه‌بندی بهترین گلزنان تاریخ", assists: "رتبه‌بندی بهترین پاسورهای تاریخ", appearances: "رتبه‌بندی بیشترین بازی", rating: "رتبه‌بندی بالاترین میانگین نمره" } as const)[metric];
     const lines = result.records.map((record) => record.rank + ". " + record.playerName + " · " + record.clubName + " (" + record.position + ") · " +
-      (metric === "rating" ? record.value.toFixed(2) : record.value.toLocaleString("fa-IR")) +
+      (metric === "rating" ? record.value.toFixed(2) : record.value.toLocaleString("fa-IR", { timeZone: "Asia/Tehran" })) +
       " · " + record.appearances + " بازی · " + record.goals + " گل · " + record.assists + " پاس گل");
     await ctx.reply([title, "", ...(lines.length ? lines : ["هنوز رکوردی ثبت نشده است."]),
       ...(metric === "rating" ? ["", "حداقل ۳ حضور برای ورود به این رتبه‌بندی لازم است."] : [])].join("\n"));
