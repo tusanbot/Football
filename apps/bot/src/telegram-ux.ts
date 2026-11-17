@@ -86,6 +86,7 @@ export const PRIVATE_MENU_SUBMENUS = {
     title: "👥 مدیریت بازیکنان",
     rows: [
       [{ label: "👥 فهرست بازیکنان", command: "players" }, { label: "⭐ بازیکنان ویژه", command: "special" }],
+      [{ label: "🏅 چالش اسطوره‌ها", command: "specialchallenges" }],
       [{ label: "🧠 برنامه جایگزین", command: "fallback" }, { label: "🛒 بازار نقل‌وانتقالات", command: "market" }],
     ],
   },
