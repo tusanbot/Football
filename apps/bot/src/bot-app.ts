@@ -846,6 +846,20 @@ bot.command("adminhelp", async (ctx) => {
   );
 });
 
+bot.callbackQuery(/^promotion:/, async (ctx) => {
+  if (!ctx.from || ctx.chat?.type !== "private") return ctx.answerCallbackQuery({ text: "این عملیات فقط در خصوصی در دسترس است." });
+  const [, decision, offerId] = ctx.callbackQuery.data.split(":");
+  if (!offerId || !["accept", "decline"].includes(decision ?? "")) return ctx.answerCallbackQuery({ text: "پیشنهاد صعود معتبر نیست." });
+  try {
+    const result = await api<{accepted:boolean}>("/v1/pyramid-leagues/promotions/" + encodeURIComponent(offerId) + "/respond", ctx.from.id, "POST", { accept: decision === "accept" });
+    await ctx.answerCallbackQuery({ text: result.accepted ? "صعود تأیید شد." : "انصراف ثبت شد." });
+    await ctx.reply(result.accepted ? "🏅 صعود شما تأیید شد." : "انصراف از پیشنهاد صعود ثبت شد.");
+  } catch (error) {
+    await ctx.answerCallbackQuery({ text: "ثبت پاسخ ناموفق بود." }).catch(() => undefined);
+    await ctx.reply("پاسخ به پیشنهاد صعود ناموفق بود: " + (error instanceof Error ? error.message : "خطای نامشخص"));
+  }
+});
+
 bot.callbackQuery(/^league:/, async (ctx) => {
   if (!ctx.from || ctx.chat?.type !== "private") return ctx.answerCallbackQuery({ text: "این بخش فقط در گفت‌وگوی خصوصی در دسترس است." });
   const [, action, id] = ctx.callbackQuery.data.split(":");
@@ -1878,10 +1892,16 @@ bot.command("pyramidleagues", async (ctx) => {
     const offers = result.promotionOffers.map((offer) =>
       "پیشنهاد صعود به سطح " + offer.targetTier + " · رتبه " + offer.finalPosition + " · شناسه " + offer.id
       + "\n/promotion " + offer.id + " accept یا decline");
-    await ctx.reply("هرم لیگ‌های سراسری · فصل " + result.season + "\n\n" + lines.join("\n\n")
+    const keyboard = new InlineKeyboard();
+    for (const tier of result.tiers) {
+      if (!tier.myApplication && !tier.leagues.some((league) => league.isMyLeague)) keyboard.text("درخواست " + tier.name, "league:apply:" + tier.tier).row();
+    }
+    for (const offer of result.promotionOffers) keyboard.text("پذیرش صعود " + offer.targetTier, "promotion:accept:" + offer.id).text("رد", "promotion:decline:" + offer.id).row();
+    await ctx.reply("🏆 هرم لیگ‌های سراسری · فصل " + result.season + "\n\n" + lines.join("\n\n")
       + "\n\n" + (history.length ? "آرشیو لیگ‌ها:\n" + history.join("\n\n") + "\n\n" : "")
       + (offers.length ? "پیشنهادهای صعود:\n" + offers.join("\n\n") + "\n\n" : "")
-      + "برای ورود به لیگ پایه: /leagueapply");
+      + "برای درخواست ورود به سطح دلخواه، دکمه همان سطح را انتخاب کن.",
+      { reply_markup: keyboard });
   } catch (error) { await ctx.reply("دریافت لیگ‌ها ناموفق بود: " + (error instanceof Error ? error.message : "خطای نامشخص")); }
 });
 
