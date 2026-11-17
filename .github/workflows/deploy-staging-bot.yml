@@ -1,0 +1,48 @@
+name: Deploy Football Empire staging Bot Worker
+
+on:
+  push:
+    branches: ["feat/telegram-production-readiness"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: football-empire-staging-bot-worker
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: github.ref == 'refs/heads/feat/telegram-production-readiness' && contains(github.event.head_commit.message, '[deploy-staging-bot]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - name: Checkout staging release branch
+        uses: actions/checkout@v4
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          package_json_file: package.json
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install dependencies
+        run: pnpm install --no-frozen-lockfile
+      - name: Build shared domain package
+        run: pnpm --filter @football/domain build
+      - name: Validate Bot Worker bundle and service binding
+        run: pnpm --filter @football/web exec wrangler deploy --dry-run --config ../bot/wrangler.jsonc
+      - name: Deploy only the staging Bot Worker
+        run: pnpm deploy:bot-worker:staging
+      - name: Verify staging Bot and API health
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' https://football-empire-bot-staging.mshmahyar9.workers.dev/health)" = "200"
+          response="$(curl --silent --show-error https://football-empire-api-staging.mshmahyar9.workers.dev/ready)"
+          echo "$response" | jq -e '.status == "ready" and .database == "connected" and .schema == "current"' >/dev/null
+          echo "Staging Bot Worker and Game API are healthy. Existing Telegram webhook and secrets were not changed."
