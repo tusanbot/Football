@@ -91,15 +91,23 @@ jobs:
         run: pnpm --dir apps/web build:worker:production
         env:
           NEXT_PUBLIC_API_URL: https://football-empire-api.mshmahyar9.workers.dev
+      - name: Archive production Mini App Worker build
+        uses: actions/upload-artifact@v4
+        with:
+          name: football-empire-miniapp-worker-production
+          path: '**/.open-next/**'
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 7
       - name: Build staging-targeted Cloudflare Mini App Worker
         run: pnpm --dir apps/web build:worker:staging
         env:
           NEXT_PUBLIC_API_URL: https://staging-api.example.invalid
           NEXT_PUBLIC_BOT_WEBHOOK_URL: https://football-empire-bot-staging.mshmahyar9.workers.dev
-      - name: Archive Mini App Worker build
+      - name: Archive staging Mini App Worker build
         uses: actions/upload-artifact@v4
         with:
-          name: football-empire-miniapp-worker
+          name: football-empire-miniapp-worker-staging
           path: '**/.open-next/**'
           include-hidden-files: true
           if-no-files-found: error
