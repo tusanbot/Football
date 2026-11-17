@@ -1,5 +1,22 @@
 type CachedSession = { token: string; expiresAt: number };
 const SESSION_STORAGE_KEY = "football-empire.session.v1";
+const MINIAPP_ANALYTICS_KEY = "football-empire.miniapp-analytics.v1";
+
+function recordMiniAppLaunch(initData: string) {
+  const endpoint = process.env.NEXT_PUBLIC_BOT_WEBHOOK_URL;
+  if (!endpoint || !initData) return;
+  try {
+    const lastSent = Number(window.sessionStorage.getItem(MINIAPP_ANALYTICS_KEY) ?? 0);
+    if (Number.isFinite(lastSent) && lastSent > Date.now() - 5 * 60_000) return;
+    window.sessionStorage.setItem(MINIAPP_ANALYTICS_KEY, String(Date.now()));
+  } catch { /* Analytics is optional when WebView storage is unavailable. */ }
+  void fetch(endpoint.replace(/\\/$/, "") + "/miniapp/launch", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ initData }),
+    keepalive: true,
+  }).catch(() => undefined);
+}
 let memorySession: CachedSession | null = null;
 
 function readCachedSession(): CachedSession | null {
