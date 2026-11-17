@@ -3249,7 +3249,7 @@ bot.on("message:text", async (ctx, next) => {
       if (wizard.stage === "specialPlayerId") {
         if (value.length < 1 || value.length > 128) return ask("شناسه بازیکن ویژه معتبر نیست.");
         wizard.prizes.push({ placement: tournamentPlacements[wizard.placementIndex]!, type: "SPECIAL_PLAYER", specialPlayerId: value });
-        wizard.placementIndex += 1; wizard.pendingPrizeType = undefined;
+        wizard.placementIndex += 1; delete wizard.pendingPrizeType;
         await askTournamentPrize(ctx, wizard);
         return;
       }
