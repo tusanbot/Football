@@ -263,5 +263,5 @@ export function registerEventTournamentRoutes(app: FastifyInstance) {
     const actor = await authorize(request, reply, "competitions");
     if (!actor) return;
     return reply.code(409).send({ error: "TOURNAMENT_RESULTS_AUTOMATIC", message: "Tournament placements and prizes are calculated automatically from completed fixtures." });
-  });;
+  });
 }
