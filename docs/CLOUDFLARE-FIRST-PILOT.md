@@ -4,7 +4,7 @@
 
 The first invited-user pilot should run without a VPS. Telegram updates enter through a Cloudflare Worker webhook, while the Mini App and game API remain separate Workers.
 
-No production Worker, primary Telegram bot webhook, BotFather setting, or production database was changed. The isolated staging database and Hyperdrive are provisioned independently. The API, Bot, and Mini App staging Workers are now deployed and passed their deployment health checks. The test Bot remains dormant: no Telegram webhook has been registered and its Cron trigger is disabled.
+No production Worker, primary Telegram bot webhook, BotFather setting, or production database was changed. The isolated staging database and Hyperdrive are provisioned independently. The API, Bot, and Mini App staging Workers are deployed and passed their deployment health checks. The test Bot webhook is now registered and verified against the staging Worker; its Cron trigger remains disabled.
 
 ## Implemented in the release branch
 
@@ -66,7 +66,15 @@ The isolated staging environment is deployed. The remaining work is live Telegra
 4. Mini App Worker `football-empire-web-staging` and Bot Worker `football-empire-bot-staging` are deployed. The deployment workflow verified the Mini App HTTP smoke test and Bot `/health` successfully. All three Workers have their staging-only database, Durable Object, and application bindings configured.
 5. The staging deployment workflow generates unique API, webhook, and analytics HMAC secrets at runtime and stores them as Worker secrets. Secret values are not exposed in source or logs.
 6. The staging deployment completed successfully in [workflow run 44045746154](https://github.com/tusanbot/Football/actions/runs/44045746154). CI for the same analytics implementation passed in [workflow run 44045194345](https://github.com/tusanbot/Football/actions/runs/44045194345).
-7. The Bot Worker has no Cron trigger. No Telegram `setWebhook` call was made, no test Bot has been started, and no production Worker, secret, webhook, or database was changed.
+7. The staging Bot identity was verified with Telegram `getMe`; its existing webhook was confirmed empty or already pointing to the same staging endpoint before registration. Telegram `setWebhook` then succeeded and `getWebhookInfo` confirmed the exact staging URL and required update types. The webhook secret was freshly generated and stored only in the staging Worker. No production Worker, secret, webhook, or database was changed. The staging Worker still has no Cron trigger, so scheduled background jobs remain dormant.
+
+## Staging Bot activation
+
+The staging-only activation workflow is [run 44050136938](https://github.com/tusanbot/Football/actions/runs/44050136938). It verified the staging API and Bot Worker health, checked the staging Bot identity with Telegram, refused to overwrite an unexpected pre-existing webhook, generated and stored a new staging webhook secret, registered the staging URL, and verified the resulting Telegram webhook configuration. Pending Telegram updates were preserved. The production Bot was not addressed.
+
+Webhook endpoint: `https://football-empire-bot-staging.mshmahyar9.workers.dev/telegram/webhook`
+
+The staging Worker still has no Cron trigger. Bot commands and Mini App launch are now able to receive updates; scheduled background jobs remain disabled until separately tested and enabled.
 
 ## Pilot acceptance criteria
 
@@ -84,7 +92,7 @@ After measuring real usage, resource consumption, and retention, decide whether 
 - CI passed Prisma schema validation and migration deployment, Bot tests, Cloudflare API typechecking and runtime tests (including authenticated analytics persistence and invalid-payload rejection), Worker dry-runs, and production/staging Mini App builds.
 - Staging deployment run [44045746154](https://github.com/tusanbot/Football/actions/runs/44045746154) completed successfully: API readiness, Mini App smoke test, and Bot health checks all passed.
 - The analytics table is ready but currently contains zero events. Real usage metrics will begin only after the test Bot is explicitly activated and Mini App sessions are launched by testers.
-- No Telegram webhook has been registered; no live Telegram end-to-end test has been performed.
+- The staging Telegram webhook is registered and verified. No user-originated Telegram update has yet been confirmed end-to-end; the first `/start` and Mini App launch will validate actual traffic and populate analytics.
 
 ## Pilot acceptance criteria
 
