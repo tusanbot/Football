@@ -42,7 +42,7 @@ No production Worker, primary Telegram bot webhook, BotFather setting, or live d
 
 ### Pilot analytics
 
-- Analytics Engine is not required or enabled for this pilot. Events are persisted in the isolated staging PostgreSQL database through the private API endpoint `POST /internal/pilot/events`.
+- Analytics Engine is not required or enabled for this pilot. The staging PostgreSQL table and Prisma migration ledger are applied; events are persisted through the private API endpoint `POST /internal/pilot/events`.
 - Bot updates record successful starts, command/callback usage, and private/group context. Mini App launch/session events are recorded after Telegram `initData` signature and freshness validation.
 - Telegram user IDs are HMAC-pseudonymized with a staging-only `ANALYTICS_HASH_SECRET`. The event table stores only the truncated 128-bit HMAC key, event/action category, chat type, source, and timestamp. Raw Telegram IDs, message text, raw callback payloads, Bot tokens, and raw `initData` are never persisted.
 - The API accepts analytics writes only with the private Bot/API shared secret, validates a strict event allowlist and payload bounds, and writes through Hyperdrive. RLS is enabled and browser-role grants are revoked on the analytics table.
