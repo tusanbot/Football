@@ -688,6 +688,17 @@ bot.callbackQuery(/^event-tournament:/, async (ctx) => {
       await ctx.reply(result.replayed ? "ثبت‌نام شما قبلاً ثبت شده بود." : "✅ ثبت‌نام شما در تورنمنت انجام شد.");
       return;
     }
+    if (action === "admin-list") {
+      const data = await api<{ tournaments: Array<{ id: string; title: string; status: string; participantCount: number }> }>("/v1/admin/event-tournaments", ctx.from.id);
+      const keyboard = new InlineKeyboard().text("➕ ساخت تورنمنت", "event-tournament:create");
+      const lines = data.tournaments.map((item) => {
+        if (item.status !== "COMPLETED" && item.status !== "CANCELLED") keyboard.row().text("ثبت نتایج · " + item.title.slice(0, 24), "event-tournament:finalize:" + item.id);
+        return "• " + item.title + " · " + item.status + " · " + item.participantCount + " شرکت‌کننده\nID: " + item.id;
+      });
+      await ctx.answerCallbackQuery();
+      await ctx.reply("🏆 مدیریت تورنمنت‌ها\n\n" + (lines.join("\n\n") || "هنوز تورنمنتی ساخته نشده است."), { reply_markup: keyboard });
+      return;
+    }
     if (action === "create") {
       const prompt = await ctx.reply("عنوان تورنمنت را ارسال کن (۳ تا ۱۰۰ نویسه).");
       pendingEventTournamentWizards.set(ctx.from.id, { promptMessageId: prompt.message_id, stage: "title", prizes: [], placementIndex: 0 });
@@ -796,7 +807,7 @@ bot.command("admin", async (ctx) => {
       walletTransactions: "تراکنش‌های کیف پول", groupTransactions: "تراکنش‌های امتیاز گروه",
     };
     const rows = Object.entries(data.counts).map(([key, value]) => (labels[key] ?? key) + ": " + value);
-    await ctx.reply("پنل مدیریت Football Empire\n\n" + rows.join("\n") + "\n\nبرای فهرست‌ها: /adminlist RESOURCE [QUERY]\nراهنما: /adminhelp");
+    await ctx.reply("پنل مدیریت Football Empire\n\n" + rows.join("\n") + "\n\nبرای فهرست‌ها: /adminlist RESOURCE [QUERY]\nراهنما: /adminhelp", { reply_markup: new InlineKeyboard().text("🏆 مدیریت تورنمنت‌ها", "event-tournament:admin-list") });
   } catch (error) {
     await ctx.reply("دسترسی مدیریت تأیید نشد یا سرویس در دسترس نیست: " + (error instanceof Error ? error.message : "خطای نامشخص"));
   }
