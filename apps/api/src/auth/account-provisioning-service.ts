@@ -29,8 +29,14 @@ export async function provisionTelegramAccount(identity: TelegramAccountIdentity
             wallets: { select: { asset: true, balance: true } },
           },
         });
+        await tx.wallet.upsert({
+          where: { userId_asset: { userId: updated.id, asset: "HONOR" } },
+          create: { userId: updated.id, asset: "HONOR", balance: 0n },
+          update: {},
+        });
         if (updated.club) await ensureStarterSquad(tx, updated.club.id);
-        return updated;
+        const wallets = await tx.wallet.findMany({ where: { userId: updated.id }, select: { asset: true, balance: true } });
+        return { ...updated, wallets };
       }
 
       const starterSettings = await tx.gameSetting.findMany({
@@ -47,7 +53,11 @@ export async function provisionTelegramAccount(identity: TelegramAccountIdentity
         data: {
           telegramId, username, displayName,
           club: { create: { name: `${firstName} FC`, slug: `club-${telegramId}` } },
-          wallets: { create: [{ asset: "CASH", balance: BigInt(starterCash) }, { asset: "GOLD", balance: BigInt(starterGold) }] },
+          wallets: { create: [
+            { asset: "CASH", balance: BigInt(starterCash) },
+            { asset: "GOLD", balance: BigInt(starterGold) },
+            { asset: "HONOR", balance: 0n },
+          ] },
         },
         select: {
           id: true, telegramId: true, displayName: true,
@@ -80,8 +90,14 @@ export async function provisionTelegramAccount(identity: TelegramAccountIdentity
             wallets: { select: { asset: true, balance: true } },
           },
         });
+        await tx.wallet.upsert({
+          where: { userId_asset: { userId: updated.id, asset: "HONOR" } },
+          create: { userId: updated.id, asset: "HONOR", balance: 0n },
+          update: {},
+        });
         if (updated.club) await ensureStarterSquad(tx, updated.club.id);
-        return updated;
+        const wallets = await tx.wallet.findMany({ where: { userId: updated.id }, select: { asset: true, balance: true } });
+        return { ...updated, wallets };
       }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
     }
     throw error;
