@@ -77,6 +77,8 @@ jobs:
         run: pnpm --filter @football/domain build
       - name: Typecheck
         run: pnpm typecheck
+      - name: Dry-run Cloudflare Bot webhook Worker bundle
+        run: pnpm --dir apps/web exec wrangler deploy --dry-run --config ../bot/wrangler.jsonc
       - name: Typecheck Cloudflare API Worker
         run: pnpm --dir cloudflare/api typecheck
       - name: Bundle Cloudflare API Worker (dry run)
