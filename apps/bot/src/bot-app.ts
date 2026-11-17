@@ -898,6 +898,24 @@ bot.command("adminhelp", async (ctx) => {
   );
 });
 
+bot.callbackQuery(/^legacy:claim:/, async (ctx) => {
+  if (!ctx.from || ctx.chat?.type !== "private") return ctx.answerCallbackQuery({ text: "دریافت جایزه فقط در گفت‌وگوی خصوصی ممکن است." });
+  const slug = ctx.callbackQuery.data.slice("legacy:claim:".length);
+  try {
+    const result = await api<{ acquisition: { specialPlayer: { fullName: string; overall: number }; replayed: boolean } }>(
+      "/v1/players/special/challenges/" + encodeURIComponent(slug) + "/claim", ctx.from.id, "POST", {},
+    );
+    await ctx.answerCallbackQuery({ text: "اسطوره به باشگاه شما پیوست!" });
+    await ctx.reply("🏆 <b>" + escapeHtml(result.acquisition.specialPlayer.fullName)
+      + "</b> با قدرت " + result.acquisition.specialPlayer.overall
+      + " از چالش اسطوره‌ای به باشگاه شما اضافه شد."
+      + (result.acquisition.replayed ? "\nاین جایزه قبلاً ثبت شده بود." : ""), { parse_mode: "HTML" });
+  } catch (error) {
+    await ctx.answerCallbackQuery({ text: "شرایط دریافت جایزه کامل نیست." }).catch(() => undefined);
+    await ctx.reply("دریافت بازیکن اسطوره‌ای ناموفق بود: " + (error instanceof Error ? error.message : "خطای نامشخص"));
+  }
+});
+
 bot.callbackQuery(/^promotion:/, async (ctx) => {
   if (!ctx.from || ctx.chat?.type !== "private") return ctx.answerCallbackQuery({ text: "این عملیات فقط در خصوصی در دسترس است." });
   const [, decision, offerId] = ctx.callbackQuery.data.split(":");
@@ -1889,6 +1907,35 @@ bot.command("market", async (ctx) => {
     );
     await ctx.reply("بازار نقل‌وانتقالات:\n\n" + lines.join("\n\n") + "\n\nبرای خرید: /buy LISTING_ID");
   } catch (error) { await ctx.reply(`دریافت بازار ناموفق بود: ${error instanceof Error ? error.message : "خطای نامشخص"}`); }
+});
+
+bot.command("specialchallenges", async (ctx) => {
+  if (!ctx.from || ctx.chat.type !== "private") return;
+  try {
+    const result = await api<{ challenges: Array<{
+      slug: string; title: string; description: string; rewardName: string;
+      progress: { matches: number; wins: number; goals: number; requiredMatches: number; requiredWins: number; requiredGoals: number };
+      claimed: boolean; available: boolean; canClaim: boolean;
+    }> }>("/v1/players/special/challenges", ctx.from.id);
+    const keyboard = new InlineKeyboard();
+    const lines = result.challenges.map((challenge) => {
+      const p = challenge.progress;
+      if (challenge.canClaim) keyboard.text("🎁 دریافت " + challenge.rewardName, "legacy:claim:" + challenge.slug).row();
+      const status = challenge.claimed ? "✅ دریافت شده"
+        : !challenge.available ? "🔒 جایزه کمیاب قبلاً دریافت شده"
+        : challenge.canClaim ? "🎉 آماده دریافت" : "⏳ در حال پیشرفت";
+      return "<b>" + escapeHtml(challenge.title) + "</b> — " + escapeHtml(challenge.rewardName)
+        + "\n" + escapeHtml(challenge.description)
+        + "\nپیشرفت: " + p.matches + "/" + p.requiredMatches + " مسابقه · "
+        + p.wins + "/" + p.requiredWins + " برد · " + p.goals + "/" + p.requiredGoals + " گل"
+        + "\nوضعیت: " + status;
+    });
+    await replyRich(ctx, "🏅 <b>چالش‌های اسطوره‌ای</b>\n\n" + lines.join("\n\n"),
+      "چالش‌های اسطوره‌ای\n" + result.challenges.map((item) => item.title + " — " + item.rewardName).join("\n"),
+      keyboard);
+  } catch (error) {
+    await ctx.reply("دریافت چالش‌های اسطوره‌ای ناموفق بود: " + (error instanceof Error ? error.message : "خطای نامشخص"));
+  }
 });
 
 bot.command("special", async (ctx) => {
