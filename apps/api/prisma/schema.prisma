@@ -518,6 +518,7 @@ model Competition {
   @@index([groupId, status])
   @@index([allianceId])
   pyramidLeague PyramidLeague?
+  eventTournament EventTournament?
 }
 
 model PyramidLeague {
@@ -1382,8 +1383,10 @@ model EventTournament {
   endsAt DateTime?
   createdByTelegramId String
   finalizedAt DateTime?
+  competitionId String? @unique
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  competition Competition? @relation(fields: [competitionId], references: [id], onDelete: SetNull)
   participants EventTournamentParticipant[]
   prizes EventTournamentPrize[]
   @@index([status, registrationEndsAt, startsAt])
