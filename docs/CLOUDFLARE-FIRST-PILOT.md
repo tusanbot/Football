@@ -1,107 +1,91 @@
 # Cloudflare-first Telegram pilot
 
-## Decision
+## Goal and safety boundary
 
-The first public pilot must not require a VPS. Telegram updates will be received through a Cloudflare Worker webhook. The existing Node.js long-polling process is not deployable as-is to Workers and must not be imported into a Worker as a shortcut.
+The first invited-user pilot should run without a VPS. Telegram updates enter through a Cloudflare Worker webhook, while the Mini App and game API remain separate Workers.
 
-The current Bot entry point (`apps/bot/src/bot.ts`) combines four concerns in one module:
+No production Worker, primary Telegram bot webhook, BotFather setting, or live database was changed as part of this implementation. The staging configs deliberately contain non-routable API placeholders until a separate staging database and API are provisioned.
 
-1. grammY command, callback-query, and membership handlers;
-2. Telegram API calls and shared API client logic;
-3. process startup, long-polling, and webhook exclusivity checks;
-4. recurring background workers for group-message deletion, match notifications, league notices, group broadcasts, and a PostgreSQL polling lease.
+## Implemented in the release branch
 
-A webhook adapter that only calls `bot.handleUpdate()` would cover incoming updates but would silently omit the recurring workers. Conversely, keeping the current long-polling entry point requires a persistent Node.js host and defeats the no-server pilot goal.
+### Shared Bot application
 
-## Target topology
+- The grammY handlers were extracted from the Node process entry point into `apps/bot/src/bot-app.ts`.
+- The shared factory receives explicit configuration and does not start polling, acquire the polling lease, register process signal handlers, or start recurring timers.
+- `apps/bot/src/bot.ts` remains the optional Node.js long-polling adapter and retains the existing API readiness, Bot identity verification, webhook exclusivity check, and lease heartbeat.
+- The Worker uses the same command/callback/group handler set, avoiding a second implementation of game behavior.
 
-- **Telegram ingress Worker:** validates Telegram's `X-Telegram-Bot-Api-Secret-Token`, bounds request size, parses the update, and dispatches it to the bot application.
-- **Bot application package:** exports a side-effect-free bot factory and update handler. It must not start polling, read process-level secrets at module import time, create process timers, or acquire a single-instance polling lease.
-- **Game API Worker:** remains the authoritative application/API layer and uses the existing Hyperdrive + PostgreSQL connection.
-- **Mini App Worker:** remains the compiled OpenNext application; it must not be replaced by a placeholder Worker.
-- **Durable background work:** scheduled delivery and deletion work moves out of Node.js `setInterval` loops. Use Cloudflare Queues for retryable delivery jobs and Cron Triggers for periodic claiming/reconciliation; retain database claim tokens/idempotency so duplicate queue deliveries are safe.
-- **Durable Objects:** keep match coordination where per-match serialization/state is required. Do not use a single global object as the general-purpose queue for all bot updates.
+### Cloudflare webhook Worker
 
-The ingress Worker and Mini App remain separate deployable services. The webhook path should include a non-secret bot identifier; the Telegram secret token is validated from the request header and is never placed in a URL or logged.
+- Entry point: `apps/bot/src/worker.ts`
+- Staging config: `apps/bot/wrangler.jsonc`
+- Endpoint: `POST /telegram/webhook`
+- Telegram's `X-Telegram-Bot-Api-Secret-Token` header is checked with a constant-time comparison.
+- Request bodies are limited to 1 MiB; malformed JSON and invalid update envelopes are rejected.
+- The Worker checks API readiness and verifies that its Telegram Bot token matches the Bot token configured in the Game API.
+- CI/deploy scripts do not call Telegram `setWebhook`. Registering a webhook for the test bot is a separate staging activation step.
 
-## Required implementation sequence
+### Duplicate update protection
 
-### 1. Extract a portable bot application
+- A Durable Object named `BotUpdateGuard` atomically claims Telegram update IDs.
+- Completed updates are treated as duplicates for seven days.
+- Concurrent in-flight duplicates receive a retryable response; failed handlers release their claim so Telegram can retry.
+- This is at-least-once processing with deduplication, not a guarantee of exactly-once external side effects. Game operations still need idempotency keys.
 
-Refactor `apps/bot/src/bot.ts` into:
-- a factory that accepts explicit configuration and returns the grammY bot instance;
-- registration modules for private commands, group commands, callbacks, and membership updates;
-- a Node-only long-polling entry point that retains the existing lease behavior for local development/optional future server hosting.
+### Background jobs
 
-The application factory must not call `bot.start()`, `getWebhookInfo()`, acquire a polling lease, register process signal handlers, or start timers. Keep the command behavior shared between webhook and long-polling adapters to prevent feature drift.
+- The four existing workers (group-message deletion, match checkpoint notifications, league notices, and admin group broadcasts) are exposed through a single bounded `runBackgroundJobs()` entry point.
+- Cloudflare Cron invokes it every minute.
+- The jobs continue using the existing PostgreSQL-backed claim/complete/fail API endpoints; the Worker does not depend on process-local timers.
+- This is database-backed queue polling, not Cloudflare Queues. The existing database claim tokens and retry rules remain authoritative.
+- Group replies target a 60-second deletion delay, but one-minute Cron polling means actual deletion can be later than 60 seconds.
 
-### 2. Add the Cloudflare webhook adapter
+### Pilot analytics
 
-Create a dedicated Worker entry point with:
-- POST-only webhook route;
-- constant-time comparison of the Telegram webhook secret header;
-- bounded JSON body and malformed-update handling;
-- grammY update dispatch with an explicit `allowed_updates` list matching the current bot;
-- no logging of tokens, secret headers, raw update payloads, or unnecessary Telegram identifiers;
-- safe handling of Telegram retries and duplicate update delivery.
+- Worker Analytics Engine dataset: `football_empire_pilot`.
+- Bot updates record starts, command/callback usage, and private/group context.
+- Mini App launch/session events are sent to `POST /miniapp/launch`. The Worker verifies Telegram Mini App `initData` with the Bot token, checks a 24-hour freshness window, and enforces the configured Mini App origin.
+- Telegram user IDs are HMAC-pseudonymized using `ANALYTICS_HASH_SECRET`; raw IDs, message text, Bot tokens, and raw `initData` are not stored in Analytics Engine.
+- Analytics writes are best-effort and cannot block gameplay.
+- Cloudflare Worker observability provides request, CPU, duration, and exception metrics.
+- Business-event analytics for every Mini App action (for example challenge creation/join and match participation) and retention cohort dashboards remain follow-up work. Bot command usage and Mini App sessions are available as the initial pilot signals.
 
-Do not register or replace the live Telegram webhook from CI or deployment automation. Webhook registration is a separate, explicitly approved launch action.
+### Mini App staging build
 
-### 3. Move recurring work to durable execution
+- Staging config: `apps/web/wrangler.staging.jsonc`
+- Build command: `pnpm --dir apps/web build:worker:staging`
+- It embeds the staging API URL and staging Bot Worker URL, not the production API URL.
+- CI builds and archives production and staging Mini App bundles separately.
 
-Inventory each current interval worker and migrate it independently:
-- group-message deletion;
-- match checkpoint notifications;
-- league notices;
-- admin group broadcasts;
-- any other queue consumer discovered during extraction.
+## Staging prerequisites that remain
 
-Use bounded batches, claim/ack/fail semantics, exponential retry with a maximum attempt/dead-letter policy, and idempotent completion. Cron should enqueue or claim bounded work; it should not run an unbounded batch inside one invocation. Remove the Node polling lease only from webhook mode; preserve it for the optional long-polling adapter.
+A working staging test cannot be completed until all of these are supplied/provisioned:
 
-### 4. Add privacy-minimal pilot analytics
+1. A separate staging Postgres database. The current Supabase project has no development branches. Creating a Supabase development branch was quoted at **$0.01344/hour** (about **$9.68 for 30 days** if continuously running). No branch was created because the recurring charge needs explicit approval.
+2. A separate staging Hyperdrive binding pointing only to that staging database.
+3. A staging Game API Worker with `ENVIRONMENT=staging`, staging CORS origin, and staging secrets. The existing API Worker configuration is not silently repointed.
+4. A separate Telegram test Bot token and matching webhook secret.
+5. The staging Bot Worker's secrets: `TELEGRAM_BOT_TOKEN`, `TELEGRAM_WEBHOOK_SECRET`, `BOT_API_SECRET`, and `ANALYTICS_HASH_SECRET` (at least 32 characters).
+6. The staging Mini App and Bot Worker deployed, then the test Bot webhook registered with allowed updates `message, edited_message, callback_query, chat_member, my_chat_member`.
 
-Track server-side counters/events with a defined retention policy:
-- bot updates received, accepted, rejected, and failed;
-- unique users starting the bot and daily/monthly active users;
-- command/callback usage by command name, not message text;
-- Mini App launches/sessions and API errors;
-- group registrations, challenge creation/join, and match participation;
-- Worker request count, CPU time, duration, exceptions, queue age/retries, Durable Object usage, and database latency.
+The staging API URL in `apps/bot/wrangler.jsonc` and `apps/web/wrangler.staging.jsonc` remains `.example.invalid` intentionally. Do not deploy the staging Bot Worker against the current production API/database or the primary Telegram Bot.
 
-Do not store raw message text or full Telegram update bodies for analytics. Prefer daily aggregates and pseudonymous user keys. Keep operational logs separate from product analytics. Analytics failure must never block gameplay requests.
+## Validation status
 
-### 5. Validate before any live activation
+- Unit tests cover webhook route security, update claim/duplicate/release behavior, Telegram Mini App signature verification, freshness checks, and pseudonymous analytics events.
+- CI includes Bot typechecking/tests, a Wrangler Bot Worker dry-run, and separate production/staging Mini App builds.
+- The latest observed CI run is pending; the earlier run failed at strict TypeScript checks in the initial adapter draft. Those reported typing issues were corrected, but the new run must complete successfully before calling the code verified.
+- No staging deployment or Telegram end-to-end test has been completed yet.
 
-CI must cover:
-- bot application factory tests without network access;
-- webhook secret rejection and body-size limits;
-- duplicate update handling and Telegram retry behavior;
-- private and group command parity;
-- callback queries and chat-member events;
-- queue retry/ack/dead-letter behavior;
-- scheduled worker tests and typechecks;
-- Worker dry-runs for ingress, API, and Mini App.
+## Pilot acceptance criteria
 
-A staging deployment and test Telegram bot should be used before the primary bot is touched. Production deployment, webhook registration, BotFather changes, database migrations against the live project, and starting any bot process remain explicit approval gates.
+The pilot is ready for invited users only when:
 
-## Current verified blockers
-
-- The current bot is a Node.js long-polling process; the entry point ends by calling `bot.start()`.
-- The bot entry point creates recurring Node timers for four background queues and a polling-lease heartbeat.
-- The API Worker already has a Hyperdrive binding and Durable Object match coordinator, but that does not provide Telegram webhook ingress.
-- The Mini App Worker has a separate OpenNext production build/deploy path. A successful build is not evidence that the compiled Mini App is live.
-- The API production readiness gate checks database migrations/security/catalog; the live API environment must be production before the pilot can be accepted.
-- No real Telegram end-to-end test has been completed.
-
-## Pilot success criteria
-
-The pilot is ready for invited users only when all of the following are true:
-
-1. The test bot receives webhook updates on Cloudflare without a VPS.
-2. Private commands, Mini App launch, group commands, challenges, and match decisions pass acceptance tests.
+1. The test Bot receives webhook updates on Cloudflare without a VPS.
+2. Private commands, Mini App launch, group commands, challenges, and match decisions pass end-to-end tests.
 3. Background notifications and message deletion survive Worker restarts and retry transient failures.
-4. Analytics can report starts, active users, feature usage, errors, and platform resource consumption without collecting message content.
-5. API readiness and Mini App smoke tests pass on the staging deployment.
-6. A documented rollback exists that does not require deleting user/game data.
+4. Analytics reports starts, active users, command usage, Mini App sessions, API errors, and platform resource consumption without storing message content or raw Telegram IDs.
+5. API readiness and Mini App smoke tests pass against the staging database.
+6. A rollback plan exists and preserves game data.
 
-Only after observing actual usage and resource consumption should the project decide whether to remain Cloudflare-only or add one or more Node.js workers/servers. Future multi-bot support should use a bot registry and per-bot secret references; it must not run multiple long-polling processes for one token.
+After measuring real usage, resource consumption, and retention, decide whether to remain Cloudflare-only or add one or more Node.js workers/servers. Future multi-bot support still requires a bot registry, per-bot secrets, and bot-specific routing; the current staging Worker is intentionally single-bot.
