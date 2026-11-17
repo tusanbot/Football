@@ -494,7 +494,7 @@ test("durable match worker advances checkpoints, resumes on two early decisions 
       { mentality: "DEFENSIVE", pressing: "LOW_BLOCK" }, decisionTime,
     );
     const resumed = await processDueMatchRuntimes(
-      "test-runtime-worker", new Date(kickoff.getTime() + 65_000), 5,
+      "test-runtime-worker", new Date(kickoff.getTime() + 50_000), 5,
     );
     assert.equal(resumed.advanced, 1);
     const minute60 = await prisma.matchTacticalCheckpoint.findUniqueOrThrow({
@@ -502,13 +502,17 @@ test("durable match worker advances checkpoints, resumes on two early decisions 
     });
     assert.equal(minute60.status, "OPEN");
     const minute75Tick = await processDueMatchRuntimes(
-      "test-runtime-worker", new Date(kickoff.getTime() + 100_000), 5,
+      "test-runtime-worker", new Date(kickoff.getTime() + 70_000), 5,
     );
     assert.equal(minute75Tick.advanced, 1);
     const fullTimeTick = await processDueMatchRuntimes(
-      "test-runtime-worker", new Date(kickoff.getTime() + 135_000), 5,
+      "test-runtime-worker", new Date(kickoff.getTime() + 90_000), 5,
     );
-    assert.equal(fullTimeTick.settled, 1);
+    assert.equal(fullTimeTick.settled, 0);
+    const settlementTick = await processDueMatchRuntimes(
+      "test-runtime-worker", new Date(kickoff.getTime() + 105_000), 5,
+    );
+    assert.equal(settlementTick.settled, 1);
     const [match, runtime, checkpoints] = await Promise.all([
       prisma.footballMatch.findUniqueOrThrow({ where: { id: created.match.id } }),
       prisma.matchRuntime.findUniqueOrThrow({ where: { matchId: created.match.id } }),
