@@ -1235,7 +1235,7 @@ function goalLifecycleEvents(events: MatchSegmentState["events"], home: MatchSid
   return [...events].filter((event) => event.type === "GOAL").sort((left, right) => left.minute - right.minute || left.sequence - right.sequence).map((event) => {
     if (event.teamId === home.clubId) homeScore++; else awayScore++;
     const names = event.teamId === home.clubId ? homePlayers : awayPlayers;
-    return { eventKey: "goal:" + event.sequence, kind: "GOAL", minute: event.minute, homeScore, awayScore,
+    return { eventKey: "goal:" + event.minute + ":" + event.sequence, kind: "GOAL", minute: event.minute, homeScore, awayScore,
       payload: { teamName: event.teamId === home.clubId ? home.clubName : away.clubName, scorerName: names.get(event.playerId) ?? "بازیکن", assistName: event.relatedPlayerId ? names.get(event.relatedPlayerId) ?? null : null },
       availableAt: new Date(startedAt.getTime() + event.minute * MATCH_MINUTE_MS) };
   });
