@@ -1,0 +1,15 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "football-empire-bot-staging",
+  "main": "src/worker.ts",
+  "compatibility_date": "2026-11-17",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": true,
+  "vars": {
+    "ENVIRONMENT": "staging",
+    "FOOTBALL_API_URL": "https://staging-api.example.invalid",
+    "TELEGRAM_WEB_APP_URL": "https://staging-football.example.invalid"
+  },
+  "triggers": { "crons": ["* * * * *"] },
+  "observability": { "enabled": true, "head_sampling_rate": 1 }
+}
