@@ -1003,7 +1003,7 @@ bot.callbackQuery(/^challenge:accept:/, async (ctx) => {
       await ctx.api.sendMessage(creatorTelegramId, "⚔️ دعوت چالش شما پذیرفته شد!\nحریف وارد مسابقه شد. شناسه مسابقه: " + accepted.match.id)
         .catch((error) => console.warn("Could not notify challenge creator:", error));
     }
-    if (ctx.chat.type === "group" || ctx.chat.type === "supergroup") {
+    if (ctx.chat?.type === "group" || ctx.chat?.type === "supergroup") {
       await ctx.api.sendMessage(ctx.from.id, message).catch((error) => console.warn("Could not DM challenge accepter:", error));
     }
     try { await ctx.editMessageReplyMarkup({ reply_markup: new InlineKeyboard().text("✅ چالش پذیرفته شد", "challenge:accepted") }); }
