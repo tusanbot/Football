@@ -258,7 +258,7 @@ async function pollLeagueNoticeQueue() {
       const telegramId = Number(notice.telegramId);
       try {
         if (!Number.isSafeInteger(telegramId)) throw new Error("Telegram user id is outside JavaScript safe integer range");
-        const keyboard = notice.kind === "ROUND_RESULTS" && notice.referenceId
+        const keyboard = ["ROUND_RESULTS", "EVENT_TOURNAMENT_RESULT"].includes(notice.kind) && notice.referenceId
           ? new InlineKeyboard().text("بازی‌های هفته بعد", "leagueview:next:" + notice.referenceId)
             .text("جدول لیگ", "leagueview:table:" + notice.referenceId)
             .row().text("جدول گلزنان", "leagueview:scorers:" + notice.referenceId)
