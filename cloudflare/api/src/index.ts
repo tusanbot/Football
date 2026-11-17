@@ -102,7 +102,7 @@ export class MatchCoordinator {
         const now = new Date();
         await processDueMatchRuntimes("cloudflare-match-coordinator", now, 10);
         await deliverDueMatchLifecycle(this.env);
-        const [runtime, futureFixture, overdueFixture] = await Promise.all([
+        const [runtime, futureFixture, overdueFixture, lifecycleNotification] = await Promise.all([
           prisma.matchRuntime.findFirst({
             where: { status: { in: ["QUEUED", "RUNNING", "AWAITING_CHECKPOINT"] } },
             orderBy: { nextActionAt: "asc" },
@@ -118,6 +118,11 @@ export class MatchCoordinator {
             orderBy: { scheduledAt: "asc" },
             select: { id: true },
           }),
+          prisma.matchLifecycleNotification.findFirst({
+            where: { status: "PENDING" },
+            orderBy: { availableAt: "asc" },
+            select: { availableAt: true },
+          }),
         ]);
         const candidates: number[] = [];
         if (runtime) {
@@ -126,6 +131,7 @@ export class MatchCoordinator {
         }
         if (futureFixture) candidates.push(futureFixture.scheduledAt.getTime());
         if (overdueFixture) candidates.push(now.getTime() + 5_000);
+        if (lifecycleNotification) candidates.push(Math.max(now.getTime() + 1_000, lifecycleNotification.availableAt.getTime()));
         nextAlarm = candidates.length ? Math.min(...candidates) : null;
       });
     } catch (error) {
