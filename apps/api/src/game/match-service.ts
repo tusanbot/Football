@@ -676,6 +676,20 @@ export async function releaseMatchRuntimeLease(runtimeId: string, leaseToken: st
   return result.count === 1;
 }
 
+async function publishLeagueRoundSummary(competitionId: string, round: number, now = new Date()) {
+  const fixtures = await prisma.footballMatch.findMany({ where: { competitionId, round }, include: { homeClub: { select: { name: true } }, awayClub: { select: { name: true } } }, orderBy: [{ scheduledAt: "asc" }, { id: "asc" }] });
+  if (!fixtures.length || fixtures.some((fixture) => fixture.status !== "COMPLETED")) return { published: false };
+  const competition = await prisma.competition.findUnique({ where: { id: competitionId }, include: { entries: { include: { club: { select: { name: true, ownerId: true } } } } } });
+  if (!competition) return { published: false };
+  const standings = [...competition.entries].sort((a, b) => b.points - a.points || (b.goalsFor - b.goalsAgainst) - (a.goalsFor - a.goalsAgainst) || b.goalsFor - a.goalsFor || a.club.name.localeCompare(b.club.name));
+  const resultsText = fixtures.map((fixture) => fixture.homeClub.name + " " + fixture.homeScore + " : " + fixture.awayScore + " " + fixture.awayClub.name).join("\n");
+  const tableText = standings.map((entry, index) => (index + 1) + ". " + entry.club.name + " · " + entry.points + " امتیاز · تفاضل " + (entry.goalsFor - entry.goalsAgainst)).join("\n");
+  const title = "نتایج هفته " + round + " · " + competition.name;
+  const body = "نتایج تمام مسابقات این هفته ثبت شد:\n" + resultsText + "\n\nجدول فعلی لیگ:\n" + tableText;
+  const notices = competition.entries.map((entry) => ({ userId: entry.club.ownerId, kind: "ROUND_RESULTS", title, body, referenceId: competitionId, dedupeKey: "league-round:" + competitionId + ":" + round + ":" + entry.club.ownerId }));
+  await prisma.leagueNotice.createMany({ data: notices, skipDuplicates: true });
+  return { published: true, teams: notices.length, round, at: now.toISOString() };
+}
 export async function simulateScheduledMatch(userId: string, matchId: string, now = new Date()) {
   const settlement = await prisma.$transaction(async (tx) => {
     const match = await tx.footballMatch.findUnique({ where: { id: matchId } });
@@ -1017,7 +1031,7 @@ export async function simulateScheduledMatch(userId: string, matchId: string, no
       events: { orderBy: { sequence: "asc" } },
     } });
     return {
-      replayed: false, matchId: final.id, competitionId: final.competitionId, homeClub: final.homeClub.name, awayClub: final.awayClub.name,
+      replayed: false, matchId: final.id, competitionId: final.competitionId, round: match.round, homeClub: final.homeClub.name, awayClub: final.awayClub.name,
       homeScore: final.homeScore, awayScore: final.awayScore, homePenalties: final.homePenalties,
       awayPenalties: final.awayPenalties, winnerClubId: final.winnerClubId, attendance: final.attendance,
       ticketRevenue: final.ticketRevenue.toString(), events: final.events.map((event) => ({
@@ -1055,6 +1069,10 @@ export async function simulateScheduledMatch(userId: string, matchId: string, no
         await advanceCupRound(settlement.competitionId, fixture.round, now);
       }
     }
+  }
+  if (settlement.competitionId && settlement.round !== null && settlement.round !== undefined) {
+    const competition = await prisma.competition.findUnique({ where: { id: settlement.competitionId }, select: { format: true } });
+    if (competition?.format === "LEAGUE") await publishLeagueRoundSummary(settlement.competitionId, settlement.round, now);
   }
   return settlement;
 }
