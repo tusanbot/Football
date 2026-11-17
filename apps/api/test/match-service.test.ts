@@ -4,7 +4,7 @@ import test from "node:test";
 import { prisma } from "../src/db.js";
 import { getMatchFallbackPlan, saveMatchFallbackPlan, MatchFallbackPlanError } from "../src/game/match-fallback-service.js";
 import {
-  createFriendlyMatch, createLeague, getLeague, joinLeague, listClubMatches,
+  createFriendlyMatch, createLeague, getLeague, joinLeague, listClubMatches, listMatchOpponents,
   simulateScheduledMatch, startLeague, submitMatchCheckpointDecision, claimDueMatchRuntimes,
   releaseMatchRuntimeLease, processDueMatchRuntimes, updateCompetitionRules,
 } from "../src/game/match-service.js";
@@ -638,6 +638,38 @@ test("club fallback plan is versioned and frozen into the kickoff runtime snapsh
     const userIds = clubs.map((club) => club.userId);
     if (userIds.length) {
       await prisma.ledgerTransaction.deleteMany({ where: { userId: { in: userIds } } });
+      await prisma.wallet.deleteMany({ where: { userId: { in: userIds } } });
+      await prisma.user.deleteMany({ where: { id: { in: userIds } } });
+    }
+  }
+});
+
+test("opponent discovery returns the ten most recently active valid clubs and supports ID/name search", async (t) => {
+  if (!process.env.DATABASE_URL) {
+    t.skip("DATABASE_URL is only configured in the ephemeral PostgreSQL CI job.");
+    return;
+  }
+  const suffix = randomUUID().replaceAll("-", "");
+  const clubs: Array<{ userId: string; clubId: string }> = [];
+  try {
+    for (let index = 0; index < 12; index++) clubs.push(await makeClub(suffix, index + 100));
+    const recent = await listMatchOpponents(clubs[0]!.userId);
+    assert.equal(recent.length, 10);
+    assert.ok(recent.every((club) => club.id !== clubs[0]!.clubId));
+    const byTelegramId = await listMatchOpponents(clubs[0]!.userId, "match-" + suffix + "-111");
+    assert.equal(byTelegramId.length, 1);
+    assert.equal(byTelegramId[0]!.id, clubs[11]!.clubId);
+    const byName = await listMatchOpponents(clubs[0]!.userId, "Match Club 111");
+    assert.equal(byName.length, 1);
+    assert.equal(byName[0]!.id, clubs[11]!.clubId);
+  } finally {
+    const clubIds = clubs.map((club) => club.clubId);
+    if (clubIds.length) {
+      await prisma.player.deleteMany({ where: { clubId: { in: clubIds } } });
+      await prisma.club.deleteMany({ where: { id: { in: clubIds } } });
+    }
+    const userIds = clubs.map((club) => club.userId);
+    if (userIds.length) {
       await prisma.wallet.deleteMany({ where: { userId: { in: userIds } } });
       await prisma.user.deleteMany({ where: { id: { in: userIds } } });
     }
