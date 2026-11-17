@@ -47,8 +47,9 @@ jobs:
         run: |
           test -n "$STAGING_DIRECT_URL" || { echo "Missing STAGING_DIRECT_URL repository secret"; exit 1; }
           case "$STAGING_DIRECT_URL" in
-            *db.uiwzbinjtglzqerymdwp.supabase.co*) ;;
-            *) echo "STAGING_DIRECT_URL must point to the isolated Football Empire Staging Supabase project"; exit 1 ;;
+            *pooler.supabase.com:5432/*) ;;
+            *pooler.supabase.com:6543/*) echo "Use Supavisor session mode on port 5432, not transaction mode on 6543"; exit 1 ;;
+            *) echo "STAGING_DIRECT_URL must be the Football Empire Staging Supavisor session-pooler URI on port 5432 (IPv4-compatible)"; exit 1 ;;
           esac
         env:
           STAGING_DIRECT_URL: ${{ secrets.STAGING_DIRECT_URL }}
