@@ -31,7 +31,7 @@ const instanceId = randomUUID();
 async function lease(action: "acquire" | "heartbeat" | "release") {
   const response = await fetch(new URL("/v1/bot/runtime/lease", apiUrl), {
     method: "POST",
-    headers: { "content-type": "application/json", "x-football-bot-secret": botApiSecret },
+    headers: { "content-type": "application/json", "x-football-bot-secret": apiSecret },
     body: JSON.stringify({ instanceId, action }),
     signal: AbortSignal.timeout(15_000),
   });
