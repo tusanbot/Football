@@ -42,11 +42,23 @@ test("readiness fails closed and reports missing runtime configuration", async (
   assert.equal(response.status, 503);
   const body = await response.json() as { status: string; missing: string[] };
   assert.equal(body.status, "not_ready");
-  assert.ok(body.missing.includes("HYPERDRIVE or DATABASE_URL"));
+  assert.ok(body.missing.includes("DATABASE_URL"));
   assert.ok(body.missing.includes("TELEGRAM_BOT_TOKEN"));
   assert.ok(body.missing.includes("BOT_API_SECRET"));
   assert.ok(body.missing.includes("CORS_ORIGIN"));
   assert.ok(body.missing.includes("GAME_ADMIN_TELEGRAM_IDS"));
+});
+
+
+test("production readiness rejects direct or session-pooled database URLs", async () => {
+  const response = await worker.fetch(new Request("https://api.example.test/ready"), {
+    ...configuredEnv,
+    ENVIRONMENT: "staging",
+    DATABASE_URL: "postgresql://postgres:postgres@db.example.test:5432/football_empire",
+  }, context);
+  assert.equal(response.status, 503);
+  const body = await response.json() as { missing: string[] };
+  assert.ok(body.missing.includes("DATABASE_URL_MUST_USE_SUPABASE_TRANSACTION_POOLER"));
 });
 
 test("pilot analytics endpoint rejects requests without the Bot/API secret", async () => {
