@@ -463,6 +463,10 @@ bot.command("start", async (ctx) => {
       `دستورهای پرکاربرد: /club /wallet /store /inventory /players /lineup /matches /leagues /market /help`,
       { reply_markup: keyboard },
     );
+    await ctx.reply("🧭 <b>منوی شیشه‌ای Football Empire</b>\\nیک دسته را برای ادامه انتخاب کنید. صفحه‌کلید متنی دسته‌بندی‌شده نیز برای دسترسی جایگزین فعال است.", {
+      parse_mode: "HTML",
+      reply_markup: inlineMenuKeyboard(),
+    });
     await sendMiniAppEntry(ctx);
   } catch (error) {
     console.error("Telegram onboarding failed:", error);
