@@ -28,7 +28,7 @@ test("season awards route keeps response shape, manual awards, minimum appearanc
     season: 2026, matches: 10, minimumAppearances: 3,
     awards: { topScorer: record, topAssists: record, playerOfSeason: record, teamOfSeason: [{ ...record, playerId: "p2", playerName: "Keeper", position: "GK", goals: 1, averageRating: 7.9 }, record] },
     manualAwards: [{ id: "a1", awardType: "SPECIAL", awardName: "Special award", reason: null, playerId: "p1", playerName: "Alex", position: "ST", clubName: "Tosan" }],
-    leaders: { scorers: [record, { ...record, playerId: "p2", playerName: "Keeper", position: "GK", goals: 1, averageRating: 7.9 }], assists: [record], ratings: [{ ...record, playerId: "p2", playerName: "Keeper", position: "GK", goals: 1, averageRating: 7.9 }, record] },
+    leaders: { scorers: [record, { ...record, playerId: "p2", playerName: "Keeper", position: "GK", goals: 1, averageRating: 7.9 }], assists: [record], ratings: [record, { ...record, playerId: "p2", playerName: "Keeper", position: "GK", goals: 1, averageRating: 7.9 }] },
   });
 });
 test("season awards route rejects invalid query parameters", async () => {
