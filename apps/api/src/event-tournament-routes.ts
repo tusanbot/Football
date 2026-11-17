@@ -5,6 +5,7 @@ import { prisma } from "./db.js";
 import { requireTelegramUser } from "./auth/require-telegram-user.js";
 import { parseAdminTelegramIds } from "./runtime-config.js";
 import { consumeAllianceActionRateLimit } from "./groups/alliance-rate-limit.js";
+import { getStoreItem } from "./store/catalog.js";
 
 type Permission = "read" | "competitions";
 const ROLE_PERMISSIONS: Record<string, Permission[]> = {
@@ -40,7 +41,7 @@ const prizeSchema = z.object({
   itemKey: z.string().trim().min(2).max(80).optional(),
   specialPlayerId: z.string().min(1).max(128).optional(),
 }).superRefine((value, context) => {
-  if (["CASH", "GOLD", "HONOR"].includes(value.type) && (!value.amount || BigInt(value.amount) <= 0n)) {
+  if (["CASH", "GOLD", "HONOR"].includes(value.type) && (!value.amount || !/^[0-9]+$/.test(value.amount) || BigInt(value.amount) <= 0n)) {
     context.addIssue({ code: z.ZodIssueCode.custom, path: ["amount"], message: "CURRENCY_PRIZE_AMOUNT_REQUIRED" });
   }
   if (value.type === "STORE_ITEM" && !value.itemKey) context.addIssue({ code: z.ZodIssueCode.custom, path: ["itemKey"], message: "STORE_ITEM_KEY_REQUIRED" });
@@ -64,8 +65,10 @@ const createSchema = z.object({
   if (registrationEndsAt <= new Date()) context.addIssue({ code: z.ZodIssueCode.custom, path: ["registrationEndsAt"], message: "REGISTRATION_END_MUST_BE_FUTURE" });
   if (startsAt < registrationEndsAt) context.addIssue({ code: z.ZodIssueCode.custom, path: ["startsAt"], message: "START_MUST_FOLLOW_REGISTRATION" });
   if (value.endsAt && new Date(value.endsAt) <= startsAt) context.addIssue({ code: z.ZodIssueCode.custom, path: ["endsAt"], message: "END_MUST_FOLLOW_START" });
-  if (BigInt(value.entryFeeAmount) > 0n && !value.entryFeeAsset) context.addIssue({ code: z.ZodIssueCode.custom, path: ["entryFeeAsset"], message: "ENTRY_FEE_ASSET_REQUIRED" });
-  if (BigInt(value.entryFeeAmount) === 0n && value.entryFeeAsset) context.addIssue({ code: z.ZodIssueCode.custom, path: ["entryFeeAsset"], message: "ENTRY_FEE_AMOUNT_REQUIRED" });
+  const validEntryAmount = /^(0|[1-9][0-9]{0,17})$/.test(value.entryFeeAmount);
+  const entryAmount = validEntryAmount ? BigInt(value.entryFeeAmount) : 0n;
+  if (validEntryAmount && entryAmount > 0n && !value.entryFeeAsset) context.addIssue({ code: z.ZodIssueCode.custom, path: ["entryFeeAsset"], message: "ENTRY_FEE_ASSET_REQUIRED" });
+  if (validEntryAmount && entryAmount === 0n && value.entryFeeAsset) context.addIssue({ code: z.ZodIssueCode.custom, path: ["entryFeeAsset"], message: "ENTRY_FEE_AMOUNT_REQUIRED" });
 });
 
 const idParams = z.object({ id: z.string().min(1).max(128) });
@@ -180,6 +183,7 @@ export function registerEventTournamentRoutes(app: FastifyInstance) {
     try {
       const result = await prisma.$transaction(async (tx) => {
         for (const prize of value.prizes) {
+          if (prize.type === "STORE_ITEM" && (!prize.itemKey || !getStoreItem(prize.itemKey))) throw new Error("STORE_ITEM_NOT_AVAILABLE");
           if (prize.type === "SPECIAL_PLAYER") {
             const special = await tx.specialPlayer.findUnique({ where: { id: prize.specialPlayerId }, select: { id: true, active: true } });
             if (!special?.active) throw new Error("SPECIAL_PLAYER_NOT_AVAILABLE");
@@ -209,7 +213,7 @@ export function registerEventTournamentRoutes(app: FastifyInstance) {
       }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
       return reply.code(201).send({ tournament: { id: result.id, title: result.title, status: result.status, participantCount: 0 } });
     } catch (error) {
-      if (error instanceof Error && error.message === "SPECIAL_PLAYER_NOT_AVAILABLE") return reply.code(409).send({ error: error.message });
+      if (error instanceof Error && ["SPECIAL_PLAYER_NOT_AVAILABLE", "STORE_ITEM_NOT_AVAILABLE"].includes(error.message)) return reply.code(409).send({ error: error.message });
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") return reply.code(409).send({ error: "DUPLICATE_OR_IDEMPOTENCY_CONFLICT" });
       throw error;
     }
