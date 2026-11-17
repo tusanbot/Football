@@ -83,7 +83,9 @@ export function registerMatchRoutes(app: FastifyInstance) {
   app.get("/v1/matches/opponents", async (request, reply) => {
     const user = await requireTelegramUser(request);
     if (!user) return reply.code(401).send({ error: "UNAUTHENTICATED" });
-    try { return { opponents: await listMatchOpponents(user.id) }; }
+    const query = z.object({ q: z.string().trim().min(1).max(80).optional() }).safeParse(request.query);
+    if (!query.success) return reply.code(400).send({ error: "INVALID_OPPONENT_SEARCH" });
+    try { return { opponents: await listMatchOpponents(user.id, query.data.q) }; }
     catch (error) { return sendMatchError(reply, error); }
   });
   app.get("/v1/matches", async (request, reply) => {
