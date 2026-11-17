@@ -62,9 +62,6 @@ jobs:
             *pooler.supabase.com*) echo "Use the direct Supabase database endpoint, not a pooler URL"; exit 1 ;;
           esac
           [[ "$STAGING_TELEGRAM_BOT_TOKEN" =~ ^[0-9]+:[A-Za-z0-9_-]{20,}$ ]] || { echo "Invalid staging Bot token format"; exit 1; }
-          [[ "${#STAGING_BOT_API_SECRET}" -ge 32 ]] || { echo "STAGING_BOT_API_SECRET must be at least 32 characters"; exit 1; }
-          [[ "$STAGING_TELEGRAM_WEBHOOK_SECRET" =~ ^[A-Za-z0-9_-]{1,256}$ ]] || { echo "Invalid Telegram webhook secret format"; exit 1; }
-          [[ "${#STAGING_ANALYTICS_HASH_SECRET}" -ge 32 ]] || { echo "STAGING_ANALYTICS_HASH_SECRET must be at least 32 characters"; exit 1; }
           [[ "$STAGING_GAME_ADMIN_TELEGRAM_IDS" =~ ^[0-9]+(,[0-9]+)*$ ]] || { echo "STAGING_GAME_ADMIN_TELEGRAM_IDS must be comma-separated numeric Telegram IDs"; exit 1; }
       - name: Generate isolated staging secrets
         shell: bash
