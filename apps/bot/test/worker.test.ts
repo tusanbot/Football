@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import worker, { BotUpdateGuard } from "../src/worker.js";
+import worker, { BotUpdateGuard, verifyTelegramInitData } from "../src/worker.js";
 
 class MemoryStorage {
   values = new Map<string, unknown>();
@@ -61,4 +61,50 @@ test("update guard releases failed updates so Telegram retries can process them"
   await guard.fetch(guardRequest("/release", 456));
   const retry = await guard.fetch(guardRequest("/claim", 456));
   assert.deepEqual(await retry.json(), { result: "claimed" });
+});
+
+async function hmac(keyBytes: Uint8Array, message: string): Promise<Uint8Array> {
+  const key = await crypto.subtle.importKey("raw", keyBytes, { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  return new Uint8Array(await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(message)));
+}
+
+async function signedInitData(botToken: string, userId: number, authDate = Math.floor(Date.now() / 1000)) {
+  const params = new URLSearchParams();
+  params.set("auth_date", String(authDate));
+  params.set("user", JSON.stringify({ id: userId, first_name: "Test" }));
+  const checkString = [...params.entries()].sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0).map(([k, v]) => k + "=" + v).join("\\n");
+  const secret = await hmac(new TextEncoder().encode("WebAppData"), botToken);
+  const hash = await hmac(secret, checkString);
+  params.set("hash", Array.from(hash, byte => byte.toString(16).padStart(2, "0")).join(""));
+  return params.toString();
+}
+
+test("Telegram Mini App initData is cryptographically verified and time-bounded", async () => {
+  const token = "123456:staging-test-token";
+  const valid = await signedInitData(token, 987654321);
+  assert.equal(await verifyTelegramInitData(valid, token), 987654321);
+  assert.equal(await verifyTelegramInitData(valid.replace("987654321", "987654322"), token), null);
+  const expired = await signedInitData(token, 987654321, Math.floor(Date.now() / 1000) - 86_500);
+  assert.equal(await verifyTelegramInitData(expired, token), null);
+});
+
+test("Mini App telemetry accepts only signed initData from the configured origin", async () => {
+  const token = "123456:staging-test-token";
+  const initData = await signedInitData(token, 987654321);
+  const points: Array<{ blobs?: string[]; doubles?: number[]; indexes?: string[] }> = [];
+  const env = {
+    TELEGRAM_BOT_TOKEN: token,
+    TELEGRAM_WEB_APP_URL: "https://game.example",
+    ANALYTICS_HASH_SECRET: "a".repeat(48),
+    PILOT_ANALYTICS: { writeDataPoint: (point: { blobs?: string[]; doubles?: number[]; indexes?: string[] }) => points.push(point) },
+  } as never;
+  const response = await worker.fetch(new Request("https://bot/miniapp/launch", {
+    method: "POST",
+    headers: { origin: "https://game.example", "content-type": "application/json" },
+    body: JSON.stringify({ initData }),
+  }), env);
+  assert.equal(response.status, 204);
+  assert.equal(points.length, 1);
+  assert.deepEqual(points[0]?.blobs, ["miniapp_session", "miniapp_launch", "private", "miniapp"]);
+  assert.notEqual(points[0]?.indexes?.[0], "987654321");
 });
