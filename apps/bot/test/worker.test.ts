@@ -93,6 +93,7 @@ test("Mini App telemetry forwards a pseudonymous event to the private API endpoi
   const initData = await signedInitData(token, 987654321);
   const originalFetch = globalThis.fetch;
   const requests: Array<{ url: string; init?: RequestInit }> = [];
+  const pendingAnalytics: Promise<unknown>[] = [];
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     requests.push({ url: String(input), init });
     return new Response(null, { status: 202 });
@@ -109,8 +110,9 @@ test("Mini App telemetry forwards a pseudonymous event to the private API endpoi
       method: "POST",
       headers: { origin: "https://game.example", "content-type": "application/json" },
       body: JSON.stringify({ initData }),
-    }), env);
+    }), env, { waitUntil(promise) { pendingAnalytics.push(promise); } });
     assert.equal(response.status, 204);
+    await Promise.all(pendingAnalytics);
     assert.equal(requests.length, 1);
     assert.equal(requests[0]?.url, "https://api.example/internal/pilot/events");
     const body = JSON.parse(String(requests[0]?.init?.body)) as { eventName: string; userKey: string; source: string };
