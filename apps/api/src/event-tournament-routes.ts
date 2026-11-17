@@ -185,6 +185,7 @@ export function registerEventTournamentRoutes(app: FastifyInstance) {
         for (const prize of value.prizes) {
           if (prize.type === "STORE_ITEM" && (!prize.itemKey || !getStoreItem(prize.itemKey))) throw new Error("STORE_ITEM_NOT_AVAILABLE");
           if (prize.type === "SPECIAL_PLAYER") {
+            if (!prize.specialPlayerId) throw new Error("SPECIAL_PLAYER_NOT_AVAILABLE");
             const special = await tx.specialPlayer.findUnique({ where: { id: prize.specialPlayerId }, select: { id: true, active: true } });
             if (!special?.active) throw new Error("SPECIAL_PLAYER_NOT_AVAILABLE");
           }
@@ -199,7 +200,7 @@ export function registerEventTournamentRoutes(app: FastifyInstance) {
             createdByTelegramId: actor.telegramId,
             prizes: { create: value.prizes.map((prize) => ({
               placement: prize.placement, type: prize.type, amount: BigInt(prize.amount ?? "0"),
-              itemKey: prize.itemKey, specialPlayerId: prize.specialPlayerId,
+              itemKey: prize.itemKey ?? null, specialPlayerId: prize.specialPlayerId ?? null,
             })) },
           },
           include: { prizes: true },
