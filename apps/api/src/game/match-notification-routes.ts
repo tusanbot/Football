@@ -1,4 +1,4 @@
-import { timingSafeEqual } from "node:crypto";
+import { randomUUID, timingSafeEqual } from "node:crypto";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
 import { prisma } from "../db.js";
@@ -16,6 +16,66 @@ function authenticateSystemBot(request: FastifyRequest, reply: FastifyReply): bo
 }
 
 export function registerMatchNotificationRoutes(app: FastifyInstance) {
+
+  app.post("/v1/bot/match-results/claim", async (request, reply) => {
+    if (!authenticateSystemBot(request, reply)) return;
+    const parsed = z.object({ limit: z.number().int().min(1).max(100).default(25) }).safeParse(request.body ?? {});
+    if (!parsed.success) return reply.code(400).send({ error: "INVALID_MATCH_RESULT_CLAIM" });
+    const now = new Date();
+    const retryBefore = new Date(now.getTime() - 30_000);
+    const candidates = await prisma.matchResultNotification.findMany({
+      where: {
+        status: "PENDING", availableAt: { lte: now },
+        OR: [{ lockedUntil: null }, { lockedUntil: { lt: retryBefore } }],
+        match: { status: "COMPLETED" },
+      },
+      include: { match: { select: {
+        id: true, homeScore: true, awayScore: true, completedAt: true,
+        homeClub: { select: { name: true } }, awayClub: { select: { name: true } },
+      } } },
+      orderBy: { createdAt: "asc" }, take: parsed.data.limit,
+    });
+    const notifications = [];
+    for (const item of candidates) {
+      const claimToken = randomUUID();
+      const claimed = await prisma.matchResultNotification.updateMany({
+        where: {
+          id: item.id, status: "PENDING", availableAt: { lte: now },
+          OR: [{ lockedUntil: null }, { lockedUntil: { lt: retryBefore } }],
+        },
+        data: { claimToken, lockedUntil: new Date(now.getTime() + 30_000), attempts: { increment: 1 } },
+      });
+      if (claimed.count === 1) notifications.push({
+        id: item.id, channel: item.channel, telegramChatId: item.telegramChatId, claimToken,
+        attempt: item.attempts + 1,
+        match: {
+          id: item.match.id, homeClub: item.match.homeClub.name, awayClub: item.match.awayClub.name,
+          homeScore: item.match.homeScore, awayScore: item.match.awayScore,
+          completedAt: item.match.completedAt?.toISOString() ?? null,
+        },
+      });
+    }
+    return { notifications };
+  });
+
+  app.post("/v1/bot/match-results/ack", async (request, reply) => {
+    if (!authenticateSystemBot(request, reply)) return;
+    const parsed = z.object({
+      id: z.string().min(1).max(64), claimToken: z.string().uuid(),
+      delivered: z.boolean(), error: z.string().max(500).optional(),
+    }).strict().safeParse(request.body);
+    if (!parsed.success) return reply.code(400).send({ error: "INVALID_MATCH_RESULT_ACK" });
+    const now = new Date();
+    const result = await prisma.matchResultNotification.updateMany({
+      where: { id: parsed.data.id, status: "PENDING", claimToken: parsed.data.claimToken, lockedUntil: { gt: now } },
+      data: parsed.data.delivered
+        ? { status: "DELIVERED", deliveredAt: now, lockedUntil: null, claimToken: null, lastError: null }
+        : { availableAt: new Date(now.getTime() + 30_000), lockedUntil: null, claimToken: null, lastError: parsed.data.error ?? "TELEGRAM_SEND_FAILED" },
+    });
+    if (result.count !== 1) return reply.code(409).send({ error: "MATCH_RESULT_CLAIM_EXPIRED" });
+    return { acknowledged: true, delivered: parsed.data.delivered };
+  });
+
   app.post("/v1/bot/match-checkpoints/claim", async (request, reply) => {
     if (!authenticateSystemBot(request, reply)) return;
     const parsed = z.object({ limit: z.number().int().min(1).max(100).default(25), checkpointId: z.string().min(1).max(64).optional() }).safeParse(request.body ?? {});
