@@ -93,7 +93,7 @@ async function analyticsUserKey(telegramUserId: number, secret: string): Promise
 }
 
 async function recordPilotEvent(update: unknown, env: Env) {
-  if (!env.PILOT_ANALYTICS || !env.ANALYTICS_HASH_SECRET) return;
+  if (!env.PILOT_ANALYTICS || !env.ANALYTICS_HASH_SECRET || env.ANALYTICS_HASH_SECRET.length < 32) return;
   type MessageLike = { text?: unknown; chat?: { type?: string }; from?: { id?: number } };
   type CallbackLike = { data?: unknown; from?: { id?: number }; message?: { chat?: { type?: string } } };
   const data = update as { message?: MessageLike; edited_message?: MessageLike; callback_query?: CallbackLike };
@@ -130,7 +130,17 @@ async function prepareBot(env: Env) {
     ...(env.TELEGRAM_WEB_APP_URL ? { webAppUrl: env.TELEGRAM_WEB_APP_URL } : {}),
     environment: env.ENVIRONMENT ?? "staging",
   });
-  if (cachedBotId === undefined) cachedBotId = (await instance.bot.api.getMe()).id;
+  if (cachedBotId === undefined) {
+    const identity = await instance.bot.api.getMe();
+    const verification = await fetch(new URL("/v1/bot/verify-identity", env.FOOTBALL_API_URL), {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-football-bot-secret": env.BOT_API_SECRET },
+      body: JSON.stringify({ telegramBotId: identity.id }),
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (!verification.ok) throw new Error("The Bot token does not match the Game API Bot identity (HTTP " + verification.status + ").");
+    cachedBotId = identity.id;
+  }
   instance.setBotTelegramId(cachedBotId);
   return instance;
 }
