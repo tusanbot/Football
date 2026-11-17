@@ -436,6 +436,19 @@ export async function getLeague(userId: string, competitionId: string) {
   competition.entries.sort((a, b) => b.points - a.points
     || (b.goalsFor - b.goalsAgainst) - (a.goalsFor - a.goalsAgainst)
     || b.goalsFor - a.goalsFor || a.club.name.localeCompare(b.club.name));
+  const [scorers] = await Promise.all([
+    prisma.playerMatchPerformance.groupBy({
+      by: ["playerId", "clubId"], where: { match: { competitionId } },
+      _sum: { goals: true, assists: true }, orderBy: { _sum: { goals: "desc" } }, take: 20,
+    }),
+  ]);
+  const playerIds = scorers.map((row) => row.playerId);
+  const players = await prisma.player.findMany({ where: { id: { in: playerIds } }, select: { id: true, firstName: true, lastName: true } });
+  const playerNames = new Map(players.map((player) => [player.id, player.firstName + " " + player.lastName]));
+  const clubNames = new Map(competition.entries.map((entry) => [entry.clubId, entry.club.name]));
+  const nextRound = competition.matches.filter((match) => match.status !== "COMPLETED" && match.round !== null)
+    .reduce<number | null>((minimum, match) => minimum === null ? match.round! : Math.min(minimum, match.round!), null);
+  const nextRoundMatches = nextRound === null ? [] : competition.matches.filter((match) => match.round === nextRound);
   return {
     competition: { id: competition.id, name: competition.name, season: competition.season, format: competition.format, cupLegs: competition.cupLegs, rules: validateMatchRules(competition.rules ?? defaultMatchRules(competition.format)), status: competition.status, startsAt: competition.startsAt?.toISOString() ?? null },
     standings: competition.entries.map((entry, index) => ({
@@ -448,6 +461,15 @@ export async function getLeague(userId: string, competitionId: string) {
       homeClub: match.homeClub, awayClub: match.awayClub, homeScore: match.homeScore, awayScore: match.awayScore,
       ...aggregateCupScore(match, competition.matches),
       rules: validateMatchRules(match.rulesSnapshot ?? defaultMatchRules(match.type)), homePenalties: match.homePenalties, awayPenalties: match.awayPenalties, winnerClubId: match.winnerClubId,
+    })),
+    nextRound, nextRoundMatches: nextRoundMatches.map((match) => ({
+      id: match.id, round: match.round, scheduledAt: match.scheduledAt.toISOString(), status: match.status,
+      homeClub: match.homeClub, awayClub: match.awayClub, homeScore: match.homeScore, awayScore: match.awayScore,
+    })),
+    topScorers: scorers.map((row) => ({
+      playerId: row.playerId, playerName: playerNames.get(row.playerId) ?? "Unknown",
+      clubId: row.clubId, clubName: clubNames.get(row.clubId) ?? "Club",
+      goals: row._sum.goals ?? 0, assists: row._sum.assists ?? 0,
     })),
   };
 }
