@@ -108,7 +108,7 @@ test("bot source does not bypass the group reply retention wrapper with direct s
   const directSends = [...botSource.matchAll(directSendPattern)].map((match) => match[0]);
   // Background sends and explicit challenge/result DMs are intentional; ordinary command
   // responses continue through ctx.reply and the transient-retention wrapper.
-  assert.deepEqual(directSends, ["bot.api.sendMessage", "bot.api.sendMessage", "bot.api.sendMessage", "bot.api.sendMessage", "ctx.api.sendMessage", "ctx.api.sendMessage"]);
+  assert.deepEqual(directSends, ["bot.api.sendMessage", "bot.api.sendMessage", "bot.api.sendMessage", "bot.api.sendMessage", "bot.api.sendMessage", "ctx.api.sendMessage", "ctx.api.sendMessage"]);
   assert.equal((botSource.match(/bot\.api\.sendMessage\(telegramId/g) ?? []).length, 3);
   assert.ok(botSource.includes("bot.api.sendMessage(Number(delivery.telegramGroupId), delivery.message)"));
   assert.ok(botSource.includes("/v1/bot/admin-group-broadcasts/"));
@@ -167,7 +167,7 @@ test("Persian help documents the non-administrative game commands", () => {
   const documented = [
     "redeem", "group-register", "group-join", "group-activity", "group-shop", "group-buy",
     "group-challenges", "group-challenge", "group-challenge-join", "group-challenge-complete",
-    "group-check", "group-league", "group-league-join", "group-league-start", "group-league-table",
+    "group-check", "group-league", "group-league-join", "group-league-table",
     "group-rewards", "group-treasury", "group-give", "group-challenge-cancel", "group-leagues",
     "setlineup", "development", "operations", "ticket-price", "coach-upgrade", "hire-coach",
     "acceptchallenge", "pyramidleagues", "leaguehistory", "pyramidtable", "leagueapply",
@@ -227,19 +227,20 @@ test("friendly challenge messages persist in groups and support inline acceptanc
   assert.ok(botSource.includes("لینک اختصاصی:"));
 });
 
-test("event tournaments expose player registration and admin settlement through buttons", () => {
+test("event tournaments expose registration and automatic result views without manual settlement", () => {
   const competitionMenu = PRIVATE_MENU_SUBMENUS.menu_competitions.rows.flat();
   assert.ok(competitionMenu.some((item) => item.command === "tournaments"));
   assert.ok(botSource.includes('bot.command("tournaments"'));
   assert.ok(botSource.includes('bot.command("eventtournaments"'));
   assert.ok(botSource.includes('bot.callbackQuery(/^event-tournament:/'));
   assert.ok(botSource.includes("event-tournament:join:"));
-  assert.ok(botSource.includes("event-tournament:finalize:"));
-  assert.ok(botSource.includes("event-tournament:rank:"));
+  assert.ok(botSource.includes("event-tournament:view:"));
+  assert.equal(botSource.includes("event-tournament:finalize:"), false);
+  assert.equal(botSource.includes("event-tournament:rank:"), false);
   assert.ok(botSource.includes("event-tournament:fee:"));
   assert.ok(botSource.includes("event-tournament:prize:"));
   assert.ok(botSource.includes("pendingEventTournamentWizards"));
-  assert.ok(botSource.includes("pendingTournamentFinalizations"));
+  assert.equal(botSource.includes("pendingTournamentFinalizations"), false);
 });
 
 test("state-changing player and club operations have button-driven flows", () => {
