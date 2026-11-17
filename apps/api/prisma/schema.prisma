@@ -682,11 +682,32 @@ model FootballMatch {
   performances  PlayerMatchPerformance[]
   runtime       MatchRuntime?
   checkpoints   MatchTacticalCheckpoint[]
+  resultNotifications MatchResultNotification[]
   @@index([homeClubId, scheduledAt, status])
   @@index([awayClubId, scheduledAt, status])
   @@index([competitionId, round])
   @@index([competitionId, round, tieId])
   @@index([status, scheduledAt])
+}
+
+model MatchResultNotification {
+  id             String   @id @default(cuid())
+  matchId        String
+  channel        String
+  telegramChatId String
+  status         String   @default("PENDING")
+  attempts       Int      @default(0)
+  availableAt    DateTime @default(now())
+  lockedUntil    DateTime?
+  claimToken     String?
+  lastError      String?
+  deliveredAt    DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  match          FootballMatch @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  @@unique([matchId, channel])
+  @@index([status, availableAt, lockedUntil])
+  @@index([telegramChatId, createdAt])
 }
 
 model MatchRuntime {
