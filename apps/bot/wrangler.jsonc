@@ -5,6 +5,9 @@
   "compatibility_date": "2026-11-17",
   "compatibility_flags": ["nodejs_compat"],
   "workers_dev": true,
+  "services": [
+    { "binding": "FOOTBALL_API", "service": "football-empire-api-staging" }
+  ],
   "vars": {
     "ENVIRONMENT": "staging",
     "FOOTBALL_API_URL": "https://football-empire-api-staging.mshmahyar9.workers.dev",
