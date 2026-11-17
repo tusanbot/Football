@@ -76,7 +76,7 @@ bot.use(async (ctx, next) => {
   if (chat && (chat.type === "group" || chat.type === "supergroup")) {
     const chatId = chat.id;
     const originalReply = ctx.reply.bind(ctx);
-    const command = ctx.message?.text?.match(/^\/([a-z0-9_-]+)/i)?.[1]?.toLowerCase() ?? (ctx.callbackQuery?.data.startsWith("g:") ? "group-challenges" : undefined);
+    const command = ctx.message?.text?.match(/^\/([a-z0-9_-]+)/i)?.[1]?.toLowerCase() ?? (typeof ctx.callbackQuery?.data === "string" && ctx.callbackQuery.data.startsWith("g:") ? "group-challenges" : undefined);
     Object.defineProperty(ctx, "reply", {
       configurable: true,
       value: async (...args: Parameters<typeof ctx.reply>) => {
@@ -173,8 +173,8 @@ async function saveTelegramClubLogo(ctx: Context, fileId: string, mimeType: stri
   }
 }
 
-async function awardGroupActivity(ctx: { chat: { type: string; id: number }; from: { id: number } | undefined }, activityType: "CHALLENGE_JOIN"|"CHALLENGE_CREATE"|"LEAGUE_JOIN"|"LEAGUE_CREATE"|"MATCH_PLAYED", referenceId: string) {
- if(!ctx.from||!(ctx.chat.type==="group"||ctx.chat.type==="supergroup"))return;
+async function awardGroupActivity(ctx: { chat?: { type: string; id: number }; from: { id: number } | undefined }, activityType: "CHALLENGE_JOIN"|"CHALLENGE_CREATE"|"LEAGUE_JOIN"|"LEAGUE_CREATE"|"MATCH_PLAYED", referenceId: string) {
+ if(!ctx.from||!ctx.chat||!(ctx.chat.type==="group"||ctx.chat.type==="supergroup"))return;
  try{await api(`/v1/groups/${encodeURIComponent(String(ctx.chat.id))}/activity/award`,ctx.from.id,"POST",{activityType,referenceId});}
  catch(error){console.warn("Group activity reward skipped:",error instanceof Error?error.message:error);}
 }
