@@ -1,6 +1,8 @@
 name: Register pre-applied Football Empire staging migrations
 
 on:
+  push:
+    branches: ["feat/telegram-production-readiness"]
   workflow_dispatch:
     inputs:
       confirm_registration:
@@ -21,7 +23,7 @@ concurrency:
 
 jobs:
   register:
-    if: github.ref == 'refs/heads/feat/telegram-production-readiness' && inputs.confirm_registration == 'REGISTER_STAGING_MIGRATIONS'
+    if: github.ref == 'refs/heads/feat/telegram-production-readiness' && ((github.event_name == 'workflow_dispatch' && inputs.confirm_registration == 'REGISTER_STAGING_MIGRATIONS') || (github.event_name == 'push' && contains(github.event.head_commit.message, '[register-staging-migrations]')))
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
