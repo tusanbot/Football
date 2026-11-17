@@ -4,9 +4,9 @@ import { acquireSpecialPlayer, getSpecialPackOffers, SpecialAcquisitionError } f
 
 test("special pack offers expose fixed server-owned prices and rarity tiers", () => {
   assert.deepEqual(getSpecialPackOffers(), [
-    { method: "epic_pack", rarity: "EPIC", priceGold: "10" },
-    { method: "legendary_pack", rarity: "LEGENDARY", priceGold: "25" },
-    { method: "icon_pack", rarity: "ICON", priceGold: "50" },
+    { method: "epic_pack", rarity: "EPIC", priceGold: "250", maxCopiesPerPlayer: 10 },
+    { method: "legendary_pack", rarity: "LEGENDARY", priceGold: "2500", maxCopiesPerPlayer: 3 },
+    { method: "icon_pack", rarity: "ICON", priceGold: "25000", maxCopiesPerPlayer: 1 },
   ]);
 });
 
