@@ -9,7 +9,7 @@ RETURNS TABLE (
   rank integer,
   "playerId" text,
   "playerName" text,
-  position text,
+  "position" text,
   overall integer,
   "clubName" text,
   appearances integer,
