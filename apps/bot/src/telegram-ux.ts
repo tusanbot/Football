@@ -66,21 +66,57 @@ export function isPersistentGroupReply(command: string | undefined, messageText:
 }
 
 export const PRIVATE_MENU_ROWS = [
-  [{ label: "🏟 باشگاه", command: "club" }, { label: "💰 کیف پول", command: "wallet" }],
-  [{ label: "🛍 فروشگاه", command: "store" }, { label: "🎒 انبار آیتم‌ها", command: "inventory" }],
-  [{ label: "👥 بازیکنان", command: "players" }, { label: "📋 ترکیب", command: "lineup" }],
-  [{ label: "📈 توسعه بازیکنان", command: "development" }, { label: "🏗 امکانات باشگاه", command: "operations" }],
-  [{ label: "📊 امور مالی", command: "finance" }, { label: "🔎 استعدادیابی", command: "scout" }],
-  [{ label: "⚔️ حریفان", command: "opponents" }, { label: "🗓 مسابقات", command: "matches" }],
-  [{ label: "🧠 برنامه جایگزین", command: "fallback" }, { label: "🏆 لیگ‌ها", command: "leagues" }],
-  [{ label: "🛒 بازار نقل‌وانتقالات", command: "market" }, { label: "⭐ بازیکنان ویژه", command: "special" }],
-  [{ label: "🏅 جوایز فصل", command: "seasonawards" }, { label: "🏆 رکوردهای بازیکنان", command: "records" }],
-  [{ label: "❔ راهنما", command: "help" }, { label: "⌂ منوی اصلی", command: "menu" }],
+  [{ label: "🏟 مدیریت باشگاه", command: "menu_club" }, { label: "⚽ مسابقات", command: "menu_matches" }],
+  [{ label: "👥 بازیکنان", command: "menu_players" }, { label: "💰 مالی و فروشگاه", command: "menu_economy" }],
+  [{ label: "🏆 لیگ‌ها و رکوردها", command: "menu_competitions" }, { label: "❔ راهنما", command: "help" }],
+  [{ label: "⌂ منوی اصلی", command: "menu" }],
 ] as const;
 
-const privateMenuCommands = new Map(
-  PRIVATE_MENU_ROWS.flat().map(({ label, command }) => [normalizePrivateMenuText(label), command]),
-);
+export const PRIVATE_MENU_SUBMENUS = {
+  menu_club: {
+    title: "🏟 مدیریت باشگاه",
+    rows: [
+      [{ label: "🏟 مشخصات باشگاه", command: "club" }, { label: "📋 ترکیب اصلی", command: "lineup" }],
+      [{ label: "🏗 امکانات باشگاه", command: "operations" }, { label: "🔎 استعدادیابی", command: "scout" }],
+      [{ label: "📈 توسعه بازیکنان", command: "development" }, { label: "✏️ تغییر نام باشگاه", command: "rename" }],
+    ],
+  },
+  menu_players: {
+    title: "👥 مدیریت بازیکنان",
+    rows: [
+      [{ label: "👥 فهرست بازیکنان", command: "players" }, { label: "⭐ بازیکنان ویژه", command: "special" }],
+      [{ label: "🧠 برنامه جایگزین", command: "fallback" }, { label: "🛒 بازار نقل‌وانتقالات", command: "market" }],
+    ],
+  },
+  menu_economy: {
+    title: "💰 امور مالی و فروشگاه",
+    rows: [
+      [{ label: "💰 کیف پول", command: "wallet" }, { label: "📊 گزارش مالی", command: "finance" }],
+      [{ label: "🛍 فروشگاه", command: "store" }, { label: "🎒 انبار آیتم‌ها", command: "inventory" }],
+    ],
+  },
+  menu_matches: {
+    title: "⚽ مسابقات",
+    rows: [
+      [{ label: "🗓 مسابقات من", command: "matches" }, { label: "⚔️ حریفان", command: "opponents" }],
+      [{ label: "🏆 لیگ‌ها", command: "leagues" }, { label: "🧩 قوانین رقابت", command: "competitionrules" }],
+    ],
+  },
+  menu_competitions: {
+    title: "🏆 لیگ‌ها و آمار",
+    rows: [
+      [{ label: "🏆 لیگ‌ها", command: "leagues" }, { label: "🏅 جوایز فصل", command: "seasonawards" }],
+      [{ label: "📊 رکوردهای بازیکنان", command: "records" }, { label: "🏟 باشگاه‌های برتر", command: "clubs" }],
+    ],
+  },
+} as const;
+
+const privateMenuCommands = new Map<string, string>();
+for (const item of PRIVATE_MENU_ROWS.flat()) privateMenuCommands.set(normalizePrivateMenuText(item.label), item.command);
+for (const menu of Object.values(PRIVATE_MENU_SUBMENUS)) {
+  for (const row of menu.rows) for (const item of row) privateMenuCommands.set(normalizePrivateMenuText(item.label), item.command);
+}
+privateMenuCommands.set(normalizePrivateMenuText("↩️ بازگشت به منوی اصلی"), "menu");
 
 function normalizePrivateMenuText(value: string): string {
   return value.trim().replace(/[يى]/g, "ی").replace(/ك/g, "ک").replace(/\u200c/g, " ");
@@ -89,6 +125,7 @@ function normalizePrivateMenuText(value: string): string {
 export function resolvePrivateMenuCommand(messageText: string): string | undefined {
   return privateMenuCommands.get(normalizePrivateMenuText(messageText));
 }
+
 
 
 export function limitTelegramMessage(text: string, maxLength = 3900): string {
