@@ -47,6 +47,7 @@ The dry-run validates the Worker bundle and configuration; it does not deploy th
 - Request bodies are capped at 1 MiB and malformed updates are rejected.
 - A Durable Object claims each Telegram `update_id` before dispatch. Completed updates are deduplicated for seven days; failed handlers release their claim so Telegram can retry.
 - The Worker checks the staging API readiness endpoint and verifies that the Bot token matches the Bot identity configured in the API.
+- The grammY Bot instance is initialized once per Worker isolate and reused for webhook dispatch so its `botInfo` is available to every update handler.
 - Internal Game API requests use the Cloudflare `FOOTBALL_API` Service Binding to reach `football-empire-api-staging` directly; `FOOTBALL_API_URL` remains the canonical origin for request paths and local fallback.
 - The scheduled handler drains the existing database-backed deletion, match-notification, league-notice, and admin-broadcast queues using the API claim/complete/fail protocol; these are not process-local timers. The staging Wrangler config intentionally disables Cron, so the Bot and background jobs remain dormant after deployment until separately activated.
 - When Cron is enabled, the group-message deletion queue is polled on a one-minute schedule, so actual deletion may occur later than the configured 60-second target.
