@@ -166,6 +166,7 @@ function describeRuntimeError(error: unknown): Record<string, unknown> {
   };
 }
 
+function escapeTelegramHtml(value: unknown): string { return String(value ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
 async function deliverDueMatchLifecycle(env: Env): Promise<void> {
   const token = env.TELEGRAM_BOT_TOKEN ?? "";
   if (!token) return;
@@ -179,13 +180,13 @@ async function deliverDueMatchLifecycle(env: Env): Promise<void> {
     const claimToken = crypto.randomUUID();
     const claim = await prisma.matchLifecycleNotification.updateMany({ where: { id: row.id, status: "PENDING", availableAt: { lte: now }, OR: [{ lockedUntil: null }, { lockedUntil: { lt: new Date(now.getTime() - 30_000) } }] }, data: { claimToken, lockedUntil: new Date(now.getTime() + 30_000), attempts: { increment: 1 } } });
     if (claim.count !== 1) continue;
-    const home = String(row.match.homeClub.name).replace(/[&<>\"]/g, "");
-    const away = String(row.match.awayClub.name).replace(/[&<>\"]/g, "");
+    const home = escapeTelegramHtml(row.match.homeClub.name);
+    const away = escapeTelegramHtml(row.match.awayClub.name);
     const score = "\n<b>" + home + "</b> " + row.homeScore + " : " + row.awayScore + " <b>" + away + "</b>";
     const payload = row.payload && typeof row.payload === "object" ? row.payload as Record<string, unknown> : {};
     const message = row.kind === "KICKOFF" ? "⚽ <b>سوت آغاز مسابقه</b>" + score
       : row.kind === "HALF_TIME" ? "⏸ <b>پایان نیمه اول</b> · دقیقه ۴۵" + score
-      : "⚽ <b>گل!</b> · دقیقه " + row.minute + "\n" + String(payload.teamName ?? "تیم") + " · " + String(payload.scorerName ?? "بازیکن") + score;
+      : "⚽ <b>گل!</b> · دقیقه " + row.minute + "\n" + escapeTelegramHtml(payload.teamName ?? "تیم") + " · " + escapeTelegramHtml(payload.scorerName ?? "بازیکن") + score;
     try {
       const response = await fetch("https://api.telegram.org/bot" + token + "/sendMessage", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ chat_id: row.telegramChatId, text: message, parse_mode: "HTML" }) });
       const body = await response.json() as { ok?: boolean };
@@ -202,14 +203,14 @@ async function deliverDueMatchLifecycle(env: Env): Promise<void> {
   });
   for (const row of results) {
     const claimToken = crypto.randomUUID();
-    const claim = await prisma.matchResultNotification.updateMany({ where: { id: row.id, status: "PENDING", claimToken: null }, data: { claimToken, lockedUntil: new Date(now.getTime() + 30_000), attempts: { increment: 1 } } });
+    const claim = await prisma.matchResultNotification.updateMany({ where: { id: row.id, status: "PENDING", availableAt: { lte: now }, OR: [{ lockedUntil: null }, { lockedUntil: { lt: new Date(now.getTime() - 30_000) } }] }, data: { claimToken, lockedUntil: new Date(now.getTime() + 30_000), attempts: { increment: 1 } } });
     if (claim.count !== 1) continue;
     const match = row.match;
     const homeStats = match.performances.filter((line) => line.clubId === match.homeClub.id);
     const awayStats = match.performances.filter((line) => line.clubId === match.awayClub.id);
     const sum = (items: typeof match.performances, key: "shots" | "passes" | "tackles") => items.reduce((total, item) => total + item[key], 0);
-    const scorers = match.performances.filter((line) => line.goals > 0).sort((a, b) => b.goals - a.goals).map((line) => line.player.firstName + " " + line.player.lastName + " · " + line.goals + " گل").join("\n");
-    const message = "🏁 <b>پایان مسابقه</b>\n<b>" + match.homeClub.name + "</b> " + match.homeScore + " : " + match.awayScore + " <b>" + match.awayClub.name + "</b>"
+    const scorers = match.performances.filter((line) => line.goals > 0).sort((a, b) => b.goals - a.goals).map((line) => escapeTelegramHtml(line.player.firstName + " " + line.player.lastName) + " · " + line.goals + " گل").join("\n");
+    const message = "🏁 <b>پایان مسابقه</b>\n<b>" + escapeTelegramHtml(match.homeClub.name) + "</b> " + match.homeScore + " : " + match.awayScore + " <b>" + escapeTelegramHtml(match.awayClub.name) + "</b>"
       + "\n\n📊 <b>آمار مسابقه</b>"
       + "\nشوت‌ها: " + sum(homeStats, "shots") + " - " + sum(awayStats, "shots")
       + "\nپاس‌ها: " + sum(homeStats, "passes") + " - " + sum(awayStats, "passes")
