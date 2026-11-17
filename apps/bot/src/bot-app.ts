@@ -436,7 +436,7 @@ async function pollMatchResultNotifications() {
   try {
     const result = await apiSystem<{ notifications: Array<{
       id: string; channel: "HOME" | "AWAY" | "GROUP"; telegramChatId: string; claimToken: string; attempt: number;
-      match: { id: string; homeClub: string; awayClub: string; homeScore: number | null; awayScore: number | null; completedAt: string | null };
+      match: { id: string; homeClub: string; awayClub: string; homeScore: number | null; awayScore: number | null; completedAt: string | null; statistics: { home: { shots: number; passes: number; tackles: number }; away: { shots: number; passes: number; tackles: number } }; scorers: Array<{ player: string; goals: number }> };
     }> }>("/v1/bot/match-results/claim", { limit: 25 });
     for (const notification of result.notifications) {
       const acknowledge = (delivered: boolean, error?: string) => apiSystem(
@@ -450,12 +450,15 @@ async function pollMatchResultNotifications() {
         continue;
       }
       const match = notification.match;
-      const message = "🏁 <b>نتیجه نهایی مسابقه</b>\n"
+      const message = "🏁 <b>پایان مسابقه</b>\n"
         + "<b>" + escapeHtml(match.homeClub) + "</b> " + (match.homeScore ?? "—")
         + " : " + (match.awayScore ?? "—") + " <b>" + escapeHtml(match.awayClub) + "</b>"
-        + "\nنوع اعلان: " + (notification.channel === "GROUP" ? "گروه" : "گزارش شخصی")
-        + "\nشناسه مسابقه: " + match.id
-        + (match.completedAt ? "\nپایان: " + new Date(match.completedAt).toLocaleString("fa-IR", { timeZone: "Asia/Tehran" }) : "");
+        + "\n\n📊 <b>آمار</b>"
+        + "\nشوت‌ها: " + match.statistics.home.shots + " - " + match.statistics.away.shots
+        + "\nپاس‌ها: " + match.statistics.home.passes + " - " + match.statistics.away.passes
+        + "\nتکل‌ها: " + match.statistics.home.tackles + " - " + match.statistics.away.tackles
+        + (match.scorers.length ? "\n\n⚽ <b>گلزنان</b>\n" + match.scorers.map((item) => escapeHtml(item.player) + " · " + item.goals + " گل").join("\n") : "\n\n⚽ بدون گل")
+        + (match.completedAt ? "\n\nپایان: " + new Date(match.completedAt).toLocaleString("fa-IR", { timeZone: "Asia/Tehran" }) : "");
       try {
         await bot.api.sendMessage(telegramId, message, { parse_mode: "HTML" });
         await acknowledge(true);
