@@ -27,3 +27,6 @@ ON "MatchResultNotification"("telegramChatId", "createdAt");
 ALTER TABLE "MatchResultNotification"
 ADD CONSTRAINT "MatchResultNotification_matchId_fkey"
 FOREIGN KEY ("matchId") REFERENCES "FootballMatch"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+ALTER TABLE "MatchResultNotification" ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON TABLE "MatchResultNotification" FROM PUBLIC, anon, authenticated;
