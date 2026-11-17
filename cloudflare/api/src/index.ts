@@ -25,17 +25,8 @@ function missingConfig(env: Env): string[] {
   else if (env.ENVIRONMENT !== "development") {
     try {
       const parsed = new URL(database);
-      if (!parsed.hostname.endsWith(".pooler.supabase.com")) {
-        missing.push("DATABASE_URL_HOST_MUST_BE_SUPABASE_POOLER");
-      }
-      if (parsed.port !== "6543") {
-        missing.push("DATABASE_URL_PORT_MUST_BE_6543");
-      }
-      if (parsed.searchParams.get("pgbouncer") !== "true") {
-        missing.push("DATABASE_URL_PGBOUNCER_MUST_BE_TRUE");
-      }
-      if (parsed.searchParams.get("sslmode") !== "require") {
-        missing.push("DATABASE_URL_SSLMODE_MUST_BE_REQUIRE");
+      if (!(parsed.hostname.endsWith(".pooler.supabase.com") && parsed.port === "6543")) {
+        missing.push("DATABASE_URL_MUST_USE_SUPABASE_TRANSACTION_POOLER");
       }
     } catch { missing.push("DATABASE_URL_INVALID"); }
   }
