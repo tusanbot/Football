@@ -6,6 +6,7 @@ import { isValidTelegramBotToken, parseAdminTelegramIds, parseCorsOrigins } from
 import { createWorkersApiRouter } from "./workers-router.js";
 import { SupabaseHttpClient } from "./supabase-http.js";
 import { SupabasePublicPlayerRecordRepository } from "./repositories/public-player-records.js";
+import { SupabaseSeasonAwardRepository } from "./repositories/season-awards.js";
 
 interface MatchCoordinatorNamespace { idFromName(name: string): unknown; get(id: unknown): { fetch(input: string, init?: RequestInit): Promise<Response> }; }
 interface MatchCoordinatorState { storage: { setAlarm(scheduledTime: number): Promise<void>; deleteAlarm(): Promise<void>; }; }
@@ -91,13 +92,12 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
   let cleanupScheduled = false;
   try {
     const response = await withPrismaClient(client, () => {
-      const publicPlayerRecords = env.SUPABASE_URL && env.SUPABASE_SERVICE_ROLE_KEY
-        ? new SupabasePublicPlayerRecordRepository(new SupabaseHttpClient({
-          url: env.SUPABASE_URL,
-          serviceRoleKey: env.SUPABASE_SERVICE_ROLE_KEY,
-        }))
+      const supabaseClient = env.SUPABASE_URL && env.SUPABASE_SERVICE_ROLE_KEY
+        ? new SupabaseHttpClient({ url: env.SUPABASE_URL, serviceRoleKey: env.SUPABASE_SERVICE_ROLE_KEY })
         : undefined;
-      return createWorkersApiRouter({ publicPlayerRecords }).fetch(request);
+      const publicPlayerRecords = supabaseClient ? new SupabasePublicPlayerRecordRepository(supabaseClient) : undefined;
+      const seasonAwards = supabaseClient ? new SupabaseSeasonAwardRepository(supabaseClient) : undefined;
+      return createWorkersApiRouter({ publicPlayerRecords, seasonAwards }).fetch(request);
     });
     cleanupScheduled = true;
     ctx.waitUntil(client.$disconnect().catch((error: unknown) => console.error("Prisma request client cleanup failed", error)));
