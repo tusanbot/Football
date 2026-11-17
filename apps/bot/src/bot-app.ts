@@ -2645,6 +2645,9 @@ bot.command("pyramidleagues", async (ctx) => {
     const keyboard = new InlineKeyboard();
     for (const tier of result.tiers) {
       if (!tier.myApplication && !tier.leagues.some((league) => league.isMyLeague)) keyboard.text("درخواست " + tier.name, "league:apply:" + tier.tier).row();
+      for (const league of tier.leagues) {
+        if (league.isMyLeague) keyboard.text("جدول " + tier.name, "pyramidview:table:" + league.id).text("بازی بعدی", "pyramidview:next:" + league.id).row();
+      }
     }
     for (const offer of result.promotionOffers) keyboard.text("پذیرش صعود " + offer.targetTier, "promotion:accept:" + offer.id).text("رد", "promotion:decline:" + offer.id).row();
     await ctx.reply("🏆 هرم لیگ‌های سراسری · فصل " + result.season + "\n\n" + lines.join("\n\n")
@@ -2684,6 +2687,30 @@ bot.command("leaguehistory", async (ctx) => {
   } catch (error) { await ctx.reply("دریافت افتخارات باشگاه ناموفق بود: " + (error instanceof Error ? error.message : "خطای نامشخص")); }
 });
 
+bot.callbackQuery(/^pyramidview:/, async (ctx) => {
+  if (!ctx.from || ctx.chat?.type !== "private") return ctx.answerCallbackQuery({ text: "این بخش فقط در گفت‌وگوی خصوصی در دسترس است." });
+  const [, view, leagueId] = ctx.callbackQuery.data.split(":");
+  if (!leagueId || !["table", "next", "scorers"].includes(view ?? "")) return ctx.answerCallbackQuery({ text: "گزینه معتبر نیست." });
+  try {
+    const data = await api<{ league: { name: string; tierName: string; season: number }; standings: Array<{ position: number; clubName: string; played: number; won: number; drawn: number; lost: number; goalsFor: number; goalsAgainst: number; points: number }>; topScorers: Array<{ playerName: string; clubName: string; goals: number }>; topAssists: Array<{ playerName: string; clubName: string; assists: number }>; nextRound: number | null; nextRoundMatches: Array<{ scheduledAt: string; homeClub: { name: string }; awayClub: { name: string } }> }>("/v1/pyramid-leagues/" + encodeURIComponent(leagueId), ctx.from.id);
+    const keyboard = new InlineKeyboard().text("بازی بعدی", "pyramidview:next:" + leagueId).text("جدول لیگ", "pyramidview:table:" + leagueId).row().text("گلزنان و پاسورها", "pyramidview:scorers:" + leagueId);
+    if (view === "next") {
+      const body = data.nextRoundMatches.map((match) => match.homeClub.name + " مقابل " + match.awayClub.name + " · " + new Date(match.scheduledAt).toLocaleString("fa-IR", { timeZone: "Asia/Tehran" })).join("\n");
+      await ctx.reply("📅 <b>بازی‌های هفته " + (data.nextRound ?? "بعد") + "</b> · " + escapeHtml(data.league.name) + "\n\n" + escapeHtml(body || "مسابقه دیگری باقی نمانده است."), { parse_mode: "HTML", reply_markup: keyboard });
+    } else if (view === "table") {
+      const body = data.standings.map((row) => row.position + ". " + row.clubName + " · " + row.points + " امتیاز · " + row.played + " بازی · " + row.won + "-" + row.drawn + "-" + row.lost + " · گل " + row.goalsFor + ":" + row.goalsAgainst).join("\n");
+      await ctx.reply("🏆 <b>جدول لیگ</b> · " + escapeHtml(data.league.name) + "\n\n" + escapeHtml(body || "جدول هنوز تشکیل نشده است."), { parse_mode: "HTML", reply_markup: keyboard });
+    } else {
+      const scorers = data.topScorers.slice(0, 10).map((row, index) => (index + 1) + ". " + row.playerName + " · " + row.clubName + " · " + row.goals + " گل").join("\n");
+      const assists = data.topAssists.slice(0, 10).map((row, index) => (index + 1) + ". " + row.playerName + " · " + row.clubName + " · " + row.assists + " پاس گل").join("\n");
+      await ctx.reply("⚽ <b>آمار بازیکنان</b> · " + escapeHtml(data.league.name) + "\n\n<b>گلزنان</b>\n" + escapeHtml(scorers || "بدون گل") + "\n\n<b>پاسورها</b>\n" + escapeHtml(assists || "بدون پاس گل"), { parse_mode: "HTML", reply_markup: keyboard });
+    }
+    await ctx.answerCallbackQuery();
+  } catch (error) {
+    await ctx.answerCallbackQuery({ text: "دریافت اطلاعات لیگ ناموفق بود." });
+    await ctx.reply("دریافت اطلاعات لیگ ناموفق بود: " + (error instanceof Error ? error.message : "خطای نامشخص"));
+  }
+});
 bot.command("pyramidtable", async (ctx) => {
   if (!ctx.from || ctx.chat.type !== "private") return;
   const id = String(ctx.match ?? "").trim().split(/\s+/)[0];
