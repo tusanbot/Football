@@ -223,7 +223,7 @@ async function scheduleGroupReplyDeletion(chatId: number, messageId: number) {
 }
 
 
-type LeagueNoticeDelivery = { id: string; telegramId: string; title: string; body: string; claimToken: string };
+type LeagueNoticeDelivery = { id: string; telegramId: string; title: string; body: string; kind: string; referenceId: string | null; claimToken: string };
 let leagueNoticeWorkerBusy = false;
 async function pollAdminGroupBroadcastQueue() {
   if (!apiUrl || !botApiSecret) return;
@@ -259,7 +259,12 @@ async function pollLeagueNoticeQueue() {
       const telegramId = Number(notice.telegramId);
       try {
         if (!Number.isSafeInteger(telegramId)) throw new Error("Telegram user id is outside JavaScript safe integer range");
-        await bot.api.sendMessage(telegramId, notice.title + "\n\n" + notice.body);
+        const keyboard = notice.kind === "ROUND_RESULTS" && notice.referenceId
+          ? new InlineKeyboard().text("بازی‌های هفته بعد", "leagueview:next:" + notice.referenceId)
+            .text("جدول لیگ", "leagueview:table:" + notice.referenceId)
+            .row().text("جدول گلزنان", "leagueview:scorers:" + notice.referenceId)
+          : undefined;
+        await bot.api.sendMessage(telegramId, notice.title + "\n\n" + notice.body, keyboard ? { reply_markup: keyboard } : {});
         await apiSystem("/v1/bot/league-notices/" + encodeURIComponent(notice.id) + "/complete", { claimToken: notice.claimToken });
       } catch (error) {
         await apiSystem("/v1/bot/league-notices/" + encodeURIComponent(notice.id) + "/fail", {
