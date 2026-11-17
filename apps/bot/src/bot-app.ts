@@ -44,6 +44,7 @@ if (webAppUrl) {
   if (webAppEndpoint.username || webAppEndpoint.password || webAppEndpoint.search || webAppEndpoint.hash || (config.environment === "production" && webAppEndpoint.protocol !== "https:")) throw new Error("TELEGRAM_WEB_APP_URL must not contain credentials, query, or fragment and must use HTTPS in production.");
 }
 const bot = new Bot(token);
+const pendingClubNameEdits = new Map<number, { promptMessageId: number; expiresAt: number }>();
 
 bot.use(async (ctx, next) => {
   const originalReply = ctx.reply.bind(ctx);
@@ -1263,6 +1264,55 @@ bot.command("group-give",async ctx=>{if(!ctx.from||!(ctx.chat.type==="group"||ct
 bot.command("group-challenge-cancel",async ctx=>{if(!ctx.from||!(ctx.chat.type==="group"||ctx.chat.type==="supergroup"))return;const id=String(ctx.match??"").trim();if(!id)return ctx.reply("روش استفاده: /group-challenge-cancel ID");try{const d=await api<{replayed:boolean;points:string}>(`/v1/groups/${encodeURIComponent(String(ctx.chat.id))}/challenges/${encodeURIComponent(id)}/cancel`,ctx.from.id,"POST",{});await ctx.reply("چالش لغو شد. امتیاز بازگشتی به خزانه: "+cash(d.points));}catch(e){await ctx.reply("لغو چالش ناموفق بود: "+(e instanceof Error?e.message:"خطای نامشخص"));}});
 bot.command("group-leagues",async ctx=>{if(!ctx.from||!(ctx.chat.type==="group"||ctx.chat.type==="supergroup"))return;try{const d=await api<{leagues:Array<{id:string;name:string;status:string;teams:number;maxTeams:number}>}>(`/v1/groups/${encodeURIComponent(String(ctx.chat.id))}/leagues`,ctx.from.id);await ctx.reply(d.leagues.length?d.leagues.map(c=>c.name+" ["+c.status+"] "+c.teams+"/"+c.maxTeams+" · "+c.id).join("\n") :"هنوز لیگ گروهی ثبت نشده است.");}catch(e){await ctx.reply("دریافت لیگ‌های گروهی ناموفق بود: "+(e instanceof Error?e.message:"خطای نامشخص"));}});
 
+bot.command("clubedit", async (ctx) => {
+  if (!ctx.from || ctx.chat.type !== "private") return ctx.reply("ویرایش باشگاه فقط در گفت‌وگوی خصوصی انجام می‌شود.");
+  try {
+    const result = await api<{club:{name:string;activeCompetition:{id:string;name:string}|null}|null}>("/v1/me", ctx.from.id);
+    if (!result.club) return ctx.reply("ابتدا باشگاه خود را ایجاد کنید.");
+    const locked = Boolean(result.club.activeCompetition);
+    const keyboard = new InlineKeyboard();
+    if (!locked) keyboard.text("✏️ تغییر نام باشگاه", "clubedit:name");
+    keyboard.text("🖼 تغییر لوگو", "clubedit:logo");
+    await replyRich(
+      ctx,
+      "⚙️ <b>ویرایش اطلاعات باشگاه</b>\nنام فعلی: <b>" + escapeHtml(result.club.name) + "</b>" +
+      (locked ? "\n\n🔒 ویرایش نام غیرفعال است؛ باشگاه در رقابت فعال «" + escapeHtml(result.club.activeCompetition!.name) + "» حضور دارد." :
+        "\n\nمی‌توانی نام باشگاه را تغییر بدهی. هنگام حضور در لیگ فعال، ویرایش اطلاعات هویتی قفل می‌شود.") +
+      "\nلوگو از طریق ارسال تصویر در همین گفت‌وگو قابل تغییر است.",
+      "ویرایش باشگاه\nنام فعلی: " + result.club.name + (locked ? "\nویرایش قفل است؛ باشگاه در رقابت فعال " + result.club.activeCompetition!.name + " حضور دارد." : "\nنام باشگاه قابل تغییر است."),
+      keyboard,
+    );
+  } catch (error) { await ctx.reply("دریافت وضعیت ویرایش باشگاه ناموفق بود: " + (error instanceof Error ? error.message : "خطای نامشخص")); }
+});
+
+bot.callbackQuery(/^clubedit:/, async (ctx) => {
+  if (!ctx.from || ctx.chat?.type !== "private") return ctx.answerCallbackQuery({ text: "ویرایش باشگاه فقط در گفت‌وگوی خصوصی انجام می‌شود." });
+  const action = ctx.callbackQuery.data.slice("clubedit:".length);
+  try {
+    const result = await api<{club:{name:string;activeCompetition:{id:string;name:string}|null}|null}>("/v1/me", ctx.from.id);
+    if (!result.club) return ctx.answerCallbackQuery({ text: "باشگاهی برای ویرایش پیدا نشد." });
+    if (result.club.activeCompetition) {
+      await ctx.answerCallbackQuery({ text: "ویرایش قفل است؛ باشگاه در لیگ فعال حضور دارد.", show_alert: true });
+      return;
+    }
+    if (action === "logo") {
+      await ctx.answerCallbackQuery();
+      await ctx.reply("🖼 برای تغییر نشان باشگاه، تصویر JPG، PNG یا WEBP را همین‌جا ارسال کن. محدودیت حجم ۵۱۲ کیلوبایت است.");
+      return;
+    }
+    if (action !== "name") return ctx.answerCallbackQuery({ text: "گزینه ویرایش معتبر نیست." });
+    await ctx.answerCallbackQuery();
+    const prompt = await ctx.reply(
+      "✏️ نام جدید باشگاه را ارسال کن (۲ تا ۳۲ نویسه). برای لغو، /menu را بزن.",
+      { reply_markup: { force_reply: true, selective: true, input_field_placeholder: "نام جدید باشگاه" } },
+    );
+    pendingClubNameEdits.set(ctx.from.id, { promptMessageId: prompt.message_id, expiresAt: Date.now() + 10 * 60_000 });
+  } catch (error) {
+    await ctx.answerCallbackQuery({ text: "دریافت وضعیت ویرایش ناموفق بود." }).catch(() => undefined);
+    await ctx.reply("ویرایش باشگاه ناموفق بود: " + (error instanceof Error ? error.message : "خطای نامشخص"));
+  }
+});
+
 bot.command("club", async (ctx) => {
   if (!ctx.from) return;
   if (ctx.chat.type !== "private") return ctx.reply("برای مشاهده باشگاه، دستور /club را در گفت‌وگوی خصوصی اجرا کنید.");
@@ -2356,6 +2406,25 @@ bot.command("clubprofile", async (ctx) => {
     const logoLink = profile.club.logoUrl && apiUrl ? "\n\nلوگوی باشگاه: " + new URL(profile.club.logoUrl, apiUrl).toString() : "";
     await ctx.reply((caption + logoLink).slice(0, 4096) || "پروفایل باشگاه خالی است.");
   } catch (error) { await ctx.reply("دریافت پروفایل باشگاه ناموفق بود: " + (error instanceof Error ? error.message : "خطای نامشخص")); }
+});
+
+bot.on("message:text", async (ctx, next) => {
+  if (ctx.chat.type !== "private" || !ctx.from || !ctx.message.reply_to_message) return next();
+  const pending = pendingClubNameEdits.get(ctx.from.id);
+  if (!pending || pending.promptMessageId !== ctx.message.reply_to_message.message_id) return next();
+  pendingClubNameEdits.delete(ctx.from.id);
+  if (pending.expiresAt < Date.now()) return ctx.reply("مهلت ویرایش نام به پایان رسید. دوباره از منوی ویرایش باشگاه اقدام کن.");
+  const name = ctx.message.text.trim();
+  if (name.length < 2 || name.length > 32) return ctx.reply("نام باشگاه باید بین ۲ تا ۳۲ نویسه باشد. دوباره از گزینه ویرایش نام استفاده کن.");
+  try {
+    const result = await api<{club:{name:string}}>("/v1/club", ctx.from.id, "PATCH", { name });
+    await replyRich(ctx, "✅ نام باشگاه به <b>" + escapeHtml(result.club.name) + "</b> تغییر کرد.", "نام باشگاه با موفقیت به «" + result.club.name + "» تغییر کرد.");
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "خطای نامشخص";
+    await ctx.reply(message.includes("CLUB_EDIT_LOCKED_ACTIVE_LEAGUE")
+      ? "🔒 تغییر نام مجاز نیست؛ باشگاه در یک لیگ فعال حضور دارد."
+      : "تغییر نام باشگاه ناموفق بود: " + message);
+  }
 });
 
 bot.on(["chat_member","my_chat_member"],async ctx=>{
