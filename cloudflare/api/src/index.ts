@@ -1,5 +1,6 @@
 import { createPrismaClient, prisma, withPrismaClient } from "../../../apps/api/src/db.js";
 import { processDueMatchRuntimes } from "../../../apps/api/src/game/match-service.js";
+import { processDueEventTournamentFinalizations } from "../../../apps/api/src/event-tournament-service.js";
 import { processDuePromotionOffers } from "../../../apps/api/src/game/league-pyramid-service.js";
 import { isValidTelegramBotToken, parseAdminTelegramIds, parseCorsOrigins } from "../../../apps/api/src/runtime-config.js";
 import { createWorkersApiRouter } from "./workers-router.js";
@@ -101,8 +102,9 @@ export class MatchCoordinator {
       await withPrismaClient(client, async () => {
         const now = new Date();
         await processDueMatchRuntimes("cloudflare-match-coordinator", now, 10);
+        const tournamentFinalizations = await processDueEventTournamentFinalizations(now, 10);
         await deliverDueMatchLifecycle(this.env);
-        const [runtime, futureFixture, overdueFixture, lifecycleNotification, resultNotification] = await Promise.all([
+        const [runtime, futureFixture, overdueFixture, lifecycleNotification, resultNotification, pendingTournamentFinalization] = await Promise.all([
           prisma.matchRuntime.findFirst({
             where: { status: { in: ["QUEUED", "RUNNING", "AWAITING_CHECKPOINT"] } },
             orderBy: { nextActionAt: "asc" },
@@ -128,6 +130,10 @@ export class MatchCoordinator {
             orderBy: { availableAt: "asc" },
             select: { availableAt: true, lockedUntil: true },
           }),
+          prisma.eventTournament.findFirst({
+            where: { status: "ACTIVE", competition: { is: { status: "COMPLETED" } } },
+            select: { id: true },
+          }),
         ]);
         const candidates: number[] = [];
         if (runtime) {
@@ -138,6 +144,8 @@ export class MatchCoordinator {
         if (overdueFixture) candidates.push(now.getTime() + 5_000);
         if (lifecycleNotification) candidates.push(Math.max(now.getTime() + 1_000, lifecycleNotification.availableAt.getTime(), lifecycleNotification.lockedUntil?.getTime() ?? 0));
         if (resultNotification) candidates.push(Math.max(now.getTime() + 1_000, resultNotification.availableAt.getTime(), resultNotification.lockedUntil?.getTime() ?? 0));
+        if (pendingTournamentFinalization) candidates.push(now.getTime() + 10_000);
+        if (tournamentFinalizations.failed) console.error("Tournament finalization retries remain pending", tournamentFinalizations);
         nextAlarm = candidates.length ? Math.min(...candidates) : null;
       });
     } catch (error) {
@@ -243,11 +251,13 @@ async function scheduledJobs(env: Env): Promise<void> {
       const matches = env.MATCH_COORDINATOR
         ? null
         : await processDueMatchRuntimes("cloudflare-api-scheduled-fallback", now, 10);
+      const tournamentFinalizations = await processDueEventTournamentFinalizations(now, 10);
       await deliverDueMatchLifecycle(env);
       const promotions = await processDuePromotionOffers(now, 50);
       if ((matches && (matches.advanced || matches.settled || matches.failed))
+        || tournamentFinalizations.finalized || tournamentFinalizations.failed
         || promotions.accepted || promotions.completedLeagues) {
-        console.info("Cloudflare scheduled game tick", { matches, promotions });
+        console.info("Cloudflare scheduled game tick", { matches, tournamentFinalizations, promotions });
       }
     });
   } finally { await client.$disconnect(); }
