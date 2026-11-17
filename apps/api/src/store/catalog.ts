@@ -33,6 +33,16 @@ export const STORE_CATALOG: StoreItem[] = [
     maxPerPurchase: 10,
   },
   {
+    key: "honor_elite_recovery",
+    name: "اکسیر افتخار",
+    description: "با ارز افتخار خریداری می‌شود؛ آمادگی جسمانی را ۱۰۰ و روحیه را ۲۰ واحد افزایش می‌دهد.",
+    category: "RECOVERY",
+    asset: "HONOR",
+    price: "5",
+    effect: { fitness: 100, morale: 20 },
+    maxPerPurchase: 2,
+  },
+  {
     key: "premium_recovery",
     name: "ریکاوری ویژه",
     description: "آمادگی جسمانی بازیکن را ۷۵ واحد افزایش می‌دهد.",
