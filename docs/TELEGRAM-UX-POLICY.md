@@ -24,3 +24,10 @@
 - Use `/group-cleanup-test` in a test group to send a transient message. It should disappear after approximately 60 seconds. Use `/group-register` or a league/ranking command to verify that persistent information remains.
 - Restart test: send `/group-cleanup-test`, restart the Bot before the minute expires, and verify the message is still deleted after the Bot returns.
 - Do not run production migrations or deploy the Bot until the migration has been reviewed and applied to the intended test environment.
+
+## Rich private-chat presentation and navigation
+- Prefer Telegram HTML-formatted rich messages for player rosters, club profiles, lineups, competition tables, and other structured game data. Escape all dynamic values before embedding them in HTML.
+- Keep a plain-text equivalent for rich-message parse failures; split long player rosters into Telegram-safe chunks before sending.
+- Keep the primary menu short and category-based. Inline buttons navigate between the root menu and categories; every category has a visible return-to-main-menu action.
+- Keep a persistent ReplyKeyboard as a fallback for clients or situations where inline navigation is unavailable. Its buttons must remain mapped to registered, parameter-free commands.
+- Avoid putting commands that require arguments on the ReplyKeyboard. Keep those in /help with explicit usage.
