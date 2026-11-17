@@ -1982,6 +1982,92 @@ bot.command("development", async (ctx) => {
   } catch (error) { await ctx.reply(`دریافت وضعیت توسعه بازیکنان ناموفق بود: ${error instanceof Error ? error.message : "خطای نامشخص"}`); }
 });
 
+bot.callbackQuery(/^player:/, async (ctx) => {
+  if (!ctx.from || ctx.chat?.type !== "private") return ctx.answerCallbackQuery({ text: "مدیریت بازیکن فقط در گفت‌وگوی خصوصی مجاز است." });
+  const [, action, value] = ctx.callbackQuery.data.split(":");
+  try {
+    if (action === "train") {
+      const playerId = value;
+      if (!playerId) return ctx.answerCallbackQuery({ text: "بازیکن معتبر نیست." });
+      pendingTrainingSelections.set(ctx.from.id, { playerId });
+      const keyboard = new InlineKeyboard()
+        .text("متعادل", "player:focus:BALANCED").text("دروازه‌بانی", "player:focus:GOALKEEPING").row()
+        .text("دفاع", "player:focus:DEFENDING").text("پاس", "player:focus:PASSING").row()
+        .text("بازی‌سازی", "player:focus:PLAYMAKING").text("دریبل", "player:focus:DRIBBLING").row()
+        .text("شوت", "player:focus:SHOOTING").text("بدنسازی", "player:focus:PHYSICAL");
+      await ctx.answerCallbackQuery();
+      await ctx.editMessageText("تمرکز تمرین را انتخاب کن:", { reply_markup: keyboard });
+      return;
+    }
+    if (action === "focus") {
+      const state = pendingTrainingSelections.get(ctx.from.id);
+      const focuses = ["BALANCED","GOALKEEPING","DEFENDING","PASSING","PLAYMAKING","DRIBBLING","SHOOTING","PHYSICAL"];
+      if (!state || !focuses.includes(value ?? "")) return ctx.answerCallbackQuery({ text: "فرایند تمرین منقضی شده است." });
+      state.focus = value;
+      const keyboard = new InlineKeyboard().text("سبک", "player:intensity:LIGHT").text("معمولی", "player:intensity:NORMAL").text("سنگین", "player:intensity:INTENSE");
+      await ctx.answerCallbackQuery();
+      await ctx.editMessageText("شدت تمرین را انتخاب کن:", { reply_markup: keyboard });
+      return;
+    }
+    if (action === "intensity") {
+      const state = pendingTrainingSelections.get(ctx.from.id);
+      if (!state?.focus || !["LIGHT","NORMAL","INTENSE"].includes(value ?? "")) return ctx.answerCallbackQuery({ text: "فرایند تمرین معتبر نیست." });
+      const result = await api<{ training: { overallBefore: number; overallAfter: number; fitnessBefore: number; fitnessAfter: number; injuryOccurred: boolean; injuryUntil: string | null; cashCost: string; replayed: boolean } }>(
+        "/v1/club/players/" + encodeURIComponent(state.playerId) + "/train", ctx.from.id, "POST",
+        { focus: state.focus, intensity: value, idempotencyKey: "tg-train-" + ctx.from.id + "-" + ctx.callbackQuery.id },
+      );
+      pendingTrainingSelections.delete(ctx.from.id);
+      const t = result.training;
+      await ctx.answerCallbackQuery({ text: "تمرین انجام شد." });
+      await ctx.editMessageText("🏋️ تمرین پایان یافت. قدرت: " + t.overallBefore + " ← " + t.overallAfter + " · آمادگی: " + t.fitnessBefore + " ← " + t.fitnessAfter + " · هزینه: " + cash(t.cashCost) + " کش." + (t.injuryOccurred ? "\nمصدومیت تا " + t.injuryUntil : ""));
+      return;
+    }
+    if (action === "renew") {
+      const playerId = value;
+      if (!playerId) return ctx.answerCallbackQuery({ text: "بازیکن معتبر نیست." });
+      const data = await api<{ club: { players: Array<{ id: string; minimumWeeklyWage: string; maximumWeeklyWage: string }> } }>("/v1/club/development", ctx.from.id);
+      const player = data.club.players.find((item) => item.id === playerId);
+      if (!player) return ctx.answerCallbackQuery({ text: "بازیکن پیدا نشد." });
+      pendingContractSelections.set(ctx.from.id, { playerId, minWage: player.minimumWeeklyWage, maxWage: player.maximumWeeklyWage });
+      const keyboard = new InlineKeyboard().text("۹۰ روز", "player:contract-days:90").text("۱۸۰ روز", "player:contract-days:180").text("۳۶۵ روز", "player:contract-days:365");
+      await ctx.answerCallbackQuery();
+      await ctx.editMessageText("مدت تمدید قرارداد را انتخاب کن:", { reply_markup: keyboard });
+      return;
+    }
+    if (action === "contract-days") {
+      const state = pendingContractSelections.get(ctx.from.id);
+      const days = Number(value);
+      if (!state || ![90,180,365].includes(days)) return ctx.answerCallbackQuery({ text: "فرایند تمدید منقضی شده است." });
+      state.days = days;
+      const min = BigInt(state.minWage), max = BigInt(state.maxWage);
+      const wages = [...new Set([min.toString(), ((min + max) / 2n).toString(), max.toString()])];
+      const keyboard = new InlineKeyboard();
+      for (const wage of wages) keyboard.text(cash(wage) + " کش/هفته", "player:contract-wage:" + wage).row();
+      await ctx.answerCallbackQuery();
+      await ctx.editMessageText("دستمزد هفتگی جدید را انتخاب کن:", { reply_markup: keyboard });
+      return;
+    }
+    if (action === "contract-wage") {
+      const state = pendingContractSelections.get(ctx.from.id);
+      if (!state?.days || !value || !/^[1-9][0-9]{0,8}$/.test(value)) return ctx.answerCallbackQuery({ text: "فرایند تمدید معتبر نیست." });
+      const result = await api<{ contract: { contractDays: number; weeklyWage: string; replayed: boolean } }>(
+        "/v1/club/players/" + encodeURIComponent(state.playerId) + "/contract/renew", ctx.from.id, "POST",
+        { extensionDays: state.days, weeklyWage: value, idempotencyKey: "tg-renew-" + ctx.from.id + "-" + ctx.callbackQuery.id },
+      );
+      pendingContractSelections.delete(ctx.from.id);
+      await ctx.answerCallbackQuery({ text: "قرارداد تمدید شد." });
+      await ctx.editMessageText("✅ قرارداد تمدید شد: " + result.contract.contractDays + " روز باقی‌مانده · دستمزد هفتگی " + cash(result.contract.weeklyWage) + " کش.");
+      return;
+    }
+    await ctx.answerCallbackQuery({ text: "گزینه معتبر نیست." });
+  } catch (error) {
+    pendingTrainingSelections.delete(ctx.from.id);
+    pendingContractSelections.delete(ctx.from.id);
+    await ctx.answerCallbackQuery({ text: "عملیات ناموفق بود.", show_alert: true });
+    await ctx.reply("عملیات بازیکن ناموفق بود: " + (error instanceof Error ? error.message : "خطای نامشخص"));
+  }
+});
+
 bot.command("train", async (ctx) => {
   if (!ctx.from) return;
   if (ctx.chat.type !== "private") return ctx.reply("دستور /train را در گفت‌وگوی خصوصی اجرا کنید.");
