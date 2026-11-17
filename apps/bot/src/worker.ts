@@ -137,7 +137,7 @@ export async function verifyTelegramInitData(initData: string, botToken: string)
     .filter(([key]) => key !== "hash")
     .sort(([left], [right]) => left < right ? -1 : left > right ? 1 : 0)
     .map(([key, value]) => key + "=" + value)
-    .join("\\n");
+    .join("\n");
   const secretKey = await hmacSha256(new TextEncoder().encode("WebAppData"), botToken);
   const signature = await hmacSha256(secretKey, dataCheckString);
   const calculatedHash = Array.from(signature, byte => byte.toString(16).padStart(2, "0")).join("");
