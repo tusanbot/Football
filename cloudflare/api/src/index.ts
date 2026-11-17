@@ -1,3 +1,4 @@
+import { Prisma } from "@prisma/client";
 import { createPrismaClient, prisma, withPrismaClient } from "../../../apps/api/src/db.js";
 import { processDueMatchRuntimes } from "../../../apps/api/src/game/match-service.js";
 import { processDueEventTournamentFinalizations } from "../../../apps/api/src/event-tournament-service.js";
@@ -95,58 +96,83 @@ export class MatchCoordinator {
       await this.state.storage.deleteAlarm();
       return;
     }
-
     const client = createPrismaClient(dbUrl(this.env) ?? undefined, 1);
     let nextAlarm: number | null = null;
     try {
       await withPrismaClient(client, async () => {
         const now = new Date();
-        await processDueMatchRuntimes("cloudflare-match-coordinator", now, 10);
-        const tournamentFinalizations = await processDueEventTournamentFinalizations(now, 1);
-        await deliverDueMatchLifecycle(this.env);
-        const [runtime, futureFixture, overdueFixture, lifecycleNotification, resultNotification, pendingTournamentFinalization] = await Promise.all([
-          prisma.matchRuntime.findFirst({
-            where: { status: { in: ["QUEUED", "RUNNING", "AWAITING_CHECKPOINT"] } },
-            orderBy: { nextActionAt: "asc" },
-            select: { nextActionAt: true, leaseExpiresAt: true },
-          }),
-          prisma.footballMatch.findFirst({
-            where: { status: "SCHEDULED", scheduledAt: { gt: now }, runtime: { is: null } },
-            orderBy: { scheduledAt: "asc" },
-            select: { scheduledAt: true },
-          }),
-          prisma.footballMatch.findFirst({
-            where: { status: "SCHEDULED", scheduledAt: { lte: now }, runtime: { is: null } },
-            orderBy: { scheduledAt: "asc" },
-            select: { id: true },
-          }),
-          prisma.matchLifecycleNotification.findFirst({
-            where: { status: "PENDING" },
-            orderBy: { availableAt: "asc" },
-            select: { availableAt: true, lockedUntil: true },
-          }),
-          prisma.matchResultNotification.findFirst({
-            where: { status: "PENDING" },
-            orderBy: { availableAt: "asc" },
-            select: { availableAt: true, lockedUntil: true },
-          }),
-          prisma.eventTournament.findFirst({
-            where: { status: "ACTIVE", competition: { is: { status: "COMPLETED" } } },
-            select: { id: true },
-          }),
-        ]);
-        const candidates: number[] = [];
-        if (runtime) {
-          const nextActionAt = runtime.nextActionAt?.getTime() ?? Date.now() + 10_000;
-          candidates.push(Math.max(nextActionAt, runtime.leaseExpiresAt?.getTime() ?? 0));
-        }
-        if (futureFixture) candidates.push(futureFixture.scheduledAt.getTime());
-        if (overdueFixture) candidates.push(now.getTime() + 5_000);
-        if (lifecycleNotification) candidates.push(Math.max(now.getTime() + 1_000, lifecycleNotification.availableAt.getTime(), lifecycleNotification.lockedUntil?.getTime() ?? 0));
-        if (resultNotification) candidates.push(Math.max(now.getTime() + 1_000, resultNotification.availableAt.getTime(), resultNotification.lockedUntil?.getTime() ?? 0));
-        if (pendingTournamentFinalization) candidates.push(now.getTime() + 10_000);
+        // One indexed scheduler statement replaces six independent findFirst queries.
+        // Its flags also let us skip queue scans and workers that have no due work.
+        const scheduleRows = await prisma.$queryRaw<Array<{
+          nextAlarm: Date | null; hasDueRuntime: boolean; hasDueFixture: boolean;
+          hasDueNotifications: boolean; hasPendingTournamentFinalization: boolean;
+        }>>(Prisma.sql`
+          WITH clock AS (SELECT NOW() AS now),
+          candidates AS (
+            SELECT GREATEST(COALESCE(runtime."nextActionAt", clock.now + INTERVAL '10 seconds'),
+                COALESCE(runtime."leaseExpiresAt", '-infinity'::timestamptz)) AS candidate_at,
+              (runtime."nextActionAt" <= clock.now
+                AND (runtime."leaseExpiresAt" IS NULL OR runtime."leaseExpiresAt" <= clock.now)) AS due_runtime,
+              FALSE AS due_fixture, FALSE AS due_notifications, FALSE AS pending_tournament
+            FROM "MatchRuntime" runtime CROSS JOIN clock
+            WHERE runtime."status"::text IN ('QUEUED', 'RUNNING', 'AWAITING_CHECKPOINT')
+            UNION ALL
+            SELECT fixture."scheduledAt", FALSE, FALSE, FALSE, FALSE
+            FROM "FootballMatch" fixture CROSS JOIN clock
+            WHERE fixture."status"::text = 'SCHEDULED' AND fixture."scheduledAt" > clock.now
+              AND NOT EXISTS (SELECT 1 FROM "MatchRuntime" runtime WHERE runtime."matchId" = fixture."id")
+            UNION ALL
+            SELECT clock.now + INTERVAL '5 seconds', FALSE, TRUE, FALSE, FALSE
+            FROM "FootballMatch" fixture CROSS JOIN clock
+            WHERE fixture."status"::text = 'SCHEDULED' AND fixture."scheduledAt" <= clock.now
+              AND NOT EXISTS (SELECT 1 FROM "MatchRuntime" runtime WHERE runtime."matchId" = fixture."id")
+            UNION ALL
+            SELECT GREATEST(clock.now + INTERVAL '1 second', notice."availableAt",
+                COALESCE(notice."lockedUntil", '-infinity'::timestamptz)),
+              FALSE, FALSE,
+              (notice."availableAt" <= clock.now
+                AND (notice."lockedUntil" IS NULL OR notice."lockedUntil" < clock.now - INTERVAL '30 seconds')),
+              FALSE
+            FROM "MatchLifecycleNotification" notice CROSS JOIN clock
+            WHERE notice."status" = 'PENDING'
+            UNION ALL
+            SELECT GREATEST(clock.now + INTERVAL '1 second', notice."availableAt",
+                COALESCE(notice."lockedUntil", '-infinity'::timestamptz)),
+              FALSE, FALSE,
+              (notice."availableAt" <= clock.now
+                AND (notice."lockedUntil" IS NULL OR notice."lockedUntil" < clock.now - INTERVAL '30 seconds')),
+              FALSE
+            FROM "MatchResultNotification" notice
+            JOIN "FootballMatch" fixture ON fixture."id" = notice."matchId"
+            CROSS JOIN clock
+            WHERE notice."status" = 'PENDING' AND fixture."status"::text = 'COMPLETED'
+            UNION ALL
+            SELECT clock.now + INTERVAL '10 seconds', FALSE, FALSE, FALSE, TRUE
+            FROM "EventTournament" tournament
+            JOIN "Competition" competition ON competition."id" = tournament."competitionId"
+            CROSS JOIN clock
+            WHERE tournament."status"::text = 'ACTIVE' AND competition."status"::text = 'COMPLETED'
+          )
+          SELECT MIN(candidate_at) AS "nextAlarm",
+            COALESCE(BOOL_OR(due_runtime), FALSE) AS "hasDueRuntime",
+            COALESCE(BOOL_OR(due_fixture), FALSE) AS "hasDueFixture",
+            COALESCE(BOOL_OR(due_notifications), FALSE) AS "hasDueNotifications",
+            COALESCE(BOOL_OR(pending_tournament), FALSE) AS "hasPendingTournamentFinalization"
+          FROM candidates
+        `);
+        const schedule = scheduleRows[0];
+        if (!schedule) throw new Error("MATCH_COORDINATOR_SCHEDULE_UNAVAILABLE");
+        const matchWork = await processDueMatchRuntimes("cloudflare-match-coordinator", now, 10, {
+          enqueue: schedule.hasDueFixture,
+          claim: schedule.hasDueRuntime || schedule.hasDueFixture,
+        });
+        const tournamentFinalizations = schedule.hasPendingTournamentFinalization
+          ? await processDueEventTournamentFinalizations(now, 1)
+          : { candidates: 0, finalized: 0, failed: 0 };
+        if (schedule.hasDueNotifications) await deliverDueMatchLifecycle(this.env);
+        if (matchWork.failed) console.warn("Match runtime work failed", matchWork);
         if (tournamentFinalizations.failed) console.error("Tournament finalization retries remain pending", tournamentFinalizations);
-        nextAlarm = candidates.length ? Math.min(...candidates) : null;
+        nextAlarm = schedule.nextAlarm?.getTime() ?? null;
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -155,13 +181,10 @@ export class MatchCoordinator {
       if (quotaLimited) {
         const now = new Date();
         nextAlarm = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1, 0, 0, 5);
-      } else {
-        nextAlarm = Date.now() + 60_000;
-      }
+      } else nextAlarm = Date.now() + 60_000;
     } finally {
       await client.$disconnect();
     }
-
     if (nextAlarm === null) await this.state.storage.deleteAlarm();
     else await this.state.storage.setAlarm(Math.max(Date.now() + 1_000, nextAlarm));
   }
@@ -192,15 +215,21 @@ async function deliverDueMatchLifecycle(env: Env): Promise<void> {
   const token = env.TELEGRAM_BOT_TOKEN ?? "";
   if (!token) return;
   const now = new Date();
-  const rows = await prisma.matchLifecycleNotification.findMany({
+  const claimToken = crypto.randomUUID();
+  const candidates = await prisma.matchLifecycleNotification.findMany({
     where: { status: "PENDING", availableAt: { lte: now }, OR: [{ lockedUntil: null }, { lockedUntil: { lt: new Date(now.getTime() - 30_000) } }] },
-    include: { match: { select: { homeClub: { select: { name: true } }, awayClub: { select: { name: true } } } } },
-    orderBy: { availableAt: "asc" }, take: 50,
+    select: { id: true }, orderBy: { availableAt: "asc" }, take: 50,
   });
+  if (candidates.length) await prisma.matchLifecycleNotification.updateMany({
+    where: { id: { in: candidates.map((row) => row.id) }, status: "PENDING", availableAt: { lte: now },
+      OR: [{ lockedUntil: null }, { lockedUntil: { lt: new Date(now.getTime() - 30_000) } }] },
+    data: { claimToken, lockedUntil: new Date(now.getTime() + 30_000), attempts: { increment: 1 } },
+  });
+  const rows = candidates.length ? await prisma.matchLifecycleNotification.findMany({
+    where: { claimToken }, include: { match: { select: { homeClub: { select: { name: true } }, awayClub: { select: { name: true } } } } },
+    orderBy: { availableAt: "asc" },
+  }) : [];
   for (const row of rows) {
-    const claimToken = crypto.randomUUID();
-    const claim = await prisma.matchLifecycleNotification.updateMany({ where: { id: row.id, status: "PENDING", availableAt: { lte: now }, OR: [{ lockedUntil: null }, { lockedUntil: { lt: new Date(now.getTime() - 30_000) } }] }, data: { claimToken, lockedUntil: new Date(now.getTime() + 30_000), attempts: { increment: 1 } } });
-    if (claim.count !== 1) continue;
     const home = escapeTelegramHtml(row.match.homeClub.name);
     const away = escapeTelegramHtml(row.match.awayClub.name);
     const score = "\n<b>" + home + "</b> " + row.homeScore + " : " + row.awayScore + " <b>" + away + "</b>";
@@ -217,15 +246,21 @@ async function deliverDueMatchLifecycle(env: Env): Promise<void> {
       await prisma.matchLifecycleNotification.updateMany({ where: { id: row.id, status: "PENDING", claimToken }, data: { availableAt: new Date(Date.now() + 15_000), claimToken: null, lockedUntil: null, lastError: error instanceof Error ? error.message.slice(0, 500) : "TELEGRAM_SEND_FAILED" } });
     }
   }
-  const results = await prisma.matchResultNotification.findMany({
+  const resultClaimToken = crypto.randomUUID();
+  const resultCandidates = await prisma.matchResultNotification.findMany({
     where: { status: "PENDING", availableAt: { lte: now }, OR: [{ lockedUntil: null }, { lockedUntil: { lt: new Date(now.getTime() - 30_000) } }], match: { status: "COMPLETED" } },
-    include: { match: { include: { homeClub: { select: { id: true, name: true } }, awayClub: { select: { id: true, name: true } }, performances: { include: { player: { select: { firstName: true, lastName: true } } } } } } },
-    orderBy: { createdAt: "asc" }, take: 50,
+    select: { id: true }, orderBy: { createdAt: "asc" }, take: 50,
   });
+  if (resultCandidates.length) await prisma.matchResultNotification.updateMany({
+    where: { id: { in: resultCandidates.map((row) => row.id) }, status: "PENDING", availableAt: { lte: now },
+      OR: [{ lockedUntil: null }, { lockedUntil: { lt: new Date(now.getTime() - 30_000) } }] },
+    data: { claimToken: resultClaimToken, lockedUntil: new Date(now.getTime() + 30_000), attempts: { increment: 1 } },
+  });
+  const results = resultCandidates.length ? await prisma.matchResultNotification.findMany({
+    where: { claimToken: resultClaimToken }, include: { match: { include: { homeClub: { select: { id: true, name: true } }, awayClub: { select: { id: true, name: true } }, performances: { include: { player: { select: { firstName: true, lastName: true } } } } } } },
+    orderBy: { createdAt: "asc" },
+  }) : [];
   for (const row of results) {
-    const claimToken = crypto.randomUUID();
-    const claim = await prisma.matchResultNotification.updateMany({ where: { id: row.id, status: "PENDING", availableAt: { lte: now }, OR: [{ lockedUntil: null }, { lockedUntil: { lt: new Date(now.getTime() - 30_000) } }] }, data: { claimToken, lockedUntil: new Date(now.getTime() + 30_000), attempts: { increment: 1 } } });
-    if (claim.count !== 1) continue;
     const match = row.match;
     const homeStats = match.performances.filter((line) => line.clubId === match.homeClub.id);
     const awayStats = match.performances.filter((line) => line.clubId === match.awayClub.id);
