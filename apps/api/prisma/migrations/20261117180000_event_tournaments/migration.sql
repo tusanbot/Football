@@ -72,3 +72,10 @@ ALTER TABLE "EventTournamentPrize" ADD CONSTRAINT "EventTournamentPrize_tourname
 ALTER TABLE "EventTournamentPrize" ADD CONSTRAINT "EventTournamentPrize_specialPlayerId_fkey" FOREIGN KEY ("specialPlayerId") REFERENCES "SpecialPlayer"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 ALTER TABLE "EventTournamentPrizeAward" ADD CONSTRAINT "EventTournamentPrizeAward_participantId_fkey" FOREIGN KEY ("participantId") REFERENCES "EventTournamentParticipant"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 ALTER TABLE "EventTournamentPrizeAward" ADD CONSTRAINT "EventTournamentPrizeAward_prizeId_fkey" FOREIGN KEY ("prizeId") REFERENCES "EventTournamentPrize"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- New public tables must follow the repository's server-only data-access policy.
+ALTER TABLE "EventTournament" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "EventTournamentParticipant" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "EventTournamentPrize" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "EventTournamentPrizeAward" ENABLE ROW LEVEL SECURITY;
+REVOKE ALL PRIVILEGES ON TABLE "EventTournament", "EventTournamentParticipant", "EventTournamentPrize", "EventTournamentPrizeAward" FROM PUBLIC;
