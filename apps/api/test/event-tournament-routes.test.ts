@@ -32,7 +32,7 @@ async function makeTournamentClub(suffix: string, index: number) {
   const positions = ["GK","RB","CB","CB","LB","CDM","CM","CAM","RW","ST","LW","GK","CB","RB","LB","CM","ST","RW"] as const;
   const user = await prisma.user.create({
     data: {
-      telegramId: String(820_000_000 + Math.floor(Math.random() * 70_000_000)) + "-" + suffix.slice(0, 6),
+      telegramId: String(820_000_000 + Math.floor(Math.random() * 70_000_000) + index),
       displayName: "Tournament Player " + index,
       club: { create: { name: "Tournament Club " + index, slug: "event-tournament-" + suffix.slice(0, 10) + "-" + index } },
       wallets: { create: [{ asset: "CASH", balance: 1000n }, { asset: "GOLD", balance: 10n }] },
