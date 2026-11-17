@@ -1,4 +1,3 @@
-import { Prisma } from "@prisma/client";
 import { createPrismaClient, prisma, withPrismaClient } from "../../../apps/api/src/db.js";
 import { processDueMatchRuntimes } from "../../../apps/api/src/game/match-service.js";
 import { processDueEventTournamentFinalizations } from "../../../apps/api/src/event-tournament-service.js";
@@ -120,7 +119,7 @@ export class MatchCoordinator {
           nextAlarm: Date | null; hasDueRuntime: boolean; hasDueFixture: boolean;
           hasDueNotifications: boolean; hasPendingTournamentFinalization: boolean;
           hasPendingPromotionWork: boolean;
-        }>>(Prisma.sql`
+        }>>`
           WITH clock AS (SELECT NOW() AS now),
           candidates AS (
             SELECT GREATEST(COALESCE(runtime."nextActionAt", clock.now + INTERVAL '10 seconds'),
@@ -184,7 +183,7 @@ export class MatchCoordinator {
             COALESCE(BOOL_OR(pending_tournament), FALSE) AS "hasPendingTournamentFinalization",
             COALESCE(BOOL_OR(pending_promotion), FALSE) AS "hasPendingPromotionWork"
           FROM candidates
-        `);
+        `;
         const schedule = scheduleRows[0];
         if (!schedule) throw new Error("MATCH_COORDINATOR_SCHEDULE_UNAVAILABLE");
         const matchWork = await processDueMatchRuntimes("cloudflare-match-coordinator", now, 10, {
