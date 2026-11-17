@@ -11,6 +11,7 @@ test("match and competition endpoints require Telegram authentication", async (t
     app.inject({ method: "PATCH", url: "/v1/club", payload: { name: "New Club" } }),
     app.inject({ method: "GET", url: "/v1/matches" }),
     app.inject({ method: "GET", url: "/v1/matches/opponents" }),
+    app.inject({ method: "GET", url: "/v1/matches/opponents?q=match-club" }),
     app.inject({ method: "POST", url: "/v1/matches/friendly", payload: {} }),
     app.inject({ method: "POST", url: "/v1/matches/m1/checkpoints/half/decisions", payload: {} }),
     app.inject({ method: "GET", url: "/v1/competitions" }),
