@@ -72,7 +72,7 @@ async function signedInitData(botToken: string, userId: number, authDate = Math.
   const params = new URLSearchParams();
   params.set("auth_date", String(authDate));
   params.set("user", JSON.stringify({ id: userId, first_name: "Test" }));
-  const checkString = [...params.entries()].sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0).map(([k, v]) => k + "=" + v).join("\\n");
+  const checkString = [...params.entries()].sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0).map(([k, v]) => k + "=" + v).join("\n");
   const secret = await hmac(new TextEncoder().encode("WebAppData"), botToken);
   const hash = await hmac(secret, checkString);
   params.set("hash", Array.from(hash, byte => byte.toString(16).padStart(2, "0")).join(""));
