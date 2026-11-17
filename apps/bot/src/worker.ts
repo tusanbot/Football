@@ -86,8 +86,8 @@ let cachedBotId: number | undefined;
 let apiReadyUntil = 0;
 
 function gameApiFetch(env: Env, url: URL, init?: RequestInit): Promise<Response> {
-  const request = new Request(url, init);
-  return env.FOOTBALL_API ? env.FOOTBALL_API.fetch(request) : fetch(request);
+  if (env.FOOTBALL_API) return env.FOOTBALL_API.fetch(new Request(url, init));
+  return fetch(url, init);
 }
 
 async function ensureApiReady(env: Env) {
