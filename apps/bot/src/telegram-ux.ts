@@ -46,7 +46,7 @@ export function formatApiError(code: string): string {
 
 // Every group command is classified explicitly. Unknown/future commands remain transient.
 export const PERSISTENT_GROUP_COMMANDS = new Set([
-  "start",
+  "start", "challenge",
   "group-register", "group-check", "group-give", "group-challenges", "group-challenge",
   "group-challenge-complete", "group-challenge-cancel", "group-rewards", "group-treasury",
   "group-league", "group-league-start", "group-league-table", "group-leagues",
