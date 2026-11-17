@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { buildApp } from "../src/app.js";
 import { prisma } from "../src/db.js";
+import { createTelegramSessionToken } from "../src/auth/telegram-session.js";
 
 test("database admin role revocation overrides environment-scoped role map in league admin routes", async (t) => {
   if (!process.env.DATABASE_URL) {
@@ -31,7 +32,7 @@ test("database admin role revocation overrides environment-scoped role map in le
   await prisma.adminRoleAssignment.create({
     data: { telegramId, role: "football", active: true, createdByTelegramId: "test", updatedByTelegramId: "test" },
   });
-  const headers = { "x-football-bot-secret": secret, "x-telegram-user-id": telegramId };
+  const headers = { authorization: "Bearer " + createTelegramSessionToken(telegramId, secret).token };
   process.env.BOT_API_SECRET = secret;
   process.env.GAME_ADMIN_ROLE_MAP = JSON.stringify({ [telegramId]: "football" });
   const granted = await app.inject({ method: "GET", url: "/v1/admin/pyramid-leagues", headers });
