@@ -384,6 +384,51 @@ async function pollMatchCheckpointNotifications() {
   }
 }
 
+let matchLifecycleNotificationWorkerBusy = false;
+async function pollMatchLifecycleNotifications() {
+  if (matchLifecycleNotificationWorkerBusy || !apiUrl || !botApiSecret) return;
+  matchLifecycleNotificationWorkerBusy = true;
+  try {
+    const result = await apiSystem<{ notifications: Array<{
+      id: string; channel: "HOME" | "AWAY" | "GROUP"; telegramChatId: string; claimToken: string;
+      kind: "KICKOFF" | "GOAL" | "HALF_TIME"; minute: number; homeScore: number; awayScore: number;
+      payload: { teamName?: string; scorerName?: string; assistName?: string } | null;
+      match: { id: string; homeClub: string; awayClub: string };
+    }> }>("/v1/bot/match-lifecycle/claim", { limit: 50 });
+    for (const notification of result.notifications) {
+      const acknowledge = (delivered: boolean, error?: string) => apiSystem(
+        "/v1/bot/match-lifecycle/ack",
+        { id: notification.id, claimToken: notification.claimToken, delivered, ...(error ? { error } : {}) },
+      );
+      const telegramId = Number(notification.telegramChatId);
+      if (!Number.isSafeInteger(telegramId)) {
+        await acknowledge(false, "INVALID_TELEGRAM_CHAT_ID").catch(() => undefined);
+        continue;
+      }
+      const score = "\n" + notification.match.homeClub + " " + notification.homeScore + " : " + notification.awayScore + " " + notification.match.awayClub;
+      let message: string;
+      if (notification.kind === "KICKOFF") message = "⚽ <b>سوت آغاز مسابقه</b>" + score + "\nبازی شروع شد.";
+      else if (notification.kind === "HALF_TIME") message = "⏸ <b>پایان نیمه اول</b> · دقیقه ۴۵" + score + "\n۵ ثانیه استراحت تاکتیکی؛ نیمه دوم به‌صورت خودکار ادامه پیدا می‌کند.";
+      else {
+        const payload = notification.payload ?? {};
+        message = "⚽ <b>گــــل!</b> · دقیقه " + notification.minute
+          + "\n" + escapeHtml(payload.teamName ?? "تیم") + "\nزننده گل: " + escapeHtml(payload.scorerName ?? "بازیکن")
+          + (payload.assistName ? "\nپاس گل: " + escapeHtml(payload.assistName) : "") + score;
+      }
+      try {
+        await bot.api.sendMessage(telegramId, message, { parse_mode: "HTML" });
+        await acknowledge(true);
+      } catch (sendError) {
+        const detail = sendError instanceof Error ? sendError.message : "TELEGRAM_SEND_FAILED";
+        await acknowledge(false, detail.slice(0, 500)).catch(() => undefined);
+      }
+    }
+  } catch (error) {
+    console.warn("Match lifecycle notification poll failed:", error instanceof Error ? error.message : error);
+  } finally {
+    matchLifecycleNotificationWorkerBusy = false;
+  }
+}
 let matchResultNotificationWorkerBusy = false;
 async function pollMatchResultNotifications() {
   if (matchResultNotificationWorkerBusy || !apiUrl || !botApiSecret) return;
@@ -3490,6 +3535,7 @@ bot.on(["chat_member","my_chat_member"],async ctx=>{
   async function runBackgroundJobs() {
     await pollGroupMessageDeletionQueue();
     await pollMatchCheckpointNotifications();
+    await pollMatchLifecycleNotifications();
     await pollMatchResultNotifications();
     await pollLeagueNoticeQueue();
     await pollAdminGroupBroadcastQueue();
