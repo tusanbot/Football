@@ -17,7 +17,10 @@
     "start:api": "node apps/api/dist/server.js",
     "start:bot": "node apps/bot/dist/bot.js",
     "start:web": "pnpm --filter @football/web start",
-    "verify": "pnpm typecheck && pnpm test && pnpm build"
+    "verify": "pnpm typecheck && pnpm test && pnpm build",
+    "dev:bot-worker": "pnpm --filter @football/web exec wrangler dev --config ../bot/wrangler.jsonc",
+    "dry-run:bot-worker": "pnpm --filter @football/web exec wrangler deploy --dry-run --config ../bot/wrangler.jsonc",
+    "deploy:bot-worker:staging": "pnpm --filter @football/web exec wrangler deploy --config ../bot/wrangler.jsonc"
   },
   "devDependencies": {
     "typescript": "^5.8.3",
