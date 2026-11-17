@@ -45,6 +45,7 @@ if (webAppUrl) {
 }
 const bot = new Bot(token);
 const pendingClubNameEdits = new Map<number, { promptMessageId: number; expiresAt: number }>();
+const pendingGroupCreations = new Map<number, { chatId: number; promptMessageId: number; kind: "challenge" | "league"; expiresAt: number }>();
 
 bot.use(async (ctx, next) => {
   const originalReply = ctx.reply.bind(ctx);
@@ -392,9 +393,10 @@ function inlineMenuKeyboard(menu?: keyof typeof PRIVATE_MENU_SUBMENUS) {
 }
 function groupStartKeyboard() {
   return new InlineKeyboard()
-    .text("🏟 وضعیت گروه", "g:status").text("⚔️ ساخت چالش", "g:challenge").row()
-    .text("🎯 چالش‌های گروه", "g:challenges").text("🏆 لیگ‌های گروه", "g:leagues").row()
-    .text("➕ عضویت باشگاه", "g:join").text("🛠 ثبت گروه", "g:register");
+    .text("🏟 وضعیت گروه", "g:status").text("⚔️ دعوت چالش", "g:challenge").row()
+    .text("🎯 چالش‌های گروه", "g:challenges").text("➕ ساخت چالش گروهی", "g:createchallenge").row()
+    .text("🏆 لیگ‌های گروه", "g:leagues").text("➕ ساخت لیگ", "g:createleague").row()
+    .text("🔗 اتصال باشگاه", "g:join").text("🛠 ثبت گروه", "g:register");
 }
 async function dispatchMenuCommand(ctx: Context, command: string) {
   if (!ctx.chat || !ctx.from || ctx.chat.type !== "private" || !/^[a-z0-9_-]{1,32}$/.test(command)) return;
@@ -1093,6 +1095,25 @@ bot.callbackQuery(/^g:/, async (ctx) => {
       });
       await ctx.answerCallbackQuery({ text: "گروه ثبت شد." });
       await ctx.reply("✅ گروه «" + result.registration.group.title + "» در Football Empire ثبت شد. اعضا می‌توانند از دکمه «عضویت باشگاه» استفاده کنند.");
+      return;
+    }
+    if (action === "createchallenge" || action === "createleague") {
+      const actor = await ctx.api.getChatMember(ctx.chat.id, ctx.from.id);
+      if (actor.status !== "creator" && actor.status !== "administrator") {
+        return ctx.answerCallbackQuery({ text: "ساخت چالش یا لیگ فقط برای مدیران گروه مجاز است.", show_alert: true });
+      }
+      await ctx.answerCallbackQuery();
+      const prompt = await ctx.reply(
+        action === "createchallenge"
+          ? "🎯 عنوان چالش گروهی را در پاسخ به این پیام بنویس. بازه چالش به‌صورت پیش‌فرض ۷ روز و جایزه صفر امتیاز خواهد بود."
+          : "🏆 نام لیگ گروهی را در پاسخ به این پیام بنویس (۳ تا ۴۰ نویسه). ظرفیت پیش‌فرض ۸ تیم است.",
+        { reply_markup: { force_reply: true, selective: true } },
+      );
+      pendingGroupCreations.set(ctx.from.id, {
+        chatId: ctx.chat.id, promptMessageId: prompt.message_id,
+        kind: action === "createchallenge" ? "challenge" : "league",
+        expiresAt: Date.now() + 10 * 60_000,
+      });
       return;
     }
     await ctx.answerCallbackQuery({ text: "این گزینه شناخته نشد." });
@@ -2413,7 +2434,40 @@ bot.command("clubprofile", async (ctx) => {
 });
 
 bot.on("message:text", async (ctx, next) => {
-  if (ctx.chat.type !== "private" || !ctx.from || !ctx.message.reply_to_message) return next();
+  if (!ctx.from || !ctx.message.reply_to_message) return next();
+  const groupPending = pendingGroupCreations.get(ctx.from.id);
+  if ((ctx.chat.type === "group" || ctx.chat.type === "supergroup") && groupPending
+    && groupPending.chatId === ctx.chat.id
+    && groupPending.promptMessageId === ctx.message.reply_to_message.message_id) {
+    pendingGroupCreations.delete(ctx.from.id);
+    if (groupPending.expiresAt < Date.now()) return ctx.reply("مهلت ساخت به پایان رسید. دوباره از منوی Football Empire اقدام کن.");
+    const title = ctx.message.text.trim();
+    if (title.length < 3 || title.length > (groupPending.kind === "league" ? 40 : 80)) {
+      return ctx.reply("عنوان باید بین ۳ تا " + (groupPending.kind === "league" ? "۴۰" : "۸۰") + " نویسه باشد.");
+    }
+    try {
+      if (groupPending.kind === "challenge") {
+        const now = new Date();
+        const result = await api<{challenge:{id:string;title:string}}>(
+          `/v1/groups/${encodeURIComponent(String(ctx.chat.id))}/challenges`, ctx.from.id, "POST",
+          { title, startsAt: now.toISOString(), endsAt: new Date(now.getTime() + 7 * 86_400_000).toISOString(), rewardPoints: "0", idempotencyKey: "group-challenge:" + randomUUID() },
+        );
+        await awardGroupActivity(ctx, "CHALLENGE_CREATE", result.challenge.id);
+        await ctx.reply("🎯 چالش گروهی «" + result.challenge.title + "» ساخته شد. اعضا از دکمه «چالش‌های گروه» می‌توانند وارد شوند.", { reply_markup: groupStartKeyboard() });
+      } else {
+        const result = await api<{competition:{id:string;name:string}}>(
+          `/v1/groups/${encodeURIComponent(String(ctx.chat.id))}/leagues`, ctx.from.id, "POST",
+          { name: title, maxTeams: 8, idempotencyKey: "group-league:" + randomUUID() },
+        );
+        await awardGroupActivity(ctx, "LEAGUE_CREATE", result.competition.id);
+        await ctx.reply("🏆 لیگ گروهی «" + result.competition.name + "» با ظرفیت ۸ تیم ساخته شد. اعضا از دکمه «لیگ‌های گروه» می‌توانند ثبت‌نام کنند.", { reply_markup: groupStartKeyboard() });
+      }
+    } catch (error) {
+      await ctx.reply("ساخت موردنظر ناموفق بود: " + (error instanceof Error ? error.message : "خطای نامشخص"));
+    }
+    return;
+  }
+  if (ctx.chat.type !== "private") return next();
   const pending = pendingClubNameEdits.get(ctx.from.id);
   if (!pending || pending.promptMessageId !== ctx.message.reply_to_message.message_id) return next();
   pendingClubNameEdits.delete(ctx.from.id);
