@@ -101,6 +101,7 @@ export class MatchCoordinator {
       await withPrismaClient(client, async () => {
         const now = new Date();
         await processDueMatchRuntimes("cloudflare-match-coordinator", now, 10);
+        await deliverDueMatchLifecycle(this.env);
         const [runtime, futureFixture, overdueFixture] = await Promise.all([
           prisma.matchRuntime.findFirst({
             where: { status: { in: ["QUEUED", "RUNNING", "AWAITING_CHECKPOINT"] } },
@@ -159,6 +160,36 @@ function describeRuntimeError(error: unknown): Record<string, unknown> {
   };
 }
 
+async function deliverDueMatchLifecycle(env: Env): Promise<void> {
+  const token = env.TELEGRAM_BOT_TOKEN ?? "";
+  if (!token) return;
+  const now = new Date();
+  const rows = await prisma.matchLifecycleNotification.findMany({
+    where: { status: "PENDING", availableAt: { lte: now }, OR: [{ lockedUntil: null }, { lockedUntil: { lt: new Date(now.getTime() - 30_000) } }] },
+    include: { match: { select: { homeClub: { select: { name: true } }, awayClub: { select: { name: true } } } } },
+    orderBy: { availableAt: "asc" }, take: 50,
+  });
+  for (const row of rows) {
+    const claimToken = crypto.randomUUID();
+    const claim = await prisma.matchLifecycleNotification.updateMany({ where: { id: row.id, status: "PENDING", claimToken: null }, data: { claimToken, lockedUntil: new Date(now.getTime() + 30_000), attempts: { increment: 1 } } });
+    if (claim.count !== 1) continue;
+    const home = String(row.match.homeClub.name).replace(/[&<>\"]/g, "");
+    const away = String(row.match.awayClub.name).replace(/[&<>\"]/g, "");
+    const score = "\n<b>" + home + "</b> " + row.homeScore + " : " + row.awayScore + " <b>" + away + "</b>";
+    const payload = row.payload && typeof row.payload === "object" ? row.payload as Record<string, unknown> : {};
+    const message = row.kind === "KICKOFF" ? "⚽ <b>سوت آغاز مسابقه</b>" + score
+      : row.kind === "HALF_TIME" ? "⏸ <b>پایان نیمه اول</b> · دقیقه ۴۵" + score
+      : "⚽ <b>گل!</b> · دقیقه " + row.minute + "\n" + String(payload.teamName ?? "تیم") + " · " + String(payload.scorerName ?? "بازیکن") + score;
+    try {
+      const response = await fetch("https://api.telegram.org/bot" + token + "/sendMessage", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ chat_id: row.telegramChatId, text: message, parse_mode: "HTML" }) });
+      const body = await response.json() as { ok?: boolean };
+      const delivered = response.ok && body.ok === true;
+      await prisma.matchLifecycleNotification.updateMany({ where: { id: row.id, status: "PENDING", claimToken }, data: delivered ? { status: "DELIVERED", deliveredAt: new Date(), claimToken: null, lockedUntil: null } : { availableAt: new Date(Date.now() + 15_000), claimToken: null, lockedUntil: null, lastError: "TELEGRAM_SEND_FAILED" } });
+    } catch (error) {
+      await prisma.matchLifecycleNotification.updateMany({ where: { id: row.id, status: "PENDING", claimToken }, data: { availableAt: new Date(Date.now() + 15_000), claimToken: null, lockedUntil: null, lastError: error instanceof Error ? error.message.slice(0, 500) : "TELEGRAM_SEND_FAILED" } });
+    }
+  }
+}
 async function scheduledJobs(env: Env): Promise<void> {
   const missing = missingConfig(env);
   if (missing.length) { console.error("Scheduled game jobs skipped; missing configuration:", missing); return; }
