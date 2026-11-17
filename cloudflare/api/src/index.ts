@@ -297,19 +297,35 @@ export default {
         const schemaChecks = await withPrismaClient(client, () => prisma.$queryRaw<Array<{ ready: boolean }>>`
           SELECT
             (
-              SELECT count(*) = 4
+              SELECT count(*) = 9
               FROM "_prisma_migrations"
               WHERE migration_name IN (
                 '20261116120000_in_game_store',
                 '20261117100000_lock_down_public_api',
                 '20261117110000_index_foreign_key_columns',
-                '20261117120000_restore_alliance_foreign_keys'
+                '20261117120000_restore_alliance_foreign_keys',
+                '20261117180000_event_tournaments',
+                '20261117200000_match_lifecycle_notifications',
+                '20261117210000_league_round_notice_dedupe',
+                '20261117220000_event_tournament_competitions',
+                '20261117230000_event_tournament_default_capacity'
               )
                 AND finished_at IS NOT NULL
                 AND rolled_back_at IS NULL
             )
             AND to_regclass('"PyramidLeague"') IS NOT NULL
             AND to_regclass('"LeaguePromotionOffer"') IS NOT NULL
+            AND to_regclass('"EventTournament"') IS NOT NULL
+            AND to_regclass('"EventTournamentParticipant"') IS NOT NULL
+            AND to_regclass('"EventTournamentPrize"') IS NOT NULL
+            AND to_regclass('"EventTournamentPrizeAward"') IS NOT NULL
+            AND to_regclass('"MatchLifecycleNotification"') IS NOT NULL
+            AND EXISTS (
+              SELECT 1 FROM information_schema.columns
+              WHERE table_schema = 'public'
+                AND table_name = 'LeagueNotice'
+                AND column_name = 'dedupeKey'
+            )
             AND (SELECT count(*) >= 15 FROM "SpecialPlayer" WHERE active = true)
             AND EXISTS (
               SELECT 1 FROM pg_roles
