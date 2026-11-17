@@ -843,6 +843,130 @@ bot.command("adminhelp", async (ctx) => {
   );
 });
 
+const menuActionCommands = new Set([
+  ...PRIVATE_MENU_ROWS.flat().map((item) => item.command),
+  ...Object.values(PRIVATE_MENU_SUBMENUS).flatMap((menu) => menu.rows.flat().map((item) => item.command)),
+  "store", "challenge", "leagues", "opponents",
+]);
+bot.callbackQuery(/^act:/, async (ctx) => {
+  if (ctx.chat?.type !== "private") return ctx.answerCallbackQuery({ text: "این عملیات را در گفت‌وگوی خصوصی انجام دهید." });
+  const command = ctx.callbackQuery.data.slice(4);
+  if (!menuActionCommands.has(command)) return ctx.answerCallbackQuery({ text: "این گزینه معتبر نیست." });
+  await ctx.answerCallbackQuery();
+  try { await dispatchMenuCommand(ctx, command); }
+  catch (error) { await ctx.reply("اجرای این گزینه ناموفق بود: " + (error instanceof Error ? error.message : "خطای نامشخص")); }
+});
+
+bot.callbackQuery(/^g:/, async (ctx) => {
+  if (!ctx.from || !ctx.chat || (ctx.chat.type !== "group" && ctx.chat.type !== "supergroup")) {
+    return ctx.answerCallbackQuery({ text: "این گزینه فقط داخل گروه تلگرام کار می‌کند." });
+  }
+  const groupId = String(ctx.chat.id);
+  const data = ctx.callbackQuery.data;
+  const parts = data.split(":");
+  const action = parts[1] ?? "";
+  try {
+    if (action === "status") {
+      const result = await api<{group:{title:string;memberCount:number;isActive:boolean;points:string};role:string;registeredManagers:number;minimumMembers:number}>("/v1/groups/" + encodeURIComponent(groupId), ctx.from.id);
+      await ctx.answerCallbackQuery();
+      await ctx.reply(
+        `🏟 <b>${escapeHtml(result.group.title)}</b>\nوضعیت: ${result.group.isActive ? "فعال" : "غیرفعال"}\nاعضا: ${result.group.memberCount} · مدیران باشگاه: ${result.registeredManagers}\nخزانه: <b>${cash(result.group.points)}</b> امتیاز\nحداقل اعضا: ${result.minimumMembers}`,
+        { parse_mode: "HTML", reply_markup: groupStartKeyboard() },
+      );
+      return;
+    }
+    if (action === "challenge") {
+      const result = await api<{challenge:{token:string;expiresAt:string};asset:string;goldCost:string;shareUrl:string|null}>(
+        "/v1/friendly-challenges", ctx.from.id, "POST", { groupTelegramId: groupId, idempotencyKey: randomUUID() },
+      );
+      const keyboard = new InlineKeyboard();
+      if (result.shareUrl) keyboard.url("📨 ارسال دعوت به حریف", "https://t.me/share/url?url=" + encodeURIComponent(result.shareUrl) + "&text=" + encodeURIComponent("برای مسابقه Football Empire دعوت شدی!"));
+      await ctx.answerCallbackQuery({ text: "دعوت چالش ساخته شد." });
+      await ctx.reply(
+        "⚔️ <b>دعوت چالش آماده است!</b>\nهزینه: " + (result.asset === "FREE" ? "رایگان" : result.asset === "GOLD" ? cash(result.goldCost) + " طلا" : "اعتبار چالش") +
+        "\nاعتبار تا: " + new Date(result.challenge.expiresAt).toLocaleString("fa-IR") +
+        "\n\nدعوت را برای بازیکنی که می‌خواهی به چالش بکشی ارسال کن.",
+        { parse_mode: "HTML", ...(result.shareUrl ? { reply_markup: keyboard } : {}) },
+      );
+      return;
+    }
+    if (action === "challenges") {
+      const result = await api<{challenges:Array<{id:string;title:string;status:string;participants:number;rewardPoints:string;startsAt:string|null;endsAt:string|null}>}>(`/v1/groups/${encodeURIComponent(groupId)}/challenges`, ctx.from.id);
+      const keyboard = new InlineKeyboard();
+      const open = result.challenges.filter((item) => item.status === "OPEN");
+      for (const item of open) keyboard.text("شرکت در «" + item.title.slice(0, 24) + "»", "g:joinchallenge:" + item.id).row();
+      await ctx.answerCallbackQuery();
+      await ctx.reply(
+        "🎯 <b>چالش‌های گروه</b>\n\n" + (result.challenges.map((item) =>
+          "• " + escapeHtml(item.title) + " · " + item.participants + " شرکت‌کننده · " + cash(item.rewardPoints) + " امتیاز · " + item.status
+        ).join("\n") || "هنوز چالشی در گروه ایجاد نشده است."),
+        { parse_mode: "HTML", ...(open.length ? { reply_markup: keyboard } : {}) },
+      );
+      return;
+    }
+    if (action === "joinchallenge") {
+      const id = parts[2] ?? "";
+      if (!id) return ctx.answerCallbackQuery({ text: "شناسه چالش معتبر نیست." });
+      await api(`/v1/groups/${encodeURIComponent(groupId)}/challenges/${encodeURIComponent(id)}/join`, ctx.from.id, "POST", {});
+      await awardGroupActivity(ctx, "CHALLENGE_JOIN", id);
+      await ctx.answerCallbackQuery({ text: "عضویت شما در چالش ثبت شد." });
+      await ctx.reply("✅ در چالش گروه ثبت‌نام شدی. برای پیگیری، دکمه چالش‌های گروه را بزن.");
+      return;
+    }
+    if (action === "leagues") {
+      const result = await api<{leagues:Array<{id:string;name:string;status:string;maxTeams:number;teams:number;joined:boolean}>}>(`/v1/groups/${encodeURIComponent(groupId)}/leagues`, ctx.from.id);
+      const keyboard = new InlineKeyboard();
+      const open = result.leagues.filter((item) => item.status === "REGISTRATION" && !item.joined && item.teams < item.maxTeams);
+      for (const item of open) keyboard.text("عضویت در «" + item.name.slice(0, 24) + "»", "g:joinleague:" + item.id).row();
+      await ctx.answerCallbackQuery();
+      await ctx.reply(
+        "🏆 <b>لیگ‌های گروه</b>\n\n" + (result.leagues.map((item) =>
+          "• " + escapeHtml(item.name) + " · " + item.teams + "/" + item.maxTeams + " تیم · " + item.status + (item.joined ? " · عضو هستید" : "")
+        ).join("\n") || "هنوز لیگ گروهی ساخته نشده است."),
+        { parse_mode: "HTML", ...(open.length ? { reply_markup: keyboard } : {}) },
+      );
+      return;
+    }
+    if (action === "joinleague") {
+      const id = parts[2] ?? "";
+      if (!id) return ctx.answerCallbackQuery({ text: "شناسه لیگ معتبر نیست." });
+      const result = await api<{teams:number}>(`/v1/groups/${encodeURIComponent(groupId)}/leagues/${encodeURIComponent(id)}/join`, ctx.from.id, "POST", {});
+      await awardGroupActivity(ctx, "LEAGUE_JOIN", id);
+      await ctx.answerCallbackQuery({ text: "عضویت در لیگ ثبت شد." });
+      await ctx.reply("🏆 عضویت باشگاه شما در لیگ گروه ثبت شد. تعداد تیم‌ها: " + result.teams);
+      return;
+    }
+    if (action === "join") {
+      const memberCount = await ctx.api.getChatMemberCount(ctx.chat.id);
+      if (!botTelegramId) throw new Error("شناسه ربات هنوز آماده نیست.");
+      const botMember = await ctx.api.getChatMember(ctx.chat.id, botTelegramId);
+      if (botMember.status !== "creator" && botMember.status !== "administrator") throw new Error("ربات باید مدیر گروه باشد تا عضویت را تأیید کند.");
+      const result = await api<{membership:{group:{title:string};role:string;alreadyJoined:boolean;registeredManagers:number}}>("/v1/groups/join", ctx.from.id, "POST", { telegramGroupId: groupId, memberCount });
+      await ctx.answerCallbackQuery({ text: "باشگاه شما به گروه متصل شد." });
+      await ctx.reply(result.membership.alreadyJoined ? "باشگاه شما از قبل عضو این گروه است." : "✅ باشگاه شما به گروه «" + result.membership.group.title + "» متصل شد.");
+      return;
+    }
+    if (action === "register") {
+      const actor = await ctx.api.getChatMember(ctx.chat.id, ctx.from.id);
+      if (actor.status !== "creator" && actor.status !== "administrator") throw new Error("فقط مدیر یا مالک گروه می‌تواند آن را ثبت کند.");
+      if (!botTelegramId) throw new Error("شناسه ربات هنوز آماده نیست.");
+      const botMember = await ctx.api.getChatMember(ctx.chat.id, botTelegramId);
+      if (botMember.status !== "creator" && botMember.status !== "administrator") throw new Error("ابتدا ربات را مدیر گروه کنید.");
+      const memberCount = await ctx.api.getChatMemberCount(ctx.chat.id);
+      const result = await api<{registration:{group:{title:string};minimumMembers:number}}>("/v1/groups/register", ctx.from.id, "POST", {
+        telegramGroupId: groupId, title: ctx.chat.title, role: actor.status === "creator" ? "OWNER" : "ADMIN", memberCount,
+      });
+      await ctx.answerCallbackQuery({ text: "گروه ثبت شد." });
+      await ctx.reply("✅ گروه «" + result.registration.group.title + "» در Football Empire ثبت شد. اعضا می‌توانند از دکمه «عضویت باشگاه» استفاده کنند.");
+      return;
+    }
+    await ctx.answerCallbackQuery({ text: "این گزینه شناخته نشد." });
+  } catch (error) {
+    await ctx.answerCallbackQuery({ text: "عملیات انجام نشد." }).catch(() => undefined);
+    await ctx.reply("⚠️ " + (error instanceof Error ? error.message : "خطای نامشخص"));
+  }
+});
+
 bot.callbackQuery(/^nav:/, async (ctx) => {
   if (ctx.chat?.type !== "private") return ctx.answerCallbackQuery({ text: "این منو فقط در گفت‌وگوی خصوصی در دسترس است." });
   const target = ctx.callbackQuery.data.slice(4);
