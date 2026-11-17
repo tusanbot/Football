@@ -1,0 +1,9 @@
+CREATE INDEX IF NOT EXISTS "Alliance_createdByGroupId_idx" ON public."Alliance" ("createdByGroupId");
+CREATE INDEX IF NOT EXISTS "CompetitionEntry_clubId_idx" ON public."CompetitionEntry" ("clubId");
+CREATE INDEX IF NOT EXISTS "FriendlyChallenge_creatorUserId_idx" ON public."FriendlyChallenge" ("creatorUserId");
+CREATE INDEX IF NOT EXISTS "GroupMemberRewardBalance_userId_idx" ON public."GroupMemberRewardBalance" ("userId");
+CREATE INDEX IF NOT EXISTS "GroupMembership_userId_idx" ON public."GroupMembership" ("userId");
+CREATE INDEX IF NOT EXISTS "GroupRewardGrant_itemId_idx" ON public."GroupRewardGrant" ("itemId");
+CREATE INDEX IF NOT EXISTS "PlayerContractRenewal_userId_idx" ON public."PlayerContractRenewal" ("userId");
+CREATE INDEX IF NOT EXISTS "PlayerMarketListing_buyerClubId_idx" ON public."PlayerMarketListing" ("buyerClubId");
+CREATE INDEX IF NOT EXISTS "PyramidLeagueApplication_userId_idx" ON public."PyramidLeagueApplication" ("userId");
