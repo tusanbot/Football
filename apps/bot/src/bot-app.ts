@@ -817,7 +817,7 @@ bot.callbackQuery(/^nav:/, async (ctx) => {
   }
   if (target === "menu") {
     await ctx.answerCallbackQuery();
-    await ctx.editMessageText("⚽ <b>Football Empire</b>\\nیک دسته را انتخاب کنید:", {
+    await ctx.editMessageText("⚽ <b>Football Empire</b>\nیک دسته را انتخاب کنید:", {
       parse_mode: "HTML", reply_markup: inlineMenuKeyboard(),
     });
     await ctx.reply("⌨️ <b>منوی متنی جایگزین</b> · اگر دکمه‌های شیشه‌ای در دسترس نبودند، از صفحه‌کلید زیر استفاده کنید.", {
@@ -829,10 +829,10 @@ bot.callbackQuery(/^nav:/, async (ctx) => {
   const menuKey = target as keyof typeof PRIVATE_MENU_SUBMENUS;
   const menu = PRIVATE_MENU_SUBMENUS[menuKey];
   await ctx.answerCallbackQuery();
-  await ctx.editMessageText(menu.title + "\\nبرای اجرای گزینه‌ها از صفحه‌کلید متنی زیر استفاده کنید.", {
+  await ctx.editMessageText(menu.title + "\nبرای اجرای گزینه‌ها از صفحه‌کلید متنی زیر استفاده کنید.", {
     reply_markup: inlineMenuKeyboard(menuKey),
   });
-  await ctx.reply(menu.title + "\\nیکی از گزینه‌های این بخش را انتخاب کنید. برای بازگشت از دکمه بازگشت استفاده کنید.", {
+  await ctx.reply(menu.title + "\nیکی از گزینه‌های این بخش را انتخاب کنید. برای بازگشت از دکمه بازگشت استفاده کنید.", {
     reply_markup: privateMenuKeyboard(menuKey),
   });
 });
@@ -849,7 +849,7 @@ for (const menuKey of Object.keys(PRIVATE_MENU_SUBMENUS) as Array<keyof typeof P
 
 bot.command("menu", async (ctx) => {
   if (ctx.chat.type !== "private") return;
-  await ctx.reply("⚽ <b>Football Empire</b>\\n\\nاز منوی شیشه‌ای زیر دسته موردنظر را انتخاب کنید. اگر این دکمه‌ها در دسترس نبودند، منوی متنی جایگزین نیز در پیام بعدی قرار دارد.", {
+  await ctx.reply("⚽ <b>Football Empire</b>\n\nاز منوی شیشه‌ای زیر دسته موردنظر را انتخاب کنید. اگر این دکمه‌ها در دسترس نبودند، منوی متنی جایگزین نیز در پیام بعدی قرار دارد.", {
     parse_mode: "HTML",
     reply_markup: inlineMenuKeyboard(),
   });
@@ -1098,7 +1098,7 @@ bot.command("lineup", async (ctx) => {
     } }>("/v1/club/lineup", ctx.from.id);
     const players = result.club.players.map((player) => `${player.lineupSlot}. ${player.firstName} ${player.lastName} — ${player.position} · قدرت ${player.overall}`);
     const plain = `⚽ ترکیب اصلی · ${result.club.formation} · نسخه ${result.club.lineupVersion}\nذهنیت: ${result.club.tactics.mentality} · پرس: ${result.club.tactics.pressing}\nسرعت: ${result.club.tactics.tempo} · پاس: ${result.club.tactics.passingStyle}\n\n${players.join("\n") || "ترکیب اصلی هنوز تنظیم نشده است."}\n\nبرای مشاهده شناسه بازیکنان از /players و برای ثبت ترکیب از /setlineup استفاده کنید.`;
-    const richPlayers = result.club.players.map((player) => `<b>${player.lineupSlot}. ${escapeHtml(player.firstName + " " + player.lastName)}</b> · ${escapeHtml(player.position)} · قدرت <b>${player.overall}</b>`).join("\\n");
+    const richPlayers = result.club.players.map((player) => `<b>${player.lineupSlot}. ${escapeHtml(player.firstName + " " + player.lastName)}</b> · ${escapeHtml(player.position)} · قدرت <b>${player.overall}</b>`).join("\n");
     const rich = `⚽ <b>ترکیب اصلی · ${escapeHtml(result.club.formation)}</b> · نسخه ${result.club.lineupVersion}\nذهنیت: <b>${escapeHtml(result.club.tactics.mentality)}</b> · پرس: ${escapeHtml(result.club.tactics.pressing)}\nسرعت: ${escapeHtml(result.club.tactics.tempo)} · پاس: ${escapeHtml(result.club.tactics.passingStyle)}\n\n${richPlayers || "ترکیب اصلی هنوز تنظیم نشده است."}\n\nبرای ثبت ترکیب: /setlineup`;
     await replyRich(ctx, rich, plain);
   } catch (error) {
@@ -1521,8 +1521,8 @@ bot.command("pyramidtable", async (ctx) => {
       + "\n\nگلزنان برتر:\n" + (scorers.join("\n") || "هنوز گلی ثبت نشده")
       + "\n\nپاسورهای برتر:\n" + (assists.join("\n") || "هنوز پاس گلی ثبت نشده")
       + (awards.length ? "\n\nجوایز:\n" + awards.join("\n") : "");
-    const richTable = result.standings.map((row) => `<b>${row.position}. ${escapeHtml(row.clubName)}</b> · <b>${row.points}</b> امتیاز · ${row.played} بازی · ${row.won}-${row.drawn}-${row.lost} · گل ${row.goalsFor}:${row.goalsAgainst}`).join("\\n");
-    const rich = `🏆 <b>${escapeHtml(result.league.name)}</b> · ${escapeHtml(result.league.tierName)} · فصل ${result.league.season}\n\n<b>جدول لیگ</b>\n${richTable || "جدولی ثبت نشده است."}\n\n<b>گلزنان برتر</b>\n${scorers.map(escapeHtml).join("\\n") || "هنوز گلی ثبت نشده"}\n\n<b>پاسورهای برتر</b>\n${assists.map(escapeHtml).join("\\n") || "هنوز پاس گلی ثبت نشده"}${awards.length ? "\\n\\n<b>جوایز</b>\\n" + awards.map(escapeHtml).join("\\n") : ""}`;
+    const richTable = result.standings.map((row) => `<b>${row.position}. ${escapeHtml(row.clubName)}</b> · <b>${row.points}</b> امتیاز · ${row.played} بازی · ${row.won}-${row.drawn}-${row.lost} · گل ${row.goalsFor}:${row.goalsAgainst}`).join("\n");
+    const rich = `🏆 <b>${escapeHtml(result.league.name)}</b> · ${escapeHtml(result.league.tierName)} · فصل ${result.league.season}\n\n<b>جدول لیگ</b>\n${richTable || "جدولی ثبت نشده است."}\n\n<b>گلزنان برتر</b>\n${scorers.map(escapeHtml).join("\n") || "هنوز گلی ثبت نشده"}\n\n<b>پاسورهای برتر</b>\n${assists.map(escapeHtml).join("\n") || "هنوز پاس گلی ثبت نشده"}${awards.length ? "\n\n<b>جوایز</b>\n" + awards.map(escapeHtml).join("\n") : ""}`;
     await replyRich(ctx, rich, plain);
   } catch (error) { await ctx.reply("دریافت جدول لیگ ناموفق بود: " + (error instanceof Error ? error.message : "خطای نامشخص")); }
 });
@@ -1841,7 +1841,7 @@ bot.command("table", async (ctx) => {
     const richRows = result.competition.format === "CUP"
       ? result.matches.map((match) => `<b>دور ${match.round ?? "—"}</b>\n${escapeHtml(match.homeClub.name)} <b>${match.homeScore ?? "–"}–${match.awayScore ?? "–"}</b> ${escapeHtml(match.awayClub.name)}${match.homePenalties !== null ? ` · پنالتی ${match.homePenalties}–${match.awayPenalties}` : ""}`)
       : result.standings.map((row) => `<b>${row.position}. ${escapeHtml(row.clubName)}</b>\nامتیاز: <b>${row.points}</b> · بازی: ${row.played} · برد: ${row.won} · مساوی: ${row.drawn} · باخت: ${row.lost} · تفاضل: ${row.goalDifference}`);
-    await replyRich(ctx, `🏆 <b>${escapeHtml(result.competition.name)}</b> · ${escapeHtml(statusLabel)}\n\n${richRows.join("\\n\\n") || "هنوز اطلاعاتی ثبت نشده است."}`, plain);
+    await replyRich(ctx, `🏆 <b>${escapeHtml(result.competition.name)}</b> · ${escapeHtml(statusLabel)}\n\n${richRows.join("\n\n") || "هنوز اطلاعاتی ثبت نشده است."}`, plain);
   } catch (error) { await ctx.reply("دریافت جدول رقابت ناموفق بود: " + (error instanceof Error ? error.message : "خطای نامشخص")); }
 });
 
