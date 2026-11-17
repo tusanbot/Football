@@ -118,6 +118,14 @@ test("event tournament auto-starts at capacity and settles HONOR prizes from sim
   const fixtures = await prisma.footballMatch.findMany({ where: { competitionId }, orderBy: [{ round: "asc" }, { scheduledAt: "asc" }] });
   assert.equal(fixtures.length, 6);
   assert.equal(new Set(fixtures.map((fixture) => fixture.round)).size, 3);
+  const opponentPairs = fixtures.map((fixture) => [fixture.homeClubId, fixture.awayClubId].sort().join(":"));
+  assert.equal(new Set(opponentPairs).size, 6);
+  for (const round of [1, 2, 3]) {
+    const roundFixtures = fixtures.filter((fixture) => fixture.round === round);
+    assert.equal(roundFixtures.length, 2);
+    assert.equal(new Set(roundFixtures.flatMap((fixture) => [fixture.homeClubId, fixture.awayClubId])).size, 4);
+    assert.equal(new Set(roundFixtures.map((fixture) => fixture.scheduledAt.getTime())).size, 1);
+  }
   assert.equal(fixtures[0]!.scheduledAt.getTime() - Date.now() >= 23 * 60 * 60_000, true);
   for (const [index, fixture] of fixtures.entries()) {
     const owner = players.find((player) => player.clubId === fixture.homeClubId || player.clubId === fixture.awayClubId)!;
