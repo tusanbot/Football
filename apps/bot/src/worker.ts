@@ -9,6 +9,23 @@ interface Env {
   ENVIRONMENT?: string;
 }
 
+let cachedBotId: number | undefined;
+async function prepareBot(env: Env) {
+  const instance = createBotApp({
+    token: env.TELEGRAM_BOT_TOKEN,
+    apiUrl: env.FOOTBALL_API_URL,
+    botApiSecret: env.BOT_API_SECRET,
+    ...(env.TELEGRAM_WEB_APP_URL ? { webAppUrl: env.TELEGRAM_WEB_APP_URL } : {}),
+    environment: env.ENVIRONMENT ?? "staging",
+  });
+  if (cachedBotId === undefined) cachedBotId = (await instance.bot.api.getMe()).id;
+  instance.setBotTelegramId(cachedBotId);
+  return instance;
+}
+
+/*
+}
+
 function constantTimeEqual(left: string, right: string): boolean {
   const a = new TextEncoder().encode(left);
   const b = new TextEncoder().encode(right);
@@ -18,15 +35,6 @@ function constantTimeEqual(left: string, right: string): boolean {
   return mismatch === 0;
 }
 
-function app(env: Env) {
-  return createBotApp({
-    token: env.TELEGRAM_BOT_TOKEN,
-    apiUrl: env.FOOTBALL_API_URL,
-    botApiSecret: env.BOT_API_SECRET,
-    webAppUrl: env.TELEGRAM_WEB_APP_URL,
-    environment: env.ENVIRONMENT ?? "staging",
-  });
-}
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
@@ -48,9 +56,7 @@ export default {
       return new Response("Invalid Telegram update", { status: 400 });
     }
     try {
-      const { bot, setBotTelegramId } = app(env);
-      const identity = await bot.api.getMe();
-      setBotTelegramId(identity.id);
+      const { bot } = await prepareBot(env);
       await bot.handleUpdate(update as never);
       return new Response("ok", { status: 200 });
     } catch (error) {
@@ -59,11 +65,9 @@ export default {
     }
   },
 
-  async scheduled(_controller: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
+  async scheduled(_controller: { scheduledTime: number; cron: string }, env: Env, ctx: { waitUntil(promise: Promise<unknown>): void }): Promise<void> {
     ctx.waitUntil((async () => {
-      const { bot, runBackgroundJobs, setBotTelegramId } = app(env);
-      const identity = await bot.api.getMe();
-      setBotTelegramId(identity.id);
+      const { runBackgroundJobs } = await prepareBot(env);
       await runBackgroundJobs();
     })());
   },
