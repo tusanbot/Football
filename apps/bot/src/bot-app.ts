@@ -5,6 +5,7 @@ import {
   GROUP_REPLY_DELETE_DELAY_MS,
   isPersistentGroupReply,
   PRIVATE_MENU_ROWS,
+  PRIVATE_MENU_SUBMENUS,
   resolvePrivateMenuCommand,
   formatApiError,
   limitTelegramMessage,
@@ -356,17 +357,31 @@ async function pollMatchCheckpointNotifications() {
   }
 }
 
-function privateMenuKeyboard() {
+function privateMenuKeyboard(menu?: keyof typeof PRIVATE_MENU_SUBMENUS) {
   const keyboard = new Keyboard();
-  for (const row of PRIVATE_MENU_ROWS) {
+  const rows = menu ? PRIVATE_MENU_SUBMENUS[menu].rows : PRIVATE_MENU_ROWS;
+  for (const row of rows) {
     for (const item of row) keyboard.text(item.label);
     keyboard.row();
   }
-  if (webAppUrl) keyboard.webApp("ورود به بازی", webAppUrl);
+  if (menu) keyboard.text("↩️ بازگشت به منوی اصلی").row();
+  if (webAppUrl) keyboard.webApp("🎮 ورود به بازی", webAppUrl);
   return keyboard.resized().persistent();
 }
 function cash(value: string) { return BigInt(value).toLocaleString("fa-IR"); }
 function playerName(player: ApiPlayer) { return `${player.firstName} ${player.lastName}`; }
+function escapeHtml(value: unknown): string {
+  return String(value ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+async function replyRich(ctx: Context, richText: string, plainText: string, replyMarkup?: Keyboard) {
+  try {
+    await ctx.reply(richText, { parse_mode: "HTML", ...(replyMarkup ? { reply_markup: replyMarkup } : {}) });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (!/can't parse entities|parse entities|unsupported start tag|can't find end of the entity/i.test(message)) throw error;
+    await ctx.reply(plainText, replyMarkup ? { reply_markup: replyMarkup } : {});
+  }
+}
 
 async function sendMiniAppEntry(ctx: Context) {
   if (ctx.chat?.type !== "private" || !webAppUrl) return;
@@ -777,9 +792,20 @@ bot.command("adminhelp", async (ctx) => {
   );
 });
 
+for (const menuKey of Object.keys(PRIVATE_MENU_SUBMENUS) as Array<keyof typeof PRIVATE_MENU_SUBMENUS>) {
+  bot.command(menuKey, async (ctx) => {
+    if (ctx.chat.type !== "private") return;
+    const menu = PRIVATE_MENU_SUBMENUS[menuKey];
+    await ctx.reply(menu.title + "\nیکی از بخش‌های زیر را انتخاب کنید. برای بازگشت، دکمه «بازگشت به منوی اصلی» را بزنید.", {
+      reply_markup: privateMenuKeyboard(menuKey),
+    });
+  });
+}
+
 bot.command("menu", async (ctx) => {
   if (ctx.chat.type !== "private") return;
-  await ctx.reply("منوی اصلی Football Empire آماده است. برای عملیات دارای ورودی، از /help راهنمای دستورها را ببینید.", {
+  await ctx.reply("⚽ <b>Football Empire</b>\n\nاز منوی دسته‌بندی‌شده زیر بخش موردنظر را انتخاب کنید. برای دسترسی به همه امکانات، از دکمه ورود به بازی استفاده کنید.", {
+    parse_mode: "HTML",
     reply_markup: privateMenuKeyboard(),
   });
   await sendMiniAppEntry(ctx);
@@ -903,9 +929,9 @@ bot.command("club", async (ctx) => {
       user: { displayName: string };
     }>("/v1/me", ctx.from.id);
     if (!result.club) return ctx.reply("هنوز باشگاهی ندارید. برای ساخت باشگاه دستور /start را ارسال کنید.");
-    await ctx.reply(
-      `باشگاه: ${result.club.name}\nمدیر: ${result.user.displayName}\nسطح: ${result.club.level}\nاعتبار: ${result.club.reputation}\nتاریخ تأسیس: ${new Date(result.club.createdAt).toLocaleDateString("fa-IR")}`,
-    );
+    const plain = `🏟 باشگاه: ${result.club.name}\nمدیر: ${result.user.displayName}\nسطح: ${result.club.level}\nاعتبار: ${result.club.reputation}\nتاریخ تأسیس: ${new Date(result.club.createdAt).toLocaleDateString("fa-IR")}`;
+    const rich = `🏟 <b>${escapeHtml(result.club.name)}</b>\nمدیر: <b>${escapeHtml(result.user.displayName)}</b>\nسطح باشگاه: <b>${result.club.level}</b>\nاعتبار: <b>${result.club.reputation}</b>\nتاریخ تأسیس: ${new Date(result.club.createdAt).toLocaleDateString("fa-IR")}`;
+    await replyRich(ctx, rich, plain);
   } catch (error) {
     await ctx.reply(`دریافت اطلاعات باشگاه ناموفق بود: ${error instanceof Error ? error.message : "خطای نامشخص"}`);
   }
@@ -990,8 +1016,23 @@ bot.command("players", async (ctx) => {
     await api("/v1/club/development", ctx.from.id);
     const result = await api<{ players: ApiPlayer[] }>("/v1/club/players", ctx.from.id);
     if (!result.players.length) return ctx.reply("فهرست بازیکنان خالی است. برای تکمیل ترکیب باشگاه، مینی‌اپ را باز کنید.");
-    const lines = result.players.map((p) => `• ${playerName(p)} | ${p.position} | قدرت ${p.overall} | پتانسیل ${p.potential}${p.lineupSlot ? ` | ترکیب اصلی #${p.lineupSlot}` : ""}\n  آمادگی ${p.fitness ?? "-"} · روحیه ${p.morale ?? "-"} · قرارداد ${p.contractDays ?? "-"} روز · دستمزد ${p.wage ? cash(p.wage) : "-"} در هفته · ${p.status === "INJURED" ? "مصدوم" : p.status === "SUSPENDED" ? "محروم" : "فعال"}\n  شناسه: ${p.id}`);
-    await ctx.reply("فهرست بازیکنان فعال:\n\n" + lines.join("\n"));
+    const lines = result.players.map((player, index) => {
+      const status = player.status === "INJURED" ? "🩹 مصدوم" : player.status === "SUSPENDED" ? "⛔ محروم" : "🟢 فعال";
+      const rich = `<b>${index + 1}. ${escapeHtml(playerName(player))}</b> <code>${escapeHtml(player.position)}</code>\nقدرت: <b>${player.overall}</b> · پتانسیل: ${player.potential}${player.lineupSlot ? ` · ترکیب اصلی: #${player.lineupSlot}` : ""}\nآمادگی: ${player.fitness ?? "—"} · روحیه: ${player.morale ?? "—"}\nقرارداد: ${player.contractDays ?? "—"} روز · دستمزد: ${player.wage ? cash(player.wage) : "—"} در هفته\nوضعیت: ${status}\nشناسه: <code>${escapeHtml(player.id)}</code>`;
+      const plain = `${index + 1}. ${playerName(player)} | ${player.position} | قدرت ${player.overall} | پتانسیل ${player.potential}${player.lineupSlot ? ` | ترکیب اصلی #${player.lineupSlot}` : ""}\nآمادگی ${player.fitness ?? "-"} · روحیه ${player.morale ?? "-"} · قرارداد ${player.contractDays ?? "-"} روز · دستمزد ${player.wage ? cash(player.wage) : "-"} در هفته · ${status}\nشناسه: ${player.id}`;
+      return { rich, plain };
+    });
+    let richChunk = `👥 <b>فهرست بازیکنان باشگاه</b> · ${result.players.length} بازیکن\n\n`;
+    let plainChunk = `👥 فهرست بازیکنان باشگاه · ${result.players.length} بازیکن\n\n`;
+    for (const line of lines) {
+      if (richChunk.length + line.rich.length + 2 > 3800) {
+        await replyRich(ctx, richChunk, plainChunk);
+        richChunk = ""; plainChunk = "";
+      }
+      richChunk += line.rich + "\n\n";
+      plainChunk += line.plain + "\n\n";
+    }
+    if (richChunk) await replyRich(ctx, richChunk, plainChunk);
   } catch (error) { await ctx.reply(`دریافت فهرست بازیکنان ناموفق بود: ${error instanceof Error ? error.message : "خطای نامشخص"}`); }
 });
 
