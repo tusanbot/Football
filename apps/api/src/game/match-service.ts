@@ -1051,7 +1051,7 @@ export async function simulateScheduledMatch(userId: string, matchId: string, no
     });
     if (competition?.format === "LEAGUE") {
       const remaining = await prisma.footballMatch.count({
-        where: { competitionId: settlement.competitionId, status: "SCHEDULED" },
+        where: { competitionId: settlement.competitionId, status: { not: "COMPLETED" } },
       });
       if (remaining === 0) {
         await prisma.competition.updateMany({
