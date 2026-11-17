@@ -843,6 +843,67 @@ bot.command("adminhelp", async (ctx) => {
   );
 });
 
+bot.callbackQuery(/^league:/, async (ctx) => {
+  if (!ctx.from || ctx.chat?.type !== "private") return ctx.answerCallbackQuery({ text: "این بخش فقط در گفت‌وگوی خصوصی در دسترس است." });
+  const [, action, id] = ctx.callbackQuery.data.split(":");
+  try {
+    if (action === "join" && id) {
+      const result = await api<{joined:boolean;replayed:boolean;teams:number}>(`/v1/competitions/${encodeURIComponent(id)}/join`, ctx.from.id, "POST", {});
+      await ctx.answerCallbackQuery({ text: "عضویت در رقابت ثبت شد." });
+      await ctx.reply("🏆 ثبت‌نام شما در رقابت انجام شد. تعداد تیم‌ها: " + result.teams + (result.replayed ? " · عضویت قبلاً ثبت شده بود." : ""));
+      return;
+    }
+    if (action === "apply" && id) {
+      const tier = Number(id);
+      if (!Number.isInteger(tier) || tier < 1 || tier > 7) return ctx.answerCallbackQuery({ text: "سطح لیگ معتبر نیست." });
+      const result = await api<{status:string;waitingTeams:number;requiredTeams:number;fixturesCreated?:number}>("/v1/pyramid-leagues/apply", ctx.from.id, "POST", { tier });
+      await ctx.answerCallbackQuery({ text: "درخواست لیگ ثبت شد." });
+      await ctx.reply(result.status === "ASSIGNED"
+        ? "🏅 درخواست پذیرفته شد و لیگ پایه تشکیل شد. مسابقات برنامه‌ریزی‌شده: " + (result.fixturesCreated ?? 0)
+        : "🏅 درخواست ورود به لیگ ثبت شد. " + result.waitingTeams + " تیم از " + result.requiredTeams + " تیم در صف هستند.");
+      return;
+    }
+    await ctx.answerCallbackQuery({ text: "این گزینه معتبر نیست." });
+  } catch (error) {
+    await ctx.answerCallbackQuery({ text: "درخواست انجام نشد." }).catch(() => undefined);
+    await ctx.reply("عضویت یا درخواست لیگ ناموفق بود: " + (error instanceof Error ? error.message : "خطای نامشخص"));
+  }
+});
+
+bot.callbackQuery(/^opp:/, async (ctx) => {
+  if (!ctx.from || ctx.chat?.type !== "private") return ctx.answerCallbackQuery({ text: "چالش حریف فقط در گفت‌وگوی خصوصی ساخته می‌شود." });
+  const [, action, clubId] = ctx.callbackQuery.data.split(":");
+  if (!clubId) return ctx.answerCallbackQuery({ text: "حریف معتبر نیست." });
+  try {
+    if (action === "match") {
+      const result = await api<{match:{id:string;scheduledAt:string}}>("/v1/matches/friendly", ctx.from.id, "POST", {
+        opponentClubId: clubId, idempotencyKey: "bot-friendly-" + ctx.from.id + "-" + ctx.update.update_id,
+      });
+      await ctx.answerCallbackQuery({ text: "مسابقه دوستانه ثبت شد." });
+      await ctx.reply("⚽ مسابقه دوستانه برنامه‌ریزی شد. زمان شروع: " + new Date(result.match.scheduledAt).toLocaleString("fa-IR") + "\nشناسه مسابقه: " + result.match.id);
+      return;
+    }
+    if (action === "challenge") {
+      const result = await api<{challenge:{token:string;expiresAt:string};asset:string;goldCost:string;shareUrl:string|null}>(
+        "/v1/friendly-challenges", ctx.from.id, "POST", { idempotencyKey: randomUUID() },
+      );
+      const keyboard = new InlineKeyboard();
+      if (result.shareUrl) keyboard.url("📨 ارسال دعوت به حریف", "https://t.me/share/url?url=" + encodeURIComponent(result.shareUrl) + "&text=" + encodeURIComponent("برای مسابقه Football Empire دعوت شدی!"));
+      await ctx.answerCallbackQuery({ text: "دعوت چالش آماده شد." });
+      await ctx.reply(
+        "⚔️ دعوت چالش برای باشگاه انتخاب‌شده آماده است. لینک را برای مدیر آن باشگاه ارسال کن.\nاعتبار: " + new Date(result.challenge.expiresAt).toLocaleString("fa-IR") +
+        (result.shareUrl ? "\nلینک دعوت: " + result.shareUrl : "\nکد دعوت: " + result.challenge.token),
+        result.shareUrl ? { reply_markup: keyboard } : {},
+      );
+      return;
+    }
+    await ctx.answerCallbackQuery({ text: "گزینه معتبر نیست." });
+  } catch (error) {
+    await ctx.answerCallbackQuery({ text: "عملیات انجام نشد." }).catch(() => undefined);
+    await ctx.reply("عملیات حریف ناموفق بود: " + (error instanceof Error ? error.message : "خطای نامشخص"));
+  }
+});
+
 bot.callbackQuery(/^shop:/, async (ctx) => {
   if (!ctx.from || ctx.chat?.type !== "private") return ctx.answerCallbackQuery({ text: "خرید فقط در گفت‌وگوی خصوصی انجام می‌شود." });
   const parts = ctx.callbackQuery.data.split(":");
@@ -1665,8 +1726,18 @@ bot.command("opponents", async (ctx) => {
   if (!ctx.from || ctx.chat.type !== "private") return;
   try {
     const result = await api<{ opponents: Array<{ id: string; name: string; level: number; reputation: number }> }>("/v1/matches/opponents", ctx.from.id);
-    const lines = result.opponents.map((club) => `• ${club.name} · Level ${club.level} · Rep ${club.reputation}\n  ID: ${club.id}`);
-    await ctx.reply("باشگاه‌های آماده برای بازی دوستانه:\n" + (lines.join("\n\n") || "هنوز حریف واجد شرایطی وجود ندارد.") + "\n\n/friendly CLUB_ID");
+    const keyboard = new InlineKeyboard();
+    const lines = result.opponents.slice(0, 20).map((club) => {
+      keyboard.text("⚽ بازی با " + club.name.slice(0, 20), "opp:match:" + club.id)
+        .text("⚔️ چالش", "opp:challenge:" + club.id).row();
+      return `<b>${escapeHtml(club.name)}</b> · سطح ${club.level} · اعتبار ${club.reputation}`;
+    });
+    await replyRich(
+      ctx,
+      "👥 <b>حریفان آماده مسابقه</b>\n\n" + (lines.join("\n") || "فعلاً حریف واجد شرایطی وجود ندارد.") + "\n\nاز دکمه‌ها برای بازی دوستانه یا ساخت دعوت چالش استفاده کن.",
+      "حریفان آماده مسابقه\n" + result.opponents.slice(0, 20).map((club) => club.name + " · سطح " + club.level + " · اعتبار " + club.reputation).join("\n") + "\nبرای مسابقه از /friendly CLUB_ID استفاده کنید.",
+      keyboard,
+    );
   } catch (error) { await ctx.reply(`دریافت فهرست حریفان ناموفق بود: ${error instanceof Error ? error.message : "خطای نامشخص"}`); }
 });
 
@@ -2047,11 +2118,21 @@ bot.command("competitionrules", async (ctx) => {
 bot.command("leagues", async (ctx) => {
   if (!ctx.from || ctx.chat.type !== "private") return;
   try {
-    const result = await api<{ competitions: Array<{ id: string; name: string; season: number; format: string; teams: number; maxTeams: number; joined: boolean; isCreator: boolean }> }>("/v1/competitions", ctx.from.id);
+    const result = await api<{ competitions: Array<{ id: string; name: string; season: number; format: string; status?: string; teams: number; maxTeams: number; joined: boolean; isCreator: boolean }> }>("/v1/competitions", ctx.from.id);
+    const keyboard = new InlineKeyboard();
+    const available = result.competitions.filter((item) => !item.joined && item.teams < item.maxTeams && (!item.status || item.status === "REGISTRATION"));
+    for (const item of available.slice(0, 20)) keyboard.text("➕ عضویت · " + item.name.slice(0, 24), "league:join:" + item.id).row();
+    keyboard.text("🏅 درخواست لیگ پایه", "league:apply:1").text("⚔️ ساخت چالش", "act:challenge");
     const lines = result.competitions.map((item) =>
-      `• ${item.name} · ${item.format === "CUP" ? "جام حذفی" : "لیگ"} · ${item.teams}/${item.maxTeams} باشگاه · فصل ${item.season}${item.joined ? " · عضو هستید" : ""}\n  شناسه: ${item.id}`,
+      `• <b>${escapeHtml(item.name)}</b> · ${item.format === "CUP" ? "جام حذفی" : "لیگ"} · ${item.teams}/${item.maxTeams} باشگاه · فصل ${item.season}${item.joined ? " · عضو هستید" : ""}`
     );
-    await ctx.reply("رقابت‌های قابل ثبت‌نام:\n" + (lines.join("\n\n") || "در حال حاضر رقابتی برای ثبت‌نام وجود ندارد.") + "\n\n/joinleague ID");
+    await replyRich(
+      ctx,
+      "🏆 <b>رقابت‌های قابل ثبت‌نام</b>\n\n" + (lines.join("\n") || "در حال حاضر رقابتی برای ثبت‌نام وجود ندارد.") +
+      "\n\nبرای عضویت، دکمه رقابت موردنظر را انتخاب کن. برای ورود به هرم لیگ‌ها نیز درخواست لیگ پایه را بزن.",
+      "رقابت‌های قابل ثبت‌نام\n" + result.competitions.map((item) => item.name + " · " + item.teams + "/" + item.maxTeams + (item.joined ? " · عضو هستید" : " · /joinleague " + item.id)).join("\n"),
+      keyboard,
+    );
   } catch (error) { await ctx.reply(`دریافت رقابت‌ها ناموفق بود: ${error instanceof Error ? error.message : "خطای نامشخص"}`); }
 });
 
