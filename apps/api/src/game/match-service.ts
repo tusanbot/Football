@@ -1281,7 +1281,7 @@ async function processClaimedMatchRuntime(
     });
     const checkpointAt = new Date(now.getTime() + 45 * MATCH_MINUTE_MS);
     const decisionDeadlineAt = new Date(checkpointAt.getTime() + MATCH_CHECKPOINT_WINDOW_MS);
-    const firstHalfNextSegmentAt = new Date(decisionDeadlineAt.getTime() + 15 * MATCH_MINUTE_MS);
+    const firstHalfNextSegmentAt = decisionDeadlineAt;
     state = {
       segment: first.state,
       substitutions: { home: first.homeSubstitutions, away: first.awaySubstitutions },
@@ -1409,7 +1409,7 @@ async function processClaimedMatchRuntime(
       where: { id: runtime.id, stateVersion: runtime.stateVersion, leaseToken: runtime.leaseToken },
       data: {
         status: "RUNNING", currentMinute: nextMinute, stateVersion: { increment: 1 },
-        simulationState: jsonSafe(nextState), nextActionAt: isFullTime ? now : new Date(now.getTime() + 1_000),
+        simulationState: jsonSafe(nextState), nextActionAt: isFullTime ? new Date(now.getTime() + 15 * MATCH_MINUTE_MS) : nextAt,
         lastError: null,
       },
     });
@@ -1424,9 +1424,9 @@ async function processClaimedMatchRuntime(
     await enqueueMatchLifecycleNotifications(tx, runtime.match, lifecycleEvents);
     if (!isFullTime) {
       const nextKind = nextMinute === 60 ? "MINUTE_60" : "MINUTE_75";
-      const nextAt = now;
+      const nextAt = new Date(now.getTime() + 15 * MATCH_MINUTE_MS);
       const decisionDeadlineAt = new Date(nextAt.getTime() + MATCH_CHECKPOINT_WINDOW_MS);
-      const nextSegmentAt = new Date(decisionDeadlineAt.getTime() + 15 * MATCH_MINUTE_MS);
+      const nextSegmentAt = decisionDeadlineAt;
       await tx.matchTacticalCheckpoint.createMany({
         data: [{
           matchId: runtime.matchId, checkpointKey: "minute-" + nextMinute,
@@ -1437,10 +1437,6 @@ async function processClaimedMatchRuntime(
       });
     }
   });
-  if (isFullTime) {
-    await simulateScheduledMatch(runtime.match.homeClub.ownerId, runtime.matchId, now);
-    return "SETTLED";
-  }
   return "ADVANCED";
 }
 
