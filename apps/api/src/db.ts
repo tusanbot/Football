@@ -7,7 +7,7 @@ import { Pool } from "pg";
 const requestPrisma = new AsyncLocalStorage<PrismaClient>();
 
 export function createPrismaClient(connectionString = process.env.DATABASE_URL, maxConnections = 10): PrismaClient {
-  if (!connectionString) throw new Error("DATABASE_URL or HYPERDRIVE binding is required.");
+  if (!connectionString) throw new Error("DATABASE_URL is required.");
   if (!/^postgres(?:ql)?:\/\//i.test(connectionString)) throw new Error("The database connection must use PostgreSQL.");
   const pool = new Pool({ connectionString, max: maxConnections, idleTimeoutMillis: 5_000, connectionTimeoutMillis: 10_000, allowExitOnIdle: true });
   return new PrismaClient({ adapter: new PrismaPg(pool) });
