@@ -69,7 +69,6 @@ export const PRIVATE_MENU_ROWS = [
   [{ label: "🏟 مدیریت باشگاه", command: "menu_club" }, { label: "⚽ مسابقات", command: "menu_matches" }],
   [{ label: "👥 بازیکنان", command: "menu_players" }, { label: "💰 مالی و فروشگاه", command: "menu_economy" }],
   [{ label: "🏆 لیگ‌ها و رکوردها", command: "menu_competitions" }, { label: "❔ راهنما", command: "help" }],
-  [{ label: "⌂ منوی اصلی", command: "menu" }],
 ] as const;
 
 export const PRIVATE_MENU_SUBMENUS = {
