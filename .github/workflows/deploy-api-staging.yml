@@ -12,6 +12,8 @@ concurrency:
   group: football-empire-api-staging-only
   cancel-in-progress: false
 
+# This workflow deploys only the isolated API staging Worker. It never touches
+# production, Mini App Workers, Bot Workers, DNS, webhooks, or database migrations.
 jobs:
   deploy-api:
     if: contains(github.event.head_commit.message, '[deploy-staging-api]')
