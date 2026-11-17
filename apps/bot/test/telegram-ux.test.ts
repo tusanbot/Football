@@ -224,6 +224,32 @@ test("friendly challenge messages persist in groups and support inline acceptanc
   assert.ok(botSource.includes("لینک اختصاصی:"));
 });
 
+test("event tournaments expose player registration and admin settlement through buttons", () => {
+  const competitionMenu = PRIVATE_MENU_SUBMENUS.menu_competitions.rows.flat();
+  assert.ok(competitionMenu.some((item) => item.command === "tournaments"));
+  assert.ok(botSource.includes('bot.command("tournaments"'));
+  assert.ok(botSource.includes('bot.command("eventtournaments"'));
+  assert.ok(botSource.includes('bot.callbackQuery(/^event-tournament:/'));
+  assert.ok(botSource.includes("event-tournament:join:"));
+  assert.ok(botSource.includes("event-tournament:finalize:"));
+  assert.ok(botSource.includes("event-tournament:rank:"));
+  assert.ok(botSource.includes("event-tournament:fee:"));
+  assert.ok(botSource.includes("event-tournament:prize:"));
+  assert.ok(botSource.includes("pendingEventTournamentWizards"));
+  assert.ok(botSource.includes("pendingTournamentFinalizations"));
+});
+
+test("state-changing player and club operations have button-driven flows", () => {
+  assert.ok(botSource.includes('bot.callbackQuery(/^player:/'));
+  assert.ok(botSource.includes("player:train:"));
+  assert.ok(botSource.includes("player:renew:"));
+  assert.ok(botSource.includes("player:contract-days:"));
+  assert.ok(botSource.includes('bot.callbackQuery(/^clubop:/'));
+  for (const action of ["clubop:upgrade:", "clubop:scout", "clubop:recruit:", "clubop:sponsor:", "clubop:coach:", "clubop:ticket:"]) {
+    assert.ok(botSource.includes(action), "Missing button workflow: " + action);
+  }
+});
+
 test("classic icon challenge is reachable from the player menu and has a claim callback", () => {
   const playerMenu = PRIVATE_MENU_SUBMENUS.menu_players.rows.flat();
   assert.ok(playerMenu.some((item) => item.command === "specialchallenges"));
