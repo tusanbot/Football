@@ -193,6 +193,7 @@ model User {
   displayName        String?
   createdAt          DateTime            @default(now())
   updatedAt          DateTime            @updatedAt
+  lastActiveAt       DateTime            @default(now())
   isSuspended         Boolean             @default(false)
   suspendedAt         DateTime?
   suspensionReason    String?
