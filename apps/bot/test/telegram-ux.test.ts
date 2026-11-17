@@ -144,6 +144,10 @@ test("private menu is categorized and each submenu has a return path", () => {
   assert.ok(botSource.includes("lineup:formation:"));
   assert.ok(botSource.includes("fallback:field:"));
   assert.ok(botSource.includes("fallback:save"));
+  assert.ok(botSource.includes('bot.callbackQuery(/^mcx:/'));
+  assert.ok(botSource.includes('bot.callbackQuery(/^mct:/'));
+  assert.ok(botSource.includes('bot.callbackQuery(/^subx:/'));
+  assert.ok(botSource.includes("mcx:" + "));
   assert.ok(botSource.includes("league:join:"));
 });
 
