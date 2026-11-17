@@ -689,6 +689,7 @@ bot.callbackQuery(/^event-tournament:/, async (ctx) => {
   if (!ctx.from || ctx.chat?.type !== "private") return ctx.answerCallbackQuery({ text: "این عملیات فقط در گفت‌وگوی خصوصی مجاز است." });
   const parts = ctx.callbackQuery.data.split(":");
   const action = parts[1];
+  const value = parts[2];
   try {
     if (action === "join") {
       const tournamentId = parts[2];
@@ -772,7 +773,7 @@ bot.callbackQuery(/^event-tournament:/, async (ctx) => {
       } else if (action === "special-player" && value) {
         state.prizes.push({ placement, type: "SPECIAL_PLAYER", specialPlayerId: value });
       } else return ctx.answerCallbackQuery({ text: "جایزه انتخاب‌شده معتبر نیست." });
-      state.pendingPrizeType = undefined; state.placementIndex += 1;
+      delete state.pendingPrizeType; state.placementIndex += 1;
       await ctx.answerCallbackQuery({ text: "جایزه ثبت شد." });
       await askTournamentPrize(ctx, state);
       return;
@@ -2042,7 +2043,7 @@ bot.callbackQuery(/^player:/, async (ctx) => {
       const state = pendingTrainingSelections.get(ctx.from.id);
       const focuses = ["BALANCED","GOALKEEPING","DEFENDING","PASSING","PLAYMAKING","DRIBBLING","SHOOTING","PHYSICAL"];
       if (!state || !focuses.includes(value ?? "")) return ctx.answerCallbackQuery({ text: "فرایند تمرین منقضی شده است." });
-      state.focus = value;
+      state.focus = value!;
       const keyboard = new InlineKeyboard().text("سبک", "player:intensity:LIGHT").text("معمولی", "player:intensity:NORMAL").text("سنگین", "player:intensity:INTENSE");
       await ctx.answerCallbackQuery();
       await ctx.editMessageText("شدت تمرین را انتخاب کن:", { reply_markup: keyboard });
@@ -3234,14 +3235,14 @@ bot.on("message:text", async (ctx, next) => {
         if (!/^[1-9][0-9]{0,17}$/.test(value)) return ask("مبلغ جایزه باید عدد صحیح مثبت باشد.");
         const placement = tournamentPlacements[wizard.placementIndex]!;
         wizard.prizes.push({ placement, type: wizard.pendingPrizeType!, amount: value });
-        wizard.pendingPrizeType = undefined; wizard.placementIndex += 1;
+        delete wizard.pendingPrizeType; wizard.placementIndex += 1;
         await askTournamentPrize(ctx, wizard);
         return;
       }
       if (wizard.stage === "itemKey") {
         if (!/^[a-z0-9][a-z0-9_-]{1,79}$/i.test(value)) return ask("کلید آیتم معتبر نیست؛ فقط حروف، عدد، خط تیره و زیرخط مجاز است.");
         wizard.prizes.push({ placement: tournamentPlacements[wizard.placementIndex]!, type: "STORE_ITEM", itemKey: value });
-        wizard.placementIndex += 1; wizard.pendingPrizeType = undefined;
+        wizard.placementIndex += 1; delete wizard.pendingPrizeType;
         await askTournamentPrize(ctx, wizard);
         return;
       }
