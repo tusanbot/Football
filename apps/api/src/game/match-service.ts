@@ -1399,6 +1399,7 @@ async function processClaimedMatchRuntime(
     ],
   };
   const isFullTime = nextMinute === 90;
+  const nextAt = new Date(now.getTime() + 15 * MATCH_MINUTE_MS);
   await prisma.$transaction(async (tx) => {
     const checkpointUpdated = await tx.matchTacticalCheckpoint.updateMany({
       where: { id: checkpoint.id, status: "OPEN" },
@@ -1409,7 +1410,7 @@ async function processClaimedMatchRuntime(
       where: { id: runtime.id, stateVersion: runtime.stateVersion, leaseToken: runtime.leaseToken },
       data: {
         status: "RUNNING", currentMinute: nextMinute, stateVersion: { increment: 1 },
-        simulationState: jsonSafe(nextState), nextActionAt: isFullTime ? new Date(now.getTime() + 15 * MATCH_MINUTE_MS) : nextAt,
+        simulationState: jsonSafe(nextState), nextActionAt: nextAt,
         lastError: null,
       },
     });
@@ -1424,7 +1425,6 @@ async function processClaimedMatchRuntime(
     await enqueueMatchLifecycleNotifications(tx, runtime.match, lifecycleEvents);
     if (!isFullTime) {
       const nextKind = nextMinute === 60 ? "MINUTE_60" : "MINUTE_75";
-      const nextAt = new Date(now.getTime() + 15 * MATCH_MINUTE_MS);
       const decisionDeadlineAt = new Date(nextAt.getTime() + MATCH_CHECKPOINT_WINDOW_MS);
       const nextSegmentAt = decisionDeadlineAt;
       await tx.matchTacticalCheckpoint.createMany({
