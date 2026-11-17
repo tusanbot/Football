@@ -2674,6 +2674,8 @@ bot.command("matches", async (ctx) => {
         keyboard.text("دفاعی · " + open.minute, "mc:" + match.id + ":" + open.checkpointKey + ":DEFENSIVE")
           .text("متعادل", "mc:" + match.id + ":" + open.checkpointKey + ":BALANCED")
           .text("هجومی", "mc:" + match.id + ":" + open.checkpointKey + ":ATTACKING").row();
+        keyboard.text("⚙️ تاکتیک کامل", "mcx:" + match.id + ":" + open.checkpointKey)
+          .text("🔄 تعویض", "subx:" + match.id + ":" + open.checkpointKey).row();
       }
       return "• " + match.homeClub.name + " " + (match.homeScore ?? "–") + " : " + (match.awayScore ?? "–") + " " + match.awayClub.name
         + (match.homePenalties !== null ? " (pens " + match.homePenalties + "–" + match.awayPenalties + ")" : "")
@@ -2683,7 +2685,7 @@ bot.command("matches", async (ctx) => {
         + "\n  " + goals.join(" · ") + "\n  ID: " + match.id;
     });
     await ctx.reply("مسابقات شما:\n" + (lines.join("\n\n") || "هنوز مسابقه‌ای ندارید.")
-      + (hasActions ? "\n\nبرای انتخاب سریع ذهنیت، از دکمه‌های زیر استفاده کنید. برای تنظیم کامل تاکتیک از /tactic و برای تعویض از /sub استفاده کنید." : ""),
+      + (hasActions ? "\n\nبرای تغییر ذهنیت، تاکتیک کامل یا تعویض، دکمه‌های مربوط به هر مسابقه را انتخاب کنید." : ""),
       hasActions ? { reply_markup: keyboard } : {});
   } catch (error) { await ctx.reply("Could not load matches: " + (error instanceof Error ? error.message : "unknown error")); }
 });
