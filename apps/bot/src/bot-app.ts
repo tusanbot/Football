@@ -1529,7 +1529,7 @@ bot.command("store", async (ctx) => {
     const keyboard = new InlineKeyboard();
     for (const item of data.items) keyboard.text("🛒 " + item.name, "shop:item:" + item.key).row();
     const descriptions = data.items.map((item) =>
-      `<b>${escapeHtml(item.name)}</b>\n${escapeHtml(item.description)}\nقیمت: <b>${cash(item.price)}</b> ${item.asset === "CASH" ? "کش" : "طلا"}`
+      `<b>${escapeHtml(item.name)}</b>\n${escapeHtml(item.description)}\nقیمت: <b>${cash(item.price)}</b> ${item.asset === "CASH" ? "کش" : item.asset === "GOLD" ? "طلا" : "افتخار"}`
     );
     await replyRich(
       ctx,
