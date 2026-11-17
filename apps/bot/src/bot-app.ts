@@ -656,7 +656,17 @@ bot.command("tournaments", async (ctx) => {
       const fee = item.entryFeeAmount === "0" ? "رایگان" : item.entryFeeAmount + " " + item.entryFeeAsset;
       const status = item.status === "REGISTRATION" ? "ثبت‌نام" : item.status === "ACTIVE" ? "در حال برگزاری" : "پایان‌یافته";
       if (item.status === "REGISTRATION" && !item.joined && item.participantCount < item.maxParticipants) keyboard.text("ثبت‌نام · " + item.title.slice(0, 24), "event-tournament:join:" + item.id).row();
-      const prizeLines = item.prizes.map((prize) => { const place = prize.placement === 0 ? "سایرین" : "رتبه " + prize.placement; const reward = ["CASH","GOLD","HONOR"].includes(prize.type) ? prize.amount + " " + prize.type : prize.type === "STORE_ITEM" ? "آیتم " + (prize.itemKey ?? "") : "بازیکن ویژه"; return place + ": " + reward; }).join(" · ");\n      return "🏆 <b>" + escapeHtml(item.title) + "</b>\\n" + escapeHtml(item.description.slice(0, 240)) + "\\nوضعیت: " + status + " · شرکت‌کننده: " + item.participantCount + "/" + item.maxParticipants + "\\nورودی: " + fee + "\\nجوایز: " + escapeHtml(prizeLines || "اعلام نشده") + "\\nپایان ثبت‌نام: " + new Date(item.registrationEndsAt).toLocaleString("fa-IR", { timeZone: "Asia/Tehran" }) + (item.joined ? "\\n✅ شما ثبت‌نام کرده‌اید." : "");
+      const prizeLines = item.prizes.map((prize) => {
+        const place = prize.placement === 0 ? "سایرین" : "رتبه " + prize.placement;
+        const reward = ["CASH", "GOLD", "HONOR"].includes(prize.type) ? prize.amount + " " + prize.type
+          : prize.type === "STORE_ITEM" ? "آیتم " + (prize.itemKey ?? "") : "بازیکن ویژه";
+        return place + ": " + reward;
+      }).join(" · ");
+      return "🏆 <b>" + escapeHtml(item.title) + "</b>\n" + escapeHtml(item.description.slice(0, 240)) +
+        "\nوضعیت: " + status + " · شرکت‌کننده: " + item.participantCount + "/" + item.maxParticipants +
+        "\nورودی: " + fee + "\nجوایز: " + escapeHtml(prizeLines || "اعلام نشده") +
+        "\nپایان ثبت‌نام: " + new Date(item.registrationEndsAt).toLocaleString("fa-IR", { timeZone: "Asia/Tehran" }) +
+        (item.joined ? "\n✅ شما ثبت‌نام کرده‌اید." : "");
     });
     await ctx.reply(lines.join("\n\n"), { parse_mode: "HTML", ...(keyboard.inline_keyboard.length ? { reply_markup: keyboard } : {}) });
   } catch (error) { await ctx.reply("دریافت تورنمنت‌ها ناموفق بود: " + (error instanceof Error ? error.message : "خطای نامشخص")); }
