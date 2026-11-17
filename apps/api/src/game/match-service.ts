@@ -1378,8 +1378,8 @@ async function processClaimedMatchRuntime(
       await tx.matchTacticalCheckpoint.createMany({
         data: [{
           matchId: runtime.matchId, checkpointKey: "minute-" + nextMinute,
-          kind: nextKind, minute: nextMinute, openedAt: now,
-          decisionDeadlineAt, nextSegmentAt: nextAt,
+          kind: nextKind, minute: nextMinute, openedAt: nextAt,
+          decisionDeadlineAt, nextSegmentAt,
         }],
         skipDuplicates: true,
       });
