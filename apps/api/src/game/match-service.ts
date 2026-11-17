@@ -10,6 +10,8 @@ import {
 import { prisma } from "../db.js";
 
 const DAY_MS = 86_400_000;
+const MATCH_MINUTE_MS = 1_000;
+const MATCH_CHECKPOINT_WINDOW_MS = 5_000;
 export class MatchServiceError extends Error {
   constructor(public readonly code: string, public readonly details?: Record<string, string>) {
     super(code); this.name = "MatchServiceError";
@@ -957,7 +959,7 @@ export async function simulateScheduledMatch(userId: string, matchId: string, no
           : null,
       })),
     };
-  });
+  }, { timeout: 30_000, maxWait: 10_000 });
   if (settlement.competitionId) {
     const competition = await prisma.competition.findUnique({
       where: { id: settlement.competitionId }, select: { format: true },
@@ -1150,7 +1152,8 @@ async function processClaimedMatchRuntime(
       awaySubstitutions: initialSubstitutions.away,
       rules: rulesForMatch(runtime.match),
     });
-    const checkpointAt = new Date(now.getTime() + 60_000);
+    const checkpointAt = new Date(now.getTime() + 45 * MATCH_MINUTE_MS);
+    const decisionDeadlineAt = new Date(checkpointAt.getTime() + MATCH_CHECKPOINT_WINDOW_MS);
     state = {
       segment: first.state,
       substitutions: { home: first.homeSubstitutions, away: first.awaySubstitutions },
@@ -1162,7 +1165,7 @@ async function processClaimedMatchRuntime(
         data: {
           status: "AWAITING_CHECKPOINT", currentMinute: 45, stateVersion: { increment: 1 },
           simulationState: jsonSafe(state), startedAt: runtime.startedAt ?? now,
-          nextActionAt: new Date(now.getTime() + 5_000), lastError: null,
+          nextActionAt: decisionDeadlineAt, lastError: null,
         },
       });
       if (runtimeUpdated.count !== 1) throw new MatchServiceError("MATCH_RUNTIME_CONCURRENT_MODIFICATION");
@@ -1174,7 +1177,7 @@ async function processClaimedMatchRuntime(
       await tx.matchTacticalCheckpoint.createMany({
         data: [{
           matchId: runtime.matchId, checkpointKey: "minute-45", kind: "HALF_TIME", minute: 45,
-          openedAt: now, decisionDeadlineAt: checkpointAt, nextSegmentAt: checkpointAt,
+          openedAt: checkpointAt, decisionDeadlineAt, nextSegmentAt: decisionDeadlineAt,
         }],
         skipDuplicates: true,
       });
@@ -1268,19 +1271,20 @@ async function processClaimedMatchRuntime(
       where: { id: runtime.id, stateVersion: runtime.stateVersion, leaseToken: runtime.leaseToken },
       data: {
         status: "RUNNING", currentMinute: nextMinute, stateVersion: { increment: 1 },
-        simulationState: jsonSafe(nextState), nextActionAt: isFullTime ? now : new Date(now.getTime() + 5_000),
+        simulationState: jsonSafe(nextState), nextActionAt: isFullTime ? now : nextAt,
         lastError: null,
       },
     });
     if (runtimeUpdated.count !== 1) throw new MatchServiceError("MATCH_RUNTIME_CONCURRENT_MODIFICATION");
     if (!isFullTime) {
       const nextKind = nextMinute === 60 ? "MINUTE_60" : "MINUTE_75";
-      const nextAt = new Date(now.getTime() + 60_000);
+      const nextAt = new Date(now.getTime() + 15 * MATCH_MINUTE_MS);
+      const decisionDeadlineAt = new Date(now.getTime() + MATCH_CHECKPOINT_WINDOW_MS);
       await tx.matchTacticalCheckpoint.createMany({
         data: [{
           matchId: runtime.matchId, checkpointKey: "minute-" + nextMinute,
           kind: nextKind, minute: nextMinute, openedAt: now,
-          decisionDeadlineAt: nextAt, nextSegmentAt: nextAt,
+          decisionDeadlineAt, nextSegmentAt: nextAt,
         }],
         skipDuplicates: true,
       });
