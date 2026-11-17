@@ -123,7 +123,7 @@ test("event tournament auto-starts at capacity and settles HONOR prizes from sim
     const owner = players.find((player) => player.clubId === fixture.homeClubId || player.clubId === fixture.awayClubId)!;
     await simulateScheduledMatch(owner.userId, fixture.id, new Date(fixture.scheduledAt.getTime() + 90_000));
   }
-  const completed = await prisma.eventTournament.findUniqueOrThrow({ where: { id: tournamentId }, include: { participants: true, prizeAwards: false } as never }).catch(async () => prisma.eventTournament.findUniqueOrThrow({ where: { id: tournamentId }, include: { participants: true } }));
+  const completed = await prisma.eventTournament.findUniqueOrThrow({ where: { id: tournamentId }, include: { participants: true } });
   assert.equal(completed.status, "COMPLETED");
   assert.equal(completed.participants.length, 4);
   assert.deepEqual(completed.participants.map((participant) => participant.placement).sort(), [1, 2, 3, 4]);
