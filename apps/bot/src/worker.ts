@@ -107,7 +107,7 @@ async function recordPilotEvent(update: unknown, env: Env) {
   const userId = message?.from?.id ?? callback?.from?.id;
   if (typeof userId !== "number" || !Number.isSafeInteger(userId)) return;
   const userKey = await analyticsUserKey(userId, hashSecret);
-  const callbackPrefix = typeof callback?.data === "string" ? callback.data.split(":", 1)[0] : "";
+  const callbackPrefix = typeof callback?.data === "string" ? (callback.data.split(":", 1)[0] ?? "") : "";
   analytics.writeDataPoint({
     blobs: [eventName, command || callbackPrefix, message?.chat?.type ?? callback?.message?.chat?.type ?? "unknown", callback ? "callback_query" : message?.text ? "text_message" : "message"],
     doubles: [1],
