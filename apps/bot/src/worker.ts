@@ -4,6 +4,7 @@ interface Env {
   TELEGRAM_BOT_TOKEN: string;
   TELEGRAM_WEBHOOK_SECRET: string;
   FOOTBALL_API_URL: string;
+  FOOTBALL_API?: { fetch(request: Request): Promise<Response> };
   BOT_API_SECRET: string;
   TELEGRAM_WEB_APP_URL?: string;
   ENVIRONMENT?: string;
@@ -84,9 +85,14 @@ function schedulePilotAnalytics(promise: Promise<unknown>, context?: ExecutionCo
 let cachedBotId: number | undefined;
 let apiReadyUntil = 0;
 
+function gameApiFetch(env: Env, url: URL, init?: RequestInit): Promise<Response> {
+  const request = new Request(url, init);
+  return env.FOOTBALL_API ? env.FOOTBALL_API.fetch(request) : fetch(request);
+}
+
 async function ensureApiReady(env: Env) {
   if (Date.now() < apiReadyUntil) return;
-  const response = await fetch(new URL("/ready", env.FOOTBALL_API_URL), { signal: AbortSignal.timeout(10_000) });
+  const response = await gameApiFetch(env, new URL("/ready", env.FOOTBALL_API_URL), { signal: AbortSignal.timeout(10_000) });
   if (!response.ok) throw new Error("Game API is not ready (HTTP " + response.status + ").");
   apiReadyUntil = Date.now() + 10_000;
 }
@@ -100,7 +106,7 @@ async function analyticsUserKey(telegramUserId: number, secret: string): Promise
 async function sendPilotEvent(env: Env, event: {
   eventName: string; userKey: string; actionKey?: string; chatType?: string; source: "bot" | "miniapp";
 }) {
-  const response = await fetch(new URL("/internal/pilot/events", env.FOOTBALL_API_URL), {
+  const response = await gameApiFetch(env, new URL("/internal/pilot/events", env.FOOTBALL_API_URL), {
     method: "POST",
     headers: { "content-type": "application/json", "x-football-bot-secret": env.BOT_API_SECRET },
     body: JSON.stringify(event),
@@ -182,10 +188,11 @@ async function prepareBot(env: Env) {
     botApiSecret: env.BOT_API_SECRET,
     ...(env.TELEGRAM_WEB_APP_URL ? { webAppUrl: env.TELEGRAM_WEB_APP_URL } : {}),
     environment: env.ENVIRONMENT ?? "staging",
+    apiFetch: (url, init) => gameApiFetch(env, url, init),
   });
   if (cachedBotId === undefined) {
     const identity = await instance.bot.api.getMe();
-    const verification = await fetch(new URL("/v1/bot/verify-identity", env.FOOTBALL_API_URL), {
+    const verification = await gameApiFetch(env, new URL("/v1/bot/verify-identity", env.FOOTBALL_API_URL), {
       method: "POST",
       headers: { "content-type": "application/json", "x-football-bot-secret": env.BOT_API_SECRET },
       body: JSON.stringify({ telegramBotId: identity.id }),
