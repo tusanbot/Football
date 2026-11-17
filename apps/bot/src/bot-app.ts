@@ -2714,6 +2714,156 @@ bot.callbackQuery(/^mc:/, async (ctx) => {
   }
 });
 
+const matchTacticFields: Record<string, string[]> = {
+  formation: ["4-3-3", "4-4-2", "3-5-2", "4-2-3-1"],
+  mentality: ["DEFENSIVE", "BALANCED", "ATTACKING"],
+  pressing: ["LOW_BLOCK", "MID_BLOCK", "HIGH_PRESS"],
+  tempo: ["SLOW", "NORMAL", "FAST"],
+  passingStyle: ["SHORT", "MIXED", "DIRECT"],
+};
+function matchTacticMenu() {
+  return new InlineKeyboard()
+    .text("آرایش", "mct:field:formation").text("ذهنیت", "mct:field:mentality").row()
+    .text("پرس", "mct:field:pressing").text("سرعت", "mct:field:tempo").row()
+    .text("سبک پاس", "mct:field:passingStyle").row()
+    .text("✅ ثبت تاکتیک", "mct:save").text("لغو", "mct:cancel");
+}
+
+bot.callbackQuery(/^mcx:/, async (ctx) => {
+  if (!ctx.from || ctx.chat?.type !== "private") return ctx.answerCallbackQuery({ text: "تغییر تاکتیک مسابقه فقط در گفت‌وگوی خصوصی مجاز است." });
+  const [, matchId, checkpointKey] = ctx.callbackQuery.data.split(":");
+  if (!matchId || !/^minute-(45|60|75)$/.test(checkpointKey ?? "")) return ctx.answerCallbackQuery({ text: "مسابقه یا وقفه معتبر نیست." });
+  pendingMatchTactics.set(ctx.from.id, { matchId, checkpointKey: checkpointKey!, instruction: {} });
+  await ctx.answerCallbackQuery();
+  await ctx.editMessageText("⚙️ تنظیم تاکتیک مسابقه\nبخش‌های موردنظر را انتخاب کن؛ سپس ثبت تاکتیک را بزن.", { reply_markup: matchTacticMenu() });
+});
+
+bot.callbackQuery(/^mct:/, async (ctx) => {
+  if (!ctx.from || ctx.chat?.type !== "private") return ctx.answerCallbackQuery({ text: "این عملیات فقط در گفت‌وگوی خصوصی مجاز است." });
+  const state = pendingMatchTactics.get(ctx.from.id);
+  if (!state) return ctx.answerCallbackQuery({ text: "فرایند تاکتیک منقضی شده است؛ از فهرست مسابقات دوباره باز کن." });
+  const [, action, field, value] = ctx.callbackQuery.data.split(":");
+  if (action === "cancel") {
+    pendingMatchTactics.delete(ctx.from.id);
+    await ctx.answerCallbackQuery({ text: "تغییر تاکتیک لغو شد." });
+    await ctx.editMessageText("تغییر تاکتیک مسابقه لغو شد.");
+    return;
+  }
+  if (action === "field") {
+    const values = matchTacticFields[field ?? ""];
+    if (!values) return ctx.answerCallbackQuery({ text: "بخش تاکتیک معتبر نیست." });
+    const keyboard = new InlineKeyboard();
+    for (const option of values) keyboard.text(option, "mct:value:" + field + ":" + option).row();
+    keyboard.text("بازگشت", "mct:back");
+    await ctx.answerCallbackQuery();
+    await ctx.editMessageText("مقدار جدید برای " + field + " را انتخاب کن:", { reply_markup: keyboard });
+    return;
+  }
+  if (action === "value") {
+    if (!field || !matchTacticFields[field]?.includes(value ?? "")) return ctx.answerCallbackQuery({ text: "مقدار تاکتیک معتبر نیست." });
+    state.instruction[field] = value!;
+  } else if (action !== "back" && action !== "save") return ctx.answerCallbackQuery({ text: "گزینه معتبر نیست." });
+  if (action === "save") {
+    if (!Object.keys(state.instruction).length) return ctx.answerCallbackQuery({ text: "حداقل یک بخش تاکتیکی را تغییر بده." });
+    try {
+      await api("/v1/matches/" + encodeURIComponent(state.matchId) + "/checkpoints/" + encodeURIComponent(state.checkpointKey) + "/decisions",
+        ctx.from.id, "POST", { idempotencyKey: "bot-tactic-" + ctx.from.id + "-" + ctx.callbackQuery.id, instruction: state.instruction });
+      pendingMatchTactics.delete(ctx.from.id);
+      await ctx.answerCallbackQuery({ text: "تاکتیک ثبت شد." });
+      await ctx.editMessageText("✅ تاکتیک مسابقه ثبت شد:\n" + Object.entries(state.instruction).map(([key, item]) => key + ": " + item).join("\n"));
+      return;
+    } catch (error) {
+      await ctx.answerCallbackQuery({ text: "ثبت تاکتیک ناموفق بود.", show_alert: true });
+      await ctx.reply("ثبت تاکتیک ناموفق بود: " + (error instanceof Error ? error.message : "خطای نامشخص"));
+      return;
+    }
+  }
+  await ctx.answerCallbackQuery({ text: action === "value" ? "تنظیم تغییر کرد." : "تنظیمات" });
+  await ctx.editMessageText("⚙️ تاکتیک انتخاب‌شده:\n" + (Object.entries(state.instruction).map(([key, item]) => key + ": " + item).join("\n") || "هنوز تغییری انتخاب نشده است.") + "\n\nبخش دیگری را انتخاب کن یا ثبت را بزن.", { reply_markup: matchTacticMenu() });
+});
+
+bot.callbackQuery(/^subx:/, async (ctx) => {
+  if (!ctx.from || ctx.chat?.type !== "private") return ctx.answerCallbackQuery({ text: "تعویض بازیکن فقط در گفت‌وگوی خصوصی مجاز است." });
+  const parts = ctx.callbackQuery.data.split(":");
+  const matchId = parts[1] ?? "";
+  const checkpointKey = parts[2] ?? "";
+  const action = parts[3];
+  const state = pendingMatchSubstitutions.get(ctx.from.id);
+  try {
+    if (!action) {
+      if (!matchId || !/^minute-(45|60|75)$/.test(checkpointKey)) return ctx.answerCallbackQuery({ text: "مسابقه یا وقفه معتبر نیست." });
+      const [lineup, roster] = await Promise.all([
+        api<{ club: { players: Array<{ id: string; firstName: string; lastName: string }> } }>("/v1/club/lineup", ctx.from.id),
+        api<{ club: { players: Array<{ id: string; firstName: string; lastName: string; status: string }> } }>("/v1/club/development", ctx.from.id),
+      ]);
+      const startingIds = new Set(lineup.club.players.map((player) => player.id));
+      const startingPlayers = lineup.club.players.map((player) => ({ id: player.id, name: player.firstName + " " + player.lastName }));
+      const benchPlayers = roster.club.players.filter((player) => player.status === "ACTIVE" && !startingIds.has(player.id))
+        .map((player) => ({ id: player.id, name: player.firstName + " " + player.lastName }));
+      if (!startingPlayers.length || !benchPlayers.length) return ctx.answerCallbackQuery({ text: "برای تعویض، ترکیب اصلی و بازیکن ذخیره فعال لازم است.", show_alert: true });
+      pendingMatchSubstitutions.set(ctx.from.id, { matchId, checkpointKey, startingPlayers, benchPlayers, substitutions: [] });
+      const keyboard = new InlineKeyboard();
+      startingPlayers.forEach((player, index) => keyboard.text("خروج: " + player.name.slice(0, 18), "subx:" + matchId + ":" + checkpointKey + ":o:" + index).row());
+      keyboard.text("لغو", "subx:" + matchId + ":" + checkpointKey + ":cancel");
+      await ctx.answerCallbackQuery();
+      await ctx.editMessageText("🔄 بازیکنی را که باید از زمین خارج شود انتخاب کن:", { reply_markup: keyboard });
+      return;
+    }
+    if (!state || state.matchId !== matchId || state.checkpointKey !== checkpointKey) return ctx.answerCallbackQuery({ text: "فرایند تعویض منقضی شده است." });
+    if (action === "cancel") {
+      pendingMatchSubstitutions.delete(ctx.from.id);
+      await ctx.answerCallbackQuery({ text: "تعویض لغو شد." });
+      await ctx.editMessageText("فرایند تعویض لغو شد.");
+      return;
+    }
+    if (action === "o") {
+      const index = Number(parts[4]);
+      const outgoing = state.startingPlayers[index];
+      if (!Number.isInteger(index) || !outgoing) return ctx.answerCallbackQuery({ text: "بازیکن خروجی معتبر نیست." });
+      state.outgoingPlayerId = outgoing.id;
+      const keyboard = new InlineKeyboard();
+      state.benchPlayers.forEach((player, benchIndex) => keyboard.text("ورود: " + player.name.slice(0, 18), "subx:" + matchId + ":" + checkpointKey + ":i:" + benchIndex).row());
+      keyboard.text("بازگشت", "subx:" + matchId + ":" + checkpointKey + ":more").row().text("لغو", "subx:" + matchId + ":" + checkpointKey + ":cancel");
+      await ctx.answerCallbackQuery();
+      await ctx.editMessageText("بازیکن جایگزین را انتخاب کن:", { reply_markup: keyboard });
+      return;
+    }
+    if (action === "i") {
+      const index = Number(parts[4]);
+      const incoming = state.benchPlayers[index];
+      if (!state.outgoingPlayerId || !Number.isInteger(index) || !incoming) return ctx.answerCallbackQuery({ text: "بازیکن ورودی معتبر نیست." });
+      state.substitutions.push({ outgoingPlayerId: state.outgoingPlayerId, incomingPlayerId: incoming.id });
+      state.startingPlayers = state.startingPlayers.filter((player) => player.id !== state.outgoingPlayerId);
+      state.benchPlayers = state.benchPlayers.filter((player) => player.id !== incoming.id);
+      delete state.outgoingPlayerId;
+      await ctx.answerCallbackQuery({ text: "تعویض به فهرست اضافه شد." });
+    } else if (action === "more") {
+      const keyboard = new InlineKeyboard();
+      state.startingPlayers.forEach((player, index) => keyboard.text("خروج: " + player.name.slice(0, 18), "subx:" + matchId + ":" + checkpointKey + ":o:" + index).row());
+      keyboard.text("ثبت تعویض‌ها", "subx:" + matchId + ":" + checkpointKey + ":save").row().text("لغو", "subx:" + matchId + ":" + checkpointKey + ":cancel");
+      await ctx.answerCallbackQuery();
+      await ctx.editMessageText("تعویض بعدی را انتخاب کن:", { reply_markup: keyboard });
+      return;
+    } else if (action === "save") {
+      if (!state.substitutions.length) return ctx.answerCallbackQuery({ text: "هنوز تعویضی انتخاب نشده است." });
+      await api("/v1/matches/" + encodeURIComponent(matchId) + "/checkpoints/" + encodeURIComponent(checkpointKey) + "/decisions",
+        ctx.from.id, "POST", { idempotencyKey: "bot-sub-" + ctx.from.id + "-" + ctx.callbackQuery.id, instruction: { substitutions: state.substitutions } });
+      pendingMatchSubstitutions.delete(ctx.from.id);
+      await ctx.answerCallbackQuery({ text: "تعویض‌ها ثبت شد." });
+      await ctx.editMessageText("✅ " + state.substitutions.length + " تعویض برای وقفه " + checkpointKey + " ثبت شد؛ سرور محدودیت‌ها و اعتبار بازیکنان را بررسی می‌کند.");
+      return;
+    } else return ctx.answerCallbackQuery({ text: "گزینه معتبر نیست." });
+    const keyboard = new InlineKeyboard();
+    if (state.substitutions.length < 5 && state.startingPlayers.length && state.benchPlayers.length) keyboard.text("➕ تعویض دیگر", "subx:" + matchId + ":" + checkpointKey + ":more").row();
+    if (state.substitutions.length) keyboard.text("✅ ثبت تعویض‌ها", "subx:" + matchId + ":" + checkpointKey + ":save").row();
+    keyboard.text("لغو", "subx:" + matchId + ":" + checkpointKey + ":cancel");
+    await ctx.editMessageText("تعویض‌های انتخاب‌شده:\n" + state.substitutions.map((item, index) => (index + 1) + ". " + item.outgoingPlayerId + " ← " + item.incomingPlayerId).join("\n") + "\n\nتعویض دیگری اضافه کن یا ثبت را بزن.", { reply_markup: keyboard });
+  } catch (error) {
+    await ctx.answerCallbackQuery({ text: "تعویض ثبت نشد.", show_alert: true });
+    await ctx.reply("ثبت تعویض ناموفق بود: " + (error instanceof Error ? error.message : "خطای نامشخص"));
+  }
+});
+
 bot.command("tactic", async (ctx) => {
   if (!ctx.from || ctx.chat.type !== "private") return;
   const parts = String(ctx.match ?? "").trim().split(/\s+/).filter(Boolean);
