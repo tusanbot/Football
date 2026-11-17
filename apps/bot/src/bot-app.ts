@@ -1182,7 +1182,7 @@ bot.callbackQuery(/^nav:/, async (ctx) => {
   const target = ctx.callbackQuery.data.slice(4);
   if (target === "help") {
     await ctx.answerCallbackQuery();
-    await ctx.reply("برای مشاهده راهنمای کامل، /help را ارسال کنید.");
+    await dispatchMenuCommand(ctx, "help");
     return;
   }
   if (target === "menu") {
