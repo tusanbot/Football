@@ -1243,7 +1243,7 @@ bot.callbackQuery(/^league:/, async (ctx) => {
 });
 
 bot.callbackQuery(/^leagueview:/, async (ctx) => {
-  if (!ctx.from || !ctx.chat) return ctx.answerCallbackQuery({ text: "این بخش در گفت‌وگوی خصوصی در دسترس است." });
+  if (!ctx.from || !ctx.chat) return ctx.answerCallbackQuery({ text: "این بخش در دسترس نیست." });
   const [, view, competitionId] = ctx.callbackQuery.data.split(":");
   if (!competitionId || !["next", "table", "scorers"].includes(view ?? "")) return ctx.answerCallbackQuery({ text: "گزینه معتبر نیست." });
   try {
