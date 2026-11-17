@@ -98,7 +98,7 @@ export async function finalizeEventTournamentFromCompetition(competitionId: stri
               : prize.type === "STORE_ITEM" ? "آیتم فروشگاه · " + (prize.itemKey ?? "") : "بازیکن ویژه").join("، ");
           return "تورنمنت به پایان رسید.\n" + winners.join("\n") + "\n\nرتبه باشگاه شما: " + placement + "\nجوایز شما: " + (rewards || "جایزه‌ای برای این رتبه تعریف نشده است.");
         })(),
-        referenceId: tournament.id, dedupeKey: "event-tournament-result:" + tournament.id + ":" + participant.userId,
+        referenceId: competitionId, dedupeKey: "event-tournament-result:" + tournament.id + ":" + participant.userId,
       })), skipDuplicates: true,
     });
     return { finalized: true, replayed: false, participants: tournament.participants.length, awards: awarded };
