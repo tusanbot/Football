@@ -8,7 +8,7 @@
   "vars": {
     "ENVIRONMENT": "staging",
     "FOOTBALL_API_URL": "https://staging-api.example.invalid",
-    "TELEGRAM_WEB_APP_URL": "https://staging-football.example.invalid"
+    "TELEGRAM_WEB_APP_URL": "https://football-empire-web-staging.mshmahyar9.workers.dev"
   },
   "analytics_engine_datasets": [{ "binding": "PILOT_ANALYTICS", "dataset": "football_empire_pilot" }],
   "durable_objects": { "bindings": [{ "name": "BOT_UPDATE_GUARD", "class_name": "BotUpdateGuard" }] },
