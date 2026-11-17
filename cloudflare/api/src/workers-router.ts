@@ -41,7 +41,7 @@ import { registerAdminGroupBroadcastRoutes } from "../../../apps/api/src/admin-g
 import { registerBotRuntimeRoutes } from "../../../apps/api/src/bot-runtime-routes.js";
 import { registerPublicClubRoutes } from "../../../apps/api/src/public-club-routes.js";
 import { registerPublicPlayerRecordRoutes, type PublicPlayerRecordRepository } from "../../../apps/api/src/players/public-record-routes.js";
-import { registerSeasonAwardRoutes } from "../../../apps/api/src/game/season-award-routes.js";
+import { registerSeasonAwardRoutes, type SeasonAwardRepository } from "../../../apps/api/src/game/season-award-routes.js";
 import { registerStoreRoutes } from "../../../apps/api/src/store/store-routes.js";
 import { parseCorsOrigins } from "../../../apps/api/src/runtime-config.js";
 
@@ -81,7 +81,7 @@ function queryObject(url: URL): Record<string, string | string[]> {
   return query;
 }
 
-export function createWorkersApiRouter(dependencies: { publicPlayerRecords?: PublicPlayerRecordRepository } = {}) {
+export function createWorkersApiRouter(dependencies: { publicPlayerRecords?: PublicPlayerRecordRepository; seasonAwards?: SeasonAwardRepository } = {}) {
   const registry = new RouteRegistry();
   const registrar = registry as unknown as Parameters<typeof registerTelegramAuthRoutes>[0];
   registerTelegramAuthRoutes(registrar);
@@ -103,7 +103,7 @@ export function createWorkersApiRouter(dependencies: { publicPlayerRecords?: Pub
   registerBotRuntimeRoutes(registrar);
   registerPublicClubRoutes(registrar);
   registerPublicPlayerRecordRoutes(registrar, dependencies.publicPlayerRecords);
-  registerSeasonAwardRoutes(registrar);
+  registerSeasonAwardRoutes(registrar, dependencies.seasonAwards);
   registerStoreRoutes(registrar);
   registry.get("/v1", async () => ({
     name: "Football Empire API",
