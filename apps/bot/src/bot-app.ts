@@ -927,6 +927,40 @@ bot.callbackQuery(/^opp:/, async (ctx) => {
   }
 });
 
+bot.callbackQuery(/^inventory:/, async (ctx) => {
+  if (!ctx.from || ctx.chat?.type !== "private") return ctx.answerCallbackQuery({ text: "انبار شخصی فقط در خصوصی در دسترس است." });
+  const parts = ctx.callbackQuery.data.split(":");
+  const action = parts[1] ?? "";
+  const itemKey = parts[2] ?? "";
+  try {
+    if (action === "use") {
+      const data = await api<{players:Array<{id:string;firstName:string;lastName:string;position:string;overall:number;fitness:number;morale:number;status:string}>}>("/v1/club/players", ctx.from.id);
+      const eligible = data.players.filter((player) => player.status === "ACTIVE" || player.status === "INJURED");
+      const keyboard = new InlineKeyboard();
+      for (const player of eligible.slice(0, 25)) keyboard.text(player.firstName + " " + player.lastName + " · " + player.position + " · " + player.overall, "inventory:apply:" + itemKey + ":" + player.id).row();
+      await ctx.answerCallbackQuery();
+      await ctx.reply("👤 <b>بازیکن دریافت‌کننده آیتم را انتخاب کن</b>\nآیتم: <b>" + escapeHtml(itemKey) + "</b>\n\n" +
+        (eligible.length ? eligible.map((player) => escapeHtml(player.firstName + " " + player.lastName) + " · آمادگی " + player.fitness + " · روحیه " + player.morale).join("\n") : "بازیکن واجد شرایطی وجود ندارد."),
+        { parse_mode: "HTML", ...(eligible.length ? { reply_markup: keyboard } : {}) });
+      return;
+    }
+    if (action === "apply") {
+      const playerId = parts[3] ?? "";
+      if (!playerId) return ctx.answerCallbackQuery({ text: "بازیکن معتبر نیست." });
+      const result = await api<{usage:{itemKey:string;inventory:number;player?:{fitness:number;morale:number}}}>("/v1/store/use", ctx.from.id, "POST", {
+        itemKey, playerId, idempotencyKey: "tg-use-" + ctx.from.id + "-" + ctx.update.update_id,
+      });
+      await ctx.answerCallbackQuery({ text: "آیتم با موفقیت استفاده شد." });
+      await ctx.reply("✅ آیتم " + result.usage.itemKey + " استفاده شد. آمادگی: " + (result.usage.player?.fitness ?? "—") + " · روحیه: " + (result.usage.player?.morale ?? "—") + " · باقی‌مانده: " + result.usage.inventory);
+      return;
+    }
+    await ctx.answerCallbackQuery({ text: "گزینه معتبر نیست." });
+  } catch (error) {
+    await ctx.answerCallbackQuery({ text: "استفاده از آیتم ناموفق بود." }).catch(() => undefined);
+    await ctx.reply("استفاده از آیتم ناموفق بود: " + (error instanceof Error ? error.message : "خطای نامشخص"));
+  }
+});
+
 bot.callbackQuery(/^shop:/, async (ctx) => {
   if (!ctx.from || ctx.chat?.type !== "private") return ctx.answerCallbackQuery({ text: "خرید فقط در گفت‌وگوی خصوصی انجام می‌شود." });
   const parts = ctx.callbackQuery.data.split(":");
@@ -1432,7 +1466,11 @@ bot.command("inventory", async (ctx) => {
   if (!ctx.from || ctx.chat.type !== "private") return ctx.reply("انبار شخصی را در گفت‌وگوی خصوصی باز کنید.");
   try {
     const data = await api<{ inventory: Array<{ itemKey: string; quantity: number }> }>("/v1/store", ctx.from.id);
-    await ctx.reply(data.inventory.length ? "🎒 انبار آیتم‌ها\n" + data.inventory.map((item) => item.itemKey + " × " + item.quantity).join("\n") + "\n\nاستفاده: /useitem ITEM_KEY PLAYER_ID" : "انبار شما خالی است.");
+    if (!data.inventory.length) return ctx.reply("🎒 انبار شما خالی است. از فروشگاه آیتم تهیه کن.", { reply_markup: new InlineKeyboard().text("🛍 رفتن به فروشگاه", "act:store") });
+    const keyboard = new InlineKeyboard();
+    for (const item of data.inventory) keyboard.text("🧪 استفاده · " + item.itemKey + " × " + item.quantity, "inventory:use:" + item.itemKey).row();
+    await ctx.reply("🎒 <b>انبار آیتم‌های باشگاه</b>\n\n" + data.inventory.map((item) => "• " + escapeHtml(item.itemKey) + " × <b>" + item.quantity + "</b>").join("\n")
+      + "\n\nبرای استفاده، آیتم را انتخاب کن؛ سپس بازیکن موردنظر را بزن.", { parse_mode: "HTML", reply_markup: keyboard });
   } catch (error) { await ctx.reply("دریافت انبار ناموفق بود: " + (error instanceof Error ? error.message : "خطای نامشخص")); }
 });
 
