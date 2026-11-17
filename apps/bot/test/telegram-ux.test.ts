@@ -13,7 +13,10 @@ import {
   assertLongPollingWebhookClear,
 } from "../src/telegram-ux.js";
 
-const botSource = await readFile(new URL("../src/bot.ts", import.meta.url), "utf8");
+const botSource = (await Promise.all([
+  readFile(new URL("../src/bot-app.ts", import.meta.url), "utf8"),
+  readFile(new URL("../src/bot.ts", import.meta.url), "utf8"),
+])).join("\n");
 
 test("group replies use a one-minute transient retention window", () => {
   assert.equal(GROUP_REPLY_DELETE_DELAY_MS, 60_000);
