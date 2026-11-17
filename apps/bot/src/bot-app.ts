@@ -482,10 +482,10 @@ bot.command("start", async (ctx) => {
         );
         const keyboard = new InlineKeyboard().text("⚔️ پذیرش چالش و شروع مسابقه", "challenge:accept:" + tokenValue);
         await ctx.reply(
-          "⚔️ <b>دعوت به مسابقه دوستانه</b>\\nباشگاه دعوت‌کننده: <b>" + escapeHtml(challenge.creatorClub.name)
+          "⚔️ <b>دعوت به مسابقه دوستانه</b>\nباشگاه دعوت‌کننده: <b>" + escapeHtml(challenge.creatorClub.name)
             + "</b> · سطح " + challenge.creatorClub.level
-            + "\\nاعتبار دعوت تا: " + new Date(challenge.expiresAt).toLocaleString("fa-IR", { timeZone: "Asia/Tehran" })
-            + "\\n\\nبرای شروع مسابقه، دکمه پذیرش را انتخاب کن.",
+            + "\nاعتبار دعوت تا: " + new Date(challenge.expiresAt).toLocaleString("fa-IR", { timeZone: "Asia/Tehran" })
+            + "\n\nبرای شروع مسابقه، دکمه پذیرش را انتخاب کن.",
           { parse_mode: "HTML", reply_markup: keyboard },
         );
         return;
@@ -507,7 +507,7 @@ bot.command("start", async (ctx) => {
       `هر انتخاب را می‌توانی با دکمه انجام بدهی؛ دستورات متنی هم همچنان فعال‌اند.`,
       { reply_markup: keyboard },
     );
-    await ctx.reply("🧭 <b>منوی شیشه‌ای Football Empire</b>\\nیک دسته را برای ادامه انتخاب کنید. صفحه‌کلید متنی دسته‌بندی‌شده نیز برای دسترسی جایگزین فعال است.", {
+    await ctx.reply("🧭 <b>منوی شیشه‌ای Football Empire</b>\nیک دسته را برای ادامه انتخاب کنید. صفحه‌کلید متنی دسته‌بندی‌شده نیز برای دسترسی جایگزین فعال است.", {
       parse_mode: "HTML",
       reply_markup: inlineMenuKeyboard(),
     });
@@ -948,14 +948,14 @@ bot.callbackQuery(/^challenge:accept:/, async (ctx) => {
       "/v1/friendly-challenges/" + encodeURIComponent(token) + "/accept", ctx.from.id, "POST", {},
     );
     const when = new Date(accepted.match.scheduledAt).toLocaleString("fa-IR", { timeZone: "Asia/Tehran" });
-    const message = "⚔️ چالش پذیرفته شد!\\nباشگاه " + info.creatorClub.name
-      + " در برابر باشگاه شما قرار گرفت.\\nمسابقه وارد صف شروع خودکار شد.\\nشناسه: " + accepted.match.id
-      + "\\nزمان ثبت‌شده: " + when;
+    const message = "⚔️ چالش پذیرفته شد!\nباشگاه " + info.creatorClub.name
+      + " در برابر باشگاه شما قرار گرفت.\nمسابقه وارد صف شروع خودکار شد.\nشناسه: " + accepted.match.id
+      + "\nزمان ثبت‌شده: " + when;
     await ctx.answerCallbackQuery({ text: "چالش پذیرفته شد؛ مسابقه ثبت شد." });
     await ctx.reply(message);
     const creatorTelegramId = Number(info.creatorTelegramId);
     if (Number.isSafeInteger(creatorTelegramId) && creatorTelegramId !== ctx.from.id) {
-      await ctx.api.sendMessage(creatorTelegramId, "⚔️ دعوت چالش شما پذیرفته شد!\\nحریف وارد مسابقه شد. شناسه مسابقه: " + accepted.match.id)
+      await ctx.api.sendMessage(creatorTelegramId, "⚔️ دعوت چالش شما پذیرفته شد!\nحریف وارد مسابقه شد. شناسه مسابقه: " + accepted.match.id)
         .catch((error) => console.warn("Could not notify challenge creator:", error));
     }
     if (ctx.chat.type === "group" || ctx.chat.type === "supergroup") {
@@ -1914,11 +1914,11 @@ bot.command("opponents", async (ctx) => {
     });
     await replyRich(
       ctx,
-      "👥 <b>" + (search ? "نتایج جست‌وجوی حریف" : "۱۰ باشگاه فعال اخیر") + "</b>\\n\\n"
-        + (lines.join("\\n") || "حریف واجد شرایطی پیدا نشد.")
-        + "\\n\\nجست‌وجو با نام باشگاه یا شناسه تلگرام: /opponents QUERY",
-      "حریفان آماده مسابقه\\n" + result.opponents.map((club) => club.name + " · سطح " + club.level).join("\\n")
-        + "\\nجست‌وجو: /opponents نام باشگاه یا شناسه تلگرام",
+      "👥 <b>" + (search ? "نتایج جست‌وجوی حریف" : "۱۰ باشگاه فعال اخیر") + "</b>\n\n"
+        + (lines.join("\n") || "حریف واجد شرایطی پیدا نشد.")
+        + "\n\nجست‌وجو با نام باشگاه یا شناسه تلگرام: /opponents QUERY",
+      "حریفان آماده مسابقه\n" + result.opponents.map((club) => club.name + " · سطح " + club.level).join("\n")
+        + "\nجست‌وجو: /opponents نام باشگاه یا شناسه تلگرام",
       keyboard,
     );
   } catch (error) { await ctx.reply(`دریافت فهرست حریفان ناموفق بود: ${error instanceof Error ? error.message : "خطای نامشخص"}`); }
@@ -1947,10 +1947,10 @@ bot.command("challenge", async (ctx) => {
     );
     const shareUrl = result.shareUrl ?? (bot.botInfo?.username
       ? "https://t.me/" + bot.botInfo.username + "?start=challenge_" + result.challenge.token : null);
-    const message = "⚔️ دعوت اختصاصی چالش دوستانه ساخته شد.\\nهزینه: "
+    const message = "⚔️ دعوت اختصاصی چالش دوستانه ساخته شد.\nهزینه: "
       + (result.asset === "FREE" ? "رایگان" : result.asset === "GOLD" ? result.goldCost + " طلا" : "اعتبار خریداری‌شده")
-      + "\\nاعتبار تا: " + new Date(result.challenge.expiresAt).toLocaleString("fa-IR", { timeZone: "Asia/Tehran" })
-      + (shareUrl ? "\\n\\nلینک اختصاصی: " + shareUrl : "\\n\\nنام کاربری ربات برای ساخت لینک تنظیم نشده است.");
+      + "\nاعتبار تا: " + new Date(result.challenge.expiresAt).toLocaleString("fa-IR", { timeZone: "Asia/Tehran" })
+      + (shareUrl ? "\n\nلینک اختصاصی: " + shareUrl : "\n\nنام کاربری ربات برای ساخت لینک تنظیم نشده است.");
     const keyboard = new InlineKeyboard();
     if (shareUrl) {
       keyboard.url("📨 اشتراک‌گذاری لینک دعوت", "https://t.me/share/url?url=" + encodeURIComponent(shareUrl)
