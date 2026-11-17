@@ -108,7 +108,8 @@ export const PRIVATE_MENU_SUBMENUS = {
   menu_competitions: {
     title: "🏆 لیگ‌ها و آمار",
     rows: [
-      [{ label: "🏆 لیگ‌ها", command: "leagues" }, { label: "🏅 جوایز فصل", command: "seasonawards" }],
+      [{ label: "🏆 لیگ‌ها", command: "leagues" }, { label: "🎖 تورنمنت‌های مناسبتی", command: "tournaments" }],
+      [{ label: "🏅 جوایز فصل", command: "seasonawards" }],
       [{ label: "📊 رکوردهای بازیکنان", command: "records" }, { label: "🏟 باشگاه‌های برتر", command: "clubs" }],
     ],
   },
