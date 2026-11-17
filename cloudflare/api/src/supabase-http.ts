@@ -110,7 +110,8 @@ export class SupabaseHttpClient {
   ): Promise<T> {
     const url = new URL(this.baseUrl.toString());
     const query = path.indexOf("?");
-    url.pathname = this.baseUrl.pathname + (query < 0 ? path : path.slice(0, query));
+    const basePath = this.baseUrl.pathname.replace(/\/+$/, "");
+    url.pathname = basePath + (query < 0 ? path : path.slice(0, query));
     if (query >= 0) url.search = path.slice(query + 1);
 
     const headers = new Headers(options?.headers);
