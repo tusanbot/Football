@@ -82,7 +82,7 @@ function schedulePilotAnalytics(promise: Promise<unknown>, context?: ExecutionCo
   else void safe;
 }
 
-let cachedBotId: number | undefined;
+let cachedBot: ReturnType<typeof createBotApp> | undefined;
 let apiReadyUntil = 0;
 
 function gameApiFetch(env: Env, url: URL, init?: RequestInit): Promise<Response> {
@@ -182,6 +182,8 @@ function constantTimeEqual(left: string, right: string): boolean {
 }
 
 async function prepareBot(env: Env) {
+  if (cachedBot) return cachedBot;
+
   const instance = createBotApp({
     token: env.TELEGRAM_BOT_TOKEN,
     apiUrl: env.FOOTBALL_API_URL,
@@ -190,18 +192,22 @@ async function prepareBot(env: Env) {
     environment: env.ENVIRONMENT ?? "staging",
     apiFetch: (url, init) => gameApiFetch(env, url, init),
   });
-  if (cachedBotId === undefined) {
-    const identity = await instance.bot.api.getMe();
-    const verification = await gameApiFetch(env, new URL("/v1/bot/verify-identity", env.FOOTBALL_API_URL), {
-      method: "POST",
-      headers: { "content-type": "application/json", "x-football-bot-secret": env.BOT_API_SECRET },
-      body: JSON.stringify({ telegramBotId: identity.id }),
-      signal: AbortSignal.timeout(10_000),
-    });
-    if (!verification.ok) throw new Error("The Bot token does not match the Game API Bot identity (HTTP " + verification.status + ").");
-    cachedBotId = identity.id;
-  }
-  instance.setBotTelegramId(cachedBotId);
+
+  // grammY needs botInfo initialized before handleUpdate can dispatch updates.
+  await instance.bot.init();
+  const identity = instance.bot.botInfo;
+  if (!identity) throw new Error("Telegram Bot initialization did not return bot identity.");
+
+  const verification = await gameApiFetch(env, new URL("/v1/bot/verify-identity", env.FOOTBALL_API_URL), {
+    method: "POST",
+    headers: { "content-type": "application/json", "x-football-bot-secret": env.BOT_API_SECRET },
+    body: JSON.stringify({ telegramBotId: identity.id }),
+    signal: AbortSignal.timeout(10_000),
+  });
+  if (!verification.ok) throw new Error("The Bot token does not match the Game API Bot identity (HTTP " + verification.status + ").");
+
+  instance.setBotTelegramId(identity.id);
+  cachedBot = instance;
   return instance;
 }
 
