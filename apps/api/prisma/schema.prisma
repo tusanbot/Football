@@ -729,6 +729,32 @@ model MatchResultNotification {
   @@index([telegramChatId, createdAt])
 }
 
+model MatchLifecycleNotification {
+  id String @id @default(cuid())
+  matchId String
+  channel String
+  eventKey String
+  kind String
+  minute Int
+  homeScore Int
+  awayScore Int
+  telegramChatId String
+  payload Json?
+  status String @default("PENDING")
+  attempts Int @default(0)
+  availableAt DateTime @default(now())
+  lockedUntil DateTime?
+  claimToken String?
+  lastError String?
+  deliveredAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  match FootballMatch @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  @@unique([matchId, channel, eventKey])
+  @@index([status, availableAt, lockedUntil])
+  @@index([telegramChatId, createdAt])
+}
+
 model MatchRuntime {
   id String @id @default(cuid())
   matchId String @unique
