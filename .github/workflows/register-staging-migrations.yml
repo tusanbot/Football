@@ -41,7 +41,7 @@ jobs:
         with:
           node-version: 22
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: pnpm install --no-frozen-lockfile
       - name: Verify direct staging database target
         shell: bash
         run: |
