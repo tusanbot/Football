@@ -56,7 +56,7 @@ test("unknown private text is not converted into a command", () => {
 test("every registered group command has an explicit transient or persistent classification", () => {
   const staticGroupCommands = [...botSource.matchAll(/bot\.command\(\s*["']([^"']+)["']/g)]
     .map((match) => match[1])
-    .filter((command) => command === "start" || command === "group" || command.startsWith("group-") || command.startsWith("alliance"));
+    .filter((command) => command === "start" || command === "group" || command === "challenge" || command.startsWith("group-") || command.startsWith("alliance"));
   // These two aliases are registered from the alliance response loop rather than bot.command literals.
   const dynamicGroupCommands = ["alliance-accept", "alliance-decline"];
   for (const command of dynamicGroupCommands) {
@@ -106,10 +106,10 @@ test("bot source does not bypass the group reply retention wrapper with direct s
   const directSendPattern =
     /(?:ctx|bot)\.api\.(?:sendMessage|sendPhoto|sendDocument|sendVideo|sendAudio|sendAnimation|sendMediaGroup|sendLocation|sendVenue|sendPoll|sendSticker|sendVoice|sendVideoNote)|ctx\.replyWith(?:Photo|Document|Video|Audio|Animation|MediaGroup|Location|Venue|Poll|Sticker|Voice|VideoNote)/g;
   const directSends = [...botSource.matchAll(directSendPattern)].map((match) => match[0]);
-  // Two direct sends are private-user league notices; the third is the durable
-  // admin broadcast worker. All group deliveries are intentionally persistent.
-  assert.deepEqual(directSends, ["bot.api.sendMessage", "bot.api.sendMessage", "bot.api.sendMessage"]);
-  assert.equal((botSource.match(/bot\.api\.sendMessage\(telegramId/g) ?? []).length, 2);
+  // Background sends and explicit challenge/result DMs are intentional; ordinary command
+  // responses continue through ctx.reply and the transient-retention wrapper.
+  assert.deepEqual(directSends, ["bot.api.sendMessage", "bot.api.sendMessage", "bot.api.sendMessage", "bot.api.sendMessage", "bot.api.sendMessage", "ctx.api.sendMessage", "ctx.api.sendMessage"]);
+  assert.equal((botSource.match(/bot\.api\.sendMessage\(telegramId/g) ?? []).length, 4);
   assert.ok(botSource.includes("bot.api.sendMessage(Number(delivery.telegramGroupId), delivery.message)"));
   assert.ok(botSource.includes("/v1/bot/admin-group-broadcasts/"));
   assert.ok(/" \+ delivery\.id \+ "\/complete"/.test(botSource));
@@ -139,6 +139,14 @@ test("private menu is categorized and each submenu has a return path", () => {
   assert.ok(botSource.includes('bot.callbackQuery(/^g:/'));
   assert.ok(botSource.includes("groupStartKeyboard()"));
   assert.ok(botSource.includes("shop:buy:"));
+  assert.ok(botSource.includes('bot.callbackQuery(/^lineup:/'));
+  assert.ok(botSource.includes('bot.callbackQuery(/^fallback:/'));
+  assert.ok(botSource.includes("lineup:formation:"));
+  assert.ok(botSource.includes("fallback:field:"));
+  assert.ok(botSource.includes("fallback:save"));
+  assert.ok(botSource.includes('bot.callbackQuery(/^mcx:/'));
+  assert.ok(botSource.includes('bot.callbackQuery(/^mct:/'));
+  assert.ok(botSource.includes('bot.callbackQuery(/^subx:/'));
   assert.ok(botSource.includes("league:join:"));
 });
 
@@ -159,7 +167,7 @@ test("Persian help documents the non-administrative game commands", () => {
   const documented = [
     "redeem", "group-register", "group-join", "group-activity", "group-shop", "group-buy",
     "group-challenges", "group-challenge", "group-challenge-join", "group-challenge-complete",
-    "group-check", "group-league", "group-league-join", "group-league-start", "group-league-table",
+    "group-check", "group-league", "group-league-join", "group-league-table",
     "group-rewards", "group-treasury", "group-give", "group-challenge-cancel", "group-leagues",
     "setlineup", "development", "operations", "ticket-price", "coach-upgrade", "hire-coach",
     "acceptchallenge", "pyramidleagues", "leaguehistory", "pyramidtable", "leagueapply",
@@ -214,6 +222,36 @@ test("friendly challenge messages persist in groups and support inline acceptanc
   assert.ok(botSource.includes("challenge:accept:"));
   assert.ok(botSource.includes("start=challenge_"));
   assert.ok(botSource.includes("match-results/claim"));
+  assert.ok(botSource.includes("result.shareUrl ?? (bot.botInfo?.username"));
+  assert.ok(botSource.includes('"challenge:accept:" + result.challenge.token'));
+  assert.ok(botSource.includes("لینک اختصاصی:"));
+});
+
+test("event tournaments expose registration and automatic result views without manual settlement", () => {
+  const competitionMenu = PRIVATE_MENU_SUBMENUS.menu_competitions.rows.flat();
+  assert.ok(competitionMenu.some((item) => item.command === "tournaments"));
+  assert.ok(botSource.includes('bot.command("tournaments"'));
+  assert.ok(botSource.includes('bot.command("eventtournaments"'));
+  assert.ok(botSource.includes('bot.callbackQuery(/^event-tournament:/'));
+  assert.ok(botSource.includes("event-tournament:join:"));
+  assert.ok(botSource.includes("event-tournament:view:"));
+  assert.equal(botSource.includes("event-tournament:finalize:"), false);
+  assert.equal(botSource.includes("event-tournament:rank:"), false);
+  assert.ok(botSource.includes("event-tournament:fee:"));
+  assert.ok(botSource.includes("event-tournament:prize:"));
+  assert.ok(botSource.includes("pendingEventTournamentWizards"));
+  assert.equal(botSource.includes("pendingTournamentFinalizations"), false);
+});
+
+test("state-changing player and club operations have button-driven flows", () => {
+  assert.ok(botSource.includes('bot.callbackQuery(/^player:/'));
+  assert.ok(botSource.includes("player:train:"));
+  assert.ok(botSource.includes("player:renew:"));
+  assert.ok(botSource.includes("player:contract-days:"));
+  assert.ok(botSource.includes('bot.callbackQuery(/^clubop:/'));
+  for (const action of ["clubop:upgrade:", "clubop:scout", "clubop:recruit:", "clubop:sponsor:", "clubop:coach:", "clubop:ticket:"]) {
+    assert.ok(botSource.includes(action), "Missing button workflow: " + action);
+  }
 });
 
 test("classic icon challenge is reachable from the player menu and has a claim callback", () => {

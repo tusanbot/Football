@@ -452,6 +452,8 @@ test("durable match worker advances checkpoints, resumes on two early decisions 
     const firstTick = await processDueMatchRuntimes("test-runtime-worker", kickoff, 5);
     assert.equal(firstTick.enqueued, 1);
     assert.equal(firstTick.advanced, 1);
+    const kickoffNotifications = await prisma.matchLifecycleNotification.findMany({ where: { matchId: created.match.id, kind: "KICKOFF" } });
+    assert.deepEqual(new Set(kickoffNotifications.map((item) => item.channel)), new Set(["HOME", "AWAY"]));
     const firstRuntime = await prisma.matchRuntime.findUniqueOrThrow({ where: { matchId: created.match.id } });
     const firstState = firstRuntime.simulationState as {
       segment: { events: Array<{ type: string; minute: number; playerId: string; detail: string }>; home: { side: { players: Array<{ id: string; position: string }> } } };
@@ -475,7 +477,7 @@ test("durable match worker advances checkpoints, resumes on two early decisions 
       where: { matchId_checkpointKey: { matchId: created.match.id, checkpointKey: "minute-45" } },
     });
     assert.equal(halfTime.status, "OPEN");
-    const decisionTime = new Date(kickoff.getTime() + 7_000);
+    const decisionTime = new Date(kickoff.getTime() + 47_000);
     const homeRoster = await prisma.player.findMany({
       where: { clubId: clubs[0]!.clubId }, select: { id: true, position: true, lineupSlot: true },
     });
@@ -494,9 +496,11 @@ test("durable match worker advances checkpoints, resumes on two early decisions 
       { mentality: "DEFENSIVE", pressing: "LOW_BLOCK" }, decisionTime,
     );
     const resumed = await processDueMatchRuntimes(
-      "test-runtime-worker", new Date(kickoff.getTime() + 10_000), 5,
+      "test-runtime-worker", new Date(kickoff.getTime() + 50_000), 5,
     );
     assert.equal(resumed.advanced, 1);
+    const halftimeNotifications = await prisma.matchLifecycleNotification.findMany({ where: { matchId: created.match.id, kind: "HALF_TIME" } });
+    assert.deepEqual(new Set(halftimeNotifications.map((item) => item.channel)), new Set(["HOME", "AWAY"]));
     const minute60 = await prisma.matchTacticalCheckpoint.findUniqueOrThrow({
       where: { matchId_checkpointKey: { matchId: created.match.id, checkpointKey: "minute-60" } },
     });
@@ -506,9 +510,13 @@ test("durable match worker advances checkpoints, resumes on two early decisions 
     );
     assert.equal(minute75Tick.advanced, 1);
     const fullTimeTick = await processDueMatchRuntimes(
-      "test-runtime-worker", new Date(kickoff.getTime() + 130_000), 5,
+      "test-runtime-worker", new Date(kickoff.getTime() + 90_000), 5,
     );
-    assert.equal(fullTimeTick.settled, 1);
+    assert.equal(fullTimeTick.settled, 0);
+    const settlementTick = await processDueMatchRuntimes(
+      "test-runtime-worker", new Date(kickoff.getTime() + 105_000), 5,
+    );
+    assert.equal(settlementTick.settled, 1);
     const [match, runtime, checkpoints] = await Promise.all([
       prisma.footballMatch.findUniqueOrThrow({ where: { id: created.match.id } }),
       prisma.matchRuntime.findUniqueOrThrow({ where: { matchId: created.match.id } }),
@@ -516,6 +524,7 @@ test("durable match worker advances checkpoints, resumes on two early decisions 
     ]);
     assert.equal(match.status, "COMPLETED");
     assert.equal(runtime.status, "COMPLETED");
+    assert.equal(await prisma.matchResultNotification.count({ where: { matchId: match.id } }), 2);
     assert.equal(runtime.currentMinute, 90);
     const finalRuntimeState = runtime.simulationState as {
       segment: { playerStats: Array<{ playerId:string; minutesPlayed:number; shots:number; passes:number; tackles:number; fitnessLoss:number }> };

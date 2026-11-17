@@ -65,6 +65,10 @@ async function createLeagueForEight(tx: Prisma.TransactionClient, tier: number, 
     data: { status: "ASSIGNED", assignedLeagueId: league.id },
   });
   const clubs = applications.map((application) => application.clubId);
+  for (let index = clubs.length - 1; index > 0; index--) {
+    const swapIndex = randomBytes(4).readUInt32BE(0) % (index + 1);
+    [clubs[index], clubs[swapIndex]] = [clubs[swapIndex]!, clubs[index]!];
+  }
   const slots: Array<string | null> = [...clubs];
   const rounds = slots.length - 1;
   const fixtures: Array<{ idempotencyKey: string; type: "LEAGUE"; competitionId: string; round: number; homeClubId: string; awayClubId: string; scheduledAt: Date; seed: string; rulesSnapshot: Prisma.InputJsonValue }> = [];
@@ -78,7 +82,7 @@ async function createLeagueForEight(tx: Prisma.TransactionClient, tier: number, 
       const key = `${idempotencyKey}:r${round + 1}:${homeClubId}:${awayClubId}`;
       fixtures.push({
         idempotencyKey: key, type: "LEAGUE", competitionId: competition.id, round: round + 1,
-        homeClubId, awayClubId, scheduledAt: new Date(now.getTime() + (round + 1) * 3 * DAY_MS),
+        homeClubId, awayClubId, scheduledAt: new Date(now.getTime() + DAY_MS + round * DAY_MS),
         seed: key, rulesSnapshot: LEAGUE_RULES as unknown as Prisma.InputJsonValue,
       });
     }
@@ -256,12 +260,16 @@ export async function getPyramidLeagueDetails(userId: string, leagueId: string) 
   const players = await prisma.player.findMany({ where: { id: { in: playerIds } }, select: { id: true, firstName: true, lastName: true } });
   const names = new Map(players.map((player) => [player.id, player.firstName + " " + player.lastName]));
   const clubNames = new Map(league.competition.entries.map((entry) => [entry.clubId, entry.club.name]));
+  const nextRound = league.competition.matches.filter((match) => match.status !== "COMPLETED" && match.round !== null)
+    .reduce<number | null>((minimum, match) => minimum === null ? match.round! : Math.min(minimum, match.round!), null);
+  const nextRoundMatches = nextRound === null ? [] : league.competition.matches.filter((match) => match.round === nextRound);
   return {
     league: { id: league.id, tier: league.tier, tierName: leagueTier(league.tier).name, season: league.season, groupNumber: league.groupNumber, name: league.competition.name, status: league.competition.status, startsAt: league.competition.startsAt?.toISOString() ?? null },
     standings: standings.map((row, index) => ({ ...row, position: index + 1 })),
     topScorers: scorers.map((row) => ({ playerId: row.playerId, playerName: names.get(row.playerId) ?? "Unknown", clubId: row.clubId, clubName: clubNames.get(row.clubId) ?? "Club", goals: row._sum.goals ?? 0 })),
     topAssists: assists.map((row) => ({ playerId: row.playerId, playerName: names.get(row.playerId) ?? "Unknown", clubId: row.clubId, clubName: clubNames.get(row.clubId) ?? "Club", assists: row._sum.assists ?? 0 })),
     matches: league.competition.matches.map((match) => ({ id: match.id, round: match.round, scheduledAt: match.scheduledAt.toISOString(), status: match.status, homeClub: match.homeClub, awayClub: match.awayClub, homeScore: match.homeScore, awayScore: match.awayScore })),
+    nextRound, nextRoundMatches: nextRoundMatches.map((match) => ({ id: match.id, round: match.round, scheduledAt: match.scheduledAt.toISOString(), status: match.status, homeClub: match.homeClub, awayClub: match.awayClub, homeScore: match.homeScore, awayScore: match.awayScore })),
     awards: league.awards.map((award) => ({ placement: award.placement, awardName: award.awardName, awardType: award.awardType, clubName: award.club.name })),
   };
 }

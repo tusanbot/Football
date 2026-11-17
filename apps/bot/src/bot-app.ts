@@ -46,6 +46,28 @@ if (webAppUrl) {
 const bot = new Bot(token);
 const pendingClubNameEdits = new Map<number, { promptMessageId: number; expiresAt: number }>();
 const pendingGroupCreations = new Map<number, { chatId: number; promptMessageId: number; kind: "challenge" | "league"; expiresAt: number }>();
+const pendingLineupSelections = new Map<number, { formation: string; playerIds: string[]; lineupVersion: number; players: Array<{ id: string; firstName: string; lastName: string; position: string; overall: number }> }>();
+const pendingFallbackEdits = new Map<number, { plan: Record<string, string>; version: number }>();
+const pendingTrainingSelections = new Map<number, { playerId: string; focus?: string }>();
+const pendingContractSelections = new Map<number, { playerId: string; minWage: string; maxWage: string; days?: number }>();
+const pendingMatchTactics = new Map<number, { matchId: string; checkpointKey: string; instruction: Record<string, string> }>();
+const pendingMatchSubstitutions = new Map<number, {
+  matchId: string; checkpointKey: string;
+  startingPlayers: Array<{ id: string; name: string }>;
+  benchPlayers: Array<{ id: string; name: string }>;
+  substitutions: Array<{ outgoingPlayerId: string; incomingPlayerId: string }>;
+  outgoingPlayerId?: string;
+}>();
+
+type EventTournamentPrizeDraft = { placement: number; type: "CASH" | "GOLD" | "HONOR" | "STORE_ITEM" | "SPECIAL_PLAYER"; amount?: string; itemKey?: string; specialPlayerId?: string };
+type EventTournamentWizard = {
+  promptMessageId: number; stage: "title" | "description" | "registrationDays" | "startsInDays" | "maxParticipants" | "feeAmount" | "prizeAmount" | "itemKey" | "specialPlayerId";
+  title?: string; description?: string; registrationDays?: number; startsInDays?: number; maxParticipants?: number;
+  feeAsset?: "CASH" | "GOLD" | "HONOR"; feeAmount?: string; prizes: EventTournamentPrizeDraft[];
+  placementIndex: number; pendingPrizeType?: EventTournamentPrizeDraft["type"];
+};
+const pendingEventTournamentWizards = new Map<number, EventTournamentWizard>();
+
 
 bot.use(async (ctx, next) => {
   const originalReply = ctx.reply.bind(ctx);
@@ -200,7 +222,7 @@ async function scheduleGroupReplyDeletion(chatId: number, messageId: number) {
 }
 
 
-type LeagueNoticeDelivery = { id: string; telegramId: string; title: string; body: string; claimToken: string };
+type LeagueNoticeDelivery = { id: string; telegramId: string; title: string; body: string; kind: string; referenceId: string | null; claimToken: string };
 let leagueNoticeWorkerBusy = false;
 async function pollAdminGroupBroadcastQueue() {
   if (!apiUrl || !botApiSecret) return;
@@ -236,7 +258,12 @@ async function pollLeagueNoticeQueue() {
       const telegramId = Number(notice.telegramId);
       try {
         if (!Number.isSafeInteger(telegramId)) throw new Error("Telegram user id is outside JavaScript safe integer range");
-        await bot.api.sendMessage(telegramId, notice.title + "\n\n" + notice.body);
+        const keyboard = ["ROUND_RESULTS", "EVENT_TOURNAMENT_RESULT"].includes(notice.kind) && notice.referenceId
+          ? new InlineKeyboard().text("بازی‌های هفته بعد", "leagueview:next:" + notice.referenceId)
+            .text("جدول لیگ", "leagueview:table:" + notice.referenceId)
+            .row().text("جدول گلزنان", "leagueview:scorers:" + notice.referenceId)
+          : undefined;
+        await bot.api.sendMessage(telegramId, notice.title + "\n\n" + notice.body, keyboard ? { reply_markup: keyboard } : {});
         await apiSystem("/v1/bot/league-notices/" + encodeURIComponent(notice.id) + "/complete", { claimToken: notice.claimToken });
       } catch (error) {
         await apiSystem("/v1/bot/league-notices/" + encodeURIComponent(notice.id) + "/fail", {
@@ -361,6 +388,51 @@ async function pollMatchCheckpointNotifications() {
   }
 }
 
+let matchLifecycleNotificationWorkerBusy = false;
+async function pollMatchLifecycleNotifications() {
+  if (matchLifecycleNotificationWorkerBusy || !apiUrl || !botApiSecret) return;
+  matchLifecycleNotificationWorkerBusy = true;
+  try {
+    const result = await apiSystem<{ notifications: Array<{
+      id: string; channel: "HOME" | "AWAY" | "GROUP"; telegramChatId: string; claimToken: string;
+      kind: "KICKOFF" | "GOAL" | "HALF_TIME"; minute: number; homeScore: number; awayScore: number;
+      payload: { teamName?: string; scorerName?: string; assistName?: string } | null;
+      match: { id: string; homeClub: string; awayClub: string };
+    }> }>("/v1/bot/match-lifecycle/claim", { limit: 50 });
+    for (const notification of result.notifications) {
+      const acknowledge = (delivered: boolean, error?: string) => apiSystem(
+        "/v1/bot/match-lifecycle/ack",
+        { id: notification.id, claimToken: notification.claimToken, delivered, ...(error ? { error } : {}) },
+      );
+      const telegramId = Number(notification.telegramChatId);
+      if (!Number.isSafeInteger(telegramId)) {
+        await acknowledge(false, "INVALID_TELEGRAM_CHAT_ID").catch(() => undefined);
+        continue;
+      }
+      const score = "\n" + notification.match.homeClub + " " + notification.homeScore + " : " + notification.awayScore + " " + notification.match.awayClub;
+      let message: string;
+      if (notification.kind === "KICKOFF") message = "⚽ <b>سوت آغاز مسابقه</b>" + score + "\nبازی شروع شد.";
+      else if (notification.kind === "HALF_TIME") message = "⏸ <b>پایان نیمه اول</b> · دقیقه ۴۵" + score + "\n۵ ثانیه استراحت تاکتیکی؛ نیمه دوم به‌صورت خودکار ادامه پیدا می‌کند.";
+      else {
+        const payload = notification.payload ?? {};
+        message = "⚽ <b>گــــل!</b> · دقیقه " + notification.minute
+          + "\n" + escapeHtml(payload.teamName ?? "تیم") + "\nزننده گل: " + escapeHtml(payload.scorerName ?? "بازیکن")
+          + (payload.assistName ? "\nپاس گل: " + escapeHtml(payload.assistName) : "") + score;
+      }
+      try {
+        await bot.api.sendMessage(telegramId, message, { parse_mode: "HTML" });
+        await acknowledge(true);
+      } catch (sendError) {
+        const detail = sendError instanceof Error ? sendError.message : "TELEGRAM_SEND_FAILED";
+        await acknowledge(false, detail.slice(0, 500)).catch(() => undefined);
+      }
+    }
+  } catch (error) {
+    console.warn("Match lifecycle notification poll failed:", error instanceof Error ? error.message : error);
+  } finally {
+    matchLifecycleNotificationWorkerBusy = false;
+  }
+}
 let matchResultNotificationWorkerBusy = false;
 async function pollMatchResultNotifications() {
   if (matchResultNotificationWorkerBusy || !apiUrl || !botApiSecret) return;
@@ -368,7 +440,7 @@ async function pollMatchResultNotifications() {
   try {
     const result = await apiSystem<{ notifications: Array<{
       id: string; channel: "HOME" | "AWAY" | "GROUP"; telegramChatId: string; claimToken: string; attempt: number;
-      match: { id: string; homeClub: string; awayClub: string; homeScore: number | null; awayScore: number | null; completedAt: string | null };
+      match: { id: string; homeClub: string; awayClub: string; homeScore: number | null; awayScore: number | null; completedAt: string | null; statistics: { home: { shots: number; passes: number; tackles: number }; away: { shots: number; passes: number; tackles: number } }; scorers: Array<{ player: string; goals: number }> };
     }> }>("/v1/bot/match-results/claim", { limit: 25 });
     for (const notification of result.notifications) {
       const acknowledge = (delivered: boolean, error?: string) => apiSystem(
@@ -382,12 +454,15 @@ async function pollMatchResultNotifications() {
         continue;
       }
       const match = notification.match;
-      const message = "🏁 <b>نتیجه نهایی مسابقه</b>\n"
+      const message = "🏁 <b>پایان مسابقه</b>\n"
         + "<b>" + escapeHtml(match.homeClub) + "</b> " + (match.homeScore ?? "—")
         + " : " + (match.awayScore ?? "—") + " <b>" + escapeHtml(match.awayClub) + "</b>"
-        + "\nنوع اعلان: " + (notification.channel === "GROUP" ? "گروه" : "گزارش شخصی")
-        + "\nشناسه مسابقه: " + match.id
-        + (match.completedAt ? "\nپایان: " + new Date(match.completedAt).toLocaleString("fa-IR", { timeZone: "Asia/Tehran" }) : "");
+        + "\n\n📊 <b>آمار</b>"
+        + "\nشوت‌ها: " + match.statistics.home.shots + " - " + match.statistics.away.shots
+        + "\nپاس‌ها: " + match.statistics.home.passes + " - " + match.statistics.away.passes
+        + "\nتکل‌ها: " + match.statistics.home.tackles + " - " + match.statistics.away.tackles
+        + (match.scorers.length ? "\n\n⚽ <b>گلزنان</b>\n" + match.scorers.map((item) => escapeHtml(item.player) + " · " + item.goals + " گل").join("\n") : "\n\n⚽ بدون گل")
+        + (match.completedAt ? "\n\nپایان: " + new Date(match.completedAt).toLocaleString("fa-IR", { timeZone: "Asia/Tehran" }) : "");
       try {
         await bot.api.sendMessage(telegramId, message, { parse_mode: "HTML" });
         await acknowledge(true);
@@ -583,7 +658,207 @@ bot.command("redeem", async (ctx) => {
   }
 });
 
+
+const tournamentPlacements = [1, 2, 3, 0] as const;
+async function askTournamentPrize(ctx: Context, state: EventTournamentWizard) {
+  if (!ctx.from) return;
+  if (state.placementIndex >= tournamentPlacements.length) {
+    if (!state.prizes.length) {
+      state.placementIndex = 0;
+      const prompt = await ctx.reply("باید دست‌کم برای یکی از رتبه‌ها جایزه تعیین شود. جایزه نفر اول را انتخاب کن:", {
+        reply_markup: new InlineKeyboard().text("کش", "event-tournament:prize:CASH").text("طلا", "event-tournament:prize:GOLD").text("Honor", "event-tournament:prize:HONOR").row().text("آیتم", "event-tournament:prize:STORE_ITEM").text("بازیکن ویژه", "event-tournament:prize:SPECIAL_PLAYER"),
+      });
+      state.promptMessageId = prompt.message_id;
+      return;
+    }
+    try {
+      const now = Date.now();
+      const registrationEndsAt = new Date(now + (state.registrationDays ?? 1) * 86_400_000);
+      const startsAt = new Date(now + (state.startsInDays ?? 2) * 86_400_000);
+      const result = await api<{ tournament: { id: string; title: string } }>("/v1/admin/event-tournaments", ctx.from.id, "POST", {
+        idempotencyKey: randomUUID(), title: state.title, description: state.description,
+        ...(state.feeAsset ? { entryFeeAsset: state.feeAsset } : {}), entryFeeAmount: state.feeAmount ?? "0",
+        maxParticipants: state.maxParticipants, registrationEndsAt: registrationEndsAt.toISOString(),
+        startsAt: startsAt.toISOString(), prizes: state.prizes,
+      });
+      pendingEventTournamentWizards.delete(ctx.from.id);
+      await ctx.reply("✅ تورنمنت «" + result.tournament.title + "» ساخته شد و ثبت‌نام آن آغاز شده است. شناسه: " + result.tournament.id);
+    } catch (error) {
+      await ctx.reply("ساخت تورنمنت ناموفق بود: " + (error instanceof Error ? error.message : "خطای نامشخص"));
+      pendingEventTournamentWizards.delete(ctx.from.id);
+    }
+    return;
+  }
+  const placement = tournamentPlacements[state.placementIndex]!;
+  const label = placement === 0 ? "سایر شرکت‌کنندگان" : "نفر " + placement;
+  const prompt = await ctx.reply("جایزه " + label + " را انتخاب کن:", {
+    reply_markup: new InlineKeyboard()
+      .text("کش", "event-tournament:prize:CASH").text("طلا", "event-tournament:prize:GOLD").text("Honor", "event-tournament:prize:HONOR").row()
+      .text("آیتم فروشگاه", "event-tournament:prize:STORE_ITEM").text("بازیکن ویژه", "event-tournament:prize:SPECIAL_PLAYER").row()
+      .text("بدون جایزه", "event-tournament:prize:NONE"),
+  });
+  state.promptMessageId = prompt.message_id;
+}
+
+async function askTournamentText(ctx: Context, state: EventTournamentWizard, promptText: string) {
+  const prompt = await ctx.reply(promptText);
+  state.promptMessageId = prompt.message_id;
+}
+
 const adminOnlyInPrivate = (ctx: Context) => ctx.chat?.type === "private";
+
+bot.command("tournaments", async (ctx) => {
+  if (!ctx.from || ctx.chat.type !== "private") return;
+  try {
+    const data = await api<{ tournaments: Array<{ id: string; title: string; description: string; status: string; competitionId: string | null; entryFeeAsset: string | null; entryFeeAmount: string; maxParticipants: number; participantCount: number; registrationEndsAt: string; startsAt: string; prizes: Array<{ placement: number; type: string; amount: string; itemKey: string | null; specialPlayerId: string | null }>; joined: boolean }> }>("/v1/event-tournaments", ctx.from.id);
+    if (!data.tournaments.length) return ctx.reply("در حال حاضر تورنمنت مناسبتی فعالی وجود ندارد.");
+    const keyboard = new InlineKeyboard();
+    const lines = data.tournaments.map((item) => {
+      const fee = item.entryFeeAmount === "0" ? "رایگان" : item.entryFeeAmount + " " + item.entryFeeAsset;
+      const status = item.status === "REGISTRATION" ? "ثبت‌نام" : item.status === "ACTIVE" && new Date(item.startsAt).getTime() > Date.now() ? "زمان‌بندی‌شده" : item.status === "ACTIVE" ? "در حال برگزاری" : "پایان‌یافته";
+      if (item.status === "REGISTRATION" && !item.joined && item.participantCount < item.maxParticipants) keyboard.text("ثبت‌نام · " + item.title.slice(0, 24), "event-tournament:join:" + item.id).row();
+      if (item.joined && item.competitionId && ["ACTIVE", "COMPLETED"].includes(item.status)) keyboard.text("برنامه و جدول · " + item.title.slice(0, 18), "event-tournament:view:" + item.id).row();
+      const prizeLines = item.prizes.map((prize) => {
+        const place = prize.placement === 0 ? "سایرین" : "رتبه " + prize.placement;
+        const reward = ["CASH", "GOLD", "HONOR"].includes(prize.type) ? prize.amount + " " + prize.type
+          : prize.type === "STORE_ITEM" ? "آیتم " + (prize.itemKey ?? "") : "بازیکن ویژه";
+        return place + ": " + reward;
+      }).join(" · ");
+      return "🏆 <b>" + escapeHtml(item.title) + "</b>\n" + escapeHtml(item.description.slice(0, 240)) +
+        "\nوضعیت: " + status + " · شرکت‌کننده: " + item.participantCount + "/" + item.maxParticipants +
+        "\nورودی: " + fee + "\nجوایز: " + escapeHtml(prizeLines || "اعلام نشده") +
+        "\nپایان ثبت‌نام: " + new Date(item.registrationEndsAt).toLocaleString("fa-IR", { timeZone: "Asia/Tehran" }) +
+        (item.joined ? "\n✅ شما ثبت‌نام کرده‌اید." : "");
+    });
+    await ctx.reply(lines.join("\n\n"), { parse_mode: "HTML", ...(keyboard.inline_keyboard.length ? { reply_markup: keyboard } : {}) });
+  } catch (error) { await ctx.reply("دریافت تورنمنت‌ها ناموفق بود: " + (error instanceof Error ? error.message : "خطای نامشخص")); }
+});
+
+bot.command("eventtournaments", async (ctx) => {
+  if (!ctx.from || !adminOnlyInPrivate(ctx)) return;
+  try {
+    const data = await api<{ tournaments: Array<{ id: string; title: string; status: string; participantCount: number; registrationEndsAt: string }> }>("/v1/admin/event-tournaments", ctx.from.id);
+    const keyboard = new InlineKeyboard().text("➕ ساخت تورنمنت", "event-tournament:create");
+    const lines = data.tournaments.map((item) => {
+            return "• " + item.title + " · " + item.status + " · " + item.participantCount + " شرکت‌کننده\nID: " + item.id;
+    });
+    await ctx.reply("🏆 مدیریت تورنمنت‌ها\n\n" + (lines.join("\n\n") || "هنوز تورنمنتی ساخته نشده است."), { reply_markup: keyboard });
+  } catch (error) { await ctx.reply("دسترسی مدیریت تورنمنت‌ها تأیید نشد: " + (error instanceof Error ? error.message : "خطای نامشخص")); }
+});
+
+bot.callbackQuery(/^event-tournament:/, async (ctx) => {
+  if (!ctx.from || ctx.chat?.type !== "private") return ctx.answerCallbackQuery({ text: "این عملیات فقط در گفت‌وگوی خصوصی مجاز است." });
+  const parts = ctx.callbackQuery.data.split(":");
+  const action = parts[1];
+  const value = parts[2];
+  try {
+    if (action === "view") {
+      const tournamentId = parts[2];
+      if (!tournamentId) return ctx.answerCallbackQuery({ text: "شناسه تورنمنت نامعتبر است." });
+      const data = await api<{ tournaments: Array<{ id: string; title: string; status: string; competitionId: string | null }> }>("/v1/event-tournaments", ctx.from.id);
+      const tournament = data.tournaments.find((item) => item.id === tournamentId);
+      if (!tournament?.competitionId) return ctx.answerCallbackQuery({ text: "برنامه مسابقات هنوز ساخته نشده است." });
+      const keyboard = new InlineKeyboard().text("بازی‌های هفته بعد", "leagueview:next:" + tournament.competitionId).text("جدول تورنمنت", "leagueview:table:" + tournament.competitionId).row().text("جدول گلزنان", "leagueview:scorers:" + tournament.competitionId);
+      await ctx.answerCallbackQuery();
+      await ctx.reply("🏆 تورنمنت «" + escapeHtml(tournament.title) + "»\nبرای مشاهده برنامه، جدول و گلزنان یکی از گزینه‌ها را انتخاب کن.", { parse_mode: "HTML", reply_markup: keyboard });
+      return;
+    }
+    if (action === "join") {
+      const tournamentId = parts[2];
+      if (!tournamentId) return ctx.answerCallbackQuery({ text: "شناسه تورنمنت نامعتبر است." });
+      const result = await api<{ joined: boolean; replayed: boolean; autoStarted?: boolean; participantCount?: number; requiredParticipants?: number; fixturesCreated?: number; rounds?: number; startsAt?: string }>("/v1/event-tournaments/" + encodeURIComponent(tournamentId) + "/join", ctx.from.id, "POST", {});
+      await ctx.answerCallbackQuery({ text: result.autoStarted ? "ظرفیت تکمیل شد؛ تورنمنت برنامه‌ریزی شد." : result.replayed ? "قبلاً ثبت‌نام کرده‌ای." : "ثبت‌نام انجام شد." });
+      await ctx.reply(result.replayed ? "ثبت‌نام شما قبلاً ثبت شده بود."
+        : result.autoStarted ? "🏆 ظرفیت تورنمنت تکمیل شد. " + result.fixturesCreated + " مسابقه در " + result.rounds + " هفته قرعه‌کشی شد. شروع: " + new Date(result.startsAt!).toLocaleString("fa-IR", { timeZone: "Asia/Tehran" })
+        : "✅ ثبت‌نام شما در تورنمنت انجام شد. " + result.participantCount + "/" + result.requiredParticipants + " تیم ثبت‌نام کرده‌اند.");
+      return;
+    }
+    if (action === "admin-list") {
+      const data = await api<{ tournaments: Array<{ id: string; title: string; status: string; participantCount: number }> }>("/v1/admin/event-tournaments", ctx.from.id);
+      const keyboard = new InlineKeyboard().text("➕ ساخت تورنمنت", "event-tournament:create");
+      const lines = data.tournaments.map((item) => {
+        return "• " + item.title + " · " + item.status + " · " + item.participantCount + " شرکت‌کننده\nID: " + item.id;
+      });
+      await ctx.answerCallbackQuery();
+      await ctx.reply("🏆 مدیریت تورنمنت‌ها\n\n" + (lines.join("\n\n") || "هنوز تورنمنتی ساخته نشده است."), { reply_markup: keyboard });
+      return;
+    }
+    if (action === "create") {
+      const prompt = await ctx.reply("عنوان تورنمنت را ارسال کن (۳ تا ۱۰۰ نویسه).");
+      pendingEventTournamentWizards.set(ctx.from.id, { promptMessageId: prompt.message_id, stage: "title", prizes: [], placementIndex: 0 });
+      await ctx.answerCallbackQuery({ text: "فرایند ساخت آغاز شد." });
+      return;
+    }
+    if (action === "fee") {
+      const state = pendingEventTournamentWizards.get(ctx.from.id);
+      if (!state) return ctx.answerCallbackQuery({ text: "فرایند ساخت منقضی شده است." });
+      const asset = parts[2];
+      if (asset === "FREE") {
+        state.feeAmount = "0";
+        await ctx.answerCallbackQuery({ text: "ورودی رایگان انتخاب شد." });
+        await askTournamentPrize(ctx, state);
+        return;
+      }
+      if (!["CASH", "GOLD", "HONOR"].includes(asset ?? "")) return ctx.answerCallbackQuery({ text: "نوع ورودی معتبر نیست." });
+      state.feeAsset = asset as "CASH" | "GOLD" | "HONOR";
+      state.stage = "feeAmount";
+      await ctx.answerCallbackQuery();
+      await askTournamentText(ctx, state, "مقدار ورودی " + asset + " را به عدد صحیح مثبت ارسال کن.");
+      return;
+    }
+    if (action === "prize") {
+      const state = pendingEventTournamentWizards.get(ctx.from.id);
+      if (!state) return ctx.answerCallbackQuery({ text: "فرایند ساخت منقضی شده است." });
+      const type = parts[2];
+      if (type === "NONE") {
+        state.placementIndex += 1;
+        await ctx.answerCallbackQuery({ text: "برای این رتبه جایزه‌ای ثبت نشد." });
+        await askTournamentPrize(ctx, state);
+        return;
+      }
+      if (!["CASH", "GOLD", "HONOR", "STORE_ITEM", "SPECIAL_PLAYER"].includes(type ?? "")) return ctx.answerCallbackQuery({ text: "نوع جایزه معتبر نیست." });
+      state.pendingPrizeType = type as EventTournamentPrizeDraft["type"];
+      if (["CASH", "GOLD", "HONOR"].includes(type ?? "")) {
+        state.stage = "prizeAmount";
+        await ctx.answerCallbackQuery();
+        await askTournamentText(ctx, state, "مقدار جایزه " + type + " را به عدد صحیح مثبت ارسال کن.");
+      } else if (type === "STORE_ITEM") {
+        const store = await api<{ items: Array<{ key: string; name: string; price: string; asset: string }> }>("/v1/store", ctx.from.id);
+        const keyboard = new InlineKeyboard();
+        for (const item of store.items) keyboard.text(item.name.slice(0, 24) + " · " + item.asset, "event-tournament:item:" + item.key).row();
+        await ctx.answerCallbackQuery();
+        await ctx.editMessageText("آیتم جایزه را از فهرست فروشگاه انتخاب کن:", { reply_markup: keyboard });
+      } else {
+        const store = await api<{ specialPlayers: Array<{ id: string; fullName: string; rarity: string; overall: number }> }>("/v1/store", ctx.from.id);
+        const keyboard = new InlineKeyboard();
+        for (const player of store.specialPlayers.slice(0, 25)) keyboard.text(player.fullName.slice(0, 22) + " · " + player.overall, "event-tournament:special-player:" + player.id).row();
+        await ctx.answerCallbackQuery();
+        await ctx.editMessageText("بازیکن ویژه جایزه را انتخاب کن:", { reply_markup: keyboard });
+      }
+      return;
+    }
+    if (action === "item" || action === "special-player") {
+      const state = pendingEventTournamentWizards.get(ctx.from.id);
+      if (!state) return ctx.answerCallbackQuery({ text: "فرایند ساخت منقضی شده است." });
+      const placement = tournamentPlacements[state.placementIndex]!;
+      if (action === "item" && value && /^[a-z0-9][a-z0-9_-]{1,39}$/i.test(value)) {
+        state.prizes.push({ placement, type: "STORE_ITEM", itemKey: value });
+      } else if (action === "special-player" && value) {
+        state.prizes.push({ placement, type: "SPECIAL_PLAYER", specialPlayerId: value });
+      } else return ctx.answerCallbackQuery({ text: "جایزه انتخاب‌شده معتبر نیست." });
+      delete state.pendingPrizeType; state.placementIndex += 1;
+      await ctx.answerCallbackQuery({ text: "جایزه ثبت شد." });
+      await askTournamentPrize(ctx, state);
+      return;
+    }
+    await ctx.answerCallbackQuery({ text: "عملیات معتبر نیست." });
+  } catch (error) {
+    await ctx.answerCallbackQuery({ text: "عملیات انجام نشد.", show_alert: true });
+    await ctx.reply("عملیات تورنمنت ناموفق بود: " + (error instanceof Error ? error.message : "خطای نامشخص"));
+  }
+});
+
+
 
 bot.command("admin", async (ctx) => {
   if (!ctx.from || !adminOnlyInPrivate(ctx)) return;
@@ -596,7 +871,7 @@ bot.command("admin", async (ctx) => {
       walletTransactions: "تراکنش‌های کیف پول", groupTransactions: "تراکنش‌های امتیاز گروه",
     };
     const rows = Object.entries(data.counts).map(([key, value]) => (labels[key] ?? key) + ": " + value);
-    await ctx.reply("پنل مدیریت Football Empire\n\n" + rows.join("\n") + "\n\nبرای فهرست‌ها: /adminlist RESOURCE [QUERY]\nراهنما: /adminhelp");
+    await ctx.reply("پنل مدیریت Football Empire\n\n" + rows.join("\n") + "\n\nبرای فهرست‌ها: /adminlist RESOURCE [QUERY]\nراهنما: /adminhelp", { reply_markup: new InlineKeyboard().text("🏆 مدیریت تورنمنت‌ها", "event-tournament:admin-list") });
   } catch (error) {
     await ctx.reply("دسترسی مدیریت تأیید نشد یا سرویس در دسترس نیست: " + (error instanceof Error ? error.message : "خطای نامشخص"));
   }
@@ -936,9 +1211,12 @@ bot.callbackQuery(/^league:/, async (ctx) => {
   const [, action, id] = ctx.callbackQuery.data.split(":");
   try {
     if (action === "join" && id) {
-      const result = await api<{joined:boolean;replayed:boolean;teams:number}>(`/v1/competitions/${encodeURIComponent(id)}/join`, ctx.from.id, "POST", {});
-      await ctx.answerCallbackQuery({ text: "عضویت در رقابت ثبت شد." });
-      await ctx.reply("🏆 ثبت‌نام شما در رقابت انجام شد. تعداد تیم‌ها: " + result.teams + (result.replayed ? " · عضویت قبلاً ثبت شده بود." : ""));
+      const result = await api<{joined:boolean;replayed:boolean;teams:number;autoStarted?:boolean;fixturesCreated?:number;rounds?:number;startsAt?:string;requiredTeams?:number}>(`/v1/competitions/${encodeURIComponent(id)}/join`, ctx.from.id, "POST", {});
+      await ctx.answerCallbackQuery({ text: result.autoStarted ? "ظرفیت تکمیل شد؛ برنامه مسابقات ساخته شد." : "عضویت در رقابت ثبت شد." });
+      await ctx.reply("🏆 ثبت‌نام شما در رقابت انجام شد. تعداد تیم‌ها: " + result.teams
+        + (result.autoStarted ? "\n🚦 ظرفیت تکمیل شد؛ " + result.fixturesCreated + " بازی در " + result.rounds + " هفته قرعه‌کشی شد. شروع: " + new Date(result.startsAt!).toLocaleString("fa-IR", { timeZone: "Asia/Tehran" })
+          : result.requiredTeams ? "\nتا شروع خودکار " + (result.requiredTeams - result.teams) + " تیم دیگر لازم است." : "")
+        + (result.replayed ? " · عضویت قبلاً ثبت شده بود." : ""));
       return;
     }
     if (action === "start" && id) {
@@ -964,6 +1242,36 @@ bot.callbackQuery(/^league:/, async (ctx) => {
   }
 });
 
+bot.callbackQuery(/^leagueview:/, async (ctx) => {
+  if (!ctx.from || !ctx.chat) return ctx.answerCallbackQuery({ text: "این بخش در دسترس نیست." });
+  const [, view, competitionId] = ctx.callbackQuery.data.split(":");
+  if (!competitionId || !["next", "table", "scorers"].includes(view ?? "")) return ctx.answerCallbackQuery({ text: "گزینه معتبر نیست." });
+  try {
+    const data = await api<{
+      competition: { name: string; status: string };
+      standings: Array<{ position: number; clubName: string; played: number; won: number; drawn: number; lost: number; goalDifference: number; points: number }>;
+      nextRound: number | null;
+      nextRoundMatches: Array<{ scheduledAt: string; status: string; homeClub: { name: string }; awayClub: { name: string }; homeScore: number | null; awayScore: number | null }>;
+      topScorers: Array<{ playerName: string; clubName: string; goals: number; assists: number }>;
+    }>("/v1/competitions/" + encodeURIComponent(competitionId), ctx.from.id);
+    const keyboard = new InlineKeyboard().text("بازی‌های هفته بعد", "leagueview:next:" + competitionId).text("جدول لیگ", "leagueview:table:" + competitionId).row().text("جدول گلزنان", "leagueview:scorers:" + competitionId);
+    if (view === "next") {
+      const fixtures = data.nextRoundMatches;
+      const body = fixtures.length ? fixtures.map((match) => match.homeClub.name + " مقابل " + match.awayClub.name + " · " + new Date(match.scheduledAt).toLocaleString("fa-IR", { timeZone: "Asia/Tehran" })).join("\n") : "مسابقه برنامه‌ریزی‌نشده‌ای باقی نمانده است. لیگ به پایان رسیده است.";
+      await ctx.reply("📅 <b>بازی‌های هفته " + (data.nextRound ?? "بعد") + "</b> · " + escapeHtml(data.competition.name) + "\n\n" + escapeHtml(body), { parse_mode: "HTML", reply_markup: keyboard });
+    } else if (view === "table") {
+      const body = data.standings.map((row) => row.position + ". " + row.clubName + " · " + row.points + " امتیاز · " + row.played + " بازی · " + row.won + " برد · " + row.drawn + " مساوی · " + row.lost + " باخت · تفاضل " + row.goalDifference).join("\n");
+      await ctx.reply("🏆 <b>جدول لیگ</b> · " + escapeHtml(data.competition.name) + "\n\n" + escapeHtml(body || "جدول هنوز تشکیل نشده است."), { parse_mode: "HTML", reply_markup: keyboard });
+    } else {
+      const body = data.topScorers.map((row, index) => (index + 1) + ". " + row.playerName + " · " + row.clubName + " · " + row.goals + " گل · " + row.assists + " پاس گل").join("\n");
+      await ctx.reply("⚽ <b>جدول گلزنان</b> · " + escapeHtml(data.competition.name) + "\n\n" + escapeHtml(body || "هنوز گلی ثبت نشده است."), { parse_mode: "HTML", reply_markup: keyboard });
+    }
+    await ctx.answerCallbackQuery();
+  } catch (error) {
+    await ctx.answerCallbackQuery({ text: "دریافت اطلاعات لیگ ناموفق بود." });
+    await ctx.reply("دریافت اطلاعات لیگ ناموفق بود: " + (error instanceof Error ? error.message : "خطای نامشخص"));
+  }
+});
 bot.callbackQuery(/^opp:/, async (ctx) => {
   if (!ctx.from || ctx.chat?.type !== "private") return ctx.answerCallbackQuery({ text: "چالش حریف فقط در گفت‌وگوی خصوصی ساخته می‌شود." });
   const [, action, clubId] = ctx.callbackQuery.data.split(":");
@@ -1176,14 +1484,18 @@ bot.callbackQuery(/^g:/, async (ctx) => {
       const result = await api<{challenge:{token:string;expiresAt:string};asset:string;goldCost:string;shareUrl:string|null}>(
         "/v1/friendly-challenges", ctx.from.id, "POST", { groupTelegramId: groupId, idempotencyKey: randomUUID() },
       );
+      const shareUrl = result.shareUrl ?? (bot.botInfo?.username
+        ? "https://t.me/" + bot.botInfo.username + "?start=challenge_" + result.challenge.token : null);
       const keyboard = new InlineKeyboard();
-      if (result.shareUrl) keyboard.url("📨 ارسال دعوت به حریف", "https://t.me/share/url?url=" + encodeURIComponent(result.shareUrl) + "&text=" + encodeURIComponent("برای مسابقه Football Empire دعوت شدی!"));
+      if (shareUrl) keyboard.url("📨 ارسال لینک اختصاصی", "https://t.me/share/url?url=" + encodeURIComponent(shareUrl) + "&text=" + encodeURIComponent("برای مسابقه Football Empire دعوت شدی!"));
+      keyboard.row().text("⚔️ پذیرش چالش در همین گروه", "challenge:accept:" + result.challenge.token);
       await ctx.answerCallbackQuery({ text: "دعوت چالش ساخته شد." });
       await ctx.reply(
         "⚔️ <b>دعوت چالش آماده است!</b>\nهزینه: " + (result.asset === "FREE" ? "رایگان" : result.asset === "GOLD" ? cash(result.goldCost) + " طلا" : "اعتبار چالش") +
         "\nاعتبار تا: " + new Date(result.challenge.expiresAt).toLocaleString("fa-IR", { timeZone: "Asia/Tehran" }) +
-        "\n\nدعوت را برای بازیکنی که می‌خواهی به چالش بکشی ارسال کن.",
-        { parse_mode: "HTML", ...(result.shareUrl ? { reply_markup: keyboard } : {}) },
+        (shareUrl ? "\n\nلینک اختصاصی: " + shareUrl : "\n\nنام کاربری ربات تنظیم نشده است.") +
+        "\n\nبازیکنان می‌توانند با دکمه زیر در همین گروه چالش را بپذیرند.",
+        { parse_mode: "HTML", reply_markup: keyboard },
       );
       return;
     }
@@ -1215,6 +1527,9 @@ bot.callbackQuery(/^g:/, async (ctx) => {
       const keyboard = new InlineKeyboard();
       const open = result.leagues.filter((item) => item.status === "REGISTRATION" && !item.joined && item.teams < item.maxTeams);
       for (const item of open) keyboard.text("عضویت در «" + item.name.slice(0, 24) + "»", "g:joinleague:" + item.id).row();
+      for (const item of result.leagues.filter((league) => league.joined && ["ACTIVE", "COMPLETED"].includes(league.status))) {
+        keyboard.text("بازی بعدی", "leagueview:next:" + item.id).text("جدول", "leagueview:table:" + item.id).row().text("گلزنان", "leagueview:scorers:" + item.id);
+      }
       await ctx.answerCallbackQuery();
       await ctx.reply(
         "🏆 <b>لیگ‌های گروه</b>\n\n" + (result.leagues.map((item) =>
@@ -1227,10 +1542,10 @@ bot.callbackQuery(/^g:/, async (ctx) => {
     if (action === "joinleague") {
       const id = parts[2] ?? "";
       if (!id) return ctx.answerCallbackQuery({ text: "شناسه لیگ معتبر نیست." });
-      const result = await api<{teams:number}>(`/v1/groups/${encodeURIComponent(groupId)}/leagues/${encodeURIComponent(id)}/join`, ctx.from.id, "POST", {});
+      const result = await api<{teams:number;autoStarted?:boolean;fixturesCreated?:number;rounds?:number;startsAt?:string;requiredTeams?:number}>(`/v1/groups/${encodeURIComponent(groupId)}/leagues/${encodeURIComponent(id)}/join`, ctx.from.id, "POST", {});
       await awardGroupActivity(ctx, "LEAGUE_JOIN", id);
-      await ctx.answerCallbackQuery({ text: "عضویت در لیگ ثبت شد." });
-      await ctx.reply("🏆 عضویت باشگاه شما در لیگ گروه ثبت شد. تعداد تیم‌ها: " + result.teams);
+      await ctx.answerCallbackQuery({ text: result.autoStarted ? "ظرفیت تکمیل شد؛ برنامه مسابقات آماده است." : "عضویت در لیگ ثبت شد." });
+      await ctx.reply("🏆 عضویت باشگاه شما در لیگ گروه ثبت شد. تعداد تیم‌ها: " + result.teams + (result.autoStarted ? "\nبرنامه: " + result.fixturesCreated + " بازی در " + result.rounds + " هفته؛ شروع " + new Date(result.startsAt!).toLocaleString("fa-IR", { timeZone: "Asia/Tehran" }) : result.requiredTeams ? "\nتا شروع خودکار " + (result.requiredTeams - result.teams) + " تیم دیگر لازم است." : ""));
       return;
     }
     if (action === "join") {
@@ -1362,7 +1677,7 @@ bot.command("help", async (ctx) => ctx.reply(
   "/group-shop و /group-buy ITEM [USER_ID] — فروشگاه و دریافت جایزه\n/group-rewards و /group-treasury — پاداش‌ها و خزانه گروه\n/group-give USER_ID ITEM_SLUG — هدیه به عضو گروه\n" +
   "/group-challenges — فهرست چالش‌ها\n/group-challenge TITLE|START_ISO|END_ISO|POINTS — ساخت چالش\n/group-challenge-join ID — عضویت در چالش\n" +
   "/group-challenge-complete ID USER_ID — تسویه چالش\n/group-challenge-cancel ID — لغو چالش\n/group-check — بررسی مجدد اعضا\n" +
-  "/group-league NAME [4-10] — ساخت لیگ گروهی\n/group-leagues — فهرست لیگ‌های گروه\n/group-league-join ID و /group-league-start ID — عضویت و آغاز لیگ\n/group-league-table ID — جدول لیگ گروهی\n" +
+  "/group-league NAME [4-10] — ساخت لیگ گروهی\n/group-leagues — فهرست لیگ‌های گروه\n/group-league-join ID — عضویت در لیگ؛ آغاز لیگ پس از تکمیل ظرفیت خودکار است\n/group-league-table ID — جدول لیگ گروهی\n" +
   "/alliance — وضعیت اتحاد\n/alliance-create NAME و /alliance-invite GROUP_ID — ساخت اتحاد و دعوت گروه\n/alliance-accept ID و /alliance-decline ID — پاسخ به دعوت\n" +
   "/alliance-championship NAME|TEAMS — ساخت قهرمانی بین‌گروهی\n/alliance-championship-join ID و /alliance-championship-start ID — عضویت و آغاز قهرمانی\n" +
   "/alliance-contribute AMOUNT — واریز به خزانه اتحاد\n/alliance-season-start [DAYS] و /alliance-season-close — مدیریت فصل اتحاد\n" +
@@ -1438,7 +1753,6 @@ bot.command("group-challenge-complete",async ctx=>{if(!ctx.from||!["group","supe
 bot.command("group-check",async ctx=>{if(!ctx.from||!["group","supergroup"].includes(ctx.chat.type))return;try{const m=await ctx.api.getChatMember(ctx.chat.id,ctx.from.id);if(m.status!=="creator"&&m.status!=="administrator")return ctx.reply("این دستور فقط برای مدیران گروه مجاز است.");if(!botTelegramId)return ctx.reply("شناسه ربات هنوز آماده نیست.");const bm=await ctx.api.getChatMember(ctx.chat.id,botTelegramId);if(bm.status!=="creator"&&bm.status!=="administrator")return ctx.reply("ربات باید مدیر گروه باشد تا گروه فعال شود.");const memberCount=await ctx.api.getChatMemberCount(ctx.chat.id);const d=await api<{isActive:boolean;memberCount:number;minimumMembers:number}>(`/v1/groups/${encodeURIComponent(String(ctx.chat.id))}/check`,ctx.from.id,"POST",{memberCount});await ctx.reply("وضعیت گروه: "+(d.isActive?"فعال":"غیرفعال")+" · اعضا: "+d.memberCount+" از حداقل "+d.minimumMembers);}catch(e){await ctx.reply("بررسی گروه ناموفق بود: "+(e instanceof Error?e.message:"خطای نامشخص"));}});
 bot.command("group-league",async ctx=>{if(!ctx.from||!["group","supergroup"].includes(ctx.chat.type))return;const m=String(ctx.match??"").trim().match(/^(.*?)(?:\s+(\d+))?$/),name=m?.[1]?.trim(),maxTeams=Number(m?.[2]??8);if(!name||maxTeams<4||maxTeams>10)return ctx.reply("روش استفاده: /group-league NAME [4-10]");try{const d=await api<{competition:{id:string}}>(`/v1/groups/${encodeURIComponent(String(ctx.chat.id))}/leagues`,ctx.from.id,"POST",{name,maxTeams,idempotencyKey:"group-league:"+randomUUID()});await awardGroupActivity(ctx,"LEAGUE_CREATE",d.competition.id);await ctx.reply("لیگ گروهی ایجاد شد؛ شناسه: "+d.competition.id+" · عضویت: /group-league-join "+d.competition.id);}catch(e){await ctx.reply("ایجاد لیگ گروهی ناموفق بود: "+(e instanceof Error?e.message:"خطای نامشخص"));}});
 bot.command("group-league-join",async ctx=>{if(!ctx.from||!["group","supergroup"].includes(ctx.chat.type))return;const id=String(ctx.match??"").trim();if(!id)return ctx.reply("روش استفاده: /group-league-join ID");try{const d=await api<{teams:number}>(`/v1/groups/${encodeURIComponent(String(ctx.chat.id))}/leagues/${encodeURIComponent(id)}/join`,ctx.from.id,"POST",{});await awardGroupActivity(ctx,"LEAGUE_JOIN",id);await ctx.reply("عضویت ثبت شد · تعداد تیم‌ها: "+d.teams);}catch(e){await ctx.reply("عضویت در لیگ گروهی ناموفق بود: "+(e instanceof Error?e.message:"خطای نامشخص"));}});
-bot.command("group-league-start",async ctx=>{if(!ctx.from||!["group","supergroup"].includes(ctx.chat.type))return;const id=String(ctx.match??"").trim();if(!id)return ctx.reply("روش استفاده: /group-league-start ID");try{const d=await api<{fixturesCreated:number;rounds:number}>(`/v1/groups/${encodeURIComponent(String(ctx.chat.id))}/leagues/${encodeURIComponent(id)}/start`,ctx.from.id,"POST",{});await ctx.reply("لیگ آغاز شد · مسابقات: "+d.fixturesCreated+" · هفته‌ها: "+d.rounds);}catch(e){await ctx.reply("آغاز لیگ ناموفق بود: "+(e instanceof Error?e.message:"خطای نامشخص"));}});
 bot.command("group-league-table",async ctx=>{if(!ctx.from||!["group","supergroup"].includes(ctx.chat.type))return;const id=String(ctx.match??"").trim();if(!id)return ctx.reply("روش استفاده: /group-league-table ID");try{const d=await api<{competition:{name:string;teams:Array<{rank:number;club:string;points:number;played:number}>}}>(`/v1/groups/${encodeURIComponent(String(ctx.chat.id))}/leagues/${encodeURIComponent(id)}`,ctx.from.id);await ctx.reply(d.competition.name+"\n"+d.competition.teams.map(t=>t.rank+". "+t.club+" · "+t.points+" امتیاز · "+t.played+" بازی").join("\n"));}catch(e){await ctx.reply("دریافت جدول لیگ ناموفق بود: "+(e instanceof Error?e.message:"خطای نامشخص"));}});
 
 
@@ -1666,23 +1980,90 @@ bot.command("lineup", async (ctx) => {
 
 bot.command("setlineup", async (ctx) => {
   if (!ctx.from) return;
-  if (ctx.chat.type !== "private") return ctx.reply("برای تغییر ترکیب اصلی، دستور /setlineup را در گفت‌وگوی خصوصی اجرا کنید.");
-  const parts = String(ctx.match ?? "").trim().split(/\s+/);
-  const [formation, ...playerIds] = parts;
-  if (!formation || playerIds.length !== 11) {
-    return ctx.reply("روش استفاده: /setlineup 4-3-3 PLAYER_ID_1 ... PLAYER_ID_11\nآرایش‌های مجاز: 4-3-3، 4-4-2، 3-5-2، 4-2-3-1");
+  if (ctx.chat.type !== "private") return ctx.reply("برای تغییر ترکیب اصلی، این بخش را در گفت‌وگوی خصوصی باز کنید.");
+  const parts = String(ctx.match ?? "").trim().split(/\\s+/).filter(Boolean);
+  if (parts.length) {
+    const [formation, ...playerIds] = parts;
+    if (!formation || playerIds.length !== 11) {
+      return ctx.reply("روش قدیمی همچنان فعال است: /setlineup 4-3-3 PLAYER_ID_1 ... PLAYER_ID_11");
+    }
+    try {
+      const current = await api<{ club: { lineupVersion: number } }>("/v1/club/lineup", ctx.from.id);
+      await api("/v1/club/lineup", ctx.from.id, "PUT", { formation, playerIds, expectedVersion: current.club.lineupVersion });
+      return ctx.reply("ترکیب اصلی و آرایش ذخیره شد. برای مشاهده نتیجه از /lineup استفاده کنید.");
+    } catch (error) {
+      return ctx.reply("ذخیره ترکیب ناموفق بود: " + (error instanceof Error ? error.message : "خطای نامشخص"));
+    }
   }
   try {
-    const current = await api<{ club: { lineupVersion: number } }>("/v1/club/lineup", ctx.from.id);
-    await api("/v1/club/lineup", ctx.from.id, "PUT", {
-      formation, playerIds, expectedVersion: current.club.lineupVersion,
-    });
-    await ctx.reply("ترکیب اصلی و آرایش ذخیره شد. برای مشاهده نتیجه از /lineup استفاده کنید.");
+    const [current, roster] = await Promise.all([
+      api<{ club: { lineupVersion: number } }>("/v1/club/lineup", ctx.from.id),
+      api<{ club: { players: Array<{ id: string; firstName: string; lastName: string; position: string; overall: number; status: string }> } }>("/v1/club/development", ctx.from.id),
+    ]);
+    const players = roster.club.players.filter((player) => player.status === "ACTIVE");
+    if (players.length < 11) return ctx.reply("برای ثبت ترکیب حداقل ۱۱ بازیکن فعال لازم است.");
+    pendingLineupSelections.set(ctx.from.id, { formation: "4-3-3", playerIds: [], lineupVersion: current.club.lineupVersion, players });
+    const keyboard = new InlineKeyboard()
+      .text("4-3-3", "lineup:formation:4-3-3").text("4-4-2", "lineup:formation:4-4-2").row()
+      .text("3-5-2", "lineup:formation:3-5-2").text("4-2-3-1", "lineup:formation:4-2-3-1").row()
+      .text("لغو", "lineup:cancel");
+    await ctx.reply("🧩 <b>تنظیم ترکیب اصلی</b>\nابتدا آرایش تیم را انتخاب کن؛ سپس ۱۱ بازیکن را با دکمه انتخاب می‌کنی.", { parse_mode: "HTML", reply_markup: keyboard });
   } catch (error) {
-    await ctx.reply(`ذخیره ترکیب ناموفق بود: ${error instanceof Error ? error.message : "خطای نامشخص"}`);
+    await ctx.reply("دریافت اطلاعات ترکیب ناموفق بود: " + (error instanceof Error ? error.message : "خطای نامشخص"));
   }
 });
 
+bot.callbackQuery(/^lineup:/, async (ctx) => {
+  if (!ctx.from || ctx.chat?.type !== "private") return ctx.answerCallbackQuery({ text: "تنظیم ترکیب فقط در گفت‌وگوی خصوصی مجاز است." });
+  const state = pendingLineupSelections.get(ctx.from.id);
+  if (!state) return ctx.answerCallbackQuery({ text: "این فرایند منقضی شده است؛ دوباره تنظیم ترکیب را باز کن." });
+  const [, action, value] = ctx.callbackQuery.data.split(":");
+  if (action === "cancel") {
+    pendingLineupSelections.delete(ctx.from.id);
+    await ctx.answerCallbackQuery({ text: "فرایند لغو شد." });
+    await ctx.editMessageText("تنظیم ترکیب لغو شد.");
+    return;
+  }
+  if (action === "formation") {
+    if (!["4-3-3", "4-4-2", "3-5-2", "4-2-3-1"].includes(value ?? "")) return ctx.answerCallbackQuery({ text: "آرایش معتبر نیست." });
+    state.formation = value!;
+    state.playerIds = [];
+  } else if (action === "player") {
+    const player = state.players.find((item) => item.id === value);
+    if (!player) return ctx.answerCallbackQuery({ text: "بازیکن معتبر نیست." });
+    if (state.playerIds.includes(player.id)) return ctx.answerCallbackQuery({ text: "این بازیکن قبلاً انتخاب شده است." });
+    if (state.playerIds.length >= 11) return ctx.answerCallbackQuery({ text: "ترکیب ۱۱ بازیکن دارد." });
+    state.playerIds.push(player.id);
+  } else if (action === "undo") {
+    state.playerIds.pop();
+  } else if (action === "save") {
+    if (state.playerIds.length !== 11) return ctx.answerCallbackQuery({ text: "ابتدا ۱۱ بازیکن انتخاب کن." });
+    try {
+      await api("/v1/club/lineup", ctx.from.id, "PUT", { formation: state.formation, playerIds: state.playerIds, expectedVersion: state.lineupVersion });
+      pendingLineupSelections.delete(ctx.from.id);
+      await ctx.answerCallbackQuery({ text: "ترکیب ذخیره شد." });
+      await ctx.editMessageText("✅ ترکیب " + state.formation + " با ۱۱ بازیکن ذخیره شد. برای مشاهده /lineup را باز کن.");
+      return;
+    } catch (error) {
+      await ctx.answerCallbackQuery({ text: "ذخیره ترکیب ناموفق بود." });
+      await ctx.reply("سرور ترکیب را نپذیرفت: " + (error instanceof Error ? error.message : "خطای نامشخص") + "\nانتخاب‌ها را بررسی کن و دوباره تلاش کن.");
+      return;
+    }
+  } else {
+    return ctx.answerCallbackQuery({ text: "گزینه معتبر نیست." });
+  }
+  const selected = new Set(state.playerIds);
+  const keyboard = new InlineKeyboard();
+  for (const player of state.players.filter((item) => !selected.has(item.id))) {
+    keyboard.text((player.firstName + " " + player.lastName).slice(0, 28) + " · " + player.position + " · " + player.overall, "lineup:player:" + player.id).row();
+  }
+  if (state.playerIds.length) keyboard.text("↩️ حذف آخرین انتخاب", "lineup:undo");
+  if (state.playerIds.length === 11) keyboard.text("✅ ذخیره ترکیب", "lineup:save");
+  keyboard.row().text("لغو", "lineup:cancel");
+  const picked = state.players.filter((item) => selected.has(item.id)).map((item, index) => (index + 1) + ". " + item.firstName + " " + item.lastName).join("\\n");
+  await ctx.answerCallbackQuery({ text: action === "formation" ? "آرایش انتخاب شد." : "انتخاب ثبت شد." });
+  await ctx.editMessageText("🧩 <b>آرایش " + state.formation + "</b>\nبازیکنان انتخاب‌شده: " + state.playerIds.length + "/11\n" + (picked || "هنوز بازیکنی انتخاب نشده است.") + "\n\nبازیکن بعدی را انتخاب کن:", { parse_mode: "HTML", reply_markup: keyboard });
+});
 bot.command("development", async (ctx) => {
   if (!ctx.from) return;
   if (ctx.chat.type !== "private") return ctx.reply("برای مشاهده وضعیت توسعه، دستور /development را در گفت‌وگوی خصوصی اجرا کنید.");
@@ -1697,12 +2078,104 @@ bot.command("development", async (ctx) => {
     const lines = result.club.players.slice(0, 15).map((p) =>
       `• ${p.firstName} ${p.lastName} · قدرت ${p.overall}/${p.potential} · سن ${p.age}\n  آمادگی ${p.fitness} · روحیه ${p.morale} · قرارداد ${p.contractDays} روز · وضعیت ${p.status}\n  تمدید: ${cash(p.minimumWeeklyWage)} تا ${cash(p.maximumWeeklyWage)} کش در هفته\n  شناسه: ${p.id}`,
     );
+    const keyboard = new InlineKeyboard();
+    for (const player of result.club.players.filter((item) => item.status === "ACTIVE").slice(0, 12)) {
+      const label = (player.firstName + " " + player.lastName).slice(0, 18);
+      keyboard.text("🏋️ " + label, "player:train:" + player.id).text("📝 تمدید", "player:renew:" + player.id).row();
+    }
     await ctx.reply(
-      `Player development · Training ground Lv.${result.club.trainingGroundLevel}\nWeekly wage bill: ${cash(result.club.weeklyWageBill)} Cash · Arrears: ${cash(result.club.wageArrears)} Cash\nCoach: ${result.club.coach.name} (Lv.${result.club.coach.level})\nTraining ${result.club.coach.trainingSkill} · Recovery ${result.club.coach.recoverySkill} · Medical ${result.club.coach.medicalSkill} · Salary ${cash(result.club.coach.weeklySalary)} Cash/week\n\n` +
-      (lines.join("\n\n") || "No players found.") +
-      "\n\n/train PLAYER_ID BALANCED|SHOOTING|... LIGHT|NORMAL|INTENSE\n/renew PLAYER_ID 90|180|365 WEEKLY_WAGE",
+      `توسعه بازیکنان · زمین تمرین سطح ${result.club.trainingGroundLevel}\nهزینه دستمزد هفتگی: ${cash(result.club.weeklyWageBill)} کش · معوقات: ${cash(result.club.wageArrears)} کش\nمربی: ${result.club.coach.name} (سطح ${result.club.coach.level})\nتمرین ${result.club.coach.trainingSkill} · ریکاوری ${result.club.coach.recoverySkill} · پزشکی ${result.club.coach.medicalSkill} · دستمزد ${cash(result.club.coach.weeklySalary)} کش در هفته\n\n` +
+      (lines.join("\n\n") || "بازیکنی پیدا نشد.") +
+      "\n\nبرای هر بازیکن، دکمه تمرین یا تمدید را انتخاب کن.",
+      { reply_markup: keyboard },
     );
   } catch (error) { await ctx.reply(`دریافت وضعیت توسعه بازیکنان ناموفق بود: ${error instanceof Error ? error.message : "خطای نامشخص"}`); }
+});
+
+bot.callbackQuery(/^player:/, async (ctx) => {
+  if (!ctx.from || ctx.chat?.type !== "private") return ctx.answerCallbackQuery({ text: "مدیریت بازیکن فقط در گفت‌وگوی خصوصی مجاز است." });
+  const [, action, value] = ctx.callbackQuery.data.split(":");
+  try {
+    if (action === "train") {
+      const playerId = value;
+      if (!playerId) return ctx.answerCallbackQuery({ text: "بازیکن معتبر نیست." });
+      pendingTrainingSelections.set(ctx.from.id, { playerId });
+      const keyboard = new InlineKeyboard()
+        .text("متعادل", "player:focus:BALANCED").text("دروازه‌بانی", "player:focus:GOALKEEPING").row()
+        .text("دفاع", "player:focus:DEFENDING").text("پاس", "player:focus:PASSING").row()
+        .text("بازی‌سازی", "player:focus:PLAYMAKING").text("دریبل", "player:focus:DRIBBLING").row()
+        .text("شوت", "player:focus:SHOOTING").text("بدنسازی", "player:focus:PHYSICAL");
+      await ctx.answerCallbackQuery();
+      await ctx.editMessageText("تمرکز تمرین را انتخاب کن:", { reply_markup: keyboard });
+      return;
+    }
+    if (action === "focus") {
+      const state = pendingTrainingSelections.get(ctx.from.id);
+      const focuses = ["BALANCED","GOALKEEPING","DEFENDING","PASSING","PLAYMAKING","DRIBBLING","SHOOTING","PHYSICAL"];
+      if (!state || !focuses.includes(value ?? "")) return ctx.answerCallbackQuery({ text: "فرایند تمرین منقضی شده است." });
+      state.focus = value!;
+      const keyboard = new InlineKeyboard().text("سبک", "player:intensity:LIGHT").text("معمولی", "player:intensity:NORMAL").text("سنگین", "player:intensity:INTENSE");
+      await ctx.answerCallbackQuery();
+      await ctx.editMessageText("شدت تمرین را انتخاب کن:", { reply_markup: keyboard });
+      return;
+    }
+    if (action === "intensity") {
+      const state = pendingTrainingSelections.get(ctx.from.id);
+      if (!state?.focus || !["LIGHT","NORMAL","INTENSE"].includes(value ?? "")) return ctx.answerCallbackQuery({ text: "فرایند تمرین معتبر نیست." });
+      const result = await api<{ training: { overallBefore: number; overallAfter: number; fitnessBefore: number; fitnessAfter: number; injuryOccurred: boolean; injuryUntil: string | null; cashCost: string; replayed: boolean } }>(
+        "/v1/club/players/" + encodeURIComponent(state.playerId) + "/train", ctx.from.id, "POST",
+        { focus: state.focus, intensity: value, idempotencyKey: "tg-train-" + ctx.from.id + "-" + ctx.callbackQuery.id },
+      );
+      pendingTrainingSelections.delete(ctx.from.id);
+      const t = result.training;
+      await ctx.answerCallbackQuery({ text: "تمرین انجام شد." });
+      await ctx.editMessageText("🏋️ تمرین پایان یافت. قدرت: " + t.overallBefore + " ← " + t.overallAfter + " · آمادگی: " + t.fitnessBefore + " ← " + t.fitnessAfter + " · هزینه: " + cash(t.cashCost) + " کش." + (t.injuryOccurred ? "\nمصدومیت تا " + t.injuryUntil : ""));
+      return;
+    }
+    if (action === "renew") {
+      const playerId = value;
+      if (!playerId) return ctx.answerCallbackQuery({ text: "بازیکن معتبر نیست." });
+      const data = await api<{ club: { players: Array<{ id: string; minimumWeeklyWage: string; maximumWeeklyWage: string }> } }>("/v1/club/development", ctx.from.id);
+      const player = data.club.players.find((item) => item.id === playerId);
+      if (!player) return ctx.answerCallbackQuery({ text: "بازیکن پیدا نشد." });
+      pendingContractSelections.set(ctx.from.id, { playerId, minWage: player.minimumWeeklyWage, maxWage: player.maximumWeeklyWage });
+      const keyboard = new InlineKeyboard().text("۹۰ روز", "player:contract-days:90").text("۱۸۰ روز", "player:contract-days:180").text("۳۶۵ روز", "player:contract-days:365");
+      await ctx.answerCallbackQuery();
+      await ctx.editMessageText("مدت تمدید قرارداد را انتخاب کن:", { reply_markup: keyboard });
+      return;
+    }
+    if (action === "contract-days") {
+      const state = pendingContractSelections.get(ctx.from.id);
+      const days = Number(value);
+      if (!state || ![90,180,365].includes(days)) return ctx.answerCallbackQuery({ text: "فرایند تمدید منقضی شده است." });
+      state.days = days;
+      const min = BigInt(state.minWage), max = BigInt(state.maxWage);
+      const wages = [...new Set([min.toString(), ((min + max) / 2n).toString(), max.toString()])];
+      const keyboard = new InlineKeyboard();
+      for (const wage of wages) keyboard.text(cash(wage) + " کش/هفته", "player:contract-wage:" + wage).row();
+      await ctx.answerCallbackQuery();
+      await ctx.editMessageText("دستمزد هفتگی جدید را انتخاب کن:", { reply_markup: keyboard });
+      return;
+    }
+    if (action === "contract-wage") {
+      const state = pendingContractSelections.get(ctx.from.id);
+      if (!state?.days || !value || !/^[1-9][0-9]{0,8}$/.test(value)) return ctx.answerCallbackQuery({ text: "فرایند تمدید معتبر نیست." });
+      const result = await api<{ contract: { contractDays: number; weeklyWage: string; replayed: boolean } }>(
+        "/v1/club/players/" + encodeURIComponent(state.playerId) + "/contract/renew", ctx.from.id, "POST",
+        { extensionDays: state.days, weeklyWage: value, idempotencyKey: "tg-renew-" + ctx.from.id + "-" + ctx.callbackQuery.id },
+      );
+      pendingContractSelections.delete(ctx.from.id);
+      await ctx.answerCallbackQuery({ text: "قرارداد تمدید شد." });
+      await ctx.editMessageText("✅ قرارداد تمدید شد: " + result.contract.contractDays + " روز باقی‌مانده · دستمزد هفتگی " + cash(result.contract.weeklyWage) + " کش.");
+      return;
+    }
+    await ctx.answerCallbackQuery({ text: "گزینه معتبر نیست." });
+  } catch (error) {
+    pendingTrainingSelections.delete(ctx.from.id);
+    pendingContractSelections.delete(ctx.from.id);
+    await ctx.answerCallbackQuery({ text: "عملیات ناموفق بود.", show_alert: true });
+    await ctx.reply("عملیات بازیکن ناموفق بود: " + (error instanceof Error ? error.message : "خطای نامشخص"));
+  }
 });
 
 bot.command("train", async (ctx) => {
@@ -1762,8 +2235,17 @@ bot.command("operations", async (ctx) => {
     const club = result.club;
     const prospects = club.prospects.map((p) => `• ${p.firstName} ${p.lastName} · ${p.age}y · ${p.position} · OVR ${p.overall}/POT ${p.potential} · ${cash(p.recruitmentCost)} Cash\n  ID: ${p.id}`);
     const sponsor = club.activeSponsor ? `${club.activeSponsor.partnerName} · ${club.activeSponsor.tier} · ${cash(club.activeSponsor.dailyIncome)} Cash/day` : "No active sponsor";
+    const keyboard = new InlineKeyboard()
+      .text("ارتقای ورزشگاه", "clubop:upgrade:STADIUM").text("ارتقای زمین تمرین", "clubop:upgrade:TRAINING_GROUND").row()
+      .text("ارتقای آکادمی", "clubop:upgrade:ACADEMY").text("🔎 استعدادیابی", "clubop:scout").row()
+      .text("💼 ارتقای مربی", "clubop:coach-upgrade").row()
+      .text("بلیت ۵۰", "clubop:ticket:50").text("بلیت ۱۰۰", "clubop:ticket:100").text("بلیت ۲۵۰", "clubop:ticket:250").row();
+    for (const prospect of club.prospects.slice(0, 8)) keyboard.text("جذب " + (prospect.firstName + " " + prospect.lastName).slice(0, 18), "clubop:recruit:" + prospect.id).row();
+    for (const offer of club.sponsorOffers) keyboard.text("امضای حامی: " + offer.partnerName.slice(0, 20), "clubop:sponsor:" + offer.id).row();
+    for (const coachOffer of club.coachOffers) keyboard.text("استخدام مربی: " + coachOffer.name.slice(0, 20), "clubop:coach:" + coachOffer.id).row();
     await ctx.reply(
-      `امکانات باشگاه\nورزشگاه سطح ${club.stadiumLevel} · ظرفیت ${club.stadiumCapacity} نفر · بلیت ${cash(club.ticketPrice)} کش\nزمین تمرین سطح ${club.trainingGroundLevel} · آکادمی سطح ${club.academyLevel}\nهزینه نگهداری روزانه: ${cash(club.dailyMaintenance)} کش · معوقات عملیاتی: ${cash(club.operatingArrears)} کش\nمربی: ${club.coach?.name ?? "ندارد"} (سطح ${club.coach?.level ?? 0}) · دستمزد هفتگی ${cash(club.coach?.weeklySalary ?? "0")} کش\nحامی مالی: ${sponsor}\n\nاستعدادهای آکادمی:\n${prospects.join("\n\n") || "استعداد آماده‌ای وجود ندارد."}\n\n/upgrade stadium|training|academy\n/scout\n/recruit PROSPECT_ID\n/sponsor local-partner|regional-brand|national-network\n/coach-upgrade\n/hire-coach balanced|youth|performance`,
+      `امکانات باشگاه\nورزشگاه سطح ${club.stadiumLevel} · ظرفیت ${club.stadiumCapacity} نفر · بلیت ${cash(club.ticketPrice)} کش\nزمین تمرین سطح ${club.trainingGroundLevel} · آکادمی سطح ${club.academyLevel}\nهزینه نگهداری روزانه: ${cash(club.dailyMaintenance)} کش · معوقات عملیاتی: ${cash(club.operatingArrears)} کش\nمربی: ${club.coach?.name ?? "ندارد"} (سطح ${club.coach?.level ?? 0}) · دستمزد هفتگی ${cash(club.coach?.weeklySalary ?? "0")} کش\nحامی مالی: ${sponsor}\n\nاستعدادهای آکادمی:\n${prospects.join("\n\n") || "استعداد آماده‌ای وجود ندارد."}\n\nبرای هر عملیات، دکمه مربوط را انتخاب کن.`,
+      { reply_markup: keyboard },
     );
   } catch (error) { await ctx.reply(`دریافت امکانات باشگاه ناموفق بود: ${error instanceof Error ? error.message : "خطای نامشخص"}`); }
 });
@@ -1786,6 +2268,62 @@ bot.command("finance", async (ctx) => {
     );
   } catch (error) { await ctx.reply("دریافت صورت‌حساب مالی ناموفق بود: " + (error instanceof Error ? error.message : "خطای نامشخص")); }
 });
+bot.callbackQuery(/^clubop:/, async (ctx) => {
+  if (!ctx.from || ctx.chat?.type !== "private") return ctx.answerCallbackQuery({ text: "مدیریت باشگاه فقط در گفت‌وگوی خصوصی مجاز است." });
+  const [, action, value] = ctx.callbackQuery.data.split(":");
+  try {
+    if (action === "upgrade" && ["STADIUM","TRAINING_GROUND","ACADEMY"].includes(value ?? "")) {
+      const result = await api<{ upgrade: { level?: number; cost?: string; replayed: boolean } }>("/v1/club/facilities/" + value + "/upgrade", ctx.from.id, "POST", { idempotencyKey: "tg-upgrade-" + ctx.from.id + "-" + ctx.callbackQuery.id });
+      await ctx.answerCallbackQuery({ text: "ارتقا انجام شد." });
+      await ctx.editMessageText("✅ سطح امکان به " + result.upgrade.level + " ارتقا یافت. هزینه: " + cash(result.upgrade.cost ?? "0") + " کش.");
+      return;
+    }
+    if (action === "scout") {
+      const result = await api<{ scouting: { prospects: Array<{ id: string; firstName: string; lastName: string; overall: number; potential: number; recruitmentCost: string }>; scoutingCost?: string } }>("/v1/club/academy/scout", ctx.from.id, "POST", { idempotencyKey: "tg-scout-" + ctx.from.id + "-" + ctx.callbackQuery.id });
+      const keyboard = new InlineKeyboard();
+      for (const player of result.scouting.prospects) keyboard.text("جذب " + (player.firstName + " " + player.lastName).slice(0, 24), "clubop:recruit:" + player.id).row();
+      await ctx.answerCallbackQuery({ text: "استعدادیابی انجام شد." });
+      await ctx.editMessageText("🔎 استعدادهای جدید شناسایی شدند. هزینه استعدادیابی: " + cash(result.scouting.scoutingCost ?? "0") + " کش.\n" + result.scouting.prospects.map((p) => p.firstName + " " + p.lastName + " · قدرت " + p.overall + " · پتانسیل " + p.potential + " · هزینه جذب " + cash(p.recruitmentCost)).join("\n"), { reply_markup: keyboard });
+      return;
+    }
+    if (action === "recruit" && value) {
+      const result = await api<{ recruitment: { player?: { firstName: string; lastName: string; overall: number; potential: number }; cost?: string; replayed: boolean } }>("/v1/club/academy/" + encodeURIComponent(value) + "/recruit", ctx.from.id, "POST", { idempotencyKey: "tg-recruit-" + ctx.from.id + "-" + ctx.callbackQuery.id });
+      await ctx.answerCallbackQuery({ text: "بازیکن جذب شد." });
+      await ctx.reply(result.recruitment.replayed ? "این جذب قبلاً ثبت شده بود." : "✅ " + result.recruitment.player?.firstName + " " + result.recruitment.player?.lastName + " جذب شد · قدرت " + result.recruitment.player?.overall + " · پتانسیل " + result.recruitment.player?.potential + " · هزینه " + cash(result.recruitment.cost ?? "0") + " کش.");
+      return;
+    }
+    if (action === "sponsor" && value) {
+      const result = await api<{ contract: { sponsor?: { partnerName: string; dailyIncome: string }; replayed: boolean } }>("/v1/club/sponsors/sign", ctx.from.id, "POST", { offerId: value, idempotencyKey: "tg-sponsor-" + ctx.from.id + "-" + ctx.callbackQuery.id });
+      await ctx.answerCallbackQuery({ text: "قرارداد حامی مالی ثبت شد." });
+      await ctx.reply("🤝 قرارداد با " + result.contract.sponsor?.partnerName + " امضا شد. درآمد روزانه: " + cash(result.contract.sponsor?.dailyIncome ?? "0") + " کش.");
+      return;
+    }
+    if (action === "coach" && value) {
+      const result = await api<{ hiring: { coach?: { name: string; weeklySalary: string }; signingFee?: string; replayed: boolean } }>("/v1/club/coach/hire", ctx.from.id, "POST", { candidateId: value, idempotencyKey: "tg-coach-hire-" + ctx.from.id + "-" + ctx.callbackQuery.id });
+      await ctx.answerCallbackQuery({ text: "مربی استخدام شد." });
+      await ctx.reply("✅ مربی " + result.hiring.coach?.name + " استخدام شد · حق امضا " + cash(result.hiring.signingFee ?? "0") + " کش · دستمزد هفتگی " + cash(result.hiring.coach?.weeklySalary ?? "0") + " کش.");
+      return;
+    }
+    if (action === "coach-upgrade") {
+      const result = await api<{ upgrade: { coach?: { level: number }; cost?: string } }>("/v1/club/coach/upgrade", ctx.from.id, "POST", { idempotencyKey: "tg-coach-upgrade-" + ctx.from.id + "-" + ctx.callbackQuery.id });
+      await ctx.answerCallbackQuery({ text: "مربی ارتقا یافت." });
+      await ctx.reply("مربی به سطح " + result.upgrade.coach?.level + " ارتقا یافت. هزینه: " + cash(result.upgrade.cost ?? "0") + " کش.");
+      return;
+    }
+    if (action === "ticket" && value && /^(50|100|250)$/.test(value)) {
+      const current = await api<{ club: { ticketPrice: string } }>("/v1/club/operations", ctx.from.id);
+      const result = await api<{ ticketing: { ticketPrice: string } }>("/v1/club/stadium/ticket-price", ctx.from.id, "PATCH", { ticketPrice: value, expectedTicketPrice: current.club.ticketPrice });
+      await ctx.answerCallbackQuery({ text: "قیمت بلیت تغییر کرد." });
+      await ctx.reply("قیمت بلیت روی " + cash(result.ticketing.ticketPrice) + " کش تنظیم شد.");
+      return;
+    }
+    await ctx.answerCallbackQuery({ text: "گزینه معتبر نیست." });
+  } catch (error) {
+    await ctx.answerCallbackQuery({ text: "عملیات ناموفق بود.", show_alert: true });
+    await ctx.reply("عملیات باشگاه ناموفق بود: " + (error instanceof Error ? error.message : "خطای نامشخص"));
+  }
+});
+
 bot.command("upgrade", async (ctx) => {
   if (!ctx.from) return;
   if (ctx.chat.type !== "private") return ctx.reply("دستور /upgrade را در گفت‌وگوی خصوصی اجرا کنید.");
@@ -2082,6 +2620,9 @@ bot.command("pyramidleagues", async (ctx) => {
     const keyboard = new InlineKeyboard();
     for (const tier of result.tiers) {
       if (!tier.myApplication && !tier.leagues.some((league) => league.isMyLeague)) keyboard.text("درخواست " + tier.name, "league:apply:" + tier.tier).row();
+      for (const league of tier.leagues) {
+        if (league.isMyLeague) keyboard.text("جدول " + tier.name, "pyramidview:table:" + league.id).text("بازی بعدی", "pyramidview:next:" + league.id).row();
+      }
     }
     for (const offer of result.promotionOffers) keyboard.text("پذیرش صعود " + offer.targetTier, "promotion:accept:" + offer.id).text("رد", "promotion:decline:" + offer.id).row();
     await ctx.reply("🏆 هرم لیگ‌های سراسری · فصل " + result.season + "\n\n" + lines.join("\n\n")
@@ -2121,6 +2662,30 @@ bot.command("leaguehistory", async (ctx) => {
   } catch (error) { await ctx.reply("دریافت افتخارات باشگاه ناموفق بود: " + (error instanceof Error ? error.message : "خطای نامشخص")); }
 });
 
+bot.callbackQuery(/^pyramidview:/, async (ctx) => {
+  if (!ctx.from || ctx.chat?.type !== "private") return ctx.answerCallbackQuery({ text: "این بخش فقط در گفت‌وگوی خصوصی در دسترس است." });
+  const [, view, leagueId] = ctx.callbackQuery.data.split(":");
+  if (!leagueId || !["table", "next", "scorers"].includes(view ?? "")) return ctx.answerCallbackQuery({ text: "گزینه معتبر نیست." });
+  try {
+    const data = await api<{ league: { name: string; tierName: string; season: number }; standings: Array<{ position: number; clubName: string; played: number; won: number; drawn: number; lost: number; goalsFor: number; goalsAgainst: number; points: number }>; topScorers: Array<{ playerName: string; clubName: string; goals: number }>; topAssists: Array<{ playerName: string; clubName: string; assists: number }>; nextRound: number | null; nextRoundMatches: Array<{ scheduledAt: string; homeClub: { name: string }; awayClub: { name: string } }> }>("/v1/pyramid-leagues/" + encodeURIComponent(leagueId), ctx.from.id);
+    const keyboard = new InlineKeyboard().text("بازی بعدی", "pyramidview:next:" + leagueId).text("جدول لیگ", "pyramidview:table:" + leagueId).row().text("گلزنان و پاسورها", "pyramidview:scorers:" + leagueId);
+    if (view === "next") {
+      const body = data.nextRoundMatches.map((match) => match.homeClub.name + " مقابل " + match.awayClub.name + " · " + new Date(match.scheduledAt).toLocaleString("fa-IR", { timeZone: "Asia/Tehran" })).join("\n");
+      await ctx.reply("📅 <b>بازی‌های هفته " + (data.nextRound ?? "بعد") + "</b> · " + escapeHtml(data.league.name) + "\n\n" + escapeHtml(body || "مسابقه دیگری باقی نمانده است."), { parse_mode: "HTML", reply_markup: keyboard });
+    } else if (view === "table") {
+      const body = data.standings.map((row) => row.position + ". " + row.clubName + " · " + row.points + " امتیاز · " + row.played + " بازی · " + row.won + "-" + row.drawn + "-" + row.lost + " · گل " + row.goalsFor + ":" + row.goalsAgainst).join("\n");
+      await ctx.reply("🏆 <b>جدول لیگ</b> · " + escapeHtml(data.league.name) + "\n\n" + escapeHtml(body || "جدول هنوز تشکیل نشده است."), { parse_mode: "HTML", reply_markup: keyboard });
+    } else {
+      const scorers = data.topScorers.slice(0, 10).map((row, index) => (index + 1) + ". " + row.playerName + " · " + row.clubName + " · " + row.goals + " گل").join("\n");
+      const assists = data.topAssists.slice(0, 10).map((row, index) => (index + 1) + ". " + row.playerName + " · " + row.clubName + " · " + row.assists + " پاس گل").join("\n");
+      await ctx.reply("⚽ <b>آمار بازیکنان</b> · " + escapeHtml(data.league.name) + "\n\n<b>گلزنان</b>\n" + escapeHtml(scorers || "بدون گل") + "\n\n<b>پاسورها</b>\n" + escapeHtml(assists || "بدون پاس گل"), { parse_mode: "HTML", reply_markup: keyboard });
+    }
+    await ctx.answerCallbackQuery();
+  } catch (error) {
+    await ctx.answerCallbackQuery({ text: "دریافت اطلاعات لیگ ناموفق بود." });
+    await ctx.reply("دریافت اطلاعات لیگ ناموفق بود: " + (error instanceof Error ? error.message : "خطای نامشخص"));
+  }
+});
 bot.command("pyramidtable", async (ctx) => {
   if (!ctx.from || ctx.chat.type !== "private") return;
   const id = String(ctx.match ?? "").trim().split(/\s+/)[0];
@@ -2197,6 +2762,8 @@ bot.command("matches", async (ctx) => {
         keyboard.text("دفاعی · " + open.minute, "mc:" + match.id + ":" + open.checkpointKey + ":DEFENSIVE")
           .text("متعادل", "mc:" + match.id + ":" + open.checkpointKey + ":BALANCED")
           .text("هجومی", "mc:" + match.id + ":" + open.checkpointKey + ":ATTACKING").row();
+        keyboard.text("⚙️ تاکتیک کامل", "mcx:" + match.id + ":" + open.checkpointKey)
+          .text("🔄 تعویض", "subx:" + match.id + ":" + open.checkpointKey).row();
       }
       return "• " + match.homeClub.name + " " + (match.homeScore ?? "–") + " : " + (match.awayScore ?? "–") + " " + match.awayClub.name
         + (match.homePenalties !== null ? " (pens " + match.homePenalties + "–" + match.awayPenalties + ")" : "")
@@ -2206,7 +2773,7 @@ bot.command("matches", async (ctx) => {
         + "\n  " + goals.join(" · ") + "\n  ID: " + match.id;
     });
     await ctx.reply("مسابقات شما:\n" + (lines.join("\n\n") || "هنوز مسابقه‌ای ندارید.")
-      + (hasActions ? "\n\nبرای انتخاب سریع ذهنیت، از دکمه‌های زیر استفاده کنید. برای تنظیم کامل تاکتیک از /tactic و برای تعویض از /sub استفاده کنید." : ""),
+      + (hasActions ? "\n\nبرای تغییر ذهنیت، تاکتیک کامل یا تعویض، دکمه‌های مربوط به هر مسابقه را انتخاب کنید." : ""),
       hasActions ? { reply_markup: keyboard } : {});
   } catch (error) { await ctx.reply("Could not load matches: " + (error instanceof Error ? error.message : "unknown error")); }
 });
@@ -2232,6 +2799,156 @@ bot.callbackQuery(/^mc:/, async (ctx) => {
   } catch (error) {
     await ctx.answerCallbackQuery({ text: "ثبت تصمیم ناموفق بود." });
     await ctx.reply("ثبت تصمیم ناموفق بود: " + (error instanceof Error ? error.message : "خطای نامشخص"));
+  }
+});
+
+const matchTacticFields: Record<string, string[]> = {
+  formation: ["4-3-3", "4-4-2", "3-5-2", "4-2-3-1"],
+  mentality: ["DEFENSIVE", "BALANCED", "ATTACKING"],
+  pressing: ["LOW_BLOCK", "MID_BLOCK", "HIGH_PRESS"],
+  tempo: ["SLOW", "NORMAL", "FAST"],
+  passingStyle: ["SHORT", "MIXED", "DIRECT"],
+};
+function matchTacticMenu() {
+  return new InlineKeyboard()
+    .text("آرایش", "mct:field:formation").text("ذهنیت", "mct:field:mentality").row()
+    .text("پرس", "mct:field:pressing").text("سرعت", "mct:field:tempo").row()
+    .text("سبک پاس", "mct:field:passingStyle").row()
+    .text("✅ ثبت تاکتیک", "mct:save").text("لغو", "mct:cancel");
+}
+
+bot.callbackQuery(/^mcx:/, async (ctx) => {
+  if (!ctx.from || ctx.chat?.type !== "private") return ctx.answerCallbackQuery({ text: "تغییر تاکتیک مسابقه فقط در گفت‌وگوی خصوصی مجاز است." });
+  const [, matchId, checkpointKey] = ctx.callbackQuery.data.split(":");
+  if (!matchId || !/^minute-(45|60|75)$/.test(checkpointKey ?? "")) return ctx.answerCallbackQuery({ text: "مسابقه یا وقفه معتبر نیست." });
+  pendingMatchTactics.set(ctx.from.id, { matchId, checkpointKey: checkpointKey!, instruction: {} });
+  await ctx.answerCallbackQuery();
+  await ctx.editMessageText("⚙️ تنظیم تاکتیک مسابقه\nبخش‌های موردنظر را انتخاب کن؛ سپس ثبت تاکتیک را بزن.", { reply_markup: matchTacticMenu() });
+});
+
+bot.callbackQuery(/^mct:/, async (ctx) => {
+  if (!ctx.from || ctx.chat?.type !== "private") return ctx.answerCallbackQuery({ text: "این عملیات فقط در گفت‌وگوی خصوصی مجاز است." });
+  const state = pendingMatchTactics.get(ctx.from.id);
+  if (!state) return ctx.answerCallbackQuery({ text: "فرایند تاکتیک منقضی شده است؛ از فهرست مسابقات دوباره باز کن." });
+  const [, action, field, value] = ctx.callbackQuery.data.split(":");
+  if (action === "cancel") {
+    pendingMatchTactics.delete(ctx.from.id);
+    await ctx.answerCallbackQuery({ text: "تغییر تاکتیک لغو شد." });
+    await ctx.editMessageText("تغییر تاکتیک مسابقه لغو شد.");
+    return;
+  }
+  if (action === "field") {
+    const values = matchTacticFields[field ?? ""];
+    if (!values) return ctx.answerCallbackQuery({ text: "بخش تاکتیک معتبر نیست." });
+    const keyboard = new InlineKeyboard();
+    for (const option of values) keyboard.text(option, "mct:value:" + field + ":" + option).row();
+    keyboard.text("بازگشت", "mct:back");
+    await ctx.answerCallbackQuery();
+    await ctx.editMessageText("مقدار جدید برای " + field + " را انتخاب کن:", { reply_markup: keyboard });
+    return;
+  }
+  if (action === "value") {
+    if (!field || !matchTacticFields[field]?.includes(value ?? "")) return ctx.answerCallbackQuery({ text: "مقدار تاکتیک معتبر نیست." });
+    state.instruction[field] = value!;
+  } else if (action !== "back" && action !== "save") return ctx.answerCallbackQuery({ text: "گزینه معتبر نیست." });
+  if (action === "save") {
+    if (!Object.keys(state.instruction).length) return ctx.answerCallbackQuery({ text: "حداقل یک بخش تاکتیکی را تغییر بده." });
+    try {
+      await api("/v1/matches/" + encodeURIComponent(state.matchId) + "/checkpoints/" + encodeURIComponent(state.checkpointKey) + "/decisions",
+        ctx.from.id, "POST", { idempotencyKey: "bot-tactic-" + ctx.from.id + "-" + ctx.callbackQuery.id, instruction: state.instruction });
+      pendingMatchTactics.delete(ctx.from.id);
+      await ctx.answerCallbackQuery({ text: "تاکتیک ثبت شد." });
+      await ctx.editMessageText("✅ تاکتیک مسابقه ثبت شد:\n" + Object.entries(state.instruction).map(([key, item]) => key + ": " + item).join("\n"));
+      return;
+    } catch (error) {
+      await ctx.answerCallbackQuery({ text: "ثبت تاکتیک ناموفق بود.", show_alert: true });
+      await ctx.reply("ثبت تاکتیک ناموفق بود: " + (error instanceof Error ? error.message : "خطای نامشخص"));
+      return;
+    }
+  }
+  await ctx.answerCallbackQuery({ text: action === "value" ? "تنظیم تغییر کرد." : "تنظیمات" });
+  await ctx.editMessageText("⚙️ تاکتیک انتخاب‌شده:\n" + (Object.entries(state.instruction).map(([key, item]) => key + ": " + item).join("\n") || "هنوز تغییری انتخاب نشده است.") + "\n\nبخش دیگری را انتخاب کن یا ثبت را بزن.", { reply_markup: matchTacticMenu() });
+});
+
+bot.callbackQuery(/^subx:/, async (ctx) => {
+  if (!ctx.from || ctx.chat?.type !== "private") return ctx.answerCallbackQuery({ text: "تعویض بازیکن فقط در گفت‌وگوی خصوصی مجاز است." });
+  const parts = ctx.callbackQuery.data.split(":");
+  const matchId = parts[1] ?? "";
+  const checkpointKey = parts[2] ?? "";
+  const action = parts[3];
+  const state = pendingMatchSubstitutions.get(ctx.from.id);
+  try {
+    if (!action) {
+      if (!matchId || !/^minute-(45|60|75)$/.test(checkpointKey)) return ctx.answerCallbackQuery({ text: "مسابقه یا وقفه معتبر نیست." });
+      const [lineup, roster] = await Promise.all([
+        api<{ club: { players: Array<{ id: string; firstName: string; lastName: string }> } }>("/v1/club/lineup", ctx.from.id),
+        api<{ club: { players: Array<{ id: string; firstName: string; lastName: string; status: string }> } }>("/v1/club/development", ctx.from.id),
+      ]);
+      const startingIds = new Set(lineup.club.players.map((player) => player.id));
+      const startingPlayers = lineup.club.players.map((player) => ({ id: player.id, name: player.firstName + " " + player.lastName }));
+      const benchPlayers = roster.club.players.filter((player) => player.status === "ACTIVE" && !startingIds.has(player.id))
+        .map((player) => ({ id: player.id, name: player.firstName + " " + player.lastName }));
+      if (!startingPlayers.length || !benchPlayers.length) return ctx.answerCallbackQuery({ text: "برای تعویض، ترکیب اصلی و بازیکن ذخیره فعال لازم است.", show_alert: true });
+      pendingMatchSubstitutions.set(ctx.from.id, { matchId, checkpointKey, startingPlayers, benchPlayers, substitutions: [] });
+      const keyboard = new InlineKeyboard();
+      startingPlayers.forEach((player, index) => keyboard.text("خروج: " + player.name.slice(0, 18), "subx:" + matchId + ":" + checkpointKey + ":o:" + index).row());
+      keyboard.text("لغو", "subx:" + matchId + ":" + checkpointKey + ":cancel");
+      await ctx.answerCallbackQuery();
+      await ctx.editMessageText("🔄 بازیکنی را که باید از زمین خارج شود انتخاب کن:", { reply_markup: keyboard });
+      return;
+    }
+    if (!state || state.matchId !== matchId || state.checkpointKey !== checkpointKey) return ctx.answerCallbackQuery({ text: "فرایند تعویض منقضی شده است." });
+    if (action === "cancel") {
+      pendingMatchSubstitutions.delete(ctx.from.id);
+      await ctx.answerCallbackQuery({ text: "تعویض لغو شد." });
+      await ctx.editMessageText("فرایند تعویض لغو شد.");
+      return;
+    }
+    if (action === "o") {
+      const index = Number(parts[4]);
+      const outgoing = state.startingPlayers[index];
+      if (!Number.isInteger(index) || !outgoing) return ctx.answerCallbackQuery({ text: "بازیکن خروجی معتبر نیست." });
+      state.outgoingPlayerId = outgoing.id;
+      const keyboard = new InlineKeyboard();
+      state.benchPlayers.forEach((player, benchIndex) => keyboard.text("ورود: " + player.name.slice(0, 18), "subx:" + matchId + ":" + checkpointKey + ":i:" + benchIndex).row());
+      keyboard.text("بازگشت", "subx:" + matchId + ":" + checkpointKey + ":more").row().text("لغو", "subx:" + matchId + ":" + checkpointKey + ":cancel");
+      await ctx.answerCallbackQuery();
+      await ctx.editMessageText("بازیکن جایگزین را انتخاب کن:", { reply_markup: keyboard });
+      return;
+    }
+    if (action === "i") {
+      const index = Number(parts[4]);
+      const incoming = state.benchPlayers[index];
+      if (!state.outgoingPlayerId || !Number.isInteger(index) || !incoming) return ctx.answerCallbackQuery({ text: "بازیکن ورودی معتبر نیست." });
+      state.substitutions.push({ outgoingPlayerId: state.outgoingPlayerId, incomingPlayerId: incoming.id });
+      state.startingPlayers = state.startingPlayers.filter((player) => player.id !== state.outgoingPlayerId);
+      state.benchPlayers = state.benchPlayers.filter((player) => player.id !== incoming.id);
+      delete state.outgoingPlayerId;
+      await ctx.answerCallbackQuery({ text: "تعویض به فهرست اضافه شد." });
+    } else if (action === "more") {
+      const keyboard = new InlineKeyboard();
+      state.startingPlayers.forEach((player, index) => keyboard.text("خروج: " + player.name.slice(0, 18), "subx:" + matchId + ":" + checkpointKey + ":o:" + index).row());
+      keyboard.text("ثبت تعویض‌ها", "subx:" + matchId + ":" + checkpointKey + ":save").row().text("لغو", "subx:" + matchId + ":" + checkpointKey + ":cancel");
+      await ctx.answerCallbackQuery();
+      await ctx.editMessageText("تعویض بعدی را انتخاب کن:", { reply_markup: keyboard });
+      return;
+    } else if (action === "save") {
+      if (!state.substitutions.length) return ctx.answerCallbackQuery({ text: "هنوز تعویضی انتخاب نشده است." });
+      await api("/v1/matches/" + encodeURIComponent(matchId) + "/checkpoints/" + encodeURIComponent(checkpointKey) + "/decisions",
+        ctx.from.id, "POST", { idempotencyKey: "bot-sub-" + ctx.from.id + "-" + ctx.callbackQuery.id, instruction: { substitutions: state.substitutions } });
+      pendingMatchSubstitutions.delete(ctx.from.id);
+      await ctx.answerCallbackQuery({ text: "تعویض‌ها ثبت شد." });
+      await ctx.editMessageText("✅ " + state.substitutions.length + " تعویض برای وقفه " + checkpointKey + " ثبت شد؛ سرور محدودیت‌ها و اعتبار بازیکنان را بررسی می‌کند.");
+      return;
+    } else return ctx.answerCallbackQuery({ text: "گزینه معتبر نیست." });
+    const keyboard = new InlineKeyboard();
+    if (state.substitutions.length < 5 && state.startingPlayers.length && state.benchPlayers.length) keyboard.text("➕ تعویض دیگر", "subx:" + matchId + ":" + checkpointKey + ":more").row();
+    if (state.substitutions.length) keyboard.text("✅ ثبت تعویض‌ها", "subx:" + matchId + ":" + checkpointKey + ":save").row();
+    keyboard.text("لغو", "subx:" + matchId + ":" + checkpointKey + ":cancel");
+    await ctx.editMessageText("تعویض‌های انتخاب‌شده:\n" + state.substitutions.map((item, index) => (index + 1) + ". " + item.outgoingPlayerId + " ← " + item.incomingPlayerId).join("\n") + "\n\nتعویض دیگری اضافه کن یا ثبت را بزن.", { reply_markup: keyboard });
+  } catch (error) {
+    await ctx.answerCallbackQuery({ text: "تعویض ثبت نشد.", show_alert: true });
+    await ctx.reply("ثبت تعویض ناموفق بود: " + (error instanceof Error ? error.message : "خطای نامشخص"));
   }
 });
 
@@ -2302,28 +3019,92 @@ bot.command("fallback", async (ctx) => {
 
 bot.command("setfallback", async (ctx) => {
   if (!ctx.from || ctx.chat.type !== "private") return;
-  const allowed:Record<string,string[]> = {
-    formation:["4-3-3","4-4-2","3-5-2","4-2-3-1"],
-    mentality:["DEFENSIVE","BALANCED","ATTACKING"],
-    pressing:["LOW_BLOCK","MID_BLOCK","HIGH_PRESS"],
-    tempo:["SLOW","NORMAL","FAST"],
-    passingStyle:["SHORT","MIXED","DIRECT"],
+  const allowed: Record<string, string[]> = {
+    formation: ["4-3-3", "4-4-2", "3-5-2", "4-2-3-1"],
+    mentality: ["DEFENSIVE", "BALANCED", "ATTACKING"],
+    pressing: ["LOW_BLOCK", "MID_BLOCK", "HIGH_PRESS"],
+    tempo: ["SLOW", "NORMAL", "FAST"],
+    passingStyle: ["SHORT", "MIXED", "DIRECT"],
   };
-  const changes:Record<string,string>={};
-  for(const part of String(ctx.match??"").trim().split(/\s+/).filter(Boolean)){
-    const i=part.indexOf("=");
-    if(i<1)return ctx.reply("هر تنظیم باید به شکل key=value باشد.");
-    const key=part.slice(0,i),value=part.slice(i+1).toUpperCase();
-    if(!allowed[key]?.includes(value))return ctx.reply("مقدار نامعتبر: "+part);
-    changes[key]=value;
+  const raw = String(ctx.match ?? "").trim();
+  if (raw) {
+    const changes: Record<string, string> = {};
+    for (const part of raw.split(/\\s+/).filter(Boolean)) {
+      const i = part.indexOf("=");
+      if (i < 1) return ctx.reply("هر تنظیم باید به شکل key=value باشد.");
+      const key = part.slice(0, i), value = part.slice(i + 1).toUpperCase();
+      if (!allowed[key]?.includes(value)) return ctx.reply("مقدار نامعتبر: " + part);
+      changes[key] = value;
+    }
+    try {
+      const current = await api<{ plan: Record<string, string>; version: number }>("/v1/matches/fallback-plan", ctx.from.id);
+      const saved = await api<{ version: number }>("/v1/matches/fallback-plan", ctx.from.id, "PUT", { expectedVersion: current.version, plan: { ...current.plan, ...changes } });
+      return ctx.reply("برنامه جایگزین ذخیره شد. نسخه " + saved.version + "؛ از مسابقه بعدی اعمال خواهد شد.");
+    } catch (error) { return ctx.reply("ذخیره برنامه جایگزین ناموفق بود: " + (error instanceof Error ? error.message : "خطای نامشخص")); }
   }
-  if(!Object.keys(changes).length)return ctx.reply("استفاده: /setfallback formation=4-4-2 mentality=DEFENSIVE pressing=LOW_BLOCK tempo=SLOW passingStyle=SHORT");
-  try{
-    const current=await api<{plan:Record<string,string>;version:number}>("/v1/matches/fallback-plan",ctx.from.id);
-    const plan={...current.plan,...changes};
-    const saved=await api<{version:number}>("/v1/matches/fallback-plan",ctx.from.id,"PUT",{expectedVersion:current.version,plan});
-    await ctx.reply("برنامه جایگزین ذخیره شد. نسخه "+saved.version+"؛ از مسابقه بعدی که شروع شود اعمال خواهد شد.");
-  }catch(error){await ctx.reply("ذخیره برنامه جایگزین ناموفق بود: "+(error instanceof Error?error.message:"unknown error"));}
+  try {
+    const current = await api<{ plan: Record<string, string>; version: number }>("/v1/matches/fallback-plan", ctx.from.id);
+    pendingFallbackEdits.set(ctx.from.id, { plan: { ...current.plan }, version: current.version });
+    const keyboard = new InlineKeyboard()
+      .text("آرایش", "fallback:field:formation").text("ذهنیت", "fallback:field:mentality").row()
+      .text("پرس", "fallback:field:pressing").text("سرعت", "fallback:field:tempo").row()
+      .text("سبک پاس", "fallback:field:passingStyle").row().text("لغو", "fallback:cancel");
+    await ctx.reply("🧠 <b>تنظیم تاکتیک پیش‌فرض</b>\n" + Object.entries(current.plan).map(([key, value]) => key + ": " + value).join("\\n") + "\nیک بخش را برای تغییر انتخاب کن.", { parse_mode: "HTML", reply_markup: keyboard });
+  } catch (error) { await ctx.reply("دریافت برنامه جایگزین ناموفق بود: " + (error instanceof Error ? error.message : "خطای نامشخص")); }
+});
+
+bot.callbackQuery(/^fallback:/, async (ctx) => {
+  if (!ctx.from || ctx.chat?.type !== "private") return ctx.answerCallbackQuery({ text: "تنظیم تاکتیک فقط در گفت‌وگوی خصوصی مجاز است." });
+  const state = pendingFallbackEdits.get(ctx.from.id);
+  if (!state) return ctx.answerCallbackQuery({ text: "فرایند منقضی شده است؛ دوباره /setfallback را باز کن." });
+  const [, action, field, value] = ctx.callbackQuery.data.split(":");
+  const allowed: Record<string, string[]> = {
+    formation: ["4-3-3", "4-4-2", "3-5-2", "4-2-3-1"],
+    mentality: ["DEFENSIVE", "BALANCED", "ATTACKING"],
+    pressing: ["LOW_BLOCK", "MID_BLOCK", "HIGH_PRESS"],
+    tempo: ["SLOW", "NORMAL", "FAST"],
+    passingStyle: ["SHORT", "MIXED", "DIRECT"],
+  };
+  if (action === "cancel") {
+    pendingFallbackEdits.delete(ctx.from.id);
+    await ctx.answerCallbackQuery({ text: "تغییرات لغو شد." });
+    await ctx.editMessageText("تنظیم تاکتیک لغو شد.");
+    return;
+  }
+  if (action === "field") {
+    if (!field || !allowed[field]) return ctx.answerCallbackQuery({ text: "بخش معتبر نیست." });
+    const keyboard = new InlineKeyboard();
+    for (const option of allowed[field]) keyboard.text(option, "fallback:value:" + field + ":" + option);
+    keyboard.row().text("بازگشت", "fallback:back");
+    await ctx.answerCallbackQuery();
+    await ctx.editMessageText("مقدار جدید برای " + field + " را انتخاب کن:", { reply_markup: keyboard });
+    return;
+  }
+  if (action === "value") {
+    if (!field || !allowed[field]?.includes(value ?? "")) return ctx.answerCallbackQuery({ text: "مقدار معتبر نیست." });
+    state.plan[field] = value!;
+  } else if (action !== "back" && action !== "save") return ctx.answerCallbackQuery({ text: "گزینه معتبر نیست." });
+  if (action === "save") {
+    try {
+      const saved = await api<{ version: number }>("/v1/matches/fallback-plan", ctx.from.id, "PUT", { expectedVersion: state.version, plan: state.plan });
+      pendingFallbackEdits.delete(ctx.from.id);
+      await ctx.answerCallbackQuery({ text: "تاکتیک ذخیره شد." });
+      await ctx.editMessageText("✅ تاکتیک پیش‌فرض ذخیره شد؛ نسخه " + saved.version + ". از مسابقه بعدی اعمال می‌شود.");
+      return;
+    } catch (error) {
+      pendingFallbackEdits.delete(ctx.from.id);
+      await ctx.answerCallbackQuery({ text: "ذخیره ناموفق بود." });
+      await ctx.reply("ذخیره تاکتیک ناموفق بود: " + (error instanceof Error ? error.message : "خطای نامشخص"));
+      return;
+    }
+  }
+  const keyboard = new InlineKeyboard()
+    .text("آرایش", "fallback:field:formation").text("ذهنیت", "fallback:field:mentality").row()
+    .text("پرس", "fallback:field:pressing").text("سرعت", "fallback:field:tempo").row()
+    .text("سبک پاس", "fallback:field:passingStyle").row()
+    .text("✅ ذخیره تاکتیک", "fallback:save").text("لغو", "fallback:cancel");
+  await ctx.answerCallbackQuery({ text: action === "value" ? "مقدار تغییر کرد." : "تنظیمات" });
+  await ctx.editMessageText("🧠 <b>تاکتیک پیش‌فرض</b>\n" + Object.entries(state.plan).map(([key, item]) => key + ": " + item).join("\\n") + "\nبرای تغییر بخش دیگر انتخاب کن یا ذخیره را بزن.", { parse_mode: "HTML", reply_markup: keyboard });
 });
 
 bot.command("play", async (ctx) => {
@@ -2413,8 +3194,11 @@ bot.command("leagues", async (ctx) => {
     const result = await api<{ competitions: Array<{ id: string; name: string; season: number; format: string; status?: string; teams: number; maxTeams: number; joined: boolean; isCreator: boolean }> }>("/v1/competitions", ctx.from.id);
     const keyboard = new InlineKeyboard();
     for (const item of result.competitions.slice(0, 20)) {
-      if (item.joined && item.isCreator && item.teams >= 4) keyboard.text("🚦 آغاز · " + item.name.slice(0, 20), "league:start:" + item.id).row();
-      else if (!item.joined && item.teams < item.maxTeams && (!item.status || item.status === "REGISTRATION")) keyboard.text("➕ عضویت · " + item.name.slice(0, 24), "league:join:" + item.id).row();
+      if (!item.joined && item.teams < item.maxTeams && (!item.status || item.status === "REGISTRATION")) keyboard.text("➕ عضویت · " + item.name.slice(0, 24), "league:join:" + item.id).row();
+      if (item.joined && (item.status === "ACTIVE" || item.status === "COMPLETED")) {
+        keyboard.text("بازی بعدی", "leagueview:next:" + item.id).text("جدول", "leagueview:table:" + item.id)
+          .row().text("گلزنان", "leagueview:scorers:" + item.id);
+      }
     }
     keyboard.text("🏅 درخواست لیگ پایه", "league:apply:1").text("⚔️ ساخت چالش", "act:challenge");
     const lines = result.competitions.map((item) =>
@@ -2653,6 +3437,76 @@ bot.command("clubprofile", async (ctx) => {
 });
 
 bot.on("message:text", async (ctx, next) => {
+  if (ctx.from && ctx.chat.type === "private" && ctx.message.reply_to_message) {
+    const wizard = pendingEventTournamentWizards.get(ctx.from.id);
+    if (wizard && wizard.promptMessageId === ctx.message.reply_to_message.message_id) {
+      const value = ctx.message.text.trim();
+      const ask = async (promptText: string) => {
+        const prompt = await ctx.reply(promptText);
+        wizard.promptMessageId = prompt.message_id;
+      };
+      if (wizard.stage === "title") {
+        if (value.length < 3 || value.length > 100) return ask("عنوان باید بین ۳ تا ۱۰۰ نویسه باشد. دوباره ارسال کن.");
+        wizard.title = value; wizard.stage = "description";
+        return ask("توضیحات تورنمنت را ارسال کن (۵ تا ۲۰۰۰ نویسه).");
+      }
+      if (wizard.stage === "description") {
+        if (value.length < 5 || value.length > 2000) return ask("توضیحات باید بین ۵ تا ۲۰۰۰ نویسه باشد. دوباره ارسال کن.");
+        wizard.description = value; wizard.stage = "registrationDays";
+        return ask("ثبت‌نام چند روز باز بماند؟ عددی بین ۱ تا ۶۰ ارسال کن.");
+      }
+      if (wizard.stage === "registrationDays") {
+        const days = Number(value);
+        if (!Number.isInteger(days) || days < 1 || days > 60) return ask("مدت ثبت‌نام باید عددی بین ۱ تا ۶۰ روز باشد.");
+        wizard.registrationDays = days; wizard.stage = "startsInDays";
+        return ask("تورنمنت چند روز دیگر شروع شود؟ باید بیشتر از مدت ثبت‌نام و حداکثر ۹۰ روز باشد.");
+      }
+      if (wizard.stage === "startsInDays") {
+        const days = Number(value);
+        if (!Number.isInteger(days) || days <= (wizard.registrationDays ?? 0) || days > 90) return ask("زمان شروع باید بیشتر از مدت ثبت‌نام و حداکثر ۹۰ روز باشد.");
+        wizard.startsInDays = days; wizard.stage = "maxParticipants";
+        return ask("ظرفیت تورنمنت را بین ۴ تا ۱۶ تیم وارد کن. با تکمیل ظرفیت، قرعه‌کشی خودکار انجام می‌شود.");
+      }
+      if (wizard.stage === "maxParticipants") {
+        const count = Number(value);
+        if (!Number.isInteger(count) || count < 4 || count > 16) return ask("ظرفیت باید عددی بین ۴ تا ۱۶ باشد.");
+        wizard.maxParticipants = count;
+        const prompt = await ctx.reply("ورودی تورنمنت را انتخاب کن:", { reply_markup: new InlineKeyboard()
+          .text("رایگان", "event-tournament:fee:FREE").row()
+          .text("کش", "event-tournament:fee:CASH").text("طلا", "event-tournament:fee:GOLD").text("Honor", "event-tournament:fee:HONOR") });
+        wizard.promptMessageId = prompt.message_id;
+        return;
+      }
+      if (wizard.stage === "feeAmount") {
+        if (!/^[1-9][0-9]{0,17}$/.test(value)) return ask("مبلغ ورودی باید عدد صحیح مثبت باشد.");
+        wizard.feeAmount = value;
+        await askTournamentPrize(ctx, wizard);
+        return;
+      }
+      if (wizard.stage === "prizeAmount") {
+        if (!/^[1-9][0-9]{0,17}$/.test(value)) return ask("مبلغ جایزه باید عدد صحیح مثبت باشد.");
+        const placement = tournamentPlacements[wizard.placementIndex]!;
+        wizard.prizes.push({ placement, type: wizard.pendingPrizeType!, amount: value });
+        delete wizard.pendingPrizeType; wizard.placementIndex += 1;
+        await askTournamentPrize(ctx, wizard);
+        return;
+      }
+      if (wizard.stage === "itemKey") {
+        if (!/^[a-z0-9][a-z0-9_-]{1,79}$/i.test(value)) return ask("کلید آیتم معتبر نیست؛ فقط حروف، عدد، خط تیره و زیرخط مجاز است.");
+        wizard.prizes.push({ placement: tournamentPlacements[wizard.placementIndex]!, type: "STORE_ITEM", itemKey: value });
+        wizard.placementIndex += 1; delete wizard.pendingPrizeType;
+        await askTournamentPrize(ctx, wizard);
+        return;
+      }
+      if (wizard.stage === "specialPlayerId") {
+        if (value.length < 1 || value.length > 128) return ask("شناسه بازیکن ویژه معتبر نیست.");
+        wizard.prizes.push({ placement: tournamentPlacements[wizard.placementIndex]!, type: "SPECIAL_PLAYER", specialPlayerId: value });
+        wizard.placementIndex += 1; delete wizard.pendingPrizeType;
+        await askTournamentPrize(ctx, wizard);
+        return;
+      }
+    }
+  }
   if (!ctx.from || !ctx.message.reply_to_message) return next();
   const groupPending = pendingGroupCreations.get(ctx.from.id);
   if ((ctx.chat.type === "group" || ctx.chat.type === "supergroup") && groupPending
@@ -2727,6 +3581,7 @@ bot.on(["chat_member","my_chat_member"],async ctx=>{
   async function runBackgroundJobs() {
     await pollGroupMessageDeletionQueue();
     await pollMatchCheckpointNotifications();
+    await pollMatchLifecycleNotifications();
     await pollMatchResultNotifications();
     await pollLeagueNoticeQueue();
     await pollAdminGroupBroadcastQueue();

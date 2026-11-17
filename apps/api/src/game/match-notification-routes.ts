@@ -31,7 +31,8 @@ export function registerMatchNotificationRoutes(app: FastifyInstance) {
       },
       include: { match: { select: {
         id: true, homeScore: true, awayScore: true, completedAt: true,
-        homeClub: { select: { name: true } }, awayClub: { select: { name: true } },
+        homeClub: { select: { id: true, name: true } }, awayClub: { select: { id: true, name: true } },
+        performances: { include: { player: { select: { firstName: true, lastName: true } } } },
       } } },
       orderBy: { createdAt: "asc" }, take: parsed.data.limit,
     });
@@ -52,6 +53,21 @@ export function registerMatchNotificationRoutes(app: FastifyInstance) {
           id: item.match.id, homeClub: item.match.homeClub.name, awayClub: item.match.awayClub.name,
           homeScore: item.match.homeScore, awayScore: item.match.awayScore,
           completedAt: item.match.completedAt?.toISOString() ?? null,
+          statistics: {
+            home: {
+              shots: item.match.performances.filter((line) => line.clubId === item.match.homeClub.id).reduce((sum, line) => sum + line.shots, 0),
+              passes: item.match.performances.filter((line) => line.clubId === item.match.homeClub.id).reduce((sum, line) => sum + line.passes, 0),
+              tackles: item.match.performances.filter((line) => line.clubId === item.match.homeClub.id).reduce((sum, line) => sum + line.tackles, 0),
+            },
+            away: {
+              shots: item.match.performances.filter((line) => line.clubId === item.match.awayClub.id).reduce((sum, line) => sum + line.shots, 0),
+              passes: item.match.performances.filter((line) => line.clubId === item.match.awayClub.id).reduce((sum, line) => sum + line.passes, 0),
+              tackles: item.match.performances.filter((line) => line.clubId === item.match.awayClub.id).reduce((sum, line) => sum + line.tackles, 0),
+            },
+          },
+          scorers: item.match.performances.filter((line) => line.goals > 0).map((line) => ({
+            player: line.player.firstName + " " + line.player.lastName, goals: line.goals,
+          })),
         },
       });
     }
@@ -76,6 +92,47 @@ export function registerMatchNotificationRoutes(app: FastifyInstance) {
     return { acknowledged: true, delivered: parsed.data.delivered };
   });
 
+  app.post("/v1/bot/match-lifecycle/claim", async (request, reply) => {
+    if (!authenticateSystemBot(request, reply)) return;
+    const parsed = z.object({ limit: z.number().int().min(1).max(100).default(50) }).safeParse(request.body ?? {});
+    if (!parsed.success) return reply.code(400).send({ error: "INVALID_MATCH_LIFECYCLE_CLAIM" });
+    const now = new Date();
+    const retryBefore = new Date(now.getTime() - 30_000);
+    const candidates = await prisma.matchLifecycleNotification.findMany({
+      where: { status: "PENDING", availableAt: { lte: now }, OR: [{ lockedUntil: null }, { lockedUntil: { lt: retryBefore } }], match: { status: { in: ["IN_PROGRESS", "COMPLETED"] } } },
+      include: { match: { select: { id: true, homeClub: { select: { name: true } }, awayClub: { select: { name: true } } } } },
+      orderBy: [{ availableAt: "asc" }, { createdAt: "asc" }], take: parsed.data.limit,
+    });
+    const notifications = [];
+    for (const item of candidates) {
+      const claimToken = randomUUID();
+      const claimed = await prisma.matchLifecycleNotification.updateMany({
+        where: { id: item.id, status: "PENDING", availableAt: { lte: now }, OR: [{ lockedUntil: null }, { lockedUntil: { lt: retryBefore } }] },
+        data: { claimToken, lockedUntil: new Date(now.getTime() + 30_000), attempts: { increment: 1 } },
+      });
+      if (claimed.count === 1) notifications.push({
+        id: item.id, channel: item.channel, telegramChatId: item.telegramChatId, claimToken, attempt: item.attempts + 1,
+        kind: item.kind, minute: item.minute, homeScore: item.homeScore, awayScore: item.awayScore, payload: item.payload,
+        match: { id: item.match.id, homeClub: item.match.homeClub.name, awayClub: item.match.awayClub.name },
+      });
+    }
+    return { notifications };
+  });
+
+  app.post("/v1/bot/match-lifecycle/ack", async (request, reply) => {
+    if (!authenticateSystemBot(request, reply)) return;
+    const parsed = z.object({ id: z.string().min(1).max(64), claimToken: z.string().uuid(), delivered: z.boolean(), error: z.string().max(500).optional() }).strict().safeParse(request.body);
+    if (!parsed.success) return reply.code(400).send({ error: "INVALID_MATCH_LIFECYCLE_ACK" });
+    const now = new Date();
+    const result = await prisma.matchLifecycleNotification.updateMany({
+      where: { id: parsed.data.id, status: "PENDING", claimToken: parsed.data.claimToken, lockedUntil: { gt: now } },
+      data: parsed.data.delivered
+        ? { status: "DELIVERED", deliveredAt: now, lockedUntil: null, claimToken: null, lastError: null }
+        : { availableAt: new Date(now.getTime() + 15_000), lockedUntil: null, claimToken: null, lastError: parsed.data.error ?? "TELEGRAM_SEND_FAILED" },
+    });
+    if (result.count !== 1) return reply.code(409).send({ error: "MATCH_LIFECYCLE_CLAIM_EXPIRED" });
+    return { acknowledged: true, delivered: parsed.data.delivered };
+  });
   app.post("/v1/bot/match-checkpoints/claim", async (request, reply) => {
     if (!authenticateSystemBot(request, reply)) return;
     const parsed = z.object({ limit: z.number().int().min(1).max(100).default(25), checkpointId: z.string().min(1).max(64).optional() }).safeParse(request.body ?? {});
@@ -87,6 +144,7 @@ export function registerMatchNotificationRoutes(app: FastifyInstance) {
         where: {
           ...(parsed.data.checkpointId ? { id: parsed.data.checkpointId } : {}),
           status: "OPEN",
+          openedAt: { lte: now },
           decisionDeadlineAt: { gt: now },
           OR: [
             { homeBotNotifiedAt: null, OR: [

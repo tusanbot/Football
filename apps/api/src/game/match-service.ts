@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { randomInt, randomUUID } from "node:crypto";
 import { Prisma } from "@prisma/client";
 import {
   advanceMatchSegment, applyMatchSubstitutions, calculateStadiumCapacity, resolveMatchCheckpoint,
@@ -10,6 +10,8 @@ import {
 import { prisma } from "../db.js";
 
 const DAY_MS = 86_400_000;
+const MATCH_MINUTE_MS = 1_000;
+const MATCH_CHECKPOINT_WINDOW_MS = 5_000;
 export class MatchServiceError extends Error {
   constructor(public readonly code: string, public readonly details?: Record<string, string>) {
     super(code); this.name = "MatchServiceError";
@@ -240,18 +242,59 @@ export async function updateCompetitionRules(userId: string, competitionId: stri
     return { competitionId, rules };
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 }
-export async function joinLeague(userId: string, competitionId: string) {
+export async function joinLeague(userId: string, competitionId: string, now = new Date()) {
   const club = await getOwnedClub(userId);
   return prisma.$transaction(async (tx) => {
     const competition = await tx.competition.findUnique({ where: { id: competitionId }, include: { entries: true } });
     if (!competition) throw new MatchServiceError("COMPETITION_NOT_FOUND");
     const existing = competition.entries.find((entry) => entry.clubId === club.id);
-    if (existing) return { joined: true, replayed: true, teams: competition.entries.length };
+    if (existing) return { joined: true, replayed: true, teams: competition.entries.length, autoStarted: competition.status === "ACTIVE" };
     if (competition.status !== "REGISTRATION") throw new MatchServiceError("COMPETITION_NOT_OPEN");
     if (competition.entries.length >= competition.maxTeams) throw new MatchServiceError("COMPETITION_FULL");
     await tx.competitionEntry.create({ data: { competitionId, clubId: club.id } });
-    return { joined: true, replayed: false, teams: competition.entries.length + 1 };
-  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+    const teams = competition.entries.length + 1;
+    if (competition.format !== "LEAGUE" || teams < competition.maxTeams) {
+      return { joined: true, replayed: false, teams, autoStarted: false, requiredTeams: competition.maxTeams };
+    }
+    const entries = await tx.competitionEntry.findMany({
+      where: { competitionId },
+      include: { club: { select: { id: true, players: { where: { status: "ACTIVE" }, select: { id: true, position: true } } } } },
+      orderBy: { joinedAt: "asc" },
+    });
+    if (entries.length !== competition.maxTeams) throw new MatchServiceError("COMPETITION_WAITING_FOR_TEAMS");
+    if (entries.some((entry) => entry.club.players.length < 11 || !entry.club.players.some((player) => player.position === "GK"))) {
+      throw new MatchServiceError("ALL_TEAMS_NEED_VALID_LINEUPS");
+    }
+    const slots = entries.map((entry) => entry.clubId);
+    for (let index = slots.length - 1; index > 0; index--) {
+      const swapIndex = randomInt(index + 1);
+      [slots[index], slots[swapIndex]] = [slots[swapIndex]!, slots[index]!];
+    }
+    if (slots.length % 2) slots.push("");
+    const rounds = slots.length - 1;
+    const kickoffAt = new Date(now.getTime() + DAY_MS);
+    const fixtures: Array<{ homeClubId: string; awayClubId: string; round: number; scheduledAt: Date; seed: string; idempotencyKey: string; type: "LEAGUE"; competitionId: string; rulesSnapshot: Prisma.InputJsonValue }> = [];
+    for (let round = 0; round < rounds; round++) {
+      for (let index = 0; index < slots.length / 2; index++) {
+        const first = slots[index]!;
+        const second = slots[slots.length - 1 - index]!;
+        if (!first || !second) continue;
+        const swap = (round + index) % 2 === 1;
+        const homeClubId = swap ? second : first;
+        const awayClubId = swap ? first : second;
+        const idempotencyKey = "league:" + competition.id + ":r" + (round + 1) + ":" + homeClubId + ":" + awayClubId;
+        fixtures.push({ homeClubId, awayClubId, round: round + 1, scheduledAt: new Date(kickoffAt.getTime() + round * DAY_MS), seed: idempotencyKey, idempotencyKey, type: "LEAGUE", competitionId, rulesSnapshot: validateMatchRules(competition.rules ?? defaultMatchRules("LEAGUE")) });
+      }
+      const fixed = slots[0]!;
+      const rotating = slots.slice(1);
+      rotating.unshift(rotating.pop()!);
+      slots.splice(0, slots.length, fixed, ...rotating);
+    }
+    await tx.footballMatch.createMany({ data: fixtures });
+    const activated = await tx.competition.updateMany({ where: { id: competitionId, status: "REGISTRATION" }, data: { status: "ACTIVE", startsAt: kickoffAt } });
+    if (activated.count !== 1) throw new MatchServiceError("COMPETITION_NOT_OPEN");
+    return { joined: true, replayed: false, teams, autoStarted: true, fixturesCreated: fixtures.length, rounds, startsAt: kickoffAt.toISOString() };
+  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, timeout: 15_000, maxWait: 10_000 });
 }
 export async function startLeague(userId: string, competitionId: string, now = new Date()) {
   const club = await getOwnedClub(userId);
@@ -285,10 +328,17 @@ export async function startLeague(userId: string, competitionId: string, now = n
       }
       throw new MatchServiceError("COMPETITION_NOT_OPEN");
     }
+    if (competition.format === "LEAGUE" && competition.entries.length < competition.maxTeams) throw new MatchServiceError("COMPETITION_WAITING_FOR_TEAMS");
     if (competition.entries.length < 4) throw new MatchServiceError("LEAGUE_NEEDS_FOUR_TEAMS");
     if (competition.entries.some((entry) => entry.club.players.length < 11 || !entry.club.players.some((player) => player.position === "GK"))) throw new MatchServiceError("ALL_TEAMS_NEED_VALID_LINEUPS");
     competition.entries.sort((a, b) => a.joinedAt.getTime() - b.joinedAt.getTime());
     const teams = competition.entries.map((entry) => entry.clubId);
+    if (competition.format === "LEAGUE") {
+      for (let index = teams.length - 1; index > 0; index--) {
+        const swapIndex = randomInt(index + 1);
+        [teams[index], teams[swapIndex]] = [teams[swapIndex]!, teams[index]!];
+      }
+    }
     if (competition.format === "CUP") {
       if (![4, 8].includes(competition.maxTeams) || teams.length !== competition.maxTeams) {
         throw new MatchServiceError("CUP_REQUIRES_FULL_FOUR_OR_EIGHT_TEAM_BRACKET");
@@ -321,6 +371,7 @@ export async function startLeague(userId: string, competitionId: string, now = n
     const slots: Array<string | null> = [...teams];
     if (slots.length % 2) slots.push(null);
     const rounds = slots.length - 1;
+    const kickoffAt = new Date(now.getTime() + DAY_MS);
     const fixtures: Array<{ homeClubId: string; awayClubId: string; round: number; scheduledAt: Date; seed: string; idempotencyKey: string }> = [];
     for (let round = 0; round < rounds; round++) {
       for (let index = 0; index < slots.length / 2; index++) {
@@ -333,7 +384,7 @@ export async function startLeague(userId: string, competitionId: string, now = n
         const idempotencyKey = `league:${competition.id}:r${round + 1}:${homeClubId}:${awayClubId}`;
         fixtures.push({
           homeClubId, awayClubId, round: round + 1,
-          scheduledAt: new Date(now.getTime() + (round + 1) * 3 * DAY_MS),
+          scheduledAt: new Date(kickoffAt.getTime() + round * DAY_MS),
           seed: idempotencyKey, idempotencyKey,
         });
       }
@@ -348,7 +399,7 @@ export async function startLeague(userId: string, competitionId: string, now = n
     })) });
     const updated = await tx.competition.updateMany({
       where: { id: competitionId, status: "REGISTRATION" },
-      data: { status: "ACTIVE", startsAt: fixtures[0]?.scheduledAt ?? now },
+      data: { status: "ACTIVE", startsAt: fixtures[0]?.scheduledAt ?? kickoffAt },
     });
     if (updated.count !== 1) throw new MatchServiceError("COMPETITION_NOT_OPEN");
     return { fixturesCreated: fixtures.length, rounds, teams: teams.length, replayed: false };
@@ -385,6 +436,19 @@ export async function getLeague(userId: string, competitionId: string) {
   competition.entries.sort((a, b) => b.points - a.points
     || (b.goalsFor - b.goalsAgainst) - (a.goalsFor - a.goalsAgainst)
     || b.goalsFor - a.goalsFor || a.club.name.localeCompare(b.club.name));
+  const [scorers] = await Promise.all([
+    prisma.playerMatchPerformance.groupBy({
+      by: ["playerId", "clubId"], where: { match: { competitionId } },
+      _sum: { goals: true, assists: true }, orderBy: { _sum: { goals: "desc" } }, take: 20,
+    }),
+  ]);
+  const playerIds = scorers.map((row) => row.playerId);
+  const players = await prisma.player.findMany({ where: { id: { in: playerIds } }, select: { id: true, firstName: true, lastName: true } });
+  const playerNames = new Map(players.map((player) => [player.id, player.firstName + " " + player.lastName]));
+  const clubNames = new Map(competition.entries.map((entry) => [entry.clubId, entry.club.name]));
+  const nextRound = competition.matches.filter((match) => match.status !== "COMPLETED" && match.round !== null)
+    .reduce<number | null>((minimum, match) => minimum === null ? match.round! : Math.min(minimum, match.round!), null);
+  const nextRoundMatches = nextRound === null ? [] : competition.matches.filter((match) => match.round === nextRound);
   return {
     competition: { id: competition.id, name: competition.name, season: competition.season, format: competition.format, cupLegs: competition.cupLegs, rules: validateMatchRules(competition.rules ?? defaultMatchRules(competition.format)), status: competition.status, startsAt: competition.startsAt?.toISOString() ?? null },
     standings: competition.entries.map((entry, index) => ({
@@ -397,6 +461,15 @@ export async function getLeague(userId: string, competitionId: string) {
       homeClub: match.homeClub, awayClub: match.awayClub, homeScore: match.homeScore, awayScore: match.awayScore,
       ...aggregateCupScore(match, competition.matches),
       rules: validateMatchRules(match.rulesSnapshot ?? defaultMatchRules(match.type)), homePenalties: match.homePenalties, awayPenalties: match.awayPenalties, winnerClubId: match.winnerClubId,
+    })),
+    nextRound, nextRoundMatches: nextRoundMatches.map((match) => ({
+      id: match.id, round: match.round, scheduledAt: match.scheduledAt.toISOString(), status: match.status,
+      homeClub: match.homeClub, awayClub: match.awayClub, homeScore: match.homeScore, awayScore: match.awayScore,
+    })),
+    topScorers: scorers.map((row) => ({
+      playerId: row.playerId, playerName: playerNames.get(row.playerId) ?? "Unknown",
+      clubId: row.clubId, clubName: clubNames.get(row.clubId) ?? "Club",
+      goals: row._sum.goals ?? 0, assists: row._sum.assists ?? 0,
     })),
   };
 }
@@ -576,7 +649,7 @@ export async function submitMatchCheckpointDecision(userId: string, matchId: str
 }
 
 /** Atomically lease due runtimes; expired leases are recoverable after worker crashes. */
-export async function claimDueMatchRuntimes(workerId: string, now = new Date(), leaseMs = 30_000, limit = 10) {
+export async function claimDueMatchRuntimes(workerId: string, now = new Date(), leaseMs = 60_000, limit = 10) {
   if (!workerId.trim() || workerId.length > 100 || !Number.isInteger(leaseMs) || leaseMs < 1_000
     || !Number.isInteger(limit) || limit < 1 || limit > 100) throw new MatchServiceError("INVALID_MATCH_WORKER_LEASE");
   const candidates = await prisma.matchRuntime.findMany({ where: {
@@ -603,6 +676,20 @@ export async function releaseMatchRuntimeLease(runtimeId: string, leaseToken: st
   return result.count === 1;
 }
 
+async function publishLeagueRoundSummary(competitionId: string, round: number, now = new Date()) {
+  const fixtures = await prisma.footballMatch.findMany({ where: { competitionId, round }, include: { homeClub: { select: { name: true } }, awayClub: { select: { name: true } } }, orderBy: [{ scheduledAt: "asc" }, { id: "asc" }] });
+  if (!fixtures.length || fixtures.some((fixture) => fixture.status !== "COMPLETED")) return { published: false };
+  const competition = await prisma.competition.findUnique({ where: { id: competitionId }, include: { entries: { include: { club: { select: { name: true, ownerId: true } } } } } });
+  if (!competition) return { published: false };
+  const standings = [...competition.entries].sort((a, b) => b.points - a.points || (b.goalsFor - b.goalsAgainst) - (a.goalsFor - a.goalsAgainst) || b.goalsFor - a.goalsFor || a.club.name.localeCompare(b.club.name));
+  const resultsText = fixtures.map((fixture) => fixture.homeClub.name + " " + fixture.homeScore + " : " + fixture.awayScore + " " + fixture.awayClub.name).join("\n");
+  const tableText = standings.map((entry, index) => (index + 1) + ". " + entry.club.name + " · " + entry.points + " امتیاز · تفاضل " + (entry.goalsFor - entry.goalsAgainst)).join("\n");
+  const title = "نتایج هفته " + round + " · " + competition.name;
+  const body = "نتایج تمام مسابقات این هفته ثبت شد:\n" + resultsText + "\n\nجدول فعلی لیگ:\n" + tableText;
+  const notices = competition.entries.map((entry) => ({ userId: entry.club.ownerId, kind: "ROUND_RESULTS", title, body, referenceId: competitionId, dedupeKey: "league-round:" + competitionId + ":" + round + ":" + entry.club.ownerId }));
+  await prisma.leagueNotice.createMany({ data: notices, skipDuplicates: true });
+  return { published: true, teams: notices.length, round, at: now.toISOString() };
+}
 export async function simulateScheduledMatch(userId: string, matchId: string, now = new Date()) {
   const settlement = await prisma.$transaction(async (tx) => {
     const match = await tx.footballMatch.findUnique({ where: { id: matchId } });
@@ -944,7 +1031,7 @@ export async function simulateScheduledMatch(userId: string, matchId: string, no
       events: { orderBy: { sequence: "asc" } },
     } });
     return {
-      replayed: false, matchId: final.id, competitionId: final.competitionId, homeClub: final.homeClub.name, awayClub: final.awayClub.name,
+      replayed: false, matchId: final.id, competitionId: final.competitionId, round: match.round, homeClub: final.homeClub.name, awayClub: final.awayClub.name,
       homeScore: final.homeScore, awayScore: final.awayScore, homePenalties: final.homePenalties,
       awayPenalties: final.awayPenalties, winnerClubId: final.winnerClubId, attendance: final.attendance,
       ticketRevenue: final.ticketRevenue.toString(), events: final.events.map((event) => ({
@@ -957,14 +1044,14 @@ export async function simulateScheduledMatch(userId: string, matchId: string, no
           : null,
       })),
     };
-  });
+  }, { timeout: 30_000, maxWait: 10_000 });
   if (settlement.competitionId) {
     const competition = await prisma.competition.findUnique({
       where: { id: settlement.competitionId }, select: { format: true },
     });
     if (competition?.format === "LEAGUE") {
       const remaining = await prisma.footballMatch.count({
-        where: { competitionId: settlement.competitionId, status: "SCHEDULED" },
+        where: { competitionId: settlement.competitionId, status: { not: "COMPLETED" } },
       });
       if (remaining === 0) {
         await prisma.competition.updateMany({
@@ -981,6 +1068,16 @@ export async function simulateScheduledMatch(userId: string, matchId: string, no
       if (fixture?.round !== null && fixture?.round !== undefined) {
         await advanceCupRound(settlement.competitionId, fixture.round, now);
       }
+    }
+  }
+  if (settlement.competitionId) {
+    const eventTournament = await prisma.eventTournament.findUnique({ where: { competitionId: settlement.competitionId }, select: { id: true } });
+    if (eventTournament) {
+      const tournamentService = await import("../event-tournament-service.js");
+      await tournamentService.finalizeEventTournamentFromCompetition(settlement.competitionId, now);
+    } else if (settlement.round !== null && settlement.round !== undefined) {
+      const competition = await prisma.competition.findUnique({ where: { id: settlement.competitionId }, select: { format: true } });
+      if (competition?.format === "LEAGUE") await publishLeagueRoundSummary(settlement.competitionId, settlement.round, now);
     }
   }
   return settlement;
@@ -1111,6 +1208,38 @@ export async function enqueueDueMatchRuntimes(now = new Date(), limit = 50) {
   return created;
 }
 
+type MatchLifecycleEventInput = {
+  eventKey: string; kind: "KICKOFF" | "GOAL" | "HALF_TIME"; minute: number;
+  homeScore: number; awayScore: number; payload?: Prisma.InputJsonValue; availableAt: Date;
+};
+async function enqueueMatchLifecycleNotifications(tx: Prisma.TransactionClient, match: { id: string; homeClub: { owner: { telegramId: string } }; awayClub: { owner: { telegramId: string } } }, events: MatchLifecycleEventInput[]) {
+  if (!events.length) return;
+  const challenge = await tx.friendlyChallenge.findUnique({ where: { matchId: match.id }, select: { group: { select: { telegramId: true } } } });
+  const recipients = [
+    { channel: "HOME", telegramChatId: match.homeClub.owner.telegramId },
+    { channel: "AWAY", telegramChatId: match.awayClub.owner.telegramId },
+    ...(challenge?.group?.telegramId ? [{ channel: "GROUP", telegramChatId: challenge.group.telegramId }] : []),
+  ];
+  await tx.matchLifecycleNotification.createMany({
+    data: events.flatMap((event) => recipients.map((recipient) => ({
+      matchId: match.id, channel: recipient.channel, telegramChatId: recipient.telegramChatId,
+      eventKey: event.eventKey, kind: event.kind, minute: event.minute, homeScore: event.homeScore, awayScore: event.awayScore,
+      payload: event.payload ?? Prisma.JsonNull, availableAt: event.availableAt,
+    }))), skipDuplicates: true,
+  });
+}
+function goalLifecycleEvents(events: MatchSegmentState["events"], home: MatchSide, away: MatchSide, initialScore: { home: number; away: number }, startedAt: Date): MatchLifecycleEventInput[] {
+  let homeScore = initialScore.home, awayScore = initialScore.away;
+  const homePlayers = new Map([...home.players, ...(home.bench ?? [])].map((player) => [player.id, player.name]));
+  const awayPlayers = new Map([...away.players, ...(away.bench ?? [])].map((player) => [player.id, player.name]));
+  return [...events].filter((event) => event.type === "GOAL").sort((left, right) => left.minute - right.minute || left.sequence - right.sequence).map((event) => {
+    if (event.teamId === home.clubId) homeScore++; else awayScore++;
+    const names = event.teamId === home.clubId ? homePlayers : awayPlayers;
+    return { eventKey: "goal:" + event.minute + ":" + event.sequence, kind: "GOAL", minute: event.minute, homeScore, awayScore,
+      payload: { teamName: event.teamId === home.clubId ? home.clubName : away.clubName, scorerName: names.get(event.playerId) ?? "بازیکن", assistName: event.relatedPlayerId ? names.get(event.relatedPlayerId) ?? null : null },
+      availableAt: new Date(startedAt.getTime() + event.minute * MATCH_MINUTE_MS) };
+  });
+}
 async function processClaimedMatchRuntime(
   runtimeId: string,
   now: Date,
@@ -1150,7 +1279,9 @@ async function processClaimedMatchRuntime(
       awaySubstitutions: initialSubstitutions.away,
       rules: rulesForMatch(runtime.match),
     });
-    const checkpointAt = new Date(now.getTime() + 60_000);
+    const checkpointAt = new Date(now.getTime() + 45 * MATCH_MINUTE_MS);
+    const decisionDeadlineAt = new Date(checkpointAt.getTime() + MATCH_CHECKPOINT_WINDOW_MS);
+    const firstHalfNextSegmentAt = decisionDeadlineAt;
     state = {
       segment: first.state,
       substitutions: { home: first.homeSubstitutions, away: first.awaySubstitutions },
@@ -1162,7 +1293,7 @@ async function processClaimedMatchRuntime(
         data: {
           status: "AWAITING_CHECKPOINT", currentMinute: 45, stateVersion: { increment: 1 },
           simulationState: jsonSafe(state), startedAt: runtime.startedAt ?? now,
-          nextActionAt: new Date(now.getTime() + 5_000), lastError: null,
+          nextActionAt: checkpointAt, lastError: null,
         },
       });
       if (runtimeUpdated.count !== 1) throw new MatchServiceError("MATCH_RUNTIME_CONCURRENT_MODIFICATION");
@@ -1171,10 +1302,14 @@ async function processClaimedMatchRuntime(
         data: { status: "IN_PROGRESS", startedAt: runtime.match.startedAt ?? now },
       });
       if (matchUpdated.count !== 1) throw new MatchServiceError("MATCH_NOT_SCHEDULED");
+      await enqueueMatchLifecycleNotifications(tx, runtime.match, [
+        { eventKey: "kickoff", kind: "KICKOFF", minute: 0, homeScore: 0, awayScore: 0, availableAt: now },
+        ...goalLifecycleEvents(first.events, snapshot.home, snapshot.away, { home: 0, away: 0 }, now),
+      ]);
       await tx.matchTacticalCheckpoint.createMany({
         data: [{
           matchId: runtime.matchId, checkpointKey: "minute-45", kind: "HALF_TIME", minute: 45,
-          openedAt: now, decisionDeadlineAt: checkpointAt, nextSegmentAt: checkpointAt,
+          openedAt: checkpointAt, decisionDeadlineAt, nextSegmentAt: firstHalfNextSegmentAt,
         }],
         skipDuplicates: true,
       });
@@ -1200,7 +1335,13 @@ async function processClaimedMatchRuntime(
     .every((clubId) => decisions.some((decision) => decision.clubId === clubId
       && decision.submittedAt >= checkpoint.openedAt
       && decision.submittedAt < checkpoint.decisionDeadlineAt));
-  if (!bothResponded && now < checkpoint.nextSegmentAt) return "WAITING";
+  if (checkpoint.minute === 45 && now >= checkpoint.openedAt) {
+    await prisma.$transaction(async (tx) => enqueueMatchLifecycleNotifications(tx, runtime.match, [{
+      eventKey: "halftime", kind: "HALF_TIME", minute: 45,
+      homeScore: state.segment.home.score, awayScore: state.segment.away.score, availableAt: now,
+    }]));
+  }
+  if (now < checkpoint.nextSegmentAt) return "WAITING";
 
   const kind = checkpoint.kind;
   const checkpointName = kind === "HALF_TIME" ? "HALF_TIME" : kind === "MINUTE_60" ? "MINUTE_60" : "MINUTE_75";
@@ -1258,6 +1399,7 @@ async function processClaimedMatchRuntime(
     ],
   };
   const isFullTime = nextMinute === 90;
+  const nextAt = new Date(now.getTime() + 15 * MATCH_MINUTE_MS);
   await prisma.$transaction(async (tx) => {
     const checkpointUpdated = await tx.matchTacticalCheckpoint.updateMany({
       where: { id: checkpoint.id, status: "OPEN" },
@@ -1268,39 +1410,45 @@ async function processClaimedMatchRuntime(
       where: { id: runtime.id, stateVersion: runtime.stateVersion, leaseToken: runtime.leaseToken },
       data: {
         status: "RUNNING", currentMinute: nextMinute, stateVersion: { increment: 1 },
-        simulationState: jsonSafe(nextState), nextActionAt: isFullTime ? now : new Date(now.getTime() + 5_000),
+        simulationState: jsonSafe(nextState), nextActionAt: nextAt,
         lastError: null,
       },
     });
     if (runtimeUpdated.count !== 1) throw new MatchServiceError("MATCH_RUNTIME_CONCURRENT_MODIFICATION");
+    const lifecycleEvents: MatchLifecycleEventInput[] = [];
+    if (checkpoint.minute === 45) lifecycleEvents.push({
+      eventKey: "halftime", kind: "HALF_TIME", minute: 45,
+      homeScore: state.segment.home.score, awayScore: state.segment.away.score, availableAt: now,
+    });
+    lifecycleEvents.push(...goalLifecycleEvents(advanced.events, homeApplied.side, awayApplied.side,
+      { home: state.segment.home.score, away: state.segment.away.score }, runtime.startedAt ?? now));
+    await enqueueMatchLifecycleNotifications(tx, runtime.match, lifecycleEvents);
     if (!isFullTime) {
       const nextKind = nextMinute === 60 ? "MINUTE_60" : "MINUTE_75";
-      const nextAt = new Date(now.getTime() + 60_000);
+      const decisionDeadlineAt = new Date(nextAt.getTime() + MATCH_CHECKPOINT_WINDOW_MS);
+      const nextSegmentAt = decisionDeadlineAt;
       await tx.matchTacticalCheckpoint.createMany({
         data: [{
           matchId: runtime.matchId, checkpointKey: "minute-" + nextMinute,
-          kind: nextKind, minute: nextMinute, openedAt: now,
-          decisionDeadlineAt: nextAt, nextSegmentAt: nextAt,
+          kind: nextKind, minute: nextMinute, openedAt: nextAt,
+          decisionDeadlineAt, nextSegmentAt,
         }],
         skipDuplicates: true,
       });
     }
   });
-  if (isFullTime) {
-    await simulateScheduledMatch(runtime.match.homeClub.ownerId, runtime.matchId, now);
-    return "SETTLED";
-  }
   return "ADVANCED";
 }
 
-/** Durable worker tick. Checkpoints are polled every five seconds so two early replies resume immediately. */
+/** Durable worker tick. The match clock advances at one real second per simulated minute; tactical windows are capped at five seconds. */
 export async function processDueMatchRuntimes(
   workerId = "match-worker",
   now = new Date(),
   limit = 10,
 ): Promise<{ enqueued: number; claimed: number; advanced: number; waiting: number; settled: number; failed: number }> {
   const enqueued = await enqueueDueMatchRuntimes(now, Math.max(limit, 10));
-  const claimed = await claimDueMatchRuntimes(workerId, now, 30_000, limit);
+  // The settlement transaction may wait 10s for a connection and run for 30s; keep the lease longer to prevent a duplicate claimant.
+  const claimed = await claimDueMatchRuntimes(workerId, now, 60_000, limit);
   const totals = { enqueued, claimed: claimed.length, advanced: 0, waiting: 0, settled: 0, failed: 0 };
   for (const item of claimed) {
     try {

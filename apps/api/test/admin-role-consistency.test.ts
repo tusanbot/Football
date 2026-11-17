@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { buildApp } from "../src/app.js";
 import { prisma } from "../src/db.js";
+import { createTelegramSessionToken } from "../src/auth/telegram-session.js";
 
 test("database admin role revocation overrides environment-scoped role map in league admin routes", async (t) => {
   if (!process.env.DATABASE_URL) {
@@ -12,7 +13,8 @@ test("database admin role revocation overrides environment-scoped role map in le
   const previousSecret = process.env.BOT_API_SECRET;
   const previousMap = process.env.GAME_ADMIN_ROLE_MAP;
   const telegramId = String(700_000_000 + Math.floor(Math.random() * 100_000_000));
-  process.env.BOT_API_SECRET = "test-admin-role-consistency-secret";
+  const secret = "test-admin-role-consistency-secret";
+  process.env.BOT_API_SECRET = secret;
   process.env.GAME_ADMIN_ROLE_MAP = JSON.stringify({ [telegramId]: "football" });
   const user = await prisma.user.create({ data: { telegramId, displayName: "Admin role test" } });
   const app = buildApp();
@@ -30,11 +32,15 @@ test("database admin role revocation overrides environment-scoped role map in le
   await prisma.adminRoleAssignment.create({
     data: { telegramId, role: "football", active: true, createdByTelegramId: "test", updatedByTelegramId: "test" },
   });
-  const headers = { "x-football-bot-secret": process.env.BOT_API_SECRET!, "x-telegram-user-id": telegramId };
+  const headers = { authorization: "Bearer " + createTelegramSessionToken(telegramId, secret).token };
+  process.env.BOT_API_SECRET = secret;
+  process.env.GAME_ADMIN_ROLE_MAP = JSON.stringify({ [telegramId]: "football" });
   const granted = await app.inject({ method: "GET", url: "/v1/admin/pyramid-leagues", headers });
   assert.equal(granted.statusCode, 200);
 
   await prisma.adminRoleAssignment.update({ where: { telegramId }, data: { active: false } });
+  process.env.BOT_API_SECRET = secret;
+  process.env.GAME_ADMIN_ROLE_MAP = JSON.stringify({ [telegramId]: "football" });
   const revoked = await app.inject({ method: "GET", url: "/v1/admin/pyramid-leagues", headers });
   assert.equal(revoked.statusCode, 403);
 });

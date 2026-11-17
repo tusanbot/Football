@@ -49,7 +49,7 @@ export const PERSISTENT_GROUP_COMMANDS = new Set([
   "start", "challenge",
   "group-register", "group-check", "group-give", "group-challenges", "group-challenge",
   "group-challenge-complete", "group-challenge-cancel", "group-rewards", "group-treasury",
-  "group-league", "group-league-start", "group-league-table", "group-leagues",
+  "group-league", "group-league-table", "group-leagues",
   "alliance", "alliance-create", "alliance-invite", "alliance-accept", "alliance-decline",
   "alliance-championship", "alliance-championship-join", "alliance-championship-start",
   "alliance-season-start", "alliance-season-close", "alliance-season-review", "alliance-contribute",
@@ -78,7 +78,8 @@ export const PRIVATE_MENU_SUBMENUS = {
     title: "🏟 مدیریت باشگاه",
     rows: [
       [{ label: "🏟 مشخصات باشگاه", command: "club" }, { label: "✏️ ویرایش باشگاه", command: "clubedit" }],
-      [{ label: "📋 ترکیب اصلی", command: "lineup" }, { label: "🏗 امکانات باشگاه", command: "operations" }],
+      [{ label: "📋 ترکیب اصلی", command: "lineup" }, { label: "🧩 تنظیم ترکیب", command: "setlineup" }],
+      [{ label: "🏗 امکانات باشگاه", command: "operations" }],
       [{ label: "🔎 استعدادیابی", command: "scout" }, { label: "📈 توسعه بازیکنان", command: "development" }],
     ],
   },
@@ -107,7 +108,8 @@ export const PRIVATE_MENU_SUBMENUS = {
   menu_competitions: {
     title: "🏆 لیگ‌ها و آمار",
     rows: [
-      [{ label: "🏆 لیگ‌ها", command: "leagues" }, { label: "🏅 جوایز فصل", command: "seasonawards" }],
+      [{ label: "🏆 لیگ‌ها", command: "leagues" }, { label: "🎖 تورنمنت‌های مناسبتی", command: "tournaments" }],
+      [{ label: "🏅 جوایز فصل", command: "seasonawards" }],
       [{ label: "📊 رکوردهای بازیکنان", command: "records" }, { label: "🏟 باشگاه‌های برتر", command: "clubs" }],
     ],
   },
