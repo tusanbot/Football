@@ -231,7 +231,6 @@ model User {
   storePurchases StorePurchase[]
   storeItemUses StoreItemUse[]
   eventTournamentEntries EventTournamentParticipant[]
-  eventTournamentPrizeAwards EventTournamentPrizeAward[]
 }
 
 model Club {
