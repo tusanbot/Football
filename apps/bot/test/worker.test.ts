@@ -88,23 +88,38 @@ test("Telegram Mini App initData is cryptographically verified and time-bounded"
   assert.equal(await verifyTelegramInitData(expired, token), null);
 });
 
-test("Mini App telemetry accepts only signed initData from the configured origin", async () => {
+test("Mini App telemetry forwards a pseudonymous event to the private API endpoint", async () => {
   const token = "123456:staging-test-token";
   const initData = await signedInitData(token, 987654321);
-  const points: Array<{ blobs?: string[]; doubles?: number[]; indexes?: string[] }> = [];
-  const env = {
-    TELEGRAM_BOT_TOKEN: token,
-    TELEGRAM_WEB_APP_URL: "https://game.example",
-    ANALYTICS_HASH_SECRET: "a".repeat(48),
-    PILOT_ANALYTICS: { writeDataPoint: (point: { blobs?: string[]; doubles?: number[]; indexes?: string[] }) => points.push(point) },
-  } as never;
-  const response = await worker.fetch(new Request("https://bot/miniapp/launch", {
-    method: "POST",
-    headers: { origin: "https://game.example", "content-type": "application/json" },
-    body: JSON.stringify({ initData }),
-  }), env);
-  assert.equal(response.status, 204);
-  assert.equal(points.length, 1);
-  assert.deepEqual(points[0]?.blobs, ["miniapp_session", "miniapp_launch", "private", "miniapp"]);
-  assert.notEqual(points[0]?.indexes?.[0], "987654321");
+  const originalFetch = globalThis.fetch;
+  const requests: Array<{ url: string; init?: RequestInit }> = [];
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    requests.push({ url: String(input), init });
+    return new Response(null, { status: 202 });
+  }) as typeof fetch;
+  try {
+    const env = {
+      TELEGRAM_BOT_TOKEN: token,
+      TELEGRAM_WEB_APP_URL: "https://game.example",
+      FOOTBALL_API_URL: "https://api.example",
+      BOT_API_SECRET: "b".repeat(48),
+      ANALYTICS_HASH_SECRET: "a".repeat(48),
+    } as never;
+    const response = await worker.fetch(new Request("https://bot/miniapp/launch", {
+      method: "POST",
+      headers: { origin: "https://game.example", "content-type": "application/json" },
+      body: JSON.stringify({ initData }),
+    }), env);
+    assert.equal(response.status, 204);
+    assert.equal(requests.length, 1);
+    assert.equal(requests[0]?.url, "https://api.example/internal/pilot/events");
+    const body = JSON.parse(String(requests[0]?.init?.body)) as { eventName: string; userKey: string; source: string };
+    assert.equal(body.eventName, "miniapp_session");
+    assert.equal(body.source, "miniapp");
+    assert.match(body.userKey, /^[a-f0-9]{32}$/);
+    assert.notEqual(body.userKey, "987654321");
+    assert.equal(new Headers(requests[0]?.init?.headers).get("x-football-bot-secret"), "b".repeat(48));
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });
