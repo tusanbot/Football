@@ -4,7 +4,7 @@
 
 The first invited-user pilot should run without a VPS. Telegram updates enter through a Cloudflare Worker webhook, while the Mini App and game API remain separate Workers.
 
-No production Worker, primary Telegram bot webhook, BotFather setting, or live database was changed as part of this implementation. The staging configs deliberately contain non-routable API placeholders until a separate staging database and API are provisioned.
+No production Worker, primary Telegram bot webhook, BotFather setting, or live database was changed as part of this implementation. The staging database and Hyperdrive are now provisioned independently from production. The API, Bot, and Mini App staging configs point to the dedicated staging endpoints; staging deployment and test-Bot activation remain gated on test credentials and final connection validation.
 
 ## Implemented in the release branch
 
@@ -74,7 +74,7 @@ The staging API URL in `apps/bot/wrangler.jsonc` and `apps/web/wrangler.staging.
 
 - Unit tests cover webhook route security, update claim/duplicate/release behavior, Telegram Mini App signature verification, freshness checks, and pseudonymous analytics events.
 - CI includes Bot typechecking/tests, a Wrangler Bot Worker dry-run, and separate production/staging Mini App builds.
-- The latest observed CI run is pending; the earlier run failed at strict TypeScript checks in the initial adapter draft. Those reported typing issues were corrected, but the new run must complete successfully before calling the code verified.
+- The latest completed CI run for the previous code revision succeeded, including Bot/API typechecks, tests, production and staging Mini App builds, API runtime tests, and production API dry-run. A new CI run was triggered by the staging API configuration updates and must complete successfully before deploying.
 - No staging deployment or Telegram end-to-end test has been completed yet.
 
 ## Pilot acceptance criteria
