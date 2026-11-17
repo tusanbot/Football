@@ -47,8 +47,8 @@ The dry-run validates the Worker bundle and configuration; it does not deploy th
 - Request bodies are capped at 1 MiB and malformed updates are rejected.
 - A Durable Object claims each Telegram `update_id` before dispatch. Completed updates are deduplicated for seven days; failed handlers release their claim so Telegram can retry.
 - The Worker checks the staging API readiness endpoint and verifies that the Bot token matches the Bot identity configured in the API.
-- A Cron Trigger runs every minute and drains the existing database-backed deletion, match-notification, league-notice, and admin-broadcast queues. These jobs use the existing API claim/complete/fail protocol; they are not process-local timers.
-- The current group-message deletion queue is polled on a one-minute schedule, so actual deletion may occur later than the configured 60-second target.
+- The scheduled handler drains the existing database-backed deletion, match-notification, league-notice, and admin-broadcast queues using the API claim/complete/fail protocol; these are not process-local timers. The staging Wrangler config intentionally disables Cron, so the Bot and background jobs remain dormant after deployment until separately activated.
+- When Cron is enabled, the group-message deletion queue is polled on a one-minute schedule, so actual deletion may occur later than the configured 60-second target.
 - Worker observability and the Analytics Engine dataset record bot starts, command/callback usage, group/private context, and pseudonymous active-user keys. The Mini App calls `/miniapp/launch` with Telegram `initData`; the Worker verifies Telegram's HMAC signature and a 24-hour freshness window before recording a pseudonymous session event. Raw `initData`, Telegram IDs, and message text are never written to analytics.
 - Build the staging Mini App with `pnpm --dir apps/web build:worker:staging`; it embeds the staging API and Bot Worker URLs from `wrangler.staging.jsonc`. The production build does not embed the staging Bot URL.
 - Analytics Engine SQL example for the last seven days:
@@ -66,7 +66,7 @@ The dry-run validates the Worker bundle and configuration; it does not deploy th
 
 ## Activation is intentionally separate
 
-After staging acceptance tests pass, configure the test bot's webhook to:
+After staging acceptance tests pass and the user explicitly approves activation, enable the staging Cron trigger and configure the test bot's webhook to:
 
 `https://football-empire-bot-staging.<your-workers-subdomain>.workers.dev/telegram/webhook`
 
