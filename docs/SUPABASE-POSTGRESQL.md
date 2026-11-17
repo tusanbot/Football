@@ -11,7 +11,7 @@ Configure these only on the server:
 
 For local development, both may point to the same local PostgreSQL database. In Supabase, copy the runtime and migration connection strings from the project's Connect panel and keep their roles separate. Prefer a direct connection for migrations; if the host cannot reach Supabase's IPv6 direct endpoint, use Supabase's session pooler for `DIRECT_URL`. Do not run Prisma schema migrations through a transaction pooler.
 
-For the Cloudflare API Worker, use Hyperdrive as the runtime connection layer where configured; the Worker already maps its Hyperdrive binding to Prisma's runtime `DATABASE_URL`. The migration command still runs from a trusted development environment with `DIRECT_URL`.
+For the Cloudflare API Worker, set `DATABASE_URL` to the Supabase shared Transaction Pooler URI (port `6543`) with `pgbouncer=true&sslmode=require`. The Worker connects directly through Supavisor using Cloudflare's Node.js TCP/TLS compatibility APIs; Hyperdrive is not used. Keep `DIRECT_URL` in a trusted development/CI environment for Prisma migrations, using a direct or session-mode endpoint (port `5432`), never the transaction pooler.
 
 ## Security boundaries
 
