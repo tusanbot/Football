@@ -54,11 +54,9 @@ jobs:
             test -n "${!key}" || { echo "Missing required repository secret: $key"; exit 1; }
           done
           case "$DATABASE_URL" in
-            *db.uiwzbinjtglzqerymdwp.supabase.co*) ;;
-            *) echo "DATABASE_URL must point to Football Empire Staging"; exit 1 ;;
-          esac
-          case "$DATABASE_URL" in
-            *pooler.supabase.com*) echo "Use the direct Supabase database endpoint, not a pooler URL"; exit 1 ;;
+            *pooler.supabase.com:5432/*) ;;
+            *pooler.supabase.com:6543/*) echo "Use Supavisor session mode on port 5432, not transaction mode on 6543"; exit 1 ;;
+            *) echo "DATABASE_URL must be the Football Empire Staging Supavisor session-pooler URI on port 5432"; exit 1 ;;
           esac
           [[ "$STAGING_TELEGRAM_BOT_TOKEN" =~ ^[0-9]+:[A-Za-z0-9_-]{20,}$ ]] || { echo "Invalid staging Bot token format"; exit 1; }
           [[ "$STAGING_GAME_ADMIN_TELEGRAM_IDS" =~ ^[0-9]+(,[0-9]+)*$ ]] || { echo "STAGING_GAME_ADMIN_TELEGRAM_IDS must be comma-separated numeric Telegram IDs"; exit 1; }
