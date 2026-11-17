@@ -9,7 +9,7 @@
   "preview_urls": false,
   "keep_vars": true,
   "vars": {
-    "NEXT_PUBLIC_API_URL": "https://staging-api.example.invalid",
+    "NEXT_PUBLIC_API_URL": "https://football-empire-api-staging.mshmahyar9.workers.dev",
     "NEXT_PUBLIC_BOT_WEBHOOK_URL": "https://football-empire-bot-staging.mshmahyar9.workers.dev"
   },
   "assets": {
