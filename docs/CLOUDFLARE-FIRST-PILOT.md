@@ -59,23 +59,23 @@ No production Worker, primary Telegram bot webhook, BotFather setting, or live d
 
 ## Staging prerequisites that remain
 
-A working staging test cannot be completed until all of these are supplied/provisioned:
+The separate staging infrastructure is now provisioned, but deployment and live Telegram testing remain gated:
 
-1. A separate staging Postgres database. The current Supabase project has no development branches. Creating a Supabase development branch was quoted at **$0.01344/hour** (about **$9.68 for 30 days** if continuously running). No branch was created because the recurring charge needs explicit approval.
-2. A separate staging Hyperdrive binding pointing only to that staging database.
-3. A staging Game API Worker with `ENVIRONMENT=staging`, staging CORS origin, and staging secrets. The existing API Worker configuration is not silently repointed.
-4. A separate Telegram test Bot token and matching webhook secret.
-5. The staging Bot Worker's secrets: `TELEGRAM_BOT_TOKEN`, `TELEGRAM_WEBHOOK_SECRET`, `BOT_API_SECRET`, and `ANALYTICS_HASH_SECRET` (at least 32 characters).
-6. The staging Mini App and Bot Worker deployed, then the test Bot webhook registered with allowed updates `message, edited_message, callback_query, chat_member, my_chat_member`.
-
-The staging API URL in `apps/bot/wrangler.jsonc` and `apps/web/wrangler.staging.jsonc` remains `.example.invalid` intentionally. Do not deploy the staging Bot Worker against the current production API/database or the primary Telegram Bot.
+1. Supabase project `Football Empire Staging` (`uiwzbinjtglzqerymdwp`) is active in `eu-north-1`. All 42 SQL migrations are applied, all 61 Prisma models/tables exist, RLS is enabled on every public table, browser-facing roles have no table grants, all 9 foreign-key indexes and both alliance-FK repairs are present, and 15 curated special players are active. User, club, and group tables remain empty.
+2. Hyperdrive `footballtest` (`3d3a95b34ee74952b551c0b28be61a00`) is dedicated to this staging project and now targets its direct PostgreSQL endpoint, `db.uiwzbinjtglzqerymdwp.supabase.co:5432`. It does not reference production.
+3. The staging API config is `cloudflare/api/wrangler.staging.jsonc`, Worker name `football-empire-api-staging`. Its separate Durable Object namespace and staging CORS origin are configured in source.
+4. Bot and Mini App staging configs point to `https://football-empire-api-staging.mshmahyar9.workers.dev`; Mini App origin is `https://football-empire-web-staging.mshmahyar9.workers.dev`; Bot Worker origin is `https://football-empire-bot-staging.mshmahyar9.workers.dev`.
+5. Supabase's migration ledger has all 42 SQL migrations. Prisma's separate `_prisma_migrations` ledger still needs to be registered because the API readiness gate checks it. The guarded workflow `.github/workflows/register-staging-migrations.yml` performs `prisma migrate resolve --applied` for the already-applied SQL migrations; it does not rerun DDL. Add the repository secret `STAGING_DIRECT_URL` pointing to the direct staging connection string (host must be `db.uiwzbinjtglzqerymdwp.supabase.co`), then manually dispatch this workflow on `feat/telegram-production-readiness` with `REGISTER_STAGING_MIGRATIONS`.
+6. For staging deployment, add repository secrets `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, `STAGING_TELEGRAM_BOT_TOKEN`, and `STAGING_GAME_ADMIN_TELEGRAM_IDS`. The deploy workflow generates unique staging-only API, webhook, and analytics secrets at runtime and stores them as Cloudflare Worker secrets.
+7. Create a separate Telegram test Bot with BotFather. Never use the primary Bot token. The staging deployment workflow `.github/workflows/deploy-staging.yml` is manually gated by `DEPLOY_STAGING`; it deploys only the three staging Workers, verifies API readiness and web/Bot health, and deliberately does not call Telegram `setWebhook`.
+8. Webhook registration is a separate activation step and must only happen after the user explicitly approves starting the test Bot. No Bot webhook has been registered and no Bot has been started.
 
 ## Validation status
 
 - Unit tests cover webhook route security, update claim/duplicate/release behavior, Telegram Mini App signature verification, freshness checks, and pseudonymous analytics events.
-- CI includes Bot typechecking/tests, a Wrangler Bot Worker dry-run, and separate production/staging Mini App builds.
-- The latest completed CI run for the previous code revision succeeded, including Bot/API typechecks, tests, production and staging Mini App builds, API runtime tests, and production API dry-run. A new CI run was triggered by the staging API configuration updates and must complete successfully before deploying.
-- No staging deployment or Telegram end-to-end test has been completed yet.
+- CI includes Bot typechecking/tests, Wrangler dry-runs for the Bot and both API configs, and separate production/staging Mini App builds.
+- The previous full CI run succeeded. The staging API config, real staging API URLs, migration-registration workflow, and guarded staging deployment workflow have since been added; the latest CI run must complete successfully before deployment.
+- No staging Worker has been deployed, no Telegram webhook has been registered, and no Telegram end-to-end test has been completed.
 
 ## Pilot acceptance criteria
 
