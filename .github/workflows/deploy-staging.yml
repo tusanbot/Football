@@ -106,14 +106,14 @@ jobs:
       - name: Deploy staging Mini App Worker
         run: pnpm --dir apps/web exec wrangler deploy --config wrangler.staging.jsonc
       - name: Deploy isolated staging Bot webhook Worker
-        run: pnpm --dir apps/bot exec wrangler deploy --config wrangler.jsonc
+        run: pnpm deploy:bot-worker:staging
       - name: Configure staging Bot Worker secrets
         shell: bash
         run: |
-          printf '%s' "$STAGING_TELEGRAM_BOT_TOKEN" | pnpm --dir apps/bot exec wrangler secret put TELEGRAM_BOT_TOKEN --config wrangler.jsonc
-          printf '%s' "$STAGING_TELEGRAM_WEBHOOK_SECRET" | pnpm --dir apps/bot exec wrangler secret put TELEGRAM_WEBHOOK_SECRET --config wrangler.jsonc
-          printf '%s' "$STAGING_BOT_API_SECRET" | pnpm --dir apps/bot exec wrangler secret put BOT_API_SECRET --config wrangler.jsonc
-          printf '%s' "$STAGING_ANALYTICS_HASH_SECRET" | pnpm --dir apps/bot exec wrangler secret put ANALYTICS_HASH_SECRET --config wrangler.jsonc
+          printf '%s' "$STAGING_TELEGRAM_BOT_TOKEN" | pnpm --dir apps/web exec wrangler secret put TELEGRAM_BOT_TOKEN --config ../bot/wrangler.jsonc
+          printf '%s' "$STAGING_TELEGRAM_WEBHOOK_SECRET" | pnpm --dir apps/web exec wrangler secret put TELEGRAM_WEBHOOK_SECRET --config ../bot/wrangler.jsonc
+          printf '%s' "$STAGING_BOT_API_SECRET" | pnpm --dir apps/web exec wrangler secret put BOT_API_SECRET --config ../bot/wrangler.jsonc
+          printf '%s' "$STAGING_ANALYTICS_HASH_SECRET" | pnpm --dir apps/web exec wrangler secret put ANALYTICS_HASH_SECRET --config ../bot/wrangler.jsonc
       - name: Verify staging Mini App and Bot Worker health
         shell: bash
         run: |
