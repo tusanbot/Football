@@ -20,3 +20,6 @@ This document records the staging preparation state. The next commit marker `[de
 
 
 Retry requested after adding the shared domain package build to the staging deploy workflow. [deploy-staging]
+
+
+Retry requested after routing Bot Worker deploy and secret commands through the shared Wrangler installation. [deploy-staging]
