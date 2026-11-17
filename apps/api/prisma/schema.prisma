@@ -1298,3 +1298,18 @@ model StoreItemUse {
   @@index([userId, createdAt])
   @@index([playerId, createdAt])
 }
+
+
+model PilotAnalyticsEvent {
+  id         BigInt   @id @default(autoincrement())
+  eventName  String   @db.VarChar(40)
+  userKey    String   @db.VarChar(32)
+  actionKey  String   @default("") @db.VarChar(64)
+  chatType   String   @default("unknown") @db.VarChar(16)
+  source     String   @db.VarChar(16)
+  occurredAt DateTime @default(now()) @db.Timestamptz(6)
+
+  @@index([eventName, occurredAt])
+  @@index([userKey, occurredAt])
+  @@index([source, occurredAt])
+}
