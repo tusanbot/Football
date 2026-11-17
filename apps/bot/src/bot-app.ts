@@ -1836,9 +1836,13 @@ bot.command("challenge", async (ctx) => {
       "/v1/friendly-challenges", ctx.from.id, "POST", { idempotencyKey: randomUUID(), ...((ctx.chat.type === "group" || ctx.chat.type === "supergroup") ? { groupTelegramId: String(ctx.chat.id) } : {}) },
     );
     const invite = result.shareUrl ?? ("کد دعوت: " + result.challenge.token + "\nدستور پذیرش: /acceptchallenge " + result.challenge.token);
-    const message = "چالش دوستانه ایجاد شد.\nهزینه: " + (result.asset === "FREE" ? "رایگان" : result.asset === "GOLD" ? result.goldCost + " گلد" : "اعتبار خریداری‌شده")
-      + "\nاعتبار تا: " + new Date(result.challenge.expiresAt).toLocaleString("fa-IR") + "\n\n" + invite;
-    const sent = await ctx.reply(message);
+    const message = "⚔️ دعوت چالش دوستانه آماده شد.\nهزینه: " + (result.asset === "FREE" ? "رایگان" : result.asset === "GOLD" ? result.goldCost + " گلد" : "اعتبار خریداری‌شده")
+      + "\nاعتبار تا: " + new Date(result.challenge.expiresAt).toLocaleString("fa-IR") + "\n\n" + invite
+      + "\n\nلینک را برای بازیکنی که می‌خواهی به مسابقه دعوت کنی ارسال کن.";
+    const keyboard = result.shareUrl
+      ? new InlineKeyboard().url("📨 ارسال دعوت به بازیکن", "https://t.me/share/url?url=" + encodeURIComponent(result.shareUrl) + "&text=" + encodeURIComponent("برای مسابقه Football Empire دعوت شدی!"))
+      : undefined;
+    const sent = await ctx.reply(message, keyboard ? { reply_markup: keyboard } : {});
     if (ctx.chat.type === "group" || ctx.chat.type === "supergroup") await scheduleGroupReplyDeletion(ctx.chat.id, sent.message_id);
   } catch (error) {
     await ctx.reply("ایجاد چالش ناموفق بود: " + (error instanceof Error ? error.message : "خطای نامشخص"));
