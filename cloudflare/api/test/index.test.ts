@@ -141,7 +141,11 @@ test("Worker router rejects disallowed cross-origin requests", async () => {
 test("production Worker requests receive strict transport security headers", async () => {
   const response = await worker.fetch(
     new Request("https://api.example.test/not-a-route"),
-    { ...configuredEnv, ENVIRONMENT: "production" },
+    {
+      ...configuredEnv,
+      ENVIRONMENT: "production",
+      DATABASE_URL: "postgresql://postgres:postgres@aws-0-test.pooler.supabase.com:6543/postgres?pgbouncer=true&sslmode=require",
+    },
     context,
   );
   assert.equal(response.headers.get("strict-transport-security"), "max-age=31536000; includeSubDomains");
