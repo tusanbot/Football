@@ -1178,14 +1178,18 @@ bot.callbackQuery(/^g:/, async (ctx) => {
       const result = await api<{challenge:{token:string;expiresAt:string};asset:string;goldCost:string;shareUrl:string|null}>(
         "/v1/friendly-challenges", ctx.from.id, "POST", { groupTelegramId: groupId, idempotencyKey: randomUUID() },
       );
+      const shareUrl = result.shareUrl ?? (bot.botInfo?.username
+        ? "https://t.me/" + bot.botInfo.username + "?start=challenge_" + result.challenge.token : null);
       const keyboard = new InlineKeyboard();
-      if (result.shareUrl) keyboard.url("📨 ارسال دعوت به حریف", "https://t.me/share/url?url=" + encodeURIComponent(result.shareUrl) + "&text=" + encodeURIComponent("برای مسابقه Football Empire دعوت شدی!"));
+      if (shareUrl) keyboard.url("📨 ارسال لینک اختصاصی", "https://t.me/share/url?url=" + encodeURIComponent(shareUrl) + "&text=" + encodeURIComponent("برای مسابقه Football Empire دعوت شدی!"));
+      keyboard.row().text("⚔️ پذیرش چالش در همین گروه", "challenge:accept:" + result.challenge.token);
       await ctx.answerCallbackQuery({ text: "دعوت چالش ساخته شد." });
       await ctx.reply(
         "⚔️ <b>دعوت چالش آماده است!</b>\nهزینه: " + (result.asset === "FREE" ? "رایگان" : result.asset === "GOLD" ? cash(result.goldCost) + " طلا" : "اعتبار چالش") +
         "\nاعتبار تا: " + new Date(result.challenge.expiresAt).toLocaleString("fa-IR", { timeZone: "Asia/Tehran" }) +
-        "\n\nدعوت را برای بازیکنی که می‌خواهی به چالش بکشی ارسال کن.",
-        { parse_mode: "HTML", ...(result.shareUrl ? { reply_markup: keyboard } : {}) },
+        (shareUrl ? "\n\nلینک اختصاصی: " + shareUrl : "\n\nنام کاربری ربات تنظیم نشده است.") +
+        "\n\nبازیکنان می‌توانند با دکمه زیر در همین گروه چالش را بپذیرند.",
+        { parse_mode: "HTML", reply_markup: keyboard },
       );
       return;
     }
