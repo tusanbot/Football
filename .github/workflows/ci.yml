@@ -91,6 +91,11 @@ jobs:
         run: pnpm --dir apps/web build:worker:production
         env:
           NEXT_PUBLIC_API_URL: https://football-empire-api.mshmahyar9.workers.dev
+      - name: Build staging-targeted Cloudflare Mini App Worker
+        run: pnpm --dir apps/web build:worker:staging
+        env:
+          NEXT_PUBLIC_API_URL: https://staging-api.example.invalid
+          NEXT_PUBLIC_BOT_WEBHOOK_URL: https://football-empire-bot-staging.mshmahyar9.workers.dev
       - name: Archive Mini App Worker build
         uses: actions/upload-artifact@v4
         with:
