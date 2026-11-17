@@ -1,6 +1,8 @@
 name: Deploy Football Empire staging
 
 on:
+  push:
+    branches: ["feat/telegram-production-readiness"]
   workflow_dispatch:
     inputs:
       confirm_staging:
@@ -21,7 +23,7 @@ concurrency:
 
 jobs:
   deploy:
-    if: github.ref == 'refs/heads/feat/telegram-production-readiness' && inputs.confirm_staging == 'DEPLOY_STAGING'
+    if: github.ref == 'refs/heads/feat/telegram-production-readiness' && ((github.event_name == 'workflow_dispatch' && inputs.confirm_staging == 'DEPLOY_STAGING') || (github.event_name == 'push' && contains(github.event.head_commit.message, '[deploy-staging]')))
     runs-on: ubuntu-latest
     timeout-minutes: 45
     env:
