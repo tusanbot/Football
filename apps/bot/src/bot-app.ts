@@ -368,6 +368,21 @@ function privateMenuKeyboard(menu?: keyof typeof PRIVATE_MENU_SUBMENUS) {
   if (webAppUrl) keyboard.webApp("🎮 ورود به بازی", webAppUrl);
   return keyboard.resized().persistent();
 }
+function inlineMenuKeyboard(menu?: keyof typeof PRIVATE_MENU_SUBMENUS) {
+  const keyboard = new InlineKeyboard();
+  if (menu) {
+    keyboard.text("↩️ بازگشت به منوی اصلی", "nav:menu");
+  } else {
+    const entries = Object.entries(PRIVATE_MENU_SUBMENUS);
+    entries.forEach(([key, item], index) => {
+      keyboard.text(item.title, "nav:" + key);
+      if (index % 2 === 1) keyboard.row();
+    });
+    keyboard.text("❔ راهنما", "nav:help");
+  }
+  if (webAppUrl) keyboard.row().webApp("🎮 ورود به بازی", webAppUrl);
+  return keyboard;
+}
 function cash(value: string) { return BigInt(value).toLocaleString("fa-IR"); }
 function playerName(player: ApiPlayer) { return `${player.firstName} ${player.lastName}`; }
 function escapeHtml(value: unknown): string {
@@ -792,6 +807,36 @@ bot.command("adminhelp", async (ctx) => {
   );
 });
 
+bot.callbackQuery(/^nav:/, async (ctx) => {
+  if (ctx.chat?.type !== "private") return ctx.answerCallbackQuery({ text: "این منو فقط در گفت‌وگوی خصوصی در دسترس است." });
+  const target = ctx.callbackQuery.data.slice(4);
+  if (target === "help") {
+    await ctx.answerCallbackQuery();
+    await ctx.reply("برای مشاهده راهنمای کامل، /help را ارسال کنید.");
+    return;
+  }
+  if (target === "menu") {
+    await ctx.answerCallbackQuery();
+    await ctx.editMessageText("⚽ <b>Football Empire</b>\\nیک دسته را انتخاب کنید:", {
+      parse_mode: "HTML", reply_markup: inlineMenuKeyboard(),
+    });
+    await ctx.reply("⌨️ <b>منوی متنی جایگزین</b> · اگر دکمه‌های شیشه‌ای در دسترس نبودند، از صفحه‌کلید زیر استفاده کنید.", {
+      parse_mode: "HTML", reply_markup: privateMenuKeyboard(),
+    });
+    return;
+  }
+  if (!Object.hasOwn(PRIVATE_MENU_SUBMENUS, target)) return ctx.answerCallbackQuery({ text: "این بخش شناخته نشد." });
+  const menuKey = target as keyof typeof PRIVATE_MENU_SUBMENUS;
+  const menu = PRIVATE_MENU_SUBMENUS[menuKey];
+  await ctx.answerCallbackQuery();
+  await ctx.editMessageText(menu.title + "\\nبرای اجرای گزینه‌ها از صفحه‌کلید متنی زیر استفاده کنید.", {
+    reply_markup: inlineMenuKeyboard(menuKey),
+  });
+  await ctx.reply(menu.title + "\\nیکی از گزینه‌های این بخش را انتخاب کنید. برای بازگشت از دکمه بازگشت استفاده کنید.", {
+    reply_markup: privateMenuKeyboard(menuKey),
+  });
+});
+
 for (const menuKey of Object.keys(PRIVATE_MENU_SUBMENUS) as Array<keyof typeof PRIVATE_MENU_SUBMENUS>) {
   bot.command(menuKey, async (ctx) => {
     if (ctx.chat.type !== "private") return;
@@ -804,7 +849,11 @@ for (const menuKey of Object.keys(PRIVATE_MENU_SUBMENUS) as Array<keyof typeof P
 
 bot.command("menu", async (ctx) => {
   if (ctx.chat.type !== "private") return;
-  await ctx.reply("⚽ <b>Football Empire</b>\n\nاز منوی دسته‌بندی‌شده زیر بخش موردنظر را انتخاب کنید. برای دسترسی به همه امکانات، از دکمه ورود به بازی استفاده کنید.", {
+  await ctx.reply("⚽ <b>Football Empire</b>\\n\\nاز منوی شیشه‌ای زیر دسته موردنظر را انتخاب کنید. اگر این دکمه‌ها در دسترس نبودند، منوی متنی جایگزین نیز در پیام بعدی قرار دارد.", {
+    parse_mode: "HTML",
+    reply_markup: inlineMenuKeyboard(),
+  });
+  await ctx.reply("⌨️ <b>منوی متنی جایگزین</b> · دسته‌بندی‌شده و همیشه در دسترس", {
     parse_mode: "HTML",
     reply_markup: privateMenuKeyboard(),
   });
