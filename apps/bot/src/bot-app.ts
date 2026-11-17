@@ -715,7 +715,7 @@ bot.command("tournaments", async (ctx) => {
     const keyboard = new InlineKeyboard();
     const lines = data.tournaments.map((item) => {
       const fee = item.entryFeeAmount === "0" ? "رایگان" : item.entryFeeAmount + " " + item.entryFeeAsset;
-      const status = item.status === "REGISTRATION" ? "ثبت‌نام" : item.status === "ACTIVE" ? "در حال برگزاری" : "پایان‌یافته";
+      const status = item.status === "REGISTRATION" ? "ثبت‌نام" : item.status === "ACTIVE" && new Date(item.startsAt).getTime() > Date.now() ? "زمان‌بندی‌شده" : item.status === "ACTIVE" ? "در حال برگزاری" : "پایان‌یافته";
       if (item.status === "REGISTRATION" && !item.joined && item.participantCount < item.maxParticipants) keyboard.text("ثبت‌نام · " + item.title.slice(0, 24), "event-tournament:join:" + item.id).row();
       if (item.joined && item.competitionId && ["ACTIVE", "COMPLETED"].includes(item.status)) keyboard.text("برنامه و جدول · " + item.title.slice(0, 18), "event-tournament:view:" + item.id).row();
       const prizeLines = item.prizes.map((prize) => {
