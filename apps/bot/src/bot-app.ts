@@ -1161,7 +1161,7 @@ bot.command("menu", async (ctx) => {
 bot.command("help", async (ctx) => ctx.reply(
   "راهنمای Football Empire\n\n" +
   "🏟 باشگاه و بازیکنان\n" +
-  "/club — اطلاعات باشگاه\n/wallet — موجودی کش و طلا\n/rename نام جدید — تغییر نام باشگاه\n" +
+  "/club — اطلاعات باشگاه\n/clubedit — ویرایش نام و لوگوی باشگاه (در لیگ فعال قفل می‌شود)\n/wallet — موجودی کش و طلا\n/rename نام جدید — تغییر نام باشگاه\n" +
   "/players — فهرست بازیکنان\n/lineup — ترکیب و تاکتیک‌ها\n/setlineup FORMATION ID1 ... ID11 — ثبت ترکیب اصلی\n" +
   "/development — وضعیت توسعه بازیکنان\n/train PLAYER_ID FOCUS INTENSITY — تمرین بازیکن\n/renew PLAYER_ID DAYS WEEKLY_WAGE — تمدید قرارداد\n" +
   "/operations — امکانات، آکادمی، مربی و حامی مالی\n/finance [DAYS] — گزارش درآمد و هزینه\n" +
