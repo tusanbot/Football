@@ -1,4 +1,3 @@
-import { connect } from "cloudflare:sockets";
 import { createPrismaClient, prisma, withPrismaClient } from "../../../apps/api/src/db.js";
 import { processDueMatchRuntimes } from "../../../apps/api/src/game/match-service.js";
 import { processDueEventTournamentFinalizations } from "../../../apps/api/src/event-tournament-service.js";
@@ -18,19 +17,6 @@ const json = (body: unknown, status = 200) => new Response(JSON.stringify(body),
   status, headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store", "x-content-type-options": "nosniff" },
 });
 function dbUrl(env: Env): string | null { return env.DATABASE_URL ?? null; }
-async function probeDatabaseTcp(databaseUrl: string): Promise<{ connected: boolean; reason?: string }> {
-  const parsed = new URL(databaseUrl);
-  let socket: ReturnType<typeof connect> | undefined;
-  try {
-    socket = connect({ hostname: parsed.hostname, port: Number(parsed.port) });
-    await socket.opened;
-    return { connected: true };
-  } catch (error) {
-    return { connected: false, reason: error instanceof Error ? error.message.slice(0, 180) : "TCP_PROBE_FAILED" };
-  } finally {
-    try { socket?.close(); } catch { /* socket may already be closed */ }
-  }
-}
 function missingConfig(env: Env): string[] {
   const missing: string[] = [];
   const database = dbUrl(env);
@@ -492,18 +478,9 @@ export default {
         return json({ status: "ready", service: "football-empire-api", database: "connected", schema: "current" });
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
-        const tcpProbe = await probeDatabaseTcp(dbUrl(env) ?? "");
-        console.error("Cloudflare API readiness database check failed", {
-          databaseError: describeRuntimeError(error),
-          tcpProbe,
-        });
+        console.error("Cloudflare API readiness database check failed", describeRuntimeError(error));
         await client.$disconnect().catch(() => undefined);
-        return json({
-          status: "not_ready",
-          service: "football-empire-cloudflare-api",
-          missing: ["DATABASE_CONNECTION"],
-          diagnostics: { tcpConnected: tcpProbe.connected, tcpError: tcpProbe.reason },
-        }, 503);
+        return json({ status: "not_ready", service: "football-empire-cloudflare-api", missing: ["DATABASE_CONNECTION"] }, 503);
       }
     }
     const response = await handleApi(request, env, ctx);
