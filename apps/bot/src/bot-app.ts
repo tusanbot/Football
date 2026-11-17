@@ -167,7 +167,9 @@ async function saveTelegramClubLogo(ctx: Context, fileId: string, mimeType: stri
     await ctx.reply("لوگوی باشگاه با موفقیت به‌روزرسانی شد.");
   } catch (error) {
     const message = error instanceof Error ? error.message : "خطای نامشخص";
-    await ctx.reply(message === "LOGO_TOO_LARGE" ? "حجم لوگو بیشتر از ۵۱۲ کیلوبایت است." : "ثبت لوگو ناموفق بود: " + message);
+    await ctx.reply(message === "LOGO_TOO_LARGE" ? "حجم لوگو بیشتر از ۵۱۲ کیلوبایت است."
+      : message.includes("CLUB_EDIT_LOCKED_ACTIVE_LEAGUE") ? "🔒 تغییر لوگو تا پایان رقابت فعال غیرفعال است."
+      : "ثبت لوگو ناموفق بود: " + message);
   }
 }
 
@@ -1350,13 +1352,13 @@ bot.command("clubedit", async (ctx) => {
     const locked = Boolean(result.club.activeCompetition);
     const keyboard = new InlineKeyboard();
     if (!locked) keyboard.text("✏️ تغییر نام باشگاه", "clubedit:name");
-    keyboard.text("🖼 تغییر لوگو", "clubedit:logo");
+    if (!locked) keyboard.text("🖼 تغییر لوگو", "clubedit:logo");
     await replyRich(
       ctx,
       "⚙️ <b>ویرایش اطلاعات باشگاه</b>\nنام فعلی: <b>" + escapeHtml(result.club.name) + "</b>" +
       (locked ? "\n\n🔒 ویرایش نام غیرفعال است؛ باشگاه در رقابت فعال «" + escapeHtml(result.club.activeCompetition!.name) + "» حضور دارد." :
         "\n\nمی‌توانی نام باشگاه را تغییر بدهی. هنگام حضور در لیگ فعال، ویرایش اطلاعات هویتی قفل می‌شود.") +
-      "\nلوگو از طریق ارسال تصویر در همین گفت‌وگو قابل تغییر است.",
+      (locked ? "\nدر زمان حضور در رقابت فعال، تغییر نام و لوگو هر دو قفل هستند." : "\nنام و لوگو از همین گفت‌وگو قابل ویرایش‌اند."),
       "ویرایش باشگاه\nنام فعلی: " + result.club.name + (locked ? "\nویرایش قفل است؛ باشگاه در رقابت فعال " + result.club.activeCompetition!.name + " حضور دارد." : "\nنام باشگاه قابل تغییر است."),
       keyboard,
     );
@@ -1403,7 +1405,8 @@ bot.command("club", async (ctx) => {
     const lock = result.club.activeCompetition ? "\n🔒 ویرایش اطلاعات هویتی تا پایان رقابت «" + result.club.activeCompetition.name + "» غیرفعال است." : "\n✏️ امکان ویرایش اطلاعات باشگاه فعال است.";
     const plain = `🏟 باشگاه: ${result.club.name}\nمدیر: ${result.user.displayName}\nسطح: ${result.club.level}\nاعتبار: ${result.club.reputation}\nتاریخ تأسیس: ${new Date(result.club.createdAt).toLocaleDateString("fa-IR")}` + lock;
     const rich = `🏟 <b>${escapeHtml(result.club.name)}</b>\nمدیر: <b>${escapeHtml(result.user.displayName)}</b>\nسطح باشگاه: <b>${result.club.level}</b>\nاعتبار: <b>${result.club.reputation}</b>\nتاریخ تأسیس: ${new Date(result.club.createdAt).toLocaleDateString("fa-IR")}` + escapeHtml(lock);
-    await replyRich(ctx, rich, plain, new InlineKeyboard().text("⚙️ ویرایش اطلاعات باشگاه", "act:clubedit"));
+    const clubKeyboard = result.club.activeCompetition ? undefined : new InlineKeyboard().text("⚙️ ویرایش اطلاعات باشگاه", "act:clubedit");
+    await replyRich(ctx, rich, plain, clubKeyboard);
   } catch (error) {
     await ctx.reply(`دریافت اطلاعات باشگاه ناموفق بود: ${error instanceof Error ? error.message : "خطای نامشخص"}`);
   }
