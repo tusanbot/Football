@@ -237,6 +237,7 @@ async function scheduledJobs(env: Env): Promise<void> {
       const matches = env.MATCH_COORDINATOR
         ? null
         : await processDueMatchRuntimes("cloudflare-api-scheduled-fallback", now, 10);
+      await deliverDueMatchLifecycle(env);
       const promotions = await processDuePromotionOffers(now, 50);
       if ((matches && (matches.advanced || matches.settled || matches.failed))
         || promotions.accepted || promotions.completedLeagues) {
