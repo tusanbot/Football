@@ -59,14 +59,11 @@ jobs:
           set -euo pipefail
           STAGING_BOT_API_SECRET="$(openssl rand -hex 32)"
           STAGING_TELEGRAM_WEBHOOK_SECRET="$(openssl rand -hex 32)"
-          STAGING_ANALYTICS_HASH_SECRET="$(openssl rand -hex 32)"
           echo "::add-mask::$STAGING_BOT_API_SECRET"
           echo "::add-mask::$STAGING_TELEGRAM_WEBHOOK_SECRET"
-          echo "::add-mask::$STAGING_ANALYTICS_HASH_SECRET"
           {
             echo "STAGING_BOT_API_SECRET=$STAGING_BOT_API_SECRET"
             echo "STAGING_TELEGRAM_WEBHOOK_SECRET=$STAGING_TELEGRAM_WEBHOOK_SECRET"
-            echo "STAGING_ANALYTICS_HASH_SECRET=$STAGING_ANALYTICS_HASH_SECRET"
           } >> "$GITHUB_ENV"
       - name: Build shared domain package
         run: pnpm --filter @football/domain build
@@ -113,7 +110,6 @@ jobs:
           printf '%s' "$STAGING_TELEGRAM_BOT_TOKEN" | pnpm --dir apps/web exec wrangler secret put TELEGRAM_BOT_TOKEN --config ../bot/wrangler.jsonc
           printf '%s' "$STAGING_TELEGRAM_WEBHOOK_SECRET" | pnpm --dir apps/web exec wrangler secret put TELEGRAM_WEBHOOK_SECRET --config ../bot/wrangler.jsonc
           printf '%s' "$STAGING_BOT_API_SECRET" | pnpm --dir apps/web exec wrangler secret put BOT_API_SECRET --config ../bot/wrangler.jsonc
-          printf '%s' "$STAGING_ANALYTICS_HASH_SECRET" | pnpm --dir apps/web exec wrangler secret put ANALYTICS_HASH_SECRET --config ../bot/wrangler.jsonc
       - name: Verify staging Mini App and Bot Worker health
         shell: bash
         run: |
