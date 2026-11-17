@@ -3,7 +3,10 @@ import { z } from "zod";
 import { requireTelegramUser } from "../auth/require-telegram-user.js";
 import { prisma } from "../db.js";
 import { buyMarketListing, cancelMarketListing, createMarketListing, getOpenMarketListings, MarketError } from "./market-service.js";
-import { acquireSpecialPlayer, getSpecialPackOffers, SpecialAcquisitionError } from "./special-acquisition-service.js";
+import {
+  acquireSpecialPlayer, getSpecialPackOffers, SpecialAcquisitionError,
+  listLegacyChallenges, claimLegacyChallenge, LegacyChallengeError,
+} from "./special-acquisition-service.js";
 
 const createSchema = z.object({
   playerId: z.string().min(1).max(64),
@@ -15,6 +18,11 @@ const idSchema = z.object({ id: z.string().min(1).max(64) });
 const specialAcquisitionSchema = z.object({ method: z.enum(["epic_pack", "legendary_pack", "icon_pack"]), idempotencyKey: z.string().regex(/^[A-Za-z0-9:_-]{8,80}$/) });
 
 function sendMarketError(reply: FastifyReply, error: unknown) {
+  if (error instanceof LegacyChallengeError) {
+    const status = ["CLUB_NOT_FOUND", "LEGACY_CHALLENGE_NOT_FOUND"].includes(error.code) ? 404
+      : ["LEGACY_CHALLENGE_NOT_COMPLETED", "LEGACY_REWARD_ALREADY_CLAIMED", "CONCURRENT_MODIFICATION"].includes(error.code) ? 409 : 400;
+    return reply.code(status).send({ error: error.code });
+  }
   if (error instanceof SpecialAcquisitionError) {
     const status = error.code === "CLUB_NOT_FOUND" ? 404 : error.code === "INSUFFICIENT_GOLD" || error.code === "NO_AVAILABLE_PLAYERS" || error.code === "CONCURRENT_MODIFICATION" || error.code === "ACQUISITION_CONFLICT_RETRY" ? 409 : 400;
     return reply.code(status).send({ error: error.code });
@@ -29,6 +37,22 @@ function sendMarketError(reply: FastifyReply, error: unknown) {
 }
 
 export function registerPlayerMarketRoutes(app: FastifyInstance) {
+  app.get("/v1/players/special/challenges", async (request, reply) => {
+    const user = await requireTelegramUser(request);
+    if (!user) return reply.code(401).send({ error: "UNAUTHENTICATED" });
+    try { return await listLegacyChallenges(user.id); }
+    catch (error) { return sendMarketError(reply, error); }
+  });
+
+  app.post("/v1/players/special/challenges/:slug/claim", async (request, reply) => {
+    const user = await requireTelegramUser(request);
+    if (!user) return reply.code(401).send({ error: "UNAUTHENTICATED" });
+    const parsed = z.object({ slug: z.string().min(1).max(64) }).safeParse(request.params);
+    if (!parsed.success) return reply.code(400).send({ error: "INVALID_LEGACY_CHALLENGE" });
+    try { return { acquisition: await claimLegacyChallenge(user.id, parsed.data.slug) }; }
+    catch (error) { return sendMarketError(reply, error); }
+  });
+
   app.get("/v1/players/special", async (request, reply) => {
     const user = await requireTelegramUser(request);
     if (!user) return reply.code(401).send({ error: "UNAUTHENTICATED" });
