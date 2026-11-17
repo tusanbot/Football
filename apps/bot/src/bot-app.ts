@@ -47,6 +47,7 @@ const bot = new Bot(token);
 const pendingClubNameEdits = new Map<number, { promptMessageId: number; expiresAt: number }>();
 const pendingGroupCreations = new Map<number, { chatId: number; promptMessageId: number; kind: "challenge" | "league"; expiresAt: number }>();
 const pendingLineupSelections = new Map<number, { formation: string; playerIds: string[]; lineupVersion: number; players: Array<{ id: string; firstName: string; lastName: string; position: string; overall: number }> }>();
+const pendingFallbackEdits = new Map<number, { plan: Record<string, string>; version: number }>();
 
 bot.use(async (ctx, next) => {
   const originalReply = ctx.reply.bind(ctx);
@@ -2370,28 +2371,92 @@ bot.command("fallback", async (ctx) => {
 
 bot.command("setfallback", async (ctx) => {
   if (!ctx.from || ctx.chat.type !== "private") return;
-  const allowed:Record<string,string[]> = {
-    formation:["4-3-3","4-4-2","3-5-2","4-2-3-1"],
-    mentality:["DEFENSIVE","BALANCED","ATTACKING"],
-    pressing:["LOW_BLOCK","MID_BLOCK","HIGH_PRESS"],
-    tempo:["SLOW","NORMAL","FAST"],
-    passingStyle:["SHORT","MIXED","DIRECT"],
+  const allowed: Record<string, string[]> = {
+    formation: ["4-3-3", "4-4-2", "3-5-2", "4-2-3-1"],
+    mentality: ["DEFENSIVE", "BALANCED", "ATTACKING"],
+    pressing: ["LOW_BLOCK", "MID_BLOCK", "HIGH_PRESS"],
+    tempo: ["SLOW", "NORMAL", "FAST"],
+    passingStyle: ["SHORT", "MIXED", "DIRECT"],
   };
-  const changes:Record<string,string>={};
-  for(const part of String(ctx.match??"").trim().split(/\s+/).filter(Boolean)){
-    const i=part.indexOf("=");
-    if(i<1)return ctx.reply("هر تنظیم باید به شکل key=value باشد.");
-    const key=part.slice(0,i),value=part.slice(i+1).toUpperCase();
-    if(!allowed[key]?.includes(value))return ctx.reply("مقدار نامعتبر: "+part);
-    changes[key]=value;
+  const raw = String(ctx.match ?? "").trim();
+  if (raw) {
+    const changes: Record<string, string> = {};
+    for (const part of raw.split(/\\s+/).filter(Boolean)) {
+      const i = part.indexOf("=");
+      if (i < 1) return ctx.reply("هر تنظیم باید به شکل key=value باشد.");
+      const key = part.slice(0, i), value = part.slice(i + 1).toUpperCase();
+      if (!allowed[key]?.includes(value)) return ctx.reply("مقدار نامعتبر: " + part);
+      changes[key] = value;
+    }
+    try {
+      const current = await api<{ plan: Record<string, string>; version: number }>("/v1/matches/fallback-plan", ctx.from.id);
+      const saved = await api<{ version: number }>("/v1/matches/fallback-plan", ctx.from.id, "PUT", { expectedVersion: current.version, plan: { ...current.plan, ...changes } });
+      return ctx.reply("برنامه جایگزین ذخیره شد. نسخه " + saved.version + "؛ از مسابقه بعدی اعمال خواهد شد.");
+    } catch (error) { return ctx.reply("ذخیره برنامه جایگزین ناموفق بود: " + (error instanceof Error ? error.message : "خطای نامشخص")); }
   }
-  if(!Object.keys(changes).length)return ctx.reply("استفاده: /setfallback formation=4-4-2 mentality=DEFENSIVE pressing=LOW_BLOCK tempo=SLOW passingStyle=SHORT");
-  try{
-    const current=await api<{plan:Record<string,string>;version:number}>("/v1/matches/fallback-plan",ctx.from.id);
-    const plan={...current.plan,...changes};
-    const saved=await api<{version:number}>("/v1/matches/fallback-plan",ctx.from.id,"PUT",{expectedVersion:current.version,plan});
-    await ctx.reply("برنامه جایگزین ذخیره شد. نسخه "+saved.version+"؛ از مسابقه بعدی که شروع شود اعمال خواهد شد.");
-  }catch(error){await ctx.reply("ذخیره برنامه جایگزین ناموفق بود: "+(error instanceof Error?error.message:"unknown error"));}
+  try {
+    const current = await api<{ plan: Record<string, string>; version: number }>("/v1/matches/fallback-plan", ctx.from.id);
+    pendingFallbackEdits.set(ctx.from.id, { plan: { ...current.plan }, version: current.version });
+    const keyboard = new InlineKeyboard()
+      .text("آرایش", "fallback:field:formation").text("ذهنیت", "fallback:field:mentality").row()
+      .text("پرس", "fallback:field:pressing").text("سرعت", "fallback:field:tempo").row()
+      .text("سبک پاس", "fallback:field:passingStyle").row().text("لغو", "fallback:cancel");
+    await ctx.reply("🧠 <b>تنظیم تاکتیک پیش‌فرض</b>\n" + Object.entries(current.plan).map(([key, value]) => key + ": " + value).join("\\n") + "\nیک بخش را برای تغییر انتخاب کن.", { parse_mode: "HTML", reply_markup: keyboard });
+  } catch (error) { await ctx.reply("دریافت برنامه جایگزین ناموفق بود: " + (error instanceof Error ? error.message : "خطای نامشخص")); }
+});
+
+bot.callbackQuery(/^fallback:/, async (ctx) => {
+  if (!ctx.from || ctx.chat?.type !== "private") return ctx.answerCallbackQuery({ text: "تنظیم تاکتیک فقط در گفت‌وگوی خصوصی مجاز است." });
+  const state = pendingFallbackEdits.get(ctx.from.id);
+  if (!state) return ctx.answerCallbackQuery({ text: "فرایند منقضی شده است؛ دوباره /setfallback را باز کن." });
+  const [, action, field, value] = ctx.callbackQuery.data.split(":");
+  const allowed: Record<string, string[]> = {
+    formation: ["4-3-3", "4-4-2", "3-5-2", "4-2-3-1"],
+    mentality: ["DEFENSIVE", "BALANCED", "ATTACKING"],
+    pressing: ["LOW_BLOCK", "MID_BLOCK", "HIGH_PRESS"],
+    tempo: ["SLOW", "NORMAL", "FAST"],
+    passingStyle: ["SHORT", "MIXED", "DIRECT"],
+  };
+  if (action === "cancel") {
+    pendingFallbackEdits.delete(ctx.from.id);
+    await ctx.answerCallbackQuery({ text: "تغییرات لغو شد." });
+    await ctx.editMessageText("تنظیم تاکتیک لغو شد.");
+    return;
+  }
+  if (action === "field") {
+    if (!field || !allowed[field]) return ctx.answerCallbackQuery({ text: "بخش معتبر نیست." });
+    const keyboard = new InlineKeyboard();
+    for (const option of allowed[field]) keyboard.text(option, "fallback:value:" + field + ":" + option);
+    keyboard.row().text("بازگشت", "fallback:back");
+    await ctx.answerCallbackQuery();
+    await ctx.editMessageText("مقدار جدید برای " + field + " را انتخاب کن:", { reply_markup: keyboard });
+    return;
+  }
+  if (action === "value") {
+    if (!field || !allowed[field]?.includes(value ?? "")) return ctx.answerCallbackQuery({ text: "مقدار معتبر نیست." });
+    state.plan[field] = value!;
+  } else if (action !== "back" && action !== "save") return ctx.answerCallbackQuery({ text: "گزینه معتبر نیست." });
+  if (action === "save") {
+    try {
+      const saved = await api<{ version: number }>("/v1/matches/fallback-plan", ctx.from.id, "PUT", { expectedVersion: state.version, plan: state.plan });
+      pendingFallbackEdits.delete(ctx.from.id);
+      await ctx.answerCallbackQuery({ text: "تاکتیک ذخیره شد." });
+      await ctx.editMessageText("✅ تاکتیک پیش‌فرض ذخیره شد؛ نسخه " + saved.version + ". از مسابقه بعدی اعمال می‌شود.");
+      return;
+    } catch (error) {
+      pendingFallbackEdits.delete(ctx.from.id);
+      await ctx.answerCallbackQuery({ text: "ذخیره ناموفق بود." });
+      await ctx.reply("ذخیره تاکتیک ناموفق بود: " + (error instanceof Error ? error.message : "خطای نامشخص"));
+      return;
+    }
+  }
+  const keyboard = new InlineKeyboard()
+    .text("آرایش", "fallback:field:formation").text("ذهنیت", "fallback:field:mentality").row()
+    .text("پرس", "fallback:field:pressing").text("سرعت", "fallback:field:tempo").row()
+    .text("سبک پاس", "fallback:field:passingStyle").row()
+    .text("✅ ذخیره تاکتیک", "fallback:save").text("لغو", "fallback:cancel");
+  await ctx.answerCallbackQuery({ text: action === "value" ? "مقدار تغییر کرد." : "تنظیمات" });
+  await ctx.editMessageText("🧠 <b>تاکتیک پیش‌فرض</b>\n" + Object.entries(state.plan).map(([key, item]) => key + ": " + item).join("\\n") + "\nبرای تغییر بخش دیگر انتخاب کن یا ذخیره را بزن.", { parse_mode: "HTML", reply_markup: keyboard });
 });
 
 bot.command("play", async (ctx) => {
