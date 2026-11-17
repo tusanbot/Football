@@ -22,8 +22,8 @@ export function registerLeagueNoticeRoutes(app: FastifyInstance) {
     const parsed = claimSchema.safeParse(request.body ?? {});
     if (!parsed.success) return reply.code(400).send({ error: "INVALID_LEAGUE_NOTICE_CLAIM" });
     const notices = await prisma.$transaction(async (tx) => {
-      const due = await tx.$queryRaw<Array<{ id: string; userId: string; telegramId: string; title: string; body: string }>>`
-        SELECT n."id", n."userId", u."telegramId", n."title", n."body"
+      const due = await tx.$queryRaw<Array<{ id: string; userId: string; telegramId: string; title: string; body: string; kind: string; referenceId: string | null }>>`
+        SELECT n."id", n."userId", u."telegramId", n."title", n."body", n."kind", n."referenceId"
         FROM "LeagueNotice" n
         INNER JOIN "User" u ON u."id" = n."userId"
         WHERE n."deliveredAt" IS NULL
@@ -41,7 +41,7 @@ export function registerLeagueNoticeRoutes(app: FastifyInstance) {
           where: { id: notice.id },
           data: { deliveryClaimToken: claimToken, deliveryLockedUntil: new Date(Date.now() + 60_000), deliveryAttempts: { increment: 1 } },
         });
-        claimed.push({ id: notice.id, telegramId: notice.telegramId, title: notice.title, body: notice.body, claimToken });
+        claimed.push({ id: notice.id, telegramId: notice.telegramId, title: notice.title, body: notice.body, kind: notice.kind, referenceId: notice.referenceId, claimToken });
       }
       return claimed;
     });
