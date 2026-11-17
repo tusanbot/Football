@@ -361,6 +361,49 @@ async function pollMatchCheckpointNotifications() {
   }
 }
 
+let matchResultNotificationWorkerBusy = false;
+async function pollMatchResultNotifications() {
+  if (matchResultNotificationWorkerBusy || !apiUrl || !botApiSecret) return;
+  matchResultNotificationWorkerBusy = true;
+  try {
+    const result = await apiSystem<{ notifications: Array<{
+      id: string; channel: "HOME" | "AWAY" | "GROUP"; telegramChatId: string; claimToken: string; attempt: number;
+      match: { id: string; homeClub: string; awayClub: string; homeScore: number | null; awayScore: number | null; completedAt: string | null };
+    }> }>("/v1/bot/match-results/claim", { limit: 25 });
+    for (const notification of result.notifications) {
+      const acknowledge = (delivered: boolean, error?: string) => apiSystem(
+        "/v1/bot/match-results/ack",
+        { id: notification.id, claimToken: notification.claimToken, delivered, ...(error ? { error } : {}) },
+      );
+      const telegramId = Number(notification.telegramChatId);
+      if (!Number.isSafeInteger(telegramId)) {
+        await acknowledge(false, "INVALID_TELEGRAM_CHAT_ID").catch((error: unknown) =>
+          console.warn("Could not acknowledge invalid match result recipient:", error instanceof Error ? error.message : error));
+        continue;
+      }
+      const match = notification.match;
+      const message = "🏁 <b>نتیجه نهایی مسابقه</b>\n"
+        + "<b>" + escapeHtml(match.homeClub) + "</b> " + (match.homeScore ?? "—")
+        + " : " + (match.awayScore ?? "—") + " <b>" + escapeHtml(match.awayClub) + "</b>"
+        + "\nنوع اعلان: " + (notification.channel === "GROUP" ? "گروه" : "گزارش شخصی")
+        + "\nشناسه مسابقه: " + match.id
+        + (match.completedAt ? "\nپایان: " + new Date(match.completedAt).toLocaleString("fa-IR", { timeZone: "Asia/Tehran" }) : "");
+      try {
+        await bot.api.sendMessage(telegramId, message, { parse_mode: "HTML" });
+        await acknowledge(true);
+      } catch (sendError) {
+        const detail = sendError instanceof Error ? sendError.message : "TELEGRAM_SEND_FAILED";
+        await acknowledge(false, detail.slice(0, 500)).catch((ackError: unknown) =>
+          console.warn("Could not persist failed match result delivery:", ackError instanceof Error ? ackError.message : ackError));
+      }
+    }
+  } catch (error) {
+    console.warn("Match result notification poll failed:", error instanceof Error ? error.message : error);
+  } finally {
+    matchResultNotificationWorkerBusy = false;
+  }
+}
+
 function privateMenuKeyboard(menu?: keyof typeof PRIVATE_MENU_SUBMENUS) {
   const keyboard = new Keyboard();
   const rows = menu ? PRIVATE_MENU_SUBMENUS[menu].rows : PRIVATE_MENU_ROWS;
@@ -2636,6 +2679,7 @@ bot.on(["chat_member","my_chat_member"],async ctx=>{
   async function runBackgroundJobs() {
     await pollGroupMessageDeletionQueue();
     await pollMatchCheckpointNotifications();
+    await pollMatchResultNotifications();
     await pollLeagueNoticeQueue();
     await pollAdminGroupBroadcastQueue();
   }
