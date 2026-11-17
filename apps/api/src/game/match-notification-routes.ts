@@ -31,7 +31,8 @@ export function registerMatchNotificationRoutes(app: FastifyInstance) {
       },
       include: { match: { select: {
         id: true, homeScore: true, awayScore: true, completedAt: true,
-        homeClub: { select: { name: true } }, awayClub: { select: { name: true } },
+        homeClub: { select: { id: true, name: true } }, awayClub: { select: { id: true, name: true } },
+        performances: { include: { player: { select: { firstName: true, lastName: true } } } },
       } } },
       orderBy: { createdAt: "asc" }, take: parsed.data.limit,
     });
@@ -52,6 +53,21 @@ export function registerMatchNotificationRoutes(app: FastifyInstance) {
           id: item.match.id, homeClub: item.match.homeClub.name, awayClub: item.match.awayClub.name,
           homeScore: item.match.homeScore, awayScore: item.match.awayScore,
           completedAt: item.match.completedAt?.toISOString() ?? null,
+          statistics: {
+            home: {
+              shots: item.match.performances.filter((line) => line.clubId === item.match.homeClub.id).reduce((sum, line) => sum + line.shots, 0),
+              passes: item.match.performances.filter((line) => line.clubId === item.match.homeClub.id).reduce((sum, line) => sum + line.passes, 0),
+              tackles: item.match.performances.filter((line) => line.clubId === item.match.homeClub.id).reduce((sum, line) => sum + line.tackles, 0),
+            },
+            away: {
+              shots: item.match.performances.filter((line) => line.clubId === item.match.awayClub.id).reduce((sum, line) => sum + line.shots, 0),
+              passes: item.match.performances.filter((line) => line.clubId === item.match.awayClub.id).reduce((sum, line) => sum + line.passes, 0),
+              tackles: item.match.performances.filter((line) => line.clubId === item.match.awayClub.id).reduce((sum, line) => sum + line.tackles, 0),
+            },
+          },
+          scorers: item.match.performances.filter((line) => line.goals > 0).map((line) => ({
+            player: line.player.firstName + " " + line.player.lastName, goals: line.goals,
+          })),
         },
       });
     }
