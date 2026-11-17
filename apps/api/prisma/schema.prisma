@@ -535,6 +535,7 @@ model PyramidLeague {
   promotionOffers LeaguePromotionOffer[]
   @@unique([tier, season, groupNumber])
   @@index([tier, season])
+  @@index([promotionProcessedAt, competitionId])
 }
 
 model LeagueAward {
@@ -595,6 +596,7 @@ model LeaguePromotionOffer {
   club Club @relation(fields: [clubId], references: [id], onDelete: Cascade)
   @@unique([leagueId, clubId])
   @@index([clubId, status, offeredAt])
+  @@index([status, expiresAt])
 }
 
 model LeagueNotice {
@@ -1391,6 +1393,7 @@ model EventTournament {
   participants EventTournamentParticipant[]
   prizes EventTournamentPrize[]
   @@index([status, registrationEndsAt, startsAt])
+  @@index([status, competitionId])
   @@index([createdAt])
 }
 
