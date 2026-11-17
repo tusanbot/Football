@@ -1,0 +1,66 @@
+name: Register pre-applied Football Empire staging migrations
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_registration:
+        description: Type REGISTER_STAGING_MIGRATIONS to register the SQL migrations already applied to the isolated staging database
+        required: true
+        type: choice
+        options:
+          - NO
+          - REGISTER_STAGING_MIGRATIONS
+        default: NO
+
+permissions:
+  contents: read
+
+concurrency:
+  group: football-empire-staging-migration-registration
+  cancel-in-progress: false
+
+jobs:
+  register:
+    if: github.ref == 'refs/heads/feat/telegram-production-readiness' && inputs.confirm_registration == 'REGISTER_STAGING_MIGRATIONS'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      DATABASE_URL: ${{ secrets.STAGING_DIRECT_URL }}
+      DIRECT_URL: ${{ secrets.STAGING_DIRECT_URL }}
+    steps:
+      - name: Checkout staging release branch
+        uses: actions/checkout@v4
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          package_json_file: package.json
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Verify direct staging database target
+        shell: bash
+        run: |
+          test -n "$STAGING_DIRECT_URL" || { echo "Missing STAGING_DIRECT_URL repository secret"; exit 1; }
+          case "$STAGING_DIRECT_URL" in
+            *db.uiwzbinjtglzqerymdwp.supabase.co*) ;;
+            *) echo "STAGING_DIRECT_URL must point to the isolated Football Empire Staging Supabase project"; exit 1 ;;
+          esac
+        env:
+          STAGING_DIRECT_URL: ${{ secrets.STAGING_DIRECT_URL }}
+      - name: Generate Prisma Client
+        run: pnpm db:generate
+      - name: Register the already-applied SQL migrations with Prisma
+        shell: bash
+        run: |
+          for migration_dir in apps/api/prisma/migrations/[0-9]*_*/; do
+            migration_name="${migration_dir%/}"
+            migration_name="${migration_name##*/}"
+            echo "Registering pre-applied migration: $migration_name"
+            pnpm --filter @football/api exec prisma migrate resolve --applied "$migration_name" --schema prisma/schema.prisma
+          done
+      - name: Verify Prisma migration history
+        run: pnpm --filter @football/api exec prisma migrate status --schema prisma/schema.prisma
