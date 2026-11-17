@@ -48,6 +48,16 @@ const pendingClubNameEdits = new Map<number, { promptMessageId: number; expiresA
 const pendingGroupCreations = new Map<number, { chatId: number; promptMessageId: number; kind: "challenge" | "league"; expiresAt: number }>();
 const pendingLineupSelections = new Map<number, { formation: string; playerIds: string[]; lineupVersion: number; players: Array<{ id: string; firstName: string; lastName: string; position: string; overall: number }> }>();
 const pendingFallbackEdits = new Map<number, { plan: Record<string, string>; version: number }>();
+type EventTournamentPrizeDraft = { placement: number; type: "CASH" | "GOLD" | "HONOR" | "STORE_ITEM" | "SPECIAL_PLAYER"; amount?: string; itemKey?: string; specialPlayerId?: string };
+type EventTournamentWizard = {
+  promptMessageId: number; stage: "title" | "description" | "registrationDays" | "startsInDays" | "maxParticipants" | "feeAmount" | "prizeAmount" | "itemKey" | "specialPlayerId";
+  title?: string; description?: string; registrationDays?: number; startsInDays?: number; maxParticipants?: number;
+  feeAsset?: "CASH" | "GOLD" | "HONOR"; feeAmount?: string; prizes: EventTournamentPrizeDraft[];
+  placementIndex: number; pendingPrizeType?: EventTournamentPrizeDraft["type"];
+};
+const pendingEventTournamentWizards = new Map<number, EventTournamentWizard>();
+const pendingTournamentFinalizations = new Map<number, { tournamentId: string; participants: Array<{ id: string; displayName: string | null; username: string | null; clubName: string }>; results: Array<{ participantId: string; placement: number; score: number }>; index: number }>();
+
 
 bot.use(async (ctx, next) => {
   const originalReply = ctx.reply.bind(ctx);
