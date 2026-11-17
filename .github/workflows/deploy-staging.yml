@@ -68,6 +68,8 @@ jobs:
             echo "STAGING_TELEGRAM_WEBHOOK_SECRET=$STAGING_TELEGRAM_WEBHOOK_SECRET"
             echo "STAGING_ANALYTICS_HASH_SECRET=$STAGING_ANALYTICS_HASH_SECRET"
           } >> "$GITHUB_ENV"
+      - name: Build shared domain package
+        run: pnpm --filter @football/domain build
       - name: Generate Prisma Client
         run: pnpm db:generate
       # Staging SQL and Prisma migration history are already applied and verified
