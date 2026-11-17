@@ -20,7 +20,7 @@ test("season awards route keeps response shape, manual awards, minimum appearanc
   const calls: number[] = [];
   const handler = capture({ async getSeasonData(season) {
     calls.push(season);
-    return { matches: 10, records: [record, { ...record, playerId: "p2", playerName: "Keeper", position: "GK", goals: 1, averageRating: 7.9 }], manualAwards: [{ id: "a1", awardType: "SPECIAL", awardName: "Special award", reason: null, playerId: "p1", playerName: "Alex", position: "ST", clubName: "Tosan" }] };
+    return { matches: 10, records: [record, { ...record, playerId: "p2", playerName: "Keeper", position: "GK", goals: 1, assists: 0, averageRating: 7.9 }], manualAwards: [{ id: "a1", awardType: "SPECIAL", awardName: "Special award", reason: null, playerId: "p1", playerName: "Alex", position: "ST", clubName: "Tosan" }] };
   } });
   const response = await handler({ params: { season: "2026" }, query: { minimumAppearances: "3" } }, { code(status) { throw new Error("Unexpected status " + status); } });
   assert.deepEqual(calls, [2026]);
