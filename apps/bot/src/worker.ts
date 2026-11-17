@@ -115,7 +115,7 @@ async function recordPilotEvent(update: unknown, env: Env) {
   });
 }
 
-async function hmacSha256(keyBytes: Uint8Array, message: string): Promise<Uint8Array> {
+async function hmacSha256(keyBytes: Uint8Array<ArrayBuffer>, message: string): Promise<Uint8Array<ArrayBuffer>> {
   const key = await crypto.subtle.importKey("raw", keyBytes, { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
   return new Uint8Array(await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(message)));
 }
