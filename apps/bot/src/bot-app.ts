@@ -1968,10 +1968,16 @@ bot.command("development", async (ctx) => {
     const lines = result.club.players.slice(0, 15).map((p) =>
       `• ${p.firstName} ${p.lastName} · قدرت ${p.overall}/${p.potential} · سن ${p.age}\n  آمادگی ${p.fitness} · روحیه ${p.morale} · قرارداد ${p.contractDays} روز · وضعیت ${p.status}\n  تمدید: ${cash(p.minimumWeeklyWage)} تا ${cash(p.maximumWeeklyWage)} کش در هفته\n  شناسه: ${p.id}`,
     );
+    const keyboard = new InlineKeyboard();
+    for (const player of result.club.players.filter((item) => item.status === "ACTIVE").slice(0, 12)) {
+      const label = (player.firstName + " " + player.lastName).slice(0, 18);
+      keyboard.text("🏋️ " + label, "player:train:" + player.id).text("📝 تمدید", "player:renew:" + player.id).row();
+    }
     await ctx.reply(
-      `Player development · Training ground Lv.${result.club.trainingGroundLevel}\nWeekly wage bill: ${cash(result.club.weeklyWageBill)} Cash · Arrears: ${cash(result.club.wageArrears)} Cash\nCoach: ${result.club.coach.name} (Lv.${result.club.coach.level})\nTraining ${result.club.coach.trainingSkill} · Recovery ${result.club.coach.recoverySkill} · Medical ${result.club.coach.medicalSkill} · Salary ${cash(result.club.coach.weeklySalary)} Cash/week\n\n` +
-      (lines.join("\n\n") || "No players found.") +
-      "\n\n/train PLAYER_ID BALANCED|SHOOTING|... LIGHT|NORMAL|INTENSE\n/renew PLAYER_ID 90|180|365 WEEKLY_WAGE",
+      `توسعه بازیکنان · زمین تمرین سطح ${result.club.trainingGroundLevel}\nهزینه دستمزد هفتگی: ${cash(result.club.weeklyWageBill)} کش · معوقات: ${cash(result.club.wageArrears)} کش\nمربی: ${result.club.coach.name} (سطح ${result.club.coach.level})\nتمرین ${result.club.coach.trainingSkill} · ریکاوری ${result.club.coach.recoverySkill} · پزشکی ${result.club.coach.medicalSkill} · دستمزد ${cash(result.club.coach.weeklySalary)} کش در هفته\n\n` +
+      (lines.join("\n\n") || "بازیکنی پیدا نشد.") +
+      "\n\nبرای هر بازیکن، دکمه تمرین یا تمدید را انتخاب کن.",
+      { reply_markup: keyboard },
     );
   } catch (error) { await ctx.reply(`دریافت وضعیت توسعه بازیکنان ناموفق بود: ${error instanceof Error ? error.message : "خطای نامشخص"}`); }
 });
