@@ -10,7 +10,7 @@ function recordMiniAppLaunch(initData: string) {
     if (Number.isFinite(lastSent) && lastSent > Date.now() - 5 * 60_000) return;
     window.sessionStorage.setItem(MINIAPP_ANALYTICS_KEY, String(Date.now()));
   } catch { /* Analytics is optional when WebView storage is unavailable. */ }
-  void fetch(endpoint.replace(/\\/$/, "") + "/miniapp/launch", {
+  void fetch(endpoint.replace(/\/$/, "") + "/miniapp/launch", {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ initData }),
