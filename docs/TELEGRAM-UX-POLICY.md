@@ -10,10 +10,14 @@
 - All group replies must use `ctx.reply`, which is wrapped by the retention middleware. Do not use direct `ctx.api.sendMessage`, media-send methods, or `ctx.replyWith*` methods for group responses unless they are routed through the same retention policy and covered by tests.
 
 ## Private-chat navigation
-- Prefer a persistent, resized Persian ReplyKeyboard for primary private-chat navigation. Every button label must resolve to an existing no-argument private command through the pre-handler text-to-command middleware in `apps/bot/src/bot.ts`.
-- Slash commands remain usable alongside keyboard navigation. Commands that require parameters stay documented in `/help` rather than being added as buttons that only return usage errors.
-- Keep keyboard labels, command mappings, and retention rules in `apps/bot/src/telegram-ux.ts`; cover them with `apps/bot/test/telegram-ux.test.ts`.
-- Use InlineKeyboard only for contextual callbacks, confirmations, pagination, and Mini App launch.
+- Use a short category-based InlineKeyboard as the primary navigation. Every category opens a submenu with action buttons and a visible return-to-main-menu button.
+- Every action button must execute the same registered command or API operation as its slash-command equivalent. Keep slash commands fully usable for keyboard-first users and advanced users.
+- Keep the persistent, resized Persian ReplyKeyboard as a fallback. Its labels must resolve to existing no-argument commands through the text-to-command middleware.
+- Prefer button-driven workflows for purchases, league registration, challenge invitations, and club editing. Confirm purchases before debiting a wallet; use idempotency keys for all writes.
+- When a workflow needs user input, ask with ForceReply and bind the response to the originating prompt, user, chat, and a short expiry. Never accept an unrelated message as form input.
+- Group /start must display group-specific actions instead of rejecting the command. Group membership and administrator-only actions remain verified by Telegram and the API.
+- Keep labels, command mappings, and retention rules in `apps/bot/src/telegram-ux.ts`; cover them with `apps/bot/test/telegram-ux.test.ts`.
+
 
 
 ## Durable deletion queue
@@ -31,3 +35,11 @@
 - Keep the primary menu short and category-based. Inline buttons navigate between the root menu and categories; every category has a visible return-to-main-menu action.
 - Keep a persistent ReplyKeyboard as a fallback for clients or situations where inline navigation is unavailable. Its buttons must remain mapped to registered, parameter-free commands.
 - Avoid putting commands that require arguments on the ReplyKeyboard. Keep those in /help with explicit usage.
+
+## Staging interaction release
+- The store lists catalog items as selectable buttons, shows a confirmation step, and completes purchases through the authenticated store API. Existing `/buyitem` and other slash commands remain available.
+- Competition lists expose one-tap registration and creator-only league start actions. Pyramid league tiers and promotion offers are actionable from inline buttons.
+- Opponent cards offer direct friendly-match scheduling or a shareable challenge invitation link.
+- Club name and logo editing are locked server-side while the club is entered in an active competition. The Bot must show the active competition that causes the lock.
+- Group /start exposes status, challenge invitation, group challenge creation/join, group league creation/join, club connection, and group registration.
+- Deploy the API and Bot Workers independently to staging. API-only deploys must preserve existing secrets and must never rotate the Telegram webhook secret without a matching explicit webhook registration.
