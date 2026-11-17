@@ -4,7 +4,7 @@ import { prisma } from "./db.js";
 export async function finalizeEventTournamentFromCompetition(competitionId: string, now = new Date()) {
   const tournament = await prisma.eventTournament.findUnique({
     where: { competitionId },
-    include: { prizes: true, participants: { select: { id: true, userId: true, clubId: true } } },
+    include: { prizes: true, participants: { select: { id: true, userId: true, clubId: true, prizeSettledAt: true } } },
   });
   if (!tournament || tournament.status !== "ACTIVE") {
     return { finalized: false, replayed: true, participants: 0, awards: 0 };
@@ -25,6 +25,7 @@ export async function finalizeEventTournamentFromCompetition(competitionId: stri
   // Settle each participant independently. A transient failure can then retry
   // without rolling back already settled participants or duplicating rewards.
   for (const participant of tournament.participants) {
+    if (participant.prizeSettledAt) continue;
     const result = positionByClub.get(participant.clubId);
     if (!result) throw new Error("EVENT_TOURNAMENT_STANDING_MISSING");
     const prizes = tournament.prizes.filter((prize) =>
@@ -182,11 +183,11 @@ export async function finalizeEventTournamentFromCompetition(competitionId: stri
 }
 
 /** Retry completed competitions whose tournament prize settlement was interrupted. */
-export async function processDueEventTournamentFinalizations(now = new Date(), limit = 10) {
+export async function processDueEventTournamentFinalizations(now = new Date(), limit = 1) {
   const candidates = await prisma.eventTournament.findMany({
     where: { status: "ACTIVE", competition: { is: { status: "COMPLETED" } } },
     orderBy: { updatedAt: "asc" },
-    take: Math.min(Math.max(Math.trunc(limit), 1), 50),
+    take: Math.min(Math.max(Math.trunc(limit), 1), 10),
     select: { competitionId: true },
   });
   let finalized = 0;

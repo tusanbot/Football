@@ -102,7 +102,7 @@ export class MatchCoordinator {
       await withPrismaClient(client, async () => {
         const now = new Date();
         await processDueMatchRuntimes("cloudflare-match-coordinator", now, 10);
-        const tournamentFinalizations = await processDueEventTournamentFinalizations(now, 10);
+        const tournamentFinalizations = await processDueEventTournamentFinalizations(now, 1);
         await deliverDueMatchLifecycle(this.env);
         const [runtime, futureFixture, overdueFixture, lifecycleNotification, resultNotification, pendingTournamentFinalization] = await Promise.all([
           prisma.matchRuntime.findFirst({
