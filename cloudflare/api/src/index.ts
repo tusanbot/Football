@@ -177,7 +177,7 @@ async function deliverDueMatchLifecycle(env: Env): Promise<void> {
   });
   for (const row of rows) {
     const claimToken = crypto.randomUUID();
-    const claim = await prisma.matchLifecycleNotification.updateMany({ where: { id: row.id, status: "PENDING", claimToken: null }, data: { claimToken, lockedUntil: new Date(now.getTime() + 30_000), attempts: { increment: 1 } } });
+    const claim = await prisma.matchLifecycleNotification.updateMany({ where: { id: row.id, status: "PENDING", availableAt: { lte: now }, OR: [{ lockedUntil: null }, { lockedUntil: { lt: new Date(now.getTime() - 30_000) } }] }, data: { claimToken, lockedUntil: new Date(now.getTime() + 30_000), attempts: { increment: 1 } } });
     if (claim.count !== 1) continue;
     const home = String(row.match.homeClub.name).replace(/[&<>\"]/g, "");
     const away = String(row.match.awayClub.name).replace(/[&<>\"]/g, "");
