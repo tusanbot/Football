@@ -43,3 +43,17 @@ Initial RPC candidates: wallet deltas, player-market transfers, reward purchases
 ## Safety
 
 This stage does not change API routing, readiness, Worker secrets, database migrations, bot webhook, DNS, or production. Existing Prisma runtime remains in place until each route family has a verified HTTP implementation. Do not configure plaintext PostgreSQL or disable TLS as a fallback.
+
+
+## First migrated route: public player records
+
+The `GET /v1/players/records` route now accepts an injected repository. The standard Fastify runtime keeps its existing Prisma implementation, while the Cloudflare Worker uses `SupabasePublicPlayerRecordRepository` when both Worker secrets are present:
+
+- `SUPABASE_URL`
+- `SUPABASE_SERVICE_ROLE_KEY`
+
+The Worker repository calls the `get_public_player_records` PostgreSQL RPC. The matching migration is `20261118090000_public_player_records_rpc`. It performs completed-match filtering, aggregation, the three-appearance rating threshold, stable ordering, and the 1–50 row limit in one database statement. It exposes only leaderboard fields and grants RPC execution only to `service_role` when that role exists; `PUBLIC`, `anon`, and `authenticated` are revoked.
+
+Until the two Worker secrets are configured, the Worker route intentionally falls back to the existing Prisma implementation. This preserves the current runtime while the route is validated; it does not mean the Worker is fully migrated. No Wrangler configuration, secrets, webhook, DNS, or deployment are changed by this code migration.
+
+The repository tests validate RPC arguments, numeric conversion, and malformed-response rejection. The migration must be applied to the target Supabase database before enabling the Worker secrets for this route. Compare the Prisma and RPC route responses against the same database fixture before enabling it in staging.
