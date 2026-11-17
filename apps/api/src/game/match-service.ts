@@ -138,16 +138,16 @@ export async function listMatchOpponents(userId: string, search?: string) {
       ] } : {}),
     },
     include: {
-      owner: { select: { telegramId: true, username: true, updatedAt: true } },
+      owner: { select: { telegramId: true, username: true, lastActiveAt: true } },
       players: { where: { status: "ACTIVE", suspensionMatchesRemaining: 0 }, select: { id: true, position: true } },
     },
-    orderBy: query ? [{ reputation: "desc" }, { level: "desc" }] : [{ owner: { updatedAt: "desc" } }, { createdAt: "desc" }],
+    orderBy: query ? [{ reputation: "desc" }, { level: "desc" }] : [{ owner: { lastActiveAt: "desc" } }, { createdAt: "desc" }],
     take: query ? 25 : 10,
   });
   return clubs.filter((club) => club.players.length >= 11 && club.players.some((player) => player.position === "GK")).map((club) => ({
     id: club.id, name: club.name, level: club.level, reputation: club.reputation,
     ownerTelegramId: club.owner.telegramId, ownerUsername: club.owner.username,
-    lastActiveAt: club.owner.updatedAt.toISOString(),
+    lastActiveAt: club.owner.lastActiveAt.toISOString(),
   }));
 }
 export async function createFriendlyMatch(userId: string, opponentClubId: string, idempotencyKey: string, scheduledAt = new Date()) {
