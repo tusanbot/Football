@@ -106,10 +106,10 @@ test("bot source does not bypass the group reply retention wrapper with direct s
   const directSendPattern =
     /(?:ctx|bot)\.api\.(?:sendMessage|sendPhoto|sendDocument|sendVideo|sendAudio|sendAnimation|sendMediaGroup|sendLocation|sendVenue|sendPoll|sendSticker|sendVoice|sendVideoNote)|ctx\.replyWith(?:Photo|Document|Video|Audio|Animation|MediaGroup|Location|Venue|Poll|Sticker|Voice|VideoNote)/g;
   const directSends = [...botSource.matchAll(directSendPattern)].map((match) => match[0]);
-  // Two direct sends are private-user league notices; the third is the durable
-  // admin broadcast worker. All group deliveries are intentionally persistent.
-  assert.deepEqual(directSends, ["bot.api.sendMessage", "bot.api.sendMessage", "bot.api.sendMessage"]);
-  assert.equal((botSource.match(/bot\.api\.sendMessage\(telegramId/g) ?? []).length, 2);
+  // Background sends and explicit challenge/result DMs are intentional; ordinary command
+  // responses continue through ctx.reply and the transient-retention wrapper.
+  assert.deepEqual(directSends, ["bot.api.sendMessage", "bot.api.sendMessage", "bot.api.sendMessage", "bot.api.sendMessage", "ctx.api.sendMessage", "ctx.api.sendMessage"]);
+  assert.equal((botSource.match(/bot\\.api\\.sendMessage\\(telegramId/g) ?? []).length, 3);
   assert.ok(botSource.includes("bot.api.sendMessage(Number(delivery.telegramGroupId), delivery.message)"));
   assert.ok(botSource.includes("/v1/bot/admin-group-broadcasts/"));
   assert.ok(/" \+ delivery\.id \+ "\/complete"/.test(botSource));
