@@ -1350,9 +1350,9 @@ bot.command("clubedit", async (ctx) => {
     const result = await api<{club:{name:string;activeCompetition:{id:string;name:string}|null}|null}>("/v1/me", ctx.from.id);
     if (!result.club) return ctx.reply("ابتدا باشگاه خود را ایجاد کنید.");
     const locked = Boolean(result.club.activeCompetition);
-    const keyboard = new InlineKeyboard();
-    if (!locked) keyboard.text("✏️ تغییر نام باشگاه", "clubedit:name");
-    if (!locked) keyboard.text("🖼 تغییر لوگو", "clubedit:logo");
+    const keyboard = locked ? undefined : new InlineKeyboard()
+      .text("✏️ تغییر نام باشگاه", "clubedit:name")
+      .text("🖼 تغییر لوگو", "clubedit:logo");
     await replyRich(
       ctx,
       "⚙️ <b>ویرایش اطلاعات باشگاه</b>\nنام فعلی: <b>" + escapeHtml(result.club.name) + "</b>" +
