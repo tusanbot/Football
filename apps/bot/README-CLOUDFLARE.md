@@ -49,7 +49,20 @@ The dry-run validates the Worker bundle and configuration; it does not deploy th
 - The Worker checks the staging API readiness endpoint and verifies that the Bot token matches the Bot identity configured in the API.
 - A Cron Trigger runs every minute and drains the existing database-backed deletion, match-notification, league-notice, and admin-broadcast queues. These jobs use the existing API claim/complete/fail protocol; they are not process-local timers.
 - The current group-message deletion queue is polled on a one-minute schedule, so actual deletion may occur later than the configured 60-second target.
-- Worker observability and the Analytics Engine dataset record update starts, command/callback usage, and pseudonymous active-user keys. Mini App page/session analytics and end-to-end retention reporting are not yet implemented; platform Worker metrics can be used for request volume, CPU, duration, and errors in the meantime.
+- Worker observability and the Analytics Engine dataset record bot starts, command/callback usage, group/private context, and pseudonymous active-user keys. The Mini App calls `/miniapp/launch` with Telegram `initData`; the Worker verifies Telegram's HMAC signature and a 24-hour freshness window before recording a pseudonymous session event. Raw `initData`, Telegram IDs, and message text are never written to analytics.
+- Build the staging Mini App with `pnpm --dir apps/web build:worker:staging`; it embeds the staging API and Bot Worker URLs from `wrangler.staging.jsonc`. The production build does not embed the staging Bot URL.
+- Analytics Engine SQL example for the last seven days:
+
+  ```sql
+  SELECT blob1 AS event, blob2 AS feature, COUNT(*) AS events, COUNT(DISTINCT index1) AS unique_users
+  FROM football_empire_pilot
+  WHERE timestamp >= NOW() - INTERVAL 7 DAY
+  GROUP BY event, feature
+  ORDER BY events DESC
+  LIMIT 100
+  ```
+
+  Analytics Engine is adaptively sampled; use the returned weighted aggregates and Cloudflare's Worker metrics when estimating exact billing or small-volume counts. Retention reporting needs a cohort query and should be added after pilot data exists.
 
 ## Activation is intentionally separate
 
