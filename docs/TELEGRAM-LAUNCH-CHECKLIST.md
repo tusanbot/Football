@@ -84,6 +84,19 @@ After the release branch is merged into the intended deployment branch and migra
 
 Do not drop unused indexes merely because the advisor currently reports them: this database has no game workload yet, so index usage statistics are not representative.
 
+## Production deployment workflow
+
+The repository includes a guarded GitHub Actions workflow at `.github/workflows/deploy-production.yml`. It can only deploy from the `main` branch and requires the explicit `DEPLOY_PRODUCTION` dispatch choice. Before using it, add these GitHub Actions repository secrets:
+
+- `CLOUDFLARE_API_TOKEN`: Cloudflare API token with Workers Scripts Write permission for this account.
+- `CLOUDFLARE_ACCOUNT_ID`: the Cloudflare account identifier.
+- `DATABASE_URL`: PostgreSQL connection string used by the Prisma runtime and seed.
+- `DIRECT_URL`: direct PostgreSQL connection string for Prisma migrations.
+
+After the complete release branch has been reviewed and merged into `main`, open GitHub Actions → **Deploy Football Empire to Telegram production**, select branch `main`, choose `DEPLOY_PRODUCTION`, and run the workflow. It installs dependencies, applies pending Prisma migrations, upserts the 15-player catalog, deploys the API Worker with `ENVIRONMENT=production`, requires `/ready` to report ready, builds and deploys the compiled Mini App Worker, and verifies that the Mini App origin serves the Next.js app. If a required secret is missing or readiness fails, the workflow stops before proceeding.
+
+This workflow does not start the Telegram Bot process, configure a webhook, or change BotFather settings.
+
 ## Live Telegram acceptance tests
 
 Run these only after the API and Mini App are deployed to the intended staging origin and the Bot runtime has been explicitly approved for start.
