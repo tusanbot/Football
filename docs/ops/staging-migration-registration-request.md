@@ -17,3 +17,6 @@
 - The test Bot Worker may be deployed for health checks, but its Cron trigger is disabled and no Telegram webhook is registered. It remains dormant until separately authorized.
 
 This document records the staging preparation state. The next commit marker `[deploy-staging]` requests deployment of the three staging Workers only; it does not authorize production deployment, webhook registration, or Bot activation.
+
+
+Retry requested after adding the shared domain package build to the staging deploy workflow. [deploy-staging]
