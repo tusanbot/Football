@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   GROUP_REPLY_DELETE_DELAY_MS,
   PRIVATE_MENU_ROWS,
+  PRIVATE_MENU_SUBMENUS,
   PERSISTENT_GROUP_COMMANDS,
   TRANSIENT_GROUP_COMMANDS,
   isPersistentGroupReply,
@@ -22,22 +23,22 @@ test("group replies use a one-minute transient retention window", () => {
   assert.equal(GROUP_REPLY_DELETE_DELAY_MS, 60_000);
 });
 
-test("every private keyboard button resolves to a registered no-argument command", () => {
-  const expected = [
-    "club", "wallet", "store", "inventory", "players", "lineup", "development", "operations",
-    "finance", "scout", "opponents", "matches", "fallback", "leagues", "market",
-    "special", "seasonawards", "records", "help", "menu",
+test("every private keyboard button resolves to a registered command", () => {
+  const items = [
+    ...PRIVATE_MENU_ROWS.flat(),
+    ...Object.values(PRIVATE_MENU_SUBMENUS).flatMap((menu) => menu.rows.flat()),
   ];
-  const actual = PRIVATE_MENU_ROWS.flat().map((item) => resolvePrivateMenuCommand(item.label));
-  assert.deepEqual(actual, expected);
-  assert.equal(new Set(actual).size, expected.length);
-
+  const actual = items.map((item) => resolvePrivateMenuCommand(item.label));
+  assert.deepEqual(actual, items.map((item) => item.command));
   const registered = new Set(
     [...botSource.matchAll(/bot\.command\(\s*["']([^"']+)["']/g)].map((match) => match[1]),
   );
-  for (const command of expected) {
-    assert.ok(registered.has(command), "Reply Keyboard command /" + command + " has no bot.command handler");
+  const dynamicMenus = Object.keys(PRIVATE_MENU_SUBMENUS);
+  for (const command of new Set(actual)) {
+    assert.ok(registered.has(command) || dynamicMenus.includes(command),
+      "Reply Keyboard command /" + command + " has no bot.command handler");
   }
+  assert.equal(resolvePrivateMenuCommand("↩️ بازگشت به منوی اصلی"), "menu");
 });
 
 test("private menu label matching tolerates whitespace and Persian Arabic variants", () => {
@@ -113,10 +114,15 @@ test("bot source does not bypass the group reply retention wrapper with direct s
   assert.ok(/" \+ delivery\.id \+ "\/complete"/.test(botSource));
 });
 
-test("private menu stays compact and every button remains uniquely routable", () => {
-  assert.equal(PRIVATE_MENU_ROWS.length, 10);
-  assert.ok(PRIVATE_MENU_ROWS.every((row) => row.length === 2));
-  assert.equal(new Set(PRIVATE_MENU_ROWS.flat().map((item) => item.command)).size, 20);
+test("private menu is categorized and each submenu has a return path", () => {
+  assert.equal(PRIVATE_MENU_ROWS.length, 4);
+  assert.ok(PRIVATE_MENU_ROWS.length < 6);
+  assert.equal(Object.keys(PRIVATE_MENU_SUBMENUS).length, 5);
+  for (const menu of Object.values(PRIVATE_MENU_SUBMENUS)) {
+    assert.ok(menu.rows.length > 0);
+    assert.ok(menu.rows.flat().every((item) => Boolean(item.label && item.command)));
+  }
+  assert.ok(botSource.includes("↩️ بازگشت به منوی اصلی"));
 });
 
 test("admin command argument parsing uses whitespace-aware splitting", () => {
