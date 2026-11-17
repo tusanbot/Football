@@ -50,6 +50,15 @@ const pendingLineupSelections = new Map<number, { formation: string; playerIds: 
 const pendingFallbackEdits = new Map<number, { plan: Record<string, string>; version: number }>();
 const pendingTrainingSelections = new Map<number, { playerId: string; focus?: string }>();
 const pendingContractSelections = new Map<number, { playerId: string; minWage: string; maxWage: string; days?: number }>();
+const pendingMatchTactics = new Map<number, { matchId: string; checkpointKey: string; instruction: Record<string, string> }>();
+const pendingMatchSubstitutions = new Map<number, {
+  matchId: string; checkpointKey: string;
+  startingPlayers: Array<{ id: string; name: string }>;
+  benchPlayers: Array<{ id: string; name: string }>;
+  substitutions: Array<{ outgoingPlayerId: string; incomingPlayerId: string }>;
+  outgoingPlayerId?: string;
+}>();
+
 type EventTournamentPrizeDraft = { placement: number; type: "CASH" | "GOLD" | "HONOR" | "STORE_ITEM" | "SPECIAL_PLAYER"; amount?: string; itemKey?: string; specialPlayerId?: string };
 type EventTournamentWizard = {
   promptMessageId: number; stage: "title" | "description" | "registrationDays" | "startsInDays" | "maxParticipants" | "feeAmount" | "prizeAmount" | "itemKey" | "specialPlayerId";
