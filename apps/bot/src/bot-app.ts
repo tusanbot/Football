@@ -456,7 +456,7 @@ async function dispatchMenuCommand(ctx: Context, command: string) {
   } as Parameters<typeof bot.handleUpdate>[0];
   await bot.handleUpdate(syntheticUpdate);
 }
-function cash(value: string) { return BigInt(value).toLocaleString("fa-IR", { timeZone: "Asia/Tehran" }); }
+function cash(value: string) { return BigInt(value).toLocaleString("fa-IR"); }
 function playerName(player: ApiPlayer) { return `${player.firstName} ${player.lastName}`; }
 function escapeHtml(value: unknown): string {
   return String(value ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
@@ -2604,7 +2604,7 @@ bot.command("records", async (ctx) => {
     );
     const title = ({ goals: "رتبه‌بندی بهترین گلزنان تاریخ", assists: "رتبه‌بندی بهترین پاسورهای تاریخ", appearances: "رتبه‌بندی بیشترین بازی", rating: "رتبه‌بندی بالاترین میانگین نمره" } as const)[metric];
     const lines = result.records.map((record) => record.rank + ". " + record.playerName + " · " + record.clubName + " (" + record.position + ") · " +
-      (metric === "rating" ? record.value.toFixed(2) : record.value.toLocaleString("fa-IR", { timeZone: "Asia/Tehran" })) +
+      (metric === "rating" ? record.value.toFixed(2) : record.value.toLocaleString("fa-IR")) +
       " · " + record.appearances + " بازی · " + record.goals + " گل · " + record.assists + " پاس گل");
     await ctx.reply([title, "", ...(lines.length ? lines : ["هنوز رکوردی ثبت نشده است."]),
       ...(metric === "rating" ? ["", "حداقل ۳ حضور برای ورود به این رتبه‌بندی لازم است."] : [])].join("\n"));
