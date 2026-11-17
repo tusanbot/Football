@@ -649,7 +649,7 @@ export async function submitMatchCheckpointDecision(userId: string, matchId: str
 }
 
 /** Atomically lease due runtimes; expired leases are recoverable after worker crashes. */
-export async function claimDueMatchRuntimes(workerId: string, now = new Date(), leaseMs = 30_000, limit = 10) {
+export async function claimDueMatchRuntimes(workerId: string, now = new Date(), leaseMs = 60_000, limit = 10) {
   if (!workerId.trim() || workerId.length > 100 || !Number.isInteger(leaseMs) || leaseMs < 1_000
     || !Number.isInteger(limit) || limit < 1 || limit > 100) throw new MatchServiceError("INVALID_MATCH_WORKER_LEASE");
   const candidates = await prisma.matchRuntime.findMany({ where: {
@@ -1447,7 +1447,8 @@ export async function processDueMatchRuntimes(
   limit = 10,
 ): Promise<{ enqueued: number; claimed: number; advanced: number; waiting: number; settled: number; failed: number }> {
   const enqueued = await enqueueDueMatchRuntimes(now, Math.max(limit, 10));
-  const claimed = await claimDueMatchRuntimes(workerId, now, 30_000, limit);
+  // The settlement transaction may wait 10s for a connection and run for 30s; keep the lease longer to prevent a duplicate claimant.
+  const claimed = await claimDueMatchRuntimes(workerId, now, 60_000, limit);
   const totals = { enqueued, claimed: claimed.length, advanced: 0, waiting: 0, settled: 0, failed: 0 };
   for (const item of claimed) {
     try {
