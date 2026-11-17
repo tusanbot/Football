@@ -4,6 +4,7 @@ const API_ERROR_MESSAGES: Record<string, string> = {
   UNAUTHENTICATED: "نشست شما معتبر نیست؛ بازی را دوباره از داخل تلگرام باز کنید.",
   PLAYER_ACCOUNT_SUSPENDED: "دسترسی این حساب به بازی تعلیق شده است.",
   CLUB_NOT_FOUND: "باشگاهی برای حساب شما پیدا نشد.",
+  CLUB_EDIT_LOCKED_ACTIVE_LEAGUE: "ویرایش اطلاعات باشگاه تا پایان رقابت فعال غیرفعال است.",
   INSUFFICIENT_CASH: "موجودی کش باشگاه کافی نیست.",
   INSUFFICIENT_FUNDS: "موجودی کیف پول کافی نیست.",
   INSUFFICIENT_GOLD: "موجودی طلای شما کافی نیست.",
