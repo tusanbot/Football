@@ -1530,10 +1530,10 @@ bot.callbackQuery(/^g:/, async (ctx) => {
     if (action === "joinleague") {
       const id = parts[2] ?? "";
       if (!id) return ctx.answerCallbackQuery({ text: "شناسه لیگ معتبر نیست." });
-      const result = await api<{teams:number}>(`/v1/groups/${encodeURIComponent(groupId)}/leagues/${encodeURIComponent(id)}/join`, ctx.from.id, "POST", {});
+      const result = await api<{teams:number;autoStarted?:boolean;fixturesCreated?:number;rounds?:number;startsAt?:string;requiredTeams?:number}>(`/v1/groups/${encodeURIComponent(groupId)}/leagues/${encodeURIComponent(id)}/join`, ctx.from.id, "POST", {});
       await awardGroupActivity(ctx, "LEAGUE_JOIN", id);
-      await ctx.answerCallbackQuery({ text: "عضویت در لیگ ثبت شد." });
-      await ctx.reply("🏆 عضویت باشگاه شما در لیگ گروه ثبت شد. تعداد تیم‌ها: " + result.teams);
+      await ctx.answerCallbackQuery({ text: result.autoStarted ? "ظرفیت تکمیل شد؛ برنامه مسابقات آماده است." : "عضویت در لیگ ثبت شد." });
+      await ctx.reply("🏆 عضویت باشگاه شما در لیگ گروه ثبت شد. تعداد تیم‌ها: " + result.teams + (result.autoStarted ? "\nبرنامه: " + result.fixturesCreated + " بازی در " + result.rounds + " هفته؛ شروع " + new Date(result.startsAt!).toLocaleString("fa-IR", { timeZone: "Asia/Tehran" }) : result.requiredTeams ? "\nتا شروع خودکار " + (result.requiredTeams - result.teams) + " تیم دیگر لازم است." : ""));
       return;
     }
     if (action === "join") {
