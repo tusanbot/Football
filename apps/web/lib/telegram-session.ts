@@ -52,6 +52,7 @@ function clearSession() {
 }
 
 export async function createTelegramSession(apiBaseUrl: string, initData: string): Promise<string> {
+  recordMiniAppLaunch(initData);
   const cached = readCachedSession();
   if (cached) {
     try {
