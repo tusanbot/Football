@@ -3,6 +3,7 @@ import test from "node:test";
 import { randomUUID } from "node:crypto";
 import { buildApp } from "../src/app.js";
 import { prisma } from "../src/db.js";
+import { createTelegramSessionToken } from "../src/auth/telegram-session.js";
 
 test("event tournament player and admin routes require authenticated Telegram users", async (t) => {
   const app = buildApp({ logger: false });
@@ -59,8 +60,8 @@ test("event tournament registration and HONOR prize settlement are atomic and id
     if (previousAdmins === undefined) delete process.env.GAME_ADMIN_TELEGRAM_IDS;
     else process.env.GAME_ADMIN_TELEGRAM_IDS = previousAdmins;
   });
-  const adminHeaders = { "x-football-bot-secret": secret, "x-telegram-user-id": adminTelegramId };
-  const playerHeaders = { "x-football-bot-secret": secret, "x-telegram-user-id": playerTelegramId };
+  const adminHeaders = { authorization: "Bearer " + createTelegramSessionToken(adminTelegramId, secret).token };
+  const playerHeaders = { authorization: "Bearer " + createTelegramSessionToken(playerTelegramId, secret).token };
   const now = Date.now();
   const created = await app.inject({
     method: "POST", url: "/v1/admin/event-tournaments", headers: adminHeaders,
