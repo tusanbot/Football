@@ -75,9 +75,9 @@ export const PRIVATE_MENU_SUBMENUS = {
   menu_club: {
     title: "🏟 مدیریت باشگاه",
     rows: [
-      [{ label: "🏟 مشخصات باشگاه", command: "club" }, { label: "📋 ترکیب اصلی", command: "lineup" }],
-      [{ label: "🏗 امکانات باشگاه", command: "operations" }, { label: "🔎 استعدادیابی", command: "scout" }],
-      [{ label: "📈 توسعه بازیکنان", command: "development" }],
+      [{ label: "🏟 مشخصات باشگاه", command: "club" }, { label: "✏️ ویرایش باشگاه", command: "clubedit" }],
+      [{ label: "📋 ترکیب اصلی", command: "lineup" }, { label: "🏗 امکانات باشگاه", command: "operations" }],
+      [{ label: "🔎 استعدادیابی", command: "scout" }, { label: "📈 توسعه بازیکنان", command: "development" }],
     ],
   },
   menu_players: {
