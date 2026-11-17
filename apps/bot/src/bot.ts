@@ -8,9 +8,10 @@ const apiUrl = process.env.FOOTBALL_API_URL;
 const botApiSecret = process.env.BOT_API_SECRET;
 const webAppUrl = process.env.TELEGRAM_WEB_APP_URL;
 if (!token || !apiUrl || !botApiSecret) throw new Error("TELEGRAM_BOT_TOKEN, FOOTBALL_API_URL, and BOT_API_SECRET are required.");
+const apiSecret = botApiSecret;
 
 const { bot, runBackgroundJobs, setBotTelegramId } = createBotApp({
-  token, apiUrl, botApiSecret, ...(webAppUrl ? { webAppUrl } : {}), environment: process.env.NODE_ENV,
+  token, apiUrl, botApiSecret: apiSecret, ...(webAppUrl ? { webAppUrl } : {}), environment: process.env.NODE_ENV ?? "development",
 });
 const apiReadiness = await fetch(new URL("/ready", apiUrl), { signal: AbortSignal.timeout(15_000) });
 if (!apiReadiness.ok) throw new Error("Football Empire API is not ready (HTTP " + apiReadiness.status + ").");
@@ -19,7 +20,7 @@ const identity = await bot.api.getMe();
 setBotTelegramId(identity.id);
 const identityCheck = await fetch(new URL("/v1/bot/verify-identity", apiUrl), {
   method: "POST",
-  headers: { "content-type": "application/json", "x-football-bot-secret": botApiSecret },
+  headers: { "content-type": "application/json", "x-football-bot-secret": apiSecret },
   body: JSON.stringify({ telegramBotId: identity.id }),
   signal: AbortSignal.timeout(15_000),
 });
