@@ -49,6 +49,35 @@ test("readiness fails closed and reports missing runtime configuration", async (
   assert.ok(body.missing.includes("GAME_ADMIN_TELEGRAM_IDS"));
 });
 
+test("pilot analytics endpoint rejects requests without the Bot/API secret", async () => {
+  const response = await worker.fetch(new Request("https://api.example.test/internal/pilot/events", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ eventName: "bot_start", userKey: "a".repeat(32), source: "bot" }),
+  }), configuredEnv, context);
+  assert.equal(response.status, 401);
+});
+
+test("pilot analytics endpoint validates event payloads before database access", async () => {
+  const response = await worker.fetch(new Request("https://api.example.test/internal/pilot/events", {
+    method: "POST",
+    headers: { "content-type": "application/json", "x-football-bot-secret": configuredEnv.BOT_API_SECRET },
+    body: JSON.stringify({ eventName: "raw_message_text", userKey: "a".repeat(32), source: "bot" }),
+  }), configuredEnv, context);
+  assert.equal(response.status, 400);
+});
+
+test("pilot analytics endpoint persists an authenticated pseudonymous event", async () => {
+  const response = await worker.fetch(new Request("https://api.example.test/internal/pilot/events", {
+    method: "POST",
+    headers: { "content-type": "application/json", "x-football-bot-secret": configuredEnv.BOT_API_SECRET },
+    body: JSON.stringify({ eventName: "bot_start", userKey: "a".repeat(32), actionKey: "start", chatType: "private", source: "bot" }),
+  }), configuredEnv, context);
+  assert.equal(response.status, 202);
+  assert.deepEqual(await response.json(), { accepted: true });
+  await Promise.all(pending.splice(0));
+});
+
 test("the Worker dispatches Fetch requests through the shared API route handlers", async () => {
   const response = await worker.fetch(new Request("https://api.example.test/not-a-route"), configuredEnv, context);
   assert.equal(response.status, 404);
