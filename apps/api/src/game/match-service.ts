@@ -749,6 +749,20 @@ export async function simulateScheduledMatch(userId: string, matchId: string, no
       },
     });
     if (claimed.count !== 1) throw new MatchServiceError("MATCH_ALREADY_SIMULATED");
+    const challengeForGroup = await tx.friendlyChallenge.findUnique({
+      where: { matchId: match.id },
+      select: { group: { select: { telegramId: true } } },
+    });
+    await tx.matchResultNotification.createMany({
+      data: [
+        { matchId: match.id, channel: "HOME", telegramChatId: home.owner.telegramId },
+        { matchId: match.id, channel: "AWAY", telegramChatId: away.owner.telegramId },
+        ...(challengeForGroup?.group?.telegramId
+          ? [{ matchId: match.id, channel: "GROUP", telegramChatId: challengeForGroup.group.telegramId }]
+          : []),
+      ],
+      skipDuplicates: true,
+    });
     if (isRuntimeSettlement && runtime) {
       const runtimeCompleted = await tx.matchRuntime.updateMany({
         where: { id: runtime.id, status: "RUNNING", currentMinute: 90 },
