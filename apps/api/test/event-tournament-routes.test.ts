@@ -68,9 +68,9 @@ test("event tournament auto-starts at capacity and settles HONOR prizes from sim
   let competitionId: string | undefined;
   t.after(async () => {
     if (tournamentId) {
-      await prisma.leagueNotice.deleteMany({ where: { referenceId: tournamentId } });
       const tournament = await prisma.eventTournament.findUnique({ where: { id: tournamentId }, select: { competitionId: true } });
       const linkedCompetitionId = tournament?.competitionId ?? competitionId;
+      await prisma.leagueNotice.deleteMany({ where: { OR: [{ referenceId: tournamentId }, ...(linkedCompetitionId ? [{ referenceId: linkedCompetitionId }] : []), { dedupeKey: { startsWith: "event-tournament-result:" + tournamentId + ":" } }] } });
       if (linkedCompetitionId) {
         await prisma.footballMatch.deleteMany({ where: { competitionId: linkedCompetitionId } });
         await prisma.competition.deleteMany({ where: { id: linkedCompetitionId } });
