@@ -1162,6 +1162,38 @@ export async function enqueueDueMatchRuntimes(now = new Date(), limit = 50) {
   return created;
 }
 
+type MatchLifecycleEventInput = {
+  eventKey: string; kind: "KICKOFF" | "GOAL" | "HALF_TIME"; minute: number;
+  homeScore: number; awayScore: number; payload?: Prisma.InputJsonValue; availableAt: Date;
+};
+async function enqueueMatchLifecycleNotifications(tx: Prisma.TransactionClient, match: { id: string; homeClub: { owner: { telegramId: string } }; awayClub: { owner: { telegramId: string } } }, events: MatchLifecycleEventInput[]) {
+  if (!events.length) return;
+  const challenge = await tx.friendlyChallenge.findUnique({ where: { matchId: match.id }, select: { group: { select: { telegramId: true } } } });
+  const recipients = [
+    { channel: "HOME", telegramChatId: match.homeClub.owner.telegramId },
+    { channel: "AWAY", telegramChatId: match.awayClub.owner.telegramId },
+    ...(challenge?.group?.telegramId ? [{ channel: "GROUP", telegramChatId: challenge.group.telegramId }] : []),
+  ];
+  await tx.matchLifecycleNotification.createMany({
+    data: events.flatMap((event) => recipients.map((recipient) => ({
+      matchId: match.id, channel: recipient.channel, telegramChatId: recipient.telegramChatId,
+      eventKey: event.eventKey, kind: event.kind, minute: event.minute, homeScore: event.homeScore, awayScore: event.awayScore,
+      payload: event.payload ?? Prisma.JsonNull, availableAt: event.availableAt,
+    }))), skipDuplicates: true,
+  });
+}
+function goalLifecycleEvents(events: MatchSegmentState["events"], home: MatchSide, away: MatchSide, initialScore: { home: number; away: number }, startedAt: Date): MatchLifecycleEventInput[] {
+  let homeScore = initialScore.home, awayScore = initialScore.away;
+  const homePlayers = new Map([...home.players, ...(home.bench ?? [])].map((player) => [player.id, player.name]));
+  const awayPlayers = new Map([...away.players, ...(away.bench ?? [])].map((player) => [player.id, player.name]));
+  return [...events].filter((event) => event.type === "GOAL").sort((left, right) => left.minute - right.minute || left.sequence - right.sequence).map((event) => {
+    if (event.teamId === home.clubId) homeScore++; else awayScore++;
+    const names = event.teamId === home.clubId ? homePlayers : awayPlayers;
+    return { eventKey: "goal:" + event.sequence, kind: "GOAL", minute: event.minute, homeScore, awayScore,
+      payload: { teamName: event.teamId === home.clubId ? home.clubName : away.clubName, scorerName: names.get(event.playerId) ?? "بازیکن", assistName: event.relatedPlayerId ? names.get(event.relatedPlayerId) ?? null : null },
+      availableAt: new Date(startedAt.getTime() + event.minute * MATCH_MINUTE_MS) };
+  });
+}
 async function processClaimedMatchRuntime(
   runtimeId: string,
   now: Date,
@@ -1223,6 +1255,10 @@ async function processClaimedMatchRuntime(
         data: { status: "IN_PROGRESS", startedAt: runtime.match.startedAt ?? now },
       });
       if (matchUpdated.count !== 1) throw new MatchServiceError("MATCH_NOT_SCHEDULED");
+      await enqueueMatchLifecycleNotifications(tx, runtime.match, [
+        { eventKey: "kickoff", kind: "KICKOFF", minute: 0, homeScore: 0, awayScore: 0, availableAt: now },
+        ...goalLifecycleEvents(first.events, snapshot.home, snapshot.away, { home: 0, away: 0 }, now),
+      ]);
       await tx.matchTacticalCheckpoint.createMany({
         data: [{
           matchId: runtime.matchId, checkpointKey: "minute-45", kind: "HALF_TIME", minute: 45,
@@ -1325,6 +1361,14 @@ async function processClaimedMatchRuntime(
       },
     });
     if (runtimeUpdated.count !== 1) throw new MatchServiceError("MATCH_RUNTIME_CONCURRENT_MODIFICATION");
+    const lifecycleEvents: MatchLifecycleEventInput[] = [];
+    if (checkpoint.minute === 45) lifecycleEvents.push({
+      eventKey: "halftime", kind: "HALF_TIME", minute: 45,
+      homeScore: state.segment.home.score, awayScore: state.segment.away.score, availableAt: now,
+    });
+    lifecycleEvents.push(...goalLifecycleEvents(advanced.events, homeApplied.side, awayApplied.side,
+      { home: state.segment.home.score, away: state.segment.away.score }, runtime.startedAt ?? now));
+    await enqueueMatchLifecycleNotifications(tx, runtime.match, lifecycleEvents);
     if (!isFullTime) {
       const nextKind = nextMinute === 60 ? "MINUTE_60" : "MINUTE_75";
       const nextAt = new Date(now.getTime() + 15 * MATCH_MINUTE_MS);
