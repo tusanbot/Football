@@ -135,3 +135,24 @@ test("checkpoint notifications retry after failed delivery and acknowledge succe
     else process.env.BOT_API_SECRET = previous;
   }
 });
+
+test("match result notification claim and acknowledgement require the system Bot secret", async (t) => {
+  const previous = process.env.BOT_API_SECRET;
+  process.env.BOT_API_SECRET = "test-match-result-notification-secret";
+  const app = buildApp();
+  await app.ready();
+  t.after(async () => {
+    await app.close();
+    if (previous === undefined) delete process.env.BOT_API_SECRET;
+    else process.env.BOT_API_SECRET = previous;
+  });
+  const [claim, ack] = await Promise.all([
+    app.inject({ method: "POST", url: "/v1/bot/match-results/claim", payload: { limit: 5 } }),
+    app.inject({ method: "POST", url: "/v1/bot/match-results/ack", payload: {
+      id: "missing", claimToken: randomUUID(), delivered: true,
+    } }),
+  ]);
+  assert.equal(claim.statusCode, 401);
+  assert.equal(ack.statusCode, 401);
+});
+
