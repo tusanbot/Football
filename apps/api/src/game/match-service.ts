@@ -124,18 +124,33 @@ async function creditMatchCash(
       direction: "CREDIT", amount, description, occurredAt: now },
   });
 }
-export async function listMatchOpponents(userId: string) {
+export async function listMatchOpponents(userId: string, search?: string) {
   const own = await getOwnedClub(userId);
+  const query = search?.trim().slice(0, 80);
   const clubs = await prisma.club.findMany({
-    where: { id: { not: own.id }, players: { some: { lineupSlot: { not: null }, status: "ACTIVE" } } },
-    include: { players: { where: { status: "ACTIVE" }, select: { id: true, position: true } } },
-    orderBy: [{ reputation: "desc" }, { level: "desc" }], take: 50,
+    where: {
+      id: { not: own.id },
+      players: { some: { lineupSlot: { not: null }, status: "ACTIVE" } },
+      ...(query ? { OR: [
+        { name: { contains: query, mode: "insensitive" } },
+        { owner: { telegramId: query.replace(/^@/, "") } },
+        ...(query.startsWith("@") ? [{ owner: { username: query.slice(1) } }] : []),
+      ] } : {}),
+    },
+    include: {
+      owner: { select: { telegramId: true, username: true, updatedAt: true } },
+      players: { where: { status: "ACTIVE", suspensionMatchesRemaining: 0 }, select: { id: true, position: true } },
+    },
+    orderBy: query ? [{ reputation: "desc" }, { level: "desc" }] : [{ owner: { updatedAt: "desc" } }, { createdAt: "desc" }],
+    take: query ? 25 : 10,
   });
   return clubs.filter((club) => club.players.length >= 11 && club.players.some((player) => player.position === "GK")).map((club) => ({
     id: club.id, name: club.name, level: club.level, reputation: club.reputation,
+    ownerTelegramId: club.owner.telegramId, ownerUsername: club.owner.username,
+    lastActiveAt: club.owner.updatedAt.toISOString(),
   }));
 }
-export async function createFriendlyMatch(userId: string, opponentClubId: string, idempotencyKey: string, scheduledAt = new Date(Date.now() + 5 * 60_000)) {
+export async function createFriendlyMatch(userId: string, opponentClubId: string, idempotencyKey: string, scheduledAt = new Date()) {
   keyValid(idempotencyKey);
   if (scheduledAt.getTime() < Date.now() - 60_000 || scheduledAt.getTime() > Date.now() + 30 * DAY_MS) {
     throw new MatchServiceError("INVALID_MATCH_SCHEDULE");
