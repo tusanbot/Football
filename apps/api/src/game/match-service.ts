@@ -649,25 +649,31 @@ export async function submitMatchCheckpointDecision(userId: string, matchId: str
 }
 
 /** Atomically lease due runtimes; expired leases are recoverable after worker crashes. */
+/** Atomically lease due runtimes in one statement; SKIP LOCKED prevents competing workers from claiming the same match. */
 export async function claimDueMatchRuntimes(workerId: string, now = new Date(), leaseMs = 60_000, limit = 10) {
   if (!workerId.trim() || workerId.length > 100 || !Number.isInteger(leaseMs) || leaseMs < 1_000
     || !Number.isInteger(limit) || limit < 1 || limit > 100) throw new MatchServiceError("INVALID_MATCH_WORKER_LEASE");
-  const candidates = await prisma.matchRuntime.findMany({ where: {
-    status: { in: ["QUEUED", "RUNNING", "AWAITING_CHECKPOINT"] }, nextActionAt: { lte: now },
-    OR: [{ leaseExpiresAt: null }, { leaseExpiresAt: { lte: now } }],
-  }, orderBy: [{ nextActionAt: "asc" }, { createdAt: "asc" }], take: limit, select: { id: true } });
-  const claimed = [];
-  for (const candidate of candidates) {
-    const token = randomUUID(), leaseExpiresAt = new Date(now.getTime() + leaseMs);
-    const updated = await prisma.matchRuntime.updateMany({ where: {
-      id: candidate.id, status: { in: ["QUEUED", "RUNNING", "AWAITING_CHECKPOINT"] },
-      nextActionAt: { lte: now }, OR: [{ leaseExpiresAt: null }, { leaseExpiresAt: { lte: now } }],
-    }, data: { leaseOwner: workerId, leaseToken: token, leaseExpiresAt } });
-    if (updated.count !== 1) continue;
-    const runtime = await prisma.matchRuntime.findUnique({ where: { id: candidate.id } });
-    if (runtime) claimed.push({ runtime, lease: { owner: workerId, token, expiresAt: leaseExpiresAt } });
-  }
-  return claimed;
+  const leaseExpiresAt = new Date(now.getTime() + leaseMs);
+  const rows = await prisma.$queryRaw<Array<{ id: string; leaseToken: string; leaseExpiresAt: Date }>>(Prisma.sql`
+    WITH due AS (
+      SELECT "id" FROM "MatchRuntime"
+      WHERE "status"::text IN ('QUEUED', 'RUNNING', 'AWAITING_CHECKPOINT')
+        AND "nextActionAt" <= ${now}
+        AND ("leaseExpiresAt" IS NULL OR "leaseExpiresAt" <= ${now})
+      ORDER BY "nextActionAt" ASC, "createdAt" ASC
+      LIMIT ${limit}
+      FOR UPDATE SKIP LOCKED
+    )
+    UPDATE "MatchRuntime" AS runtime
+    SET "leaseOwner" = ${workerId}, "leaseToken" = gen_random_uuid()::text,
+        "leaseExpiresAt" = ${leaseExpiresAt}, "updatedAt" = NOW()
+    FROM due WHERE runtime."id" = due."id"
+    RETURNING runtime."id", runtime."leaseToken", runtime."leaseExpiresAt"
+  `);
+  return rows.map((row) => ({
+    runtime: { id: row.id },
+    lease: { owner: workerId, token: row.leaseToken, expiresAt: row.leaseExpiresAt },
+  }));
 }
 export async function releaseMatchRuntimeLease(runtimeId: string, leaseToken: string,
   nextActionAt: Date | null, lastError: string | null = null) {
@@ -1174,7 +1180,7 @@ export async function enqueueDueMatchRuntimes(now = new Date(), limit = 50) {
     include: { homeClub: { include: matchClubInclude }, awayClub: { include: matchClubInclude } },
     orderBy: { scheduledAt: "asc" }, take: limit,
   });
-  let created = 0;
+  const runtimes: Prisma.MatchRuntimeCreateManyInput[] = [];
   for (const fixture of fixtures) {
     try {
       const home = toSide(fixture.homeClub);
@@ -1183,29 +1189,20 @@ export async function enqueueDueMatchRuntimes(now = new Date(), limit = 50) {
         await simulateScheduledMatch(fixture.homeClub.ownerId, fixture.id, now);
         continue;
       }
-      const result = await prisma.matchRuntime.createMany({
-        data: [{
-          matchId: fixture.id, status: "QUEUED", currentMinute: 0,
-          nextActionAt: fixture.scheduledAt,
-          kickoffSnapshot: jsonSafe({ home, away }),
-          fallbackPlan: jsonSafe({
-            // Freeze each club's independently configured fallback plan at kickoff.
-            home: fixture.homeClub.matchFallbackPlan
-              ? fixture.homeClub.matchFallbackPlan
-              : { formation: home.formation, ...home.tactics },
-            away: fixture.awayClub.matchFallbackPlan
-              ? fixture.awayClub.matchFallbackPlan
-              : { formation: away.formation, ...away.tactics },
-          }),
-        }],
-        skipDuplicates: true,
+      runtimes.push({
+        matchId: fixture.id, status: "QUEUED", currentMinute: 0, nextActionAt: fixture.scheduledAt,
+        kickoffSnapshot: jsonSafe({ home, away }),
+        fallbackPlan: jsonSafe({
+          home: fixture.homeClub.matchFallbackPlan ? fixture.homeClub.matchFallbackPlan : { formation: home.formation, ...home.tactics },
+          away: fixture.awayClub.matchFallbackPlan ? fixture.awayClub.matchFallbackPlan : { formation: away.formation, ...away.tactics },
+        }),
       });
-      created += result.count;
     } catch {
       // A malformed squad must not block other due fixtures; retry on the next worker tick.
     }
   }
-  return created;
+  if (!runtimes.length) return 0;
+  return (await prisma.matchRuntime.createMany({ data: runtimes, skipDuplicates: true })).count;
 }
 
 type MatchLifecycleEventInput = {
@@ -1445,10 +1442,11 @@ export async function processDueMatchRuntimes(
   workerId = "match-worker",
   now = new Date(),
   limit = 10,
+  options: { enqueue?: boolean; claim?: boolean } = {},
 ): Promise<{ enqueued: number; claimed: number; advanced: number; waiting: number; settled: number; failed: number }> {
-  const enqueued = await enqueueDueMatchRuntimes(now, Math.max(limit, 10));
-  // The settlement transaction may wait 10s for a connection and run for 30s; keep the lease longer to prevent a duplicate claimant.
-  const claimed = await claimDueMatchRuntimes(workerId, now, 60_000, limit);
+  const enqueued = options.enqueue === false ? 0 : await enqueueDueMatchRuntimes(now, Math.max(limit, 10));
+  // The coordinator skips queue scans entirely when its scheduler snapshot says no work is due.
+  const claimed = options.claim === false ? [] : await claimDueMatchRuntimes(workerId, now, 60_000, limit);
   const totals = { enqueued, claimed: claimed.length, advanced: 0, waiting: 0, settled: 0, failed: 0 };
   for (const item of claimed) {
     try {
@@ -1456,16 +1454,11 @@ export async function processDueMatchRuntimes(
       if (outcome === "ADVANCED") totals.advanced++;
       else if (outcome === "WAITING") totals.waiting++;
       else totals.settled++;
-      if (outcome !== "SETTLED") {
-        const nextActionAt = outcome === "WAITING" ? new Date(now.getTime() + 5_000) : new Date(now.getTime() + 5_000);
-        await releaseMatchRuntimeLease(item.runtime.id, item.lease.token, nextActionAt, null);
-      }
+      if (outcome !== "SETTLED") await releaseMatchRuntimeLease(item.runtime.id, item.lease.token, new Date(now.getTime() + 5_000), null);
     } catch (error) {
       totals.failed++;
-      await releaseMatchRuntimeLease(
-        item.runtime.id, item.lease.token, new Date(now.getTime() + 10_000),
-        error instanceof Error ? error.message.slice(0, 500) : "MATCH_RUNTIME_WORKER_ERROR",
-      );
+      await releaseMatchRuntimeLease(item.runtime.id, item.lease.token, new Date(now.getTime() + 10_000),
+        error instanceof Error ? error.message.slice(0, 500) : "MATCH_RUNTIME_WORKER_ERROR");
     }
   }
   return totals;
