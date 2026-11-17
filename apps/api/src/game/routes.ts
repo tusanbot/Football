@@ -27,11 +27,31 @@ export function registerGameRoutes(app: FastifyInstance) {
     const user = await requireTelegramUser(request);
     if (!user) return reply.code(401).send({ error: "UNAUTHENTICATED" });
     const [club, wallets] = await Promise.all([
-      prisma.club.findUnique({ where: { ownerId: user.id }, select: { id: true, name: true, level: true, reputation: true, createdAt: true } }),
+      prisma.club.findUnique({
+        where: { ownerId: user.id },
+        select: {
+          id: true, name: true, level: true, reputation: true, createdAt: true,
+          competitionEntries: {
+            where: { competition: { status: "ACTIVE" } }, take: 1,
+            select: { competition: { select: { id: true, name: true } } },
+          },
+          pyramidLeagueEntries: {
+            where: { league: { competition: { status: "ACTIVE" } } }, take: 1,
+            select: { league: { select: { competition: { select: { id: true, name: true } } } } },
+          },
+        },
+      }),
       prisma.wallet.findMany({ where: { userId: user.id }, select: { asset: true, balance: true, version: true }, orderBy: { asset: "asc" } }),
     ]);
+    const activeCompetition = club?.competitionEntries[0]?.competition
+      ?? club?.pyramidLeagueEntries[0]?.league.competition
+      ?? null;
     return {
-      user: { ...user, createdAt: user.createdAt.toISOString() }, club,
+      user: { ...user, createdAt: user.createdAt.toISOString() },
+      club: club ? {
+        id: club.id, name: club.name, level: club.level, reputation: club.reputation,
+        createdAt: club.createdAt.toISOString(), activeCompetition,
+      } : null,
       wallets: wallets.map((wallet) => ({ asset: wallet.asset, balance: wallet.balance.toString(), version: wallet.version })),
     };
   });
@@ -41,9 +61,44 @@ export function registerGameRoutes(app: FastifyInstance) {
     if (!user) return reply.code(401).send({ error: "UNAUTHENTICATED" });
     const parsed = clubUpdateSchema.safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ error: "INVALID_CLUB_NAME", details: parsed.error.flatten() });
-    const club = await prisma.club.updateMany({ where: { ownerId: user.id }, data: { name: parsed.data.name } });
-    if (club.count !== 1) return reply.code(404).send({ error: "CLUB_NOT_FOUND" });
-    return { club: await prisma.club.findUnique({ where: { ownerId: user.id }, select: { id: true, name: true, level: true, reputation: true } }) };
+    try {
+      const result = await prisma.$transaction(async (tx) => {
+        const club = await tx.club.findUnique({
+          where: { ownerId: user.id },
+          select: {
+            id: true,
+            competitionEntries: {
+              where: { competition: { status: "ACTIVE" } }, take: 1,
+              select: { competition: { select: { id: true, name: true } } },
+            },
+            pyramidLeagueEntries: {
+              where: { league: { competition: { status: "ACTIVE" } } }, take: 1,
+              select: { league: { select: { competition: { select: { id: true, name: true } } } } },
+            },
+          },
+        });
+        if (!club) return { kind: "NOT_FOUND" as const };
+        const activeCompetition = club.competitionEntries[0]?.competition
+          ?? club.pyramidLeagueEntries[0]?.league.competition
+          ?? null;
+        if (activeCompetition) return { kind: "LOCKED" as const, activeCompetition };
+        const updated = await tx.club.update({
+          where: { id: club.id }, data: { name: parsed.data.name },
+          select: { id: true, name: true, level: true, reputation: true },
+        });
+        return { kind: "UPDATED" as const, club: updated };
+      }, { isolationLevel: "Serializable" });
+      if (result.kind === "NOT_FOUND") return reply.code(404).send({ error: "CLUB_NOT_FOUND" });
+      if (result.kind === "LOCKED") return reply.code(409).send({
+        error: "CLUB_EDIT_LOCKED_ACTIVE_LEAGUE", activeCompetition: result.activeCompetition,
+      });
+      return { club: result.club };
+    } catch (error) {
+      if (typeof error === "object" && error !== null && "code" in error && error.code === "P2034") {
+        return reply.code(409).send({ error: "CONCURRENT_MODIFICATION" });
+      }
+      throw error;
+    }
   });
 
   app.get("/v1/wallet", async (request, reply) => {
