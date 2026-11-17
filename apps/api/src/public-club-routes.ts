@@ -188,29 +188,67 @@ export function registerPublicClubRoutes(app: FastifyInstance) {
     const bytes = Buffer.from(body.data.base64, "base64");
     if (bytes.length > MAX_LOGO_BYTES || bytes.toString("base64").replace(/=+$/, "") !== body.data.base64.replace(/=+$/, "")
       || !isValidImage(bytes, body.data.mimeType)) return reply.code(400).send({ error: "INVALID_CLUB_LOGO" });
-    const club = await prisma.club.update({
-      where: { ownerId: user.id },
-      data: { logoData: body.data.base64, logoMime: body.data.mimeType },
-      select: { id: true, name: true },
-    }).catch((error: unknown) => {
-      if (typeof error === "object" && error !== null && "code" in error && error.code === "P2025") return null;
-      throw error;
-    });
-    if (!club) return reply.code(404).send({ error: "CLUB_NOT_FOUND" });
-    return { updated: true, club, logoUrl: "/v1/clubs/" + club.id + "/logo" };
+    const result = await prisma.$transaction(async (tx) => {
+      const current = await tx.club.findUnique({
+        where: { ownerId: user.id },
+        select: {
+          id: true,
+          competitionEntries: {
+            where: { competition: { status: "ACTIVE" } }, take: 1,
+            select: { competition: { select: { id: true, name: true } } },
+          },
+          pyramidLeagueEntries: {
+            where: { league: { competition: { status: "ACTIVE" } } }, take: 1,
+            select: { league: { select: { competition: { select: { id: true, name: true } } } } },
+          },
+        },
+      });
+      if (!current) return { kind: "NOT_FOUND" as const };
+      const activeCompetition = current.competitionEntries[0]?.competition
+        ?? current.pyramidLeagueEntries[0]?.league.competition
+        ?? null;
+      if (activeCompetition) return { kind: "LOCKED" as const, activeCompetition };
+      const club = await tx.club.update({
+        where: { id: current.id },
+        data: { logoData: body.data.base64, logoMime: body.data.mimeType },
+        select: { id: true, name: true },
+      });
+      return { kind: "UPDATED" as const, club };
+    }, { isolationLevel: "Serializable" });
+    if (result.kind === "NOT_FOUND") return reply.code(404).send({ error: "CLUB_NOT_FOUND" });
+    if (result.kind === "LOCKED") return reply.code(409).send({ error: "CLUB_EDIT_LOCKED_ACTIVE_LEAGUE", activeCompetition: result.activeCompetition });
+    return { updated: true, club: result.club, logoUrl: "/v1/clubs/" + result.club.id + "/logo" };
   });
 
   app.delete("/v1/club/logo", async (request, reply) => {
     const user = await requireTelegramUser(request);
     if (!user) return reply.code(401).send({ error: "UNAUTHENTICATED" });
     if (!await consumeAllianceActionRateLimit({ telegramUserId: user.telegramId, telegramGroupId: "global", action: "club-logo-delete", limit: 5 })) return reply.code(429).send({ error: "CLUB_LOGO_RATE_LIMITED", retryAfterSeconds: 60 });
-    const club = await prisma.club.update({
-      where: { ownerId: user.id }, data: { logoData: null, logoMime: null }, select: { id: true },
-    }).catch((error: unknown) => {
-      if (typeof error === "object" && error !== null && "code" in error && error.code === "P2025") return null;
-      throw error;
-    });
-    if (!club) return reply.code(404).send({ error: "CLUB_NOT_FOUND" });
+    const result = await prisma.$transaction(async (tx) => {
+      const current = await tx.club.findUnique({
+        where: { ownerId: user.id },
+        select: {
+          id: true,
+          competitionEntries: {
+            where: { competition: { status: "ACTIVE" } }, take: 1,
+            select: { competition: { select: { id: true, name: true } } },
+          },
+          pyramidLeagueEntries: {
+            where: { league: { competition: { status: "ACTIVE" } } }, take: 1,
+            select: { league: { select: { competition: { select: { id: true, name: true } } } } },
+          },
+        },
+      });
+      if (!current) return { kind: "NOT_FOUND" as const };
+      const activeCompetition = current.competitionEntries[0]?.competition
+        ?? current.pyramidLeagueEntries[0]?.league.competition
+        ?? null;
+      if (activeCompetition) return { kind: "LOCKED" as const, activeCompetition };
+      await tx.club.update({ where: { id: current.id }, data: { logoData: null, logoMime: null }, select: { id: true } });
+      return { kind: "UPDATED" as const };
+    }, { isolationLevel: "Serializable" });
+    if (result.kind === "NOT_FOUND") return reply.code(404).send({ error: "CLUB_NOT_FOUND" });
+    if (result.kind === "LOCKED") return reply.code(409).send({ error: "CLUB_EDIT_LOCKED_ACTIVE_LEAGUE", activeCompetition: result.activeCompetition });
     return { updated: true, removed: true };
   });
 }
