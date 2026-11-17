@@ -201,8 +201,10 @@ export default {
       if (request.method !== "POST") return new Response("Method not allowed", { status: 405, headers: { ...corsHeaders, allow: "POST, OPTIONS" } });
       const length = Number(request.headers.get("content-length") ?? "0");
       if (Number.isFinite(length) && length > 16_384) return new Response("Payload too large", { status: 413, headers: corsHeaders });
+      const rawBody = await request.text();
+      if (new TextEncoder().encode(rawBody).byteLength > 16_384) return new Response("Payload too large", { status: 413, headers: corsHeaders });
       let body: { initData?: unknown };
-      try { body = await request.json() as { initData?: unknown }; } catch { return new Response("Invalid JSON", { status: 400, headers: corsHeaders }); }
+      try { body = JSON.parse(rawBody) as { initData?: unknown }; } catch { return new Response("Invalid JSON", { status: 400, headers: corsHeaders }); }
       if (typeof body.initData !== "string") return new Response("Invalid initData", { status: 400, headers: corsHeaders });
       const userId = await verifyTelegramInitData(body.initData, env.TELEGRAM_BOT_TOKEN);
       if (!userId) return new Response("Invalid Telegram Mini App signature", { status: 401, headers: corsHeaders });
