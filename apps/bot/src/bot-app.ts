@@ -739,14 +739,32 @@ bot.callbackQuery(/^event-tournament:/, async (ctx) => {
         await ctx.answerCallbackQuery();
         await askTournamentText(ctx, state, "مقدار جایزه " + type + " را به عدد صحیح مثبت ارسال کن.");
       } else if (type === "STORE_ITEM") {
-        state.stage = "itemKey";
+        const store = await api<{ items: Array<{ key: string; name: string; price: string; asset: string }> }>("/v1/store", ctx.from.id);
+        const keyboard = new InlineKeyboard();
+        for (const item of store.items) keyboard.text(item.name.slice(0, 24) + " · " + item.asset, "event-tournament:item:" + item.key).row();
         await ctx.answerCallbackQuery();
-        await askTournamentText(ctx, state, "کلید فنی آیتم فروشگاه را ارسال کن؛ مثال: training_boost.");
+        await ctx.editMessageText("آیتم جایزه را از فهرست فروشگاه انتخاب کن:", { reply_markup: keyboard });
       } else {
-        state.stage = "specialPlayerId";
+        const store = await api<{ specialPlayers: Array<{ id: string; fullName: string; rarity: string; overall: number }> }>("/v1/store", ctx.from.id);
+        const keyboard = new InlineKeyboard();
+        for (const player of store.specialPlayers.slice(0, 25)) keyboard.text(player.fullName.slice(0, 22) + " · " + player.overall, "event-tournament:special-player:" + player.id).row();
         await ctx.answerCallbackQuery();
-        await askTournamentText(ctx, state, "شناسه بازیکن ویژه‌ای را که جایزه داده می‌شود ارسال کن.");
+        await ctx.editMessageText("بازیکن ویژه جایزه را انتخاب کن:", { reply_markup: keyboard });
       }
+      return;
+    }
+    if (action === "item" || action === "special-player") {
+      const state = pendingEventTournamentWizards.get(ctx.from.id);
+      if (!state) return ctx.answerCallbackQuery({ text: "فرایند ساخت منقضی شده است." });
+      const placement = tournamentPlacements[state.placementIndex]!;
+      if (action === "item" && value && /^[a-z0-9][a-z0-9_-]{1,39}$/i.test(value)) {
+        state.prizes.push({ placement, type: "STORE_ITEM", itemKey: value });
+      } else if (action === "special-player" && value) {
+        state.prizes.push({ placement, type: "SPECIAL_PLAYER", specialPlayerId: value });
+      } else return ctx.answerCallbackQuery({ text: "جایزه انتخاب‌شده معتبر نیست." });
+      state.pendingPrizeType = undefined; state.placementIndex += 1;
+      await ctx.answerCallbackQuery({ text: "جایزه ثبت شد." });
+      await askTournamentPrize(ctx, state);
       return;
     }
     if (action === "finalize") {
