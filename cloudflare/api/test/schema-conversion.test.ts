@@ -1,11 +1,13 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { convertPrismaSchema } from "../scripts/prisma-d1-schema.mjs";
 import { fromD1Integer, toD1Integer } from "../src/d1-integer.js";
 
 test("Prisma conversion inventories the complete game schema", () => {
-  const source = readFileSync("apps/api/prisma/schema.prisma", "utf8");
+  const schemaPath = fileURLToPath(new URL("../../../apps/api/prisma/schema.prisma", import.meta.url));
+  const source = readFileSync(schemaPath, "utf8");
   const converted = convertPrismaSchema(source);
   const totals = converted.inventory.totals;
 

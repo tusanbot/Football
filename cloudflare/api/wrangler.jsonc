@@ -7,12 +7,6 @@
   "compatibility_flags": ["nodejs_compat", "allow_eval_during_startup"],
   "vars": { "ENVIRONMENT": "development" },
   "keep_vars": true,
-  "hyperdrive": [
-    {
-      "binding": "HYPERDRIVE",
-      "id": "bac8e3a5fdd34a969913fd5a40c28737"
-    }
-  ],
   "dev": { "port": 8787 },
   "workers_dev": true,
   "preview_urls": false,

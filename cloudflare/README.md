@@ -9,7 +9,7 @@ The API Worker reuses the same Fastify route registration and Prisma domain code
 
 ## Database architecture
 
-The current game API remains PostgreSQL-backed. The API Worker accepts either a Cloudflare **Hyperdrive** binding named `HYPERDRIVE` (recommended), or a server-side `DATABASE_URL` secret using a PostgreSQL connection string.
+The game API remains PostgreSQL-backed. Cloudflare Workers connect **directly to Supabase's shared Transaction Pooler** over TLS using the server-side `DATABASE_URL` secret. Hyperdrive is not part of the target runtime and no `HYPERDRIVE` binding is required.
 
 The Worker creates a request-scoped Prisma Client using `@prisma/adapter-pg`, `pg`, and Prisma's JavaScript engine. AsyncLocalStorage isolates concurrent requests. The Node.js API uses the same adapter with its normal process-scoped client.
 
@@ -59,7 +59,7 @@ The API Worker imports the existing Fastify application and all route registrati
 
 Required secrets:
 
-- `DATABASE_URL`: PostgreSQL connection string, unless a `HYPERDRIVE` binding is attached.
+- `DATABASE_URL`: Supabase shared Transaction Pooler connection string copied from the Supabase Dashboard → Connect → Transaction pooler. It must use port `6543`, `pgbouncer=true`, and `sslmode=require`.
 - `TELEGRAM_BOT_TOKEN`: used by Telegram Mini App init-data verification.
 - `BOT_API_SECRET`: same server-to-server secret used by the existing Bot; at least 32 random characters.
 
@@ -69,19 +69,7 @@ Required variables:
 - `GAME_ADMIN_TELEGRAM_IDS`: comma-separated numeric Telegram administrator IDs.
 - `ENVIRONMENT`: use `development` for initial staging validation.
 
-Create a Cloudflare Hyperdrive configuration pointing at the existing **development PostgreSQL database**. Add its generated ID to `cloudflare/api/wrangler.jsonc` as the `HYPERDRIVE` binding:
-
-```json
-"hyperdrive": [
-  {
-    "binding": "HYPERDRIVE",
-    "id": "YOUR_DEVELOPMENT_HYPERDRIVE_ID",
-    "localConnectionString": "postgresql://postgres:postgres@127.0.0.1:5432/football_empire"
-  }
-]
-```
-
-Hyperdrive is preferred because it pools database connections across Worker requests. If you do not use Hyperdrive, set `DATABASE_URL` as a Worker secret instead. Never commit database credentials or put them in Wrangler `vars`. The D1 binding named `DB` is not used by this PostgreSQL compatibility runtime.
+Copy the shared **Transaction pooler** URI from Supabase Dashboard → Connect → Transaction pooler and store it as a Cloudflare Worker secret named `DATABASE_URL` (do not put it in Wrangler `vars`). Keep `DIRECT_URL` in the trusted migration environment only; use a direct or session-mode URL for Prisma migrations, never port `6543`. The runtime URL must include `?pgbouncer=true&sslmode=require` (merge these parameters with any existing query parameters). The Worker validates that non-development environments use the Supabase pooler hostname, port `6543`, and both parameters. The D1 binding named `DB` is not used by this PostgreSQL runtime.
 
 For local development, copy `cloudflare/api/.dev.vars.example` to `cloudflare/api/.dev.vars` and replace placeholders with local development values. The real `.dev.vars` file is Git-ignored. The API Worker uses local port `8787`; the OpenNext Worker preview uses `8788`. For a fully functional local Mini App/API loop, run the API Worker and the ordinary Next.js dev server (port `3000`) with `NEXT_PUBLIC_API_URL=http://localhost:8787`. The production OpenNext build requires an HTTPS API origin, so use the deployed staging API Worker origin when validating the Cloudflare Mini App build.
 

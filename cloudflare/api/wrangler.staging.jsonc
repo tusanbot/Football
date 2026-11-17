@@ -5,12 +5,6 @@
   "compatibility_date": "2026-11-17",
   "compatibility_flags": ["nodejs_compat", "allow_eval_during_startup"],
   "keep_vars": true,
-  "hyperdrive": [
-    {
-      "binding": "HYPERDRIVE",
-      "id": "3d3a95b34ee74952b551c0b28be61a00"
-    }
-  ],
   "dev": { "port": 8788 },
   "workers_dev": true,
   "preview_urls": false,
