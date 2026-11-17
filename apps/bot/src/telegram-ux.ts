@@ -78,7 +78,7 @@ export const PRIVATE_MENU_SUBMENUS = {
     rows: [
       [{ label: "🏟 مشخصات باشگاه", command: "club" }, { label: "📋 ترکیب اصلی", command: "lineup" }],
       [{ label: "🏗 امکانات باشگاه", command: "operations" }, { label: "🔎 استعدادیابی", command: "scout" }],
-      [{ label: "📈 توسعه بازیکنان", command: "development" }, { label: "✏️ تغییر نام باشگاه", command: "rename" }],
+      [{ label: "📈 توسعه بازیکنان", command: "development" }],
     ],
   },
   menu_players: {
@@ -99,7 +99,7 @@ export const PRIVATE_MENU_SUBMENUS = {
     title: "⚽ مسابقات",
     rows: [
       [{ label: "🗓 مسابقات من", command: "matches" }, { label: "⚔️ حریفان", command: "opponents" }],
-      [{ label: "🏆 لیگ‌ها", command: "leagues" }, { label: "🧩 قوانین رقابت", command: "competitionrules" }],
+      [{ label: "🏆 لیگ‌ها", command: "leagues" }, { label: "📊 جدول لیگ", command: "table" }],
     ],
   },
   menu_competitions: {
