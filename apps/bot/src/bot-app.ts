@@ -710,13 +710,14 @@ const adminOnlyInPrivate = (ctx: Context) => ctx.chat?.type === "private";
 bot.command("tournaments", async (ctx) => {
   if (!ctx.from || ctx.chat.type !== "private") return;
   try {
-    const data = await api<{ tournaments: Array<{ id: string; title: string; description: string; status: string; entryFeeAsset: string | null; entryFeeAmount: string; maxParticipants: number; participantCount: number; registrationEndsAt: string; startsAt: string; prizes: Array<{ placement: number; type: string; amount: string; itemKey: string | null; specialPlayerId: string | null }>; joined: boolean }> }>("/v1/event-tournaments", ctx.from.id);
+    const data = await api<{ tournaments: Array<{ id: string; title: string; description: string; status: string; competitionId: string | null; entryFeeAsset: string | null; entryFeeAmount: string; maxParticipants: number; participantCount: number; registrationEndsAt: string; startsAt: string; prizes: Array<{ placement: number; type: string; amount: string; itemKey: string | null; specialPlayerId: string | null }>; joined: boolean }> }>("/v1/event-tournaments", ctx.from.id);
     if (!data.tournaments.length) return ctx.reply("در حال حاضر تورنمنت مناسبتی فعالی وجود ندارد.");
     const keyboard = new InlineKeyboard();
     const lines = data.tournaments.map((item) => {
       const fee = item.entryFeeAmount === "0" ? "رایگان" : item.entryFeeAmount + " " + item.entryFeeAsset;
       const status = item.status === "REGISTRATION" ? "ثبت‌نام" : item.status === "ACTIVE" ? "در حال برگزاری" : "پایان‌یافته";
       if (item.status === "REGISTRATION" && !item.joined && item.participantCount < item.maxParticipants) keyboard.text("ثبت‌نام · " + item.title.slice(0, 24), "event-tournament:join:" + item.id).row();
+      if (item.joined && item.competitionId && ["ACTIVE", "COMPLETED"].includes(item.status)) keyboard.text("برنامه و جدول · " + item.title.slice(0, 18), "event-tournament:view:" + item.id).row();
       const prizeLines = item.prizes.map((prize) => {
         const place = prize.placement === 0 ? "سایرین" : "رتبه " + prize.placement;
         const reward = ["CASH", "GOLD", "HONOR"].includes(prize.type) ? prize.amount + " " + prize.type
@@ -751,6 +752,17 @@ bot.callbackQuery(/^event-tournament:/, async (ctx) => {
   const action = parts[1];
   const value = parts[2];
   try {
+    if (action === "view") {
+      const tournamentId = parts[2];
+      if (!tournamentId) return ctx.answerCallbackQuery({ text: "شناسه تورنمنت نامعتبر است." });
+      const data = await api<{ tournaments: Array<{ id: string; title: string; status: string; competitionId: string | null }> }>("/v1/event-tournaments", ctx.from.id);
+      const tournament = data.tournaments.find((item) => item.id === tournamentId);
+      if (!tournament?.competitionId) return ctx.answerCallbackQuery({ text: "برنامه مسابقات هنوز ساخته نشده است." });
+      const keyboard = new InlineKeyboard().text("بازی‌های هفته بعد", "leagueview:next:" + tournament.competitionId).text("جدول تورنمنت", "leagueview:table:" + tournament.competitionId).row().text("جدول گلزنان", "leagueview:scorers:" + tournament.competitionId);
+      await ctx.answerCallbackQuery();
+      await ctx.reply("🏆 تورنمنت «" + escapeHtml(tournament.title) + "»\nبرای مشاهده برنامه، جدول و گلزنان یکی از گزینه‌ها را انتخاب کن.", { parse_mode: "HTML", reply_markup: keyboard });
+      return;
+    }
     if (action === "join") {
       const tournamentId = parts[2];
       if (!tournamentId) return ctx.answerCallbackQuery({ text: "شناسه تورنمنت نامعتبر است." });
