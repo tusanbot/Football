@@ -2,14 +2,35 @@ import { AsyncLocalStorage } from "node:async_hooks";
 import { randomUUID } from "node:crypto";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@prisma/client";
-import { Pool } from "pg";
+import { Pool, type PoolConfig } from "pg";
 
 const requestPrisma = new AsyncLocalStorage<PrismaClient>();
+
+export function createPgPoolConfig(connectionString: string, maxConnections = 10): PoolConfig {
+  const parsed = new URL(connectionString);
+  const isSupabaseTransactionPooler = parsed.hostname.endsWith(".pooler.supabase.com") && parsed.port === "6543";
+  if (isSupabaseTransactionPooler) {
+    // Supavisor transaction mode is selected by port 6543. The pg driver adapter
+    // does not use Prisma's URL parser, so enforce TLS in node-postgres directly
+    // and normalize the Prisma pooler hint without requiring dashboard URL flags.
+    parsed.searchParams.delete("sslmode");
+    parsed.searchParams.delete("ssl");
+    parsed.searchParams.set("pgbouncer", "true");
+  }
+  return {
+    connectionString: parsed.toString(),
+    ...(isSupabaseTransactionPooler ? { ssl: { rejectUnauthorized: true } } : {}),
+    max: maxConnections,
+    idleTimeoutMillis: 5_000,
+    connectionTimeoutMillis: 10_000,
+    allowExitOnIdle: true,
+  };
+}
 
 export function createPrismaClient(connectionString = process.env.DATABASE_URL, maxConnections = 10): PrismaClient {
   if (!connectionString) throw new Error("DATABASE_URL is required.");
   if (!/^postgres(?:ql)?:\/\//i.test(connectionString)) throw new Error("The database connection must use PostgreSQL.");
-  const pool = new Pool({ connectionString, max: maxConnections, idleTimeoutMillis: 5_000, connectionTimeoutMillis: 10_000, allowExitOnIdle: true });
+  const pool = new Pool(createPgPoolConfig(connectionString, maxConnections));
   return new PrismaClient({ adapter: new PrismaPg(pool) });
 }
 
