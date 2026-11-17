@@ -47,7 +47,7 @@ No production Worker, primary Telegram bot webhook, BotFather setting, or produc
 - Telegram user IDs are HMAC-pseudonymized with a staging-only `ANALYTICS_HASH_SECRET`. The event table stores only the truncated 128-bit HMAC key, event/action category, chat type, source, and timestamp. Raw Telegram IDs, message text, raw callback payloads, Bot tokens, and raw `initData` are never persisted.
 - The API accepts analytics writes only with the private Bot/API shared secret, validates a strict event allowlist and payload bounds, and writes through Hyperdrive. RLS is enabled and browser-role grants are revoked on the analytics table.
 - Analytics writes are best-effort and do not block gameplay. Bot events are recorded only after successful handler completion. Cloudflare Worker observability separately provides request, CPU, duration, and exception metrics.
-- Business-event analytics (challenge creation/join, match participation), retention cohorts, and admin dashboards remain follow-up work.
+- Read-only SQL reports for starts, DAU, command usage, Mini App sessions, private/group activity, and first-week retention are in [docs/PILOT-ANALYTICS-QUERIES.md](./PILOT-ANALYTICS-QUERIES.md). Business-event analytics (challenge creation/join, match participation) and an in-app admin dashboard remain follow-up work.
 
 ### Mini App staging build
 
