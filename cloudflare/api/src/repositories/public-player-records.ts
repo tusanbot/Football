@@ -1,5 +1,5 @@
-import type { PublicPlayerRecord, PublicPlayerRecordMetric, PublicPlayerRecordRepository } from "../../../apps/api/src/players/public-record-routes.js";
-import type { SupabaseHttpClient } from "./supabase-http.js";
+import type { PublicPlayerRecord, PublicPlayerRecordMetric, PublicPlayerRecordRepository } from "../../../../apps/api/src/players/public-record-routes.js";
+import type { SupabaseHttpClient } from "../supabase-http.js";
 
 interface RpcPlayerRecord {
   playerId: unknown;
