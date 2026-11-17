@@ -75,6 +75,12 @@ interface ExecutionContextLike {
   waitUntil(promise: Promise<unknown>): void;
 }
 
+function schedulePilotAnalytics(promise: Promise<unknown>, context?: ExecutionContextLike) {
+  const safe = promise.catch(() => undefined);
+  if (context) context.waitUntil(safe);
+  else void safe;
+}
+
 let cachedBotId: number | undefined;
 let apiReadyUntil = 0;
 
@@ -193,7 +199,7 @@ async function prepareBot(env: Env) {
 }
 
 export default {
-  async fetch(request: Request, env: Env): Promise<Response> {
+  async fetch(request: Request, env: Env, context?: ExecutionContextLike): Promise<Response> {
     const url = new URL(request.url);
     if (url.pathname === "/health") return new Response("ok", { status: 200 });
     if (url.pathname === "/miniapp/launch") {
@@ -212,7 +218,7 @@ export default {
       if (typeof body.initData !== "string") return new Response("Invalid initData", { status: 400, headers: corsHeaders });
       const userId = await verifyTelegramInitData(body.initData, env.TELEGRAM_BOT_TOKEN);
       if (!userId) return new Response("Invalid Telegram Mini App signature", { status: 401, headers: corsHeaders });
-      await recordMiniAppSession(userId, env).catch(() => undefined);
+      schedulePilotAnalytics(recordMiniAppSession(userId, env), context);
       return new Response(null, { status: 204, headers: corsHeaders });
     }
     if (url.pathname !== "/telegram/webhook") return new Response("Not found", { status: 404 });
@@ -242,7 +248,7 @@ export default {
       const { bot } = await prepareBot(env);
       await bot.handleUpdate(update as never);
       // Count successfully handled updates only; failed handlers are retried by Telegram.
-      await recordPilotEvent(update, env).catch(() => undefined);
+      schedulePilotAnalytics(recordPilotEvent(update, env), context);
       await guard.fetch(new Request("https://bot-update-guard/complete", { method: "POST", body: JSON.stringify({ updateId }) }));
       return new Response("ok", { status: 200 });
     } catch (error) {
