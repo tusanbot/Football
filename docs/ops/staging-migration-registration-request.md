@@ -23,3 +23,6 @@ Retry requested after adding the shared domain package build to the staging depl
 
 
 Retry requested after routing Bot Worker deploy and secret commands through the shared Wrangler installation. [deploy-staging]
+
+
+Staging Bot deployment also omits the optional Analytics Engine binding and analytics secret. No Analytics Engine feature needs to be enabled for this staging run. [deploy-staging]
