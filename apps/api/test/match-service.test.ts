@@ -61,6 +61,11 @@ test("friendly match simulation settles score, events, fitness, gate revenue and
     const match = await prisma.footballMatch.findUniqueOrThrow({ where: { id: created.match.id } });
     assert.equal(match.status, "COMPLETED");
     assert.equal(match.simulationVersion, 1);
+    const resultNotifications = await prisma.matchResultNotification.findMany({
+      where: { matchId: match.id }, orderBy: { channel: "asc" }, select: { channel: true, telegramChatId: true },
+    });
+    assert.deepEqual(resultNotifications.map((item) => item.channel), ["AWAY", "HOME"]);
+    assert.ok(resultNotifications.every((item) => item.telegramChatId.length > 0));
     assert.equal(await prisma.matchEvent.count({ where: { matchId: match.id } }), result.events?.length ?? 0);
     assert.equal(await prisma.playerMatchPerformance.count({ where: { matchId: match.id } }), 36);
     assert.ok(await prisma.matchEvent.count({ where: { matchId: match.id, type: "SUBSTITUTION" } }) > 0);
