@@ -1136,7 +1136,10 @@ for (const menuKey of Object.keys(PRIVATE_MENU_SUBMENUS) as Array<keyof typeof P
   bot.command(menuKey, async (ctx) => {
     if (ctx.chat.type !== "private") return;
     const menu = PRIVATE_MENU_SUBMENUS[menuKey];
-    await ctx.reply(menu.title + "\nیکی از بخش‌های زیر را انتخاب کنید. برای بازگشت، دکمه «بازگشت به منوی اصلی» را بزنید.", {
+    await ctx.reply(menu.title + "\nبرای اجرای هر بخش، دکمه شیشه‌ای را انتخاب کن. صفحه‌کلید متنی پایین هم به‌عنوان مسیر جایگزین فعال است.", {
+      reply_markup: inlineMenuKeyboard(menuKey),
+    });
+    await ctx.reply("⌨️ منوی متنی جایگزین · " + menu.title, {
       reply_markup: privateMenuKeyboard(menuKey),
     });
   });
@@ -1318,13 +1321,14 @@ bot.command("club", async (ctx) => {
   if (ctx.chat.type !== "private") return ctx.reply("برای مشاهده باشگاه، دستور /club را در گفت‌وگوی خصوصی اجرا کنید.");
   try {
     const result = await api<{
-      club: { name: string; level: number; reputation: number; createdAt: string } | null;
+      club: { name: string; level: number; reputation: number; createdAt: string; activeCompetition: { id: string; name: string } | null } | null;
       user: { displayName: string };
     }>("/v1/me", ctx.from.id);
     if (!result.club) return ctx.reply("هنوز باشگاهی ندارید. برای ساخت باشگاه دستور /start را ارسال کنید.");
-    const plain = `🏟 باشگاه: ${result.club.name}\nمدیر: ${result.user.displayName}\nسطح: ${result.club.level}\nاعتبار: ${result.club.reputation}\nتاریخ تأسیس: ${new Date(result.club.createdAt).toLocaleDateString("fa-IR")}`;
-    const rich = `🏟 <b>${escapeHtml(result.club.name)}</b>\nمدیر: <b>${escapeHtml(result.user.displayName)}</b>\nسطح باشگاه: <b>${result.club.level}</b>\nاعتبار: <b>${result.club.reputation}</b>\nتاریخ تأسیس: ${new Date(result.club.createdAt).toLocaleDateString("fa-IR")}`;
-    await replyRich(ctx, rich, plain);
+    const lock = result.club.activeCompetition ? "\n🔒 ویرایش اطلاعات هویتی تا پایان رقابت «" + result.club.activeCompetition.name + "» غیرفعال است." : "\n✏️ امکان ویرایش اطلاعات باشگاه فعال است.";
+    const plain = `🏟 باشگاه: ${result.club.name}\nمدیر: ${result.user.displayName}\nسطح: ${result.club.level}\nاعتبار: ${result.club.reputation}\nتاریخ تأسیس: ${new Date(result.club.createdAt).toLocaleDateString("fa-IR")}` + lock;
+    const rich = `🏟 <b>${escapeHtml(result.club.name)}</b>\nمدیر: <b>${escapeHtml(result.user.displayName)}</b>\nسطح باشگاه: <b>${result.club.level}</b>\nاعتبار: <b>${result.club.reputation}</b>\nتاریخ تأسیس: ${new Date(result.club.createdAt).toLocaleDateString("fa-IR")}` + escapeHtml(lock);
+    await replyRich(ctx, rich, plain, new InlineKeyboard().text("⚙️ ویرایش اطلاعات باشگاه", "act:clubedit"));
   } catch (error) {
     await ctx.reply(`دریافت اطلاعات باشگاه ناموفق بود: ${error instanceof Error ? error.message : "خطای نامشخص"}`);
   }
