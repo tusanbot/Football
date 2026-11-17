@@ -765,7 +765,6 @@ bot.callbackQuery(/^event-tournament:/, async (ctx) => {
       const data = await api<{ tournaments: Array<{ id: string; title: string; status: string; participantCount: number }> }>("/v1/admin/event-tournaments", ctx.from.id);
       const keyboard = new InlineKeyboard().text("➕ ساخت تورنمنت", "event-tournament:create");
       const lines = data.tournaments.map((item) => {
-        if (item.status !== "COMPLETED" && item.status !== "CANCELLED") keyboard.row().text("ثبت نتایج · " + item.title.slice(0, 24), "event-tournament:finalize:" + item.id);
         return "• " + item.title + " · " + item.status + " · " + item.participantCount + " شرکت‌کننده\nID: " + item.id;
       });
       await ctx.answerCallbackQuery();
