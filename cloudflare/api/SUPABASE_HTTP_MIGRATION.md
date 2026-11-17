@@ -57,3 +57,12 @@ The Worker repository calls the `get_public_player_records` PostgreSQL RPC. The 
 Until the two Worker secrets are configured, the Worker route intentionally falls back to the existing Prisma implementation. This preserves the current runtime while the route is validated; it does not mean the Worker is fully migrated. No Wrangler configuration, secrets, webhook, DNS, or deployment are changed by this code migration.
 
 The repository tests validate RPC arguments, numeric conversion, and malformed-response rejection. The migration must be applied to the target Supabase database before enabling the Worker secrets for this route. Compare the Prisma and RPC route responses against the same database fixture before enabling it in staging.
+
+
+## Second migrated route: season awards
+
+The `GET /v1/seasons/:season/awards` route now supports an injected repository. The standard Fastify runtime retains its Prisma repository; the Cloudflare Worker uses `SupabaseSeasonAwardRepository` whenever both Supabase secrets are present.
+
+The `get_season_award_data(p_season)` RPC returns season-scoped completed-match performance aggregates, manual player awards, and the completed-match count in one HTTPS RPC. The existing TypeScript award-selection logic remains authoritative for minimum appearances, position-group team-of-season slots, tie-breaks, and leaderboards. Manual awards are included unchanged. The migration is `20261118100000_season_award_data_rpc`; it is `SECURITY INVOKER` and executable only by `service_role` (with public, anon, and authenticated execution revoked).
+
+Tests cover the repository RPC contract, numeric conversion and malformed payload rejection, plus the route response envelope, team selection, manual awards, and query validation. As with the first route, apply the migration to an isolated target and compare Prisma and RPC-backed responses against the same fixture before enabling Supabase secrets in staging. No remote migration, secrets, Worker deployment, or production change is part of this code commit.
