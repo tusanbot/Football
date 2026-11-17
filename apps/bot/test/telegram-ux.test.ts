@@ -42,7 +42,8 @@ test("every private keyboard button resolves to a registered command", () => {
 });
 
 test("private menu label matching tolerates whitespace and Persian Arabic variants", () => {
-  assert.equal(resolvePrivateMenuCommand("  🏟 باشگاه  "), "club");
+  assert.equal(resolvePrivateMenuCommand("  🏟 مدیریت باشگاه  "), "menu_club");
+  assert.equal(resolvePrivateMenuCommand("🏟 مشخصات باشگاه"), "club");
   assert.equal(resolvePrivateMenuCommand("💰 کیف پول"), "wallet");
   assert.equal(resolvePrivateMenuCommand("❔ راهنما"), "help");
 });
