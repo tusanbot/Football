@@ -751,7 +751,7 @@ export async function simulateScheduledMatch(userId: string, matchId: string, no
     if (claimed.count !== 1) throw new MatchServiceError("MATCH_ALREADY_SIMULATED");
     const challengeForGroup = await tx.friendlyChallenge.findUnique({
       where: { matchId: match.id },
-      select: { group: { select: { telegramId: true } } },
+      select: { id: true, group: { select: { telegramId: true } } },
     });
     await tx.matchResultNotification.createMany({
       data: [
@@ -763,6 +763,27 @@ export async function simulateScheduledMatch(userId: string, matchId: string, no
       ],
       skipDuplicates: true,
     });
+    if (challengeForGroup) {
+      const honorAwards = winnerClubId
+        ? [{ clubId: winnerClubId, amount: 3n }]
+        : [{ clubId: home.id, amount: 1n }, { clubId: away.id, amount: 1n }];
+      for (const award of honorAwards) {
+        const userId = award.clubId === home.id ? home.ownerId : away.ownerId;
+        await tx.wallet.upsert({
+          where: { userId_asset: { userId, asset: "HONOR" } },
+          create: { userId, asset: "HONOR", balance: award.amount },
+          update: { balance: { increment: award.amount }, version: { increment: 1 } },
+        });
+        await tx.ledgerTransaction.create({
+          data: {
+            idempotencyKey: `friendly-challenge-honor:${match.id}:${award.clubId}`,
+            userId, asset: "HONOR", direction: "CREDIT", amount: award.amount,
+            reason: "FRIENDLY_CHALLENGE_HONOR_REWARD",
+            referenceType: "FRIENDLY_CHALLENGE", referenceId: challengeForGroup.id,
+          },
+        });
+      }
+    }
     if (isRuntimeSettlement && runtime) {
       const runtimeCompleted = await tx.matchRuntime.updateMany({
         where: { id: runtime.id, status: "RUNNING", currentMinute: 90 },
