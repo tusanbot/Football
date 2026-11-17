@@ -43,3 +43,7 @@
 - Club name and logo editing are locked server-side while the club is entered in an active competition. The Bot must show the active competition that causes the lock.
 - Group /start exposes status, challenge invitation, group challenge creation/join, group league creation/join, club connection, and group registration.
 - Deploy the API and Bot Workers independently to staging. API-only deploys must preserve existing secrets and must never rotate the Telegram webhook secret without a matching explicit webhook registration.
+
+## Release verification
+- This change set passed the repository CI workflow, including Bot tests, API tests, TypeScript checks, Cloudflare Worker dry-runs, and the monorepo build.
+- Deploy API and Bot code to isolated staging Workers independently; do not rotate Bot/API secrets or change the Telegram webhook as part of a code-only release.
