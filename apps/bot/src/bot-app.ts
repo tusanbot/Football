@@ -46,6 +46,7 @@ if (webAppUrl) {
 const bot = new Bot(token);
 const pendingClubNameEdits = new Map<number, { promptMessageId: number; expiresAt: number }>();
 const pendingGroupCreations = new Map<number, { chatId: number; promptMessageId: number; kind: "challenge" | "league"; expiresAt: number }>();
+const pendingLineupSelections = new Map<number, { formation: string; playerIds: string[]; lineupVersion: number; players: Array<{ id: string; firstName: string; lastName: string; position: string; overall: number }> }>();
 
 bot.use(async (ctx, next) => {
   const originalReply = ctx.reply.bind(ctx);
@@ -1666,23 +1667,90 @@ bot.command("lineup", async (ctx) => {
 
 bot.command("setlineup", async (ctx) => {
   if (!ctx.from) return;
-  if (ctx.chat.type !== "private") return ctx.reply("برای تغییر ترکیب اصلی، دستور /setlineup را در گفت‌وگوی خصوصی اجرا کنید.");
-  const parts = String(ctx.match ?? "").trim().split(/\s+/);
-  const [formation, ...playerIds] = parts;
-  if (!formation || playerIds.length !== 11) {
-    return ctx.reply("روش استفاده: /setlineup 4-3-3 PLAYER_ID_1 ... PLAYER_ID_11\nآرایش‌های مجاز: 4-3-3، 4-4-2، 3-5-2، 4-2-3-1");
+  if (ctx.chat.type !== "private") return ctx.reply("برای تغییر ترکیب اصلی، این بخش را در گفت‌وگوی خصوصی باز کنید.");
+  const parts = String(ctx.match ?? "").trim().split(/\\s+/).filter(Boolean);
+  if (parts.length) {
+    const [formation, ...playerIds] = parts;
+    if (!formation || playerIds.length !== 11) {
+      return ctx.reply("روش قدیمی همچنان فعال است: /setlineup 4-3-3 PLAYER_ID_1 ... PLAYER_ID_11");
+    }
+    try {
+      const current = await api<{ club: { lineupVersion: number } }>("/v1/club/lineup", ctx.from.id);
+      await api("/v1/club/lineup", ctx.from.id, "PUT", { formation, playerIds, expectedVersion: current.club.lineupVersion });
+      return ctx.reply("ترکیب اصلی و آرایش ذخیره شد. برای مشاهده نتیجه از /lineup استفاده کنید.");
+    } catch (error) {
+      return ctx.reply("ذخیره ترکیب ناموفق بود: " + (error instanceof Error ? error.message : "خطای نامشخص"));
+    }
   }
   try {
-    const current = await api<{ club: { lineupVersion: number } }>("/v1/club/lineup", ctx.from.id);
-    await api("/v1/club/lineup", ctx.from.id, "PUT", {
-      formation, playerIds, expectedVersion: current.club.lineupVersion,
-    });
-    await ctx.reply("ترکیب اصلی و آرایش ذخیره شد. برای مشاهده نتیجه از /lineup استفاده کنید.");
+    const [current, roster] = await Promise.all([
+      api<{ club: { lineupVersion: number } }>("/v1/club/lineup", ctx.from.id),
+      api<{ club: { players: Array<{ id: string; firstName: string; lastName: string; position: string; overall: number; status: string }> } }>("/v1/club/development", ctx.from.id),
+    ]);
+    const players = roster.club.players.filter((player) => player.status === "ACTIVE");
+    if (players.length < 11) return ctx.reply("برای ثبت ترکیب حداقل ۱۱ بازیکن فعال لازم است.");
+    pendingLineupSelections.set(ctx.from.id, { formation: "4-3-3", playerIds: [], lineupVersion: current.club.lineupVersion, players });
+    const keyboard = new InlineKeyboard()
+      .text("4-3-3", "lineup:formation:4-3-3").text("4-4-2", "lineup:formation:4-4-2").row()
+      .text("3-5-2", "lineup:formation:3-5-2").text("4-2-3-1", "lineup:formation:4-2-3-1").row()
+      .text("لغو", "lineup:cancel");
+    await ctx.reply("🧩 <b>تنظیم ترکیب اصلی</b>\nابتدا آرایش تیم را انتخاب کن؛ سپس ۱۱ بازیکن را با دکمه انتخاب می‌کنی.", { parse_mode: "HTML", reply_markup: keyboard });
   } catch (error) {
-    await ctx.reply(`ذخیره ترکیب ناموفق بود: ${error instanceof Error ? error.message : "خطای نامشخص"}`);
+    await ctx.reply("دریافت اطلاعات ترکیب ناموفق بود: " + (error instanceof Error ? error.message : "خطای نامشخص"));
   }
 });
 
+bot.callbackQuery(/^lineup:/, async (ctx) => {
+  if (!ctx.from || ctx.chat?.type !== "private") return ctx.answerCallbackQuery({ text: "تنظیم ترکیب فقط در گفت‌وگوی خصوصی مجاز است." });
+  const state = pendingLineupSelections.get(ctx.from.id);
+  if (!state) return ctx.answerCallbackQuery({ text: "این فرایند منقضی شده است؛ دوباره تنظیم ترکیب را باز کن." });
+  const [, action, value] = ctx.callbackQuery.data.split(":");
+  if (action === "cancel") {
+    pendingLineupSelections.delete(ctx.from.id);
+    await ctx.answerCallbackQuery({ text: "فرایند لغو شد." });
+    await ctx.editMessageText("تنظیم ترکیب لغو شد.");
+    return;
+  }
+  if (action === "formation") {
+    if (!["4-3-3", "4-4-2", "3-5-2", "4-2-3-1"].includes(value ?? "")) return ctx.answerCallbackQuery({ text: "آرایش معتبر نیست." });
+    state.formation = value!;
+    state.playerIds = [];
+  } else if (action === "player") {
+    const player = state.players.find((item) => item.id === value);
+    if (!player) return ctx.answerCallbackQuery({ text: "بازیکن معتبر نیست." });
+    if (state.playerIds.includes(player.id)) return ctx.answerCallbackQuery({ text: "این بازیکن قبلاً انتخاب شده است." });
+    if (state.playerIds.length >= 11) return ctx.answerCallbackQuery({ text: "ترکیب ۱۱ بازیکن دارد." });
+    state.playerIds.push(player.id);
+  } else if (action === "undo") {
+    state.playerIds.pop();
+  } else if (action === "save") {
+    if (state.playerIds.length !== 11) return ctx.answerCallbackQuery({ text: "ابتدا ۱۱ بازیکن انتخاب کن." });
+    try {
+      await api("/v1/club/lineup", ctx.from.id, "PUT", { formation: state.formation, playerIds: state.playerIds, expectedVersion: state.lineupVersion });
+      pendingLineupSelections.delete(ctx.from.id);
+      await ctx.answerCallbackQuery({ text: "ترکیب ذخیره شد." });
+      await ctx.editMessageText("✅ ترکیب " + state.formation + " با ۱۱ بازیکن ذخیره شد. برای مشاهده /lineup را باز کن.");
+      return;
+    } catch (error) {
+      await ctx.answerCallbackQuery({ text: "ذخیره ترکیب ناموفق بود." });
+      await ctx.reply("سرور ترکیب را نپذیرفت: " + (error instanceof Error ? error.message : "خطای نامشخص") + "\nانتخاب‌ها را بررسی کن و دوباره تلاش کن.");
+      return;
+    }
+  } else {
+    return ctx.answerCallbackQuery({ text: "گزینه معتبر نیست." });
+  }
+  const selected = new Set(state.playerIds);
+  const keyboard = new InlineKeyboard();
+  for (const player of state.players.filter((item) => !selected.has(item.id))) {
+    keyboard.text((player.firstName + " " + player.lastName).slice(0, 28) + " · " + player.position + " · " + player.overall, "lineup:player:" + player.id).row();
+  }
+  if (state.playerIds.length) keyboard.text("↩️ حذف آخرین انتخاب", "lineup:undo");
+  if (state.playerIds.length === 11) keyboard.text("✅ ذخیره ترکیب", "lineup:save");
+  keyboard.row().text("لغو", "lineup:cancel");
+  const picked = state.players.filter((item) => selected.has(item.id)).map((item, index) => (index + 1) + ". " + item.firstName + " " + item.lastName).join("\\n");
+  await ctx.answerCallbackQuery({ text: action === "formation" ? "آرایش انتخاب شد." : "انتخاب ثبت شد." });
+  await ctx.editMessageText("🧩 <b>آرایش " + state.formation + "</b>\nبازیکنان انتخاب‌شده: " + state.playerIds.length + "/11\n" + (picked || "هنوز بازیکنی انتخاب نشده است.") + "\n\nبازیکن بعدی را انتخاب کن:", { parse_mode: "HTML", reply_markup: keyboard });
+});
 bot.command("development", async (ctx) => {
   if (!ctx.from) return;
   if (ctx.chat.type !== "private") return ctx.reply("برای مشاهده وضعیت توسعه، دستور /development را در گفت‌وگوی خصوصی اجرا کنید.");
