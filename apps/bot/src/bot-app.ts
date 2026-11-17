@@ -371,6 +371,10 @@ function privateMenuKeyboard(menu?: keyof typeof PRIVATE_MENU_SUBMENUS) {
 function inlineMenuKeyboard(menu?: keyof typeof PRIVATE_MENU_SUBMENUS) {
   const keyboard = new InlineKeyboard();
   if (menu) {
+    for (const row of PRIVATE_MENU_SUBMENUS[menu].rows) {
+      for (const item of row) keyboard.text(item.label, "act:" + item.command);
+      keyboard.row();
+    }
     keyboard.text("↩️ بازگشت به منوی اصلی", "nav:menu");
   } else {
     const entries = Object.entries(PRIVATE_MENU_SUBMENUS);
@@ -378,10 +382,31 @@ function inlineMenuKeyboard(menu?: keyof typeof PRIVATE_MENU_SUBMENUS) {
       keyboard.text(item.title, "nav:" + key);
       if (index % 2 === 1) keyboard.row();
     });
-    keyboard.text("❔ راهنما", "nav:help");
+    keyboard.row().text("🛍 فروشگاه", "act:store").text("⚔️ ساخت چالش", "act:challenge");
+    keyboard.row().text("🏆 رقابت‌ها", "act:leagues").text("👥 حریفان", "act:opponents");
+    keyboard.row().text("❔ راهنما", "nav:help");
   }
   if (webAppUrl) keyboard.row().webApp("🎮 ورود به بازی", webAppUrl);
   return keyboard;
+}
+function groupStartKeyboard() {
+  return new InlineKeyboard()
+    .text("🏟 وضعیت گروه", "g:status").text("⚔️ ساخت چالش", "g:challenge").row()
+    .text("🎯 چالش‌های گروه", "g:challenges").text("🏆 لیگ‌های گروه", "g:leagues").row()
+    .text("➕ عضویت باشگاه", "g:join").text("🛠 ثبت گروه", "g:register");
+}
+async function dispatchMenuCommand(ctx: Context, command: string) {
+  if (!ctx.chat || !ctx.from || ctx.chat.type !== "private" || !/^[a-z0-9_-]{1,32}$/.test(command)) return;
+  const callbackMessage = ctx.callbackQuery?.message;
+  const messageId = callbackMessage && "message_id" in callbackMessage ? callbackMessage.message_id : 1;
+  const syntheticUpdate = {
+    update_id: ctx.update.update_id + 1,
+    message: {
+      message_id: messageId, date: Math.floor(Date.now() / 1000), chat: ctx.chat, from: ctx.from,
+      text: "/" + command, entities: [{ type: "bot_command", offset: 0, length: command.length + 1 }],
+    },
+  } as Parameters<typeof bot.handleUpdate>[0];
+  await bot.handleUpdate(syntheticUpdate);
 }
 function cash(value: string) { return BigInt(value).toLocaleString("fa-IR"); }
 function playerName(player: ApiPlayer) { return `${player.firstName} ${player.lastName}`; }
@@ -421,9 +446,16 @@ bot.command("miniapp", async (ctx) => {
 
 bot.command("start", async (ctx) => {
   if (!ctx.from) return;
-  if (ctx.chat.type !== "private") {
-    return ctx.reply("برای ساخت یا مدیریت باشگاه، ربات Football Empire را در گفت‌وگوی خصوصی باز کنید.");
+  if (ctx.chat.type === "group" || ctx.chat.type === "supergroup") {
+    await ctx.reply(
+      "⚽ <b>Football Empire وارد زمین شد!</b>\n\n" +
+      "اینجا می‌توانید با اعضای گروه رقابت کنید، چالش بسازید، در لیگ گروهی شرکت کنید و امتیاز خزانه گروه را بالا ببرید.\n" +
+      "برای عملیات شخصی باشگاه، دکمه «ورود به بازی» را بزنید و ربات را در خصوصی باز کنید.",
+      { parse_mode: "HTML", reply_markup: groupStartKeyboard() },
+    );
+    return;
   }
+  if (ctx.chat.type !== "private") return;
 
   try {
     const account = await api<{
@@ -456,11 +488,11 @@ bot.command("start", async (ctx) => {
     const keyboard = privateMenuKeyboard();
 
     await ctx.reply(
-      `سلام ${account.user.displayName}، به Football Empire خوش آمدید.\n\n` +
-      `باشگاه: ${account.club?.name ?? "هنوز ساخته نشده"} · سطح ${account.club?.level ?? 1}\n` +
-      `موجودی آغازین: ${cash(cashBalance)} کش · ${cash(goldBalance)} طلا\n\n` +
-      `مدیریت باشگاه از همین ربات یا نسخه مینی‌اپ امکان‌پذیر است. برای شروع، یکی از گزینه‌های منوی پایین را انتخاب کنید.\n\n` +
-      `دستورهای پرکاربرد: /club /wallet /store /inventory /players /lineup /matches /leagues /market /help`,
+      `سلام ${account.user.displayName}، به Football Empire خوش آمدید!\n\n` +
+      `🏟 باشگاه: ${account.club?.name ?? "هنوز ساخته نشده"} · سطح ${account.club?.level ?? 1}\n` +
+      `💰 سرمایه: ${cash(cashBalance)} کش · ${cash(goldBalance)} طلا\n\n` +
+      `🎯 مأموریت شروع: ترکیب ۱۱ نفره‌ات را آماده کن، وارد یک رقابت شو و اولین چالش دوستانه‌ات را بساز.\n` +
+      `هر انتخاب را می‌توانی با دکمه انجام بدهی؛ دستورات متنی هم همچنان فعال‌اند.`,
       { reply_markup: keyboard },
     );
     await ctx.reply("🧭 <b>منوی شیشه‌ای Football Empire</b>\\nیک دسته را برای ادامه انتخاب کنید. صفحه‌کلید متنی دسته‌بندی‌شده نیز برای دسترسی جایگزین فعال است.", {
