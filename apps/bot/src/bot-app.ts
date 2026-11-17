@@ -1238,9 +1238,12 @@ bot.callbackQuery(/^league:/, async (ctx) => {
   const [, action, id] = ctx.callbackQuery.data.split(":");
   try {
     if (action === "join" && id) {
-      const result = await api<{joined:boolean;replayed:boolean;teams:number}>(`/v1/competitions/${encodeURIComponent(id)}/join`, ctx.from.id, "POST", {});
-      await ctx.answerCallbackQuery({ text: "عضویت در رقابت ثبت شد." });
-      await ctx.reply("🏆 ثبت‌نام شما در رقابت انجام شد. تعداد تیم‌ها: " + result.teams + (result.replayed ? " · عضویت قبلاً ثبت شده بود." : ""));
+      const result = await api<{joined:boolean;replayed:boolean;teams:number;autoStarted?:boolean;fixturesCreated?:number;rounds?:number;startsAt?:string;requiredTeams?:number}>(`/v1/competitions/${encodeURIComponent(id)}/join`, ctx.from.id, "POST", {});
+      await ctx.answerCallbackQuery({ text: result.autoStarted ? "ظرفیت تکمیل شد؛ برنامه مسابقات ساخته شد." : "عضویت در رقابت ثبت شد." });
+      await ctx.reply("🏆 ثبت‌نام شما در رقابت انجام شد. تعداد تیم‌ها: " + result.teams
+        + (result.autoStarted ? "\n🚦 ظرفیت تکمیل شد؛ " + result.fixturesCreated + " بازی در " + result.rounds + " هفته قرعه‌کشی شد. شروع: " + new Date(result.startsAt!).toLocaleString("fa-IR", { timeZone: "Asia/Tehran" })
+          : result.requiredTeams ? "\nتا شروع خودکار " + (result.requiredTeams - result.teams) + " تیم دیگر لازم است." : "")
+        + (result.replayed ? " · عضویت قبلاً ثبت شده بود." : ""));
       return;
     }
     if (action === "start" && id) {
@@ -3189,8 +3192,11 @@ bot.command("leagues", async (ctx) => {
     const result = await api<{ competitions: Array<{ id: string; name: string; season: number; format: string; status?: string; teams: number; maxTeams: number; joined: boolean; isCreator: boolean }> }>("/v1/competitions", ctx.from.id);
     const keyboard = new InlineKeyboard();
     for (const item of result.competitions.slice(0, 20)) {
-      if (item.joined && item.isCreator && item.teams >= 4) keyboard.text("🚦 آغاز · " + item.name.slice(0, 20), "league:start:" + item.id).row();
-      else if (!item.joined && item.teams < item.maxTeams && (!item.status || item.status === "REGISTRATION")) keyboard.text("➕ عضویت · " + item.name.slice(0, 24), "league:join:" + item.id).row();
+      if (!item.joined && item.teams < item.maxTeams && (!item.status || item.status === "REGISTRATION")) keyboard.text("➕ عضویت · " + item.name.slice(0, 24), "league:join:" + item.id).row();
+      if (item.joined && (item.status === "ACTIVE" || item.status === "COMPLETED")) {
+        keyboard.text("بازی بعدی", "leagueview:next:" + item.id).text("جدول", "leagueview:table:" + item.id)
+          .row().text("گلزنان", "leagueview:scorers:" + item.id);
+      }
     }
     keyboard.text("🏅 درخواست لیگ پایه", "league:apply:1").text("⚔️ ساخت چالش", "act:challenge");
     const lines = result.competitions.map((item) =>
