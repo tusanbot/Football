@@ -704,6 +704,7 @@ model FootballMatch {
   runtime       MatchRuntime?
   checkpoints   MatchTacticalCheckpoint[]
   resultNotifications MatchResultNotification[]
+  lifecycleNotifications MatchLifecycleNotification[]
   @@index([homeClubId, scheduledAt, status])
   @@index([awayClubId, scheduledAt, status])
   @@index([competitionId, round])
