@@ -87,6 +87,7 @@ export function registerMatchNotificationRoutes(app: FastifyInstance) {
         where: {
           ...(parsed.data.checkpointId ? { id: parsed.data.checkpointId } : {}),
           status: "OPEN",
+          openedAt: { lte: now },
           decisionDeadlineAt: { gt: now },
           OR: [
             { homeBotNotifiedAt: null, OR: [
