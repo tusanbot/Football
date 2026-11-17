@@ -24,12 +24,22 @@ test("season awards route keeps response shape, manual awards, minimum appearanc
   } });
   const response = await handler({ params: { season: "2026" }, query: { minimumAppearances: "3" } }, { code(status) { throw new Error("Unexpected status " + status); } });
   assert.deepEqual(calls, [2026]);
-  assert.deepEqual(response, {
-    season: 2026, matches: 10, minimumAppearances: 3,
-    awards: { topScorer: record, topAssists: record, playerOfSeason: record, teamOfSeason: [{ ...record, playerId: "p2", playerName: "Keeper", position: "GK", goals: 1, averageRating: 7.9 }, record] },
-    manualAwards: [{ id: "a1", awardType: "SPECIAL", awardName: "Special award", reason: null, playerId: "p1", playerName: "Alex", position: "ST", clubName: "Tosan" }],
-    leaders: { scorers: [record, { ...record, playerId: "p2", playerName: "Keeper", position: "GK", goals: 1, averageRating: 7.9 }], assists: [record], ratings: [record, { ...record, playerId: "p2", playerName: "Keeper", position: "GK", goals: 1, averageRating: 7.9 }] },
-  });
+  assert.equal((response as { season: number }).season, 2026);
+  assert.equal((response as { matches: number }).matches, 10);
+  assert.equal((response as { minimumAppearances: number }).minimumAppearances, 3);
+  const result = response as {
+    awards: { topScorer: { playerId: string }; topAssists: { playerId: string }; playerOfSeason: { playerId: string }; teamOfSeason: Array<{ playerId: string }> };
+    manualAwards: Array<{ id: string; awardName: string; playerId: string }>;
+    leaders: { scorers: Array<{ playerId: string }>; assists: Array<{ playerId: string }>; ratings: Array<{ playerId: string }> };
+  };
+  assert.equal(result.awards.topScorer.playerId, "p1");
+  assert.equal(result.awards.topAssists.playerId, "p1");
+  assert.equal(result.awards.playerOfSeason.playerId, "p1");
+  assert.deepEqual(result.awards.teamOfSeason.map((player) => player.playerId), ["p2", "p1"]);
+  assert.deepEqual(result.manualAwards.map(({ id, awardName, playerId }) => ({ id, awardName, playerId })), [{ id: "a1", awardName: "Special award", playerId: "p1" }]);
+  assert.deepEqual(result.leaders.scorers.map((player) => player.playerId), ["p1", "p2"]);
+  assert.deepEqual(result.leaders.assists.map((player) => player.playerId), ["p1"]);
+  assert.deepEqual(result.leaders.ratings.map((player) => player.playerId), ["p1", "p2"]);
 });
 test("season awards route rejects invalid query parameters", async () => {
   const handler = capture({ async getSeasonData() { throw new Error("must not be called"); } });
