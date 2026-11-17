@@ -1444,7 +1444,7 @@ async function processClaimedMatchRuntime(
   return "ADVANCED";
 }
 
-/** Durable worker tick. Checkpoints are polled every five seconds so two early replies resume immediately. */
+/** Durable worker tick. The match clock advances at one real second per simulated minute; tactical windows are capped at five seconds. */
 export async function processDueMatchRuntimes(
   workerId = "match-worker",
   now = new Date(),
