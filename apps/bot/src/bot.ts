@@ -10,10 +10,11 @@ const webAppUrl = process.env.TELEGRAM_WEB_APP_URL;
 if (!token || !apiUrl || !botApiSecret) throw new Error("TELEGRAM_BOT_TOKEN, FOOTBALL_API_URL, and BOT_API_SECRET are required.");
 
 const { bot, runBackgroundJobs, setBotTelegramId } = createBotApp({
-  token, apiUrl, botApiSecret, webAppUrl, environment: process.env.NODE_ENV,
+  token, apiUrl, botApiSecret, ...(webAppUrl ? { webAppUrl } : {}), environment: process.env.NODE_ENV,
 });
 const apiReadiness = await fetch(new URL("/ready", apiUrl), { signal: AbortSignal.timeout(15_000) });
 if (!apiReadiness.ok) throw new Error("Football Empire API is not ready (HTTP " + apiReadiness.status + ").");
+bot.catch((error) => console.error("Telegram bot error:", error));
 const identity = await bot.api.getMe();
 setBotTelegramId(identity.id);
 const identityCheck = await fetch(new URL("/v1/bot/verify-identity", apiUrl), {
