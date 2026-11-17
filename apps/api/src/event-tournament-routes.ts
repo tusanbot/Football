@@ -1,5 +1,7 @@
+import { randomInt } from "node:crypto";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { Prisma, type PlayerPosition, type WalletAsset } from "@prisma/client";
+import { defaultMatchRules } from "@football/domain";
 import { z } from "zod";
 import { prisma } from "./db.js";
 import { requireTelegramUser } from "./auth/require-telegram-user.js";
@@ -54,7 +56,7 @@ const createSchema = z.object({
   description: z.string().trim().min(5).max(2000),
   entryFeeAsset: z.enum(["CASH", "GOLD", "HONOR"]).optional(),
   entryFeeAmount: z.string().regex(/^(0|[1-9][0-9]{0,17})$/).default("0"),
-  maxParticipants: z.number().int().min(2).max(500).default(128),
+  maxParticipants: z.number().int().min(4).max(16).default(8),
   registrationEndsAt: z.string().datetime(),
   startsAt: z.string().datetime(),
   endsAt: z.string().datetime().optional(),
@@ -110,7 +112,7 @@ export function registerEventTournamentRoutes(app: FastifyInstance) {
     try {
       const result = await prisma.$transaction(async (tx) => {
         const existing = await tx.eventTournamentParticipant.findUnique({ where: { tournamentId_userId: { tournamentId: params.data.id, userId: actor.id } } });
-        if (existing) return { participantId: existing.id, replayed: true };
+        if (existing) return { participantId: existing.id, replayed: true, autoStarted: false };
         const tournament = await tx.eventTournament.findUnique({ where: { id: params.data.id } });
         if (!tournament) throw new Error("TOURNAMENT_NOT_FOUND");
         const now = new Date();
@@ -123,10 +125,7 @@ export function registerEventTournamentRoutes(app: FastifyInstance) {
           const asset = tournament.entryFeeAsset as WalletAsset;
           const wallet = await tx.wallet.findUnique({ where: { userId_asset: { userId: actor.id, asset } }, select: { id: true, balance: true, version: true } });
           if (!wallet || wallet.balance < tournament.entryFeeAmount) throw new Error("INSUFFICIENT_FUNDS");
-          const updated = await tx.wallet.updateMany({
-            where: { id: wallet.id, balance: wallet.balance, version: wallet.version },
-            data: { balance: { decrement: tournament.entryFeeAmount }, version: { increment: 1 } },
-          });
+          const updated = await tx.wallet.updateMany({ where: { id: wallet.id, balance: wallet.balance, version: wallet.version }, data: { balance: { decrement: tournament.entryFeeAmount }, version: { increment: 1 } } });
           if (updated.count !== 1) throw new Error("CONCURRENT_MODIFICATION");
           await tx.ledgerTransaction.create({ data: {
             idempotencyKey: "event-tournament-entry:" + tournament.id + ":" + actor.id,
@@ -135,16 +134,56 @@ export function registerEventTournamentRoutes(app: FastifyInstance) {
           } });
         }
         const participant = await tx.eventTournamentParticipant.create({ data: { tournamentId: tournament.id, userId: actor.id, clubId: club.id } });
-        return { participantId: participant.id, replayed: false };
-      }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+        const participantCount = count + 1;
+        if (participantCount < tournament.maxParticipants) return { participantId: participant.id, replayed: false, autoStarted: false, participantCount, requiredParticipants: tournament.maxParticipants };
+        const participants = await tx.eventTournamentParticipant.findMany({
+          where: { tournamentId: tournament.id }, orderBy: [{ joinedAt: "asc" }, { id: "asc" }],
+          include: { club: { select: { id: true, players: { where: { status: "ACTIVE" }, select: { id: true, position: true } } } } },
+        });
+        if (participants.length !== tournament.maxParticipants) throw new Error("TOURNAMENT_CAPACITY_CHANGED");
+        if (participants.some((item) => item.club.players.length < 11 || !item.club.players.some((player) => player.position === "GK"))) throw new Error("ALL_TEAMS_NEED_VALID_LINEUPS");
+        const slots = participants.map((item) => item.clubId);
+        for (let index = slots.length - 1; index > 0; index--) {
+          const swapIndex = randomInt(index + 1);
+          [slots[index], slots[swapIndex]] = [slots[swapIndex]!, slots[index]!];
+        }
+        if (slots.length % 2) slots.push("");
+        const rounds = slots.length - 1;
+        const kickoffAt = new Date(now.getTime() + 86_400_000);
+        const competition = await tx.competition.create({
+          data: {
+            idempotencyKey: "event-tournament-competition:" + tournament.id,
+            name: tournament.title, season: now.getUTCFullYear(), format: "LEAGUE", status: "ACTIVE",
+            maxTeams: participants.length, createdByClubId: participants[0]!.clubId,
+            rules: defaultMatchRules("LEAGUE") as unknown as Prisma.InputJsonValue, startsAt: kickoffAt,
+            entries: { create: participants.map((item) => ({ clubId: item.clubId })) },
+          },
+        });
+        const fixtures: Array<{ idempotencyKey: string; type: "LEAGUE"; competitionId: string; round: number; homeClubId: string; awayClubId: string; scheduledAt: Date; seed: string; rulesSnapshot: Prisma.InputJsonValue }> = [];
+        for (let round = 0; round < rounds; round++) {
+          for (let index = 0; index < slots.length / 2; index++) {
+            const first = slots[index]!, second = slots[slots.length - 1 - index]!;
+            if (!first || !second) continue;
+            const swap = (round + index) % 2 === 1;
+            const homeClubId = swap ? second : first, awayClubId = swap ? first : second;
+            const idempotencyKey = "event-tournament:" + tournament.id + ":r" + (round + 1) + ":" + homeClubId + ":" + awayClubId;
+            fixtures.push({ idempotencyKey, type: "LEAGUE", competitionId: competition.id, round: round + 1, homeClubId, awayClubId, scheduledAt: new Date(kickoffAt.getTime() + round * 86_400_000), seed: idempotencyKey, rulesSnapshot: defaultMatchRules("LEAGUE") as unknown as Prisma.InputJsonValue });
+          }
+          const fixed = slots[0]!, rotating = slots.slice(1);
+          rotating.unshift(rotating.pop()!);
+          slots.splice(0, slots.length, fixed, ...rotating);
+        }
+        await tx.footballMatch.createMany({ data: fixtures });
+        await tx.eventTournament.update({ where: { id: tournament.id }, data: { status: "ACTIVE", competitionId: competition.id, startsAt: kickoffAt } });
+        return { participantId: participant.id, replayed: false, autoStarted: true, participantCount, fixturesCreated: fixtures.length, rounds, startsAt: kickoffAt.toISOString(), competitionId: competition.id };
+      }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, timeout: 20_000, maxWait: 10_000 });
       return { joined: true, ...result };
     } catch (error) {
       const code = error instanceof Error ? error.message : "TOURNAMENT_JOIN_FAILED";
-      const status = code === "TOURNAMENT_NOT_FOUND" ? 404 : code === "INSUFFICIENT_FUNDS" ? 409 : code === "TOURNAMENT_FULL" || code === "TOURNAMENT_REGISTRATION_CLOSED" ? 409 : 400;
+      const status = code === "TOURNAMENT_NOT_FOUND" ? 404 : code === "INSUFFICIENT_FUNDS" ? 409 : ["TOURNAMENT_FULL", "TOURNAMENT_REGISTRATION_CLOSED", "ALL_TEAMS_NEED_VALID_LINEUPS"].includes(code) ? 409 : 400;
       return reply.code(status).send({ error: code });
     }
   });
-
   app.get("/v1/admin/event-tournaments", async (request, reply) => {
     const actor = await authorize(request, reply, "read");
     if (!actor) return;
