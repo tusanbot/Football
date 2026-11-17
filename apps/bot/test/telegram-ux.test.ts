@@ -207,3 +207,11 @@ test("private Bot entry points expose the Telegram Mini App launch button", () =
   assert.ok(botSource.includes("/miniapp — باز کردن نسخه گرافیکی Football Empire"));
   assert.match(botSource, /bot\.command\("miniapp",[\s\S]*?ctx\.chat\.type !== "private"/);
 });
+
+test("friendly challenge messages persist in groups and support inline acceptance", () => {
+  assert.ok(PERSISTENT_GROUP_COMMANDS.has("challenge"));
+  assert.equal(isPersistentGroupReply("challenge", "دعوت اختصاصی چالش"), true);
+  assert.ok(botSource.includes("challenge:accept:"));
+  assert.ok(botSource.includes("start=challenge_"));
+  assert.ok(botSource.includes("match-results/claim"));
+});
