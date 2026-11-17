@@ -7,6 +7,8 @@ interface Env {
   BOT_API_SECRET: string;
   TELEGRAM_WEB_APP_URL?: string;
   ENVIRONMENT?: string;
+  ANALYTICS_HASH_SECRET?: string;
+  PILOT_ANALYTICS?: { writeDataPoint(data: { blobs?: string[]; doubles?: number[]; indexes?: string[] }): void };
 }
 
 interface ExecutionContextLike {
@@ -14,6 +16,39 @@ interface ExecutionContextLike {
 }
 
 let cachedBotId: number | undefined;
+let apiReadyUntil = 0;
+
+async function ensureApiReady(env: Env) {
+  if (Date.now() < apiReadyUntil) return;
+  const response = await fetch(new URL("/ready", env.FOOTBALL_API_URL), { signal: AbortSignal.timeout(10_000) });
+  if (!response.ok) throw new Error("Game API is not ready (HTTP " + response.status + ").");
+  apiReadyUntil = Date.now() + 10_000;
+}
+
+async function analyticsUserKey(telegramUserId: number, secret: string): Promise<string> {
+  const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  const signature = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(String(telegramUserId)));
+  return Array.from(new Uint8Array(signature).slice(0, 16), byte => byte.toString(16).padStart(2, "0")).join("");
+}
+
+async function recordPilotEvent(update: unknown, env: Env) {
+  if (!env.PILOT_ANALYTICS || !env.ANALYTICS_HASH_SECRET) return;
+  const data = update as Record<string, any>;
+  const message = data.message ?? data.edited_message;
+  const callback = data.callback_query;
+  const text = typeof message?.text === "string" ? message.text : "";
+  const command = text.match(/^\\/([a-z0-9_]+)/i)?.[1]?.toLowerCase() ?? "";
+  const eventName = command === "start" ? "bot_start" : command ? "bot_command" : callback ? "bot_callback" : "bot_update";
+  const userId = message?.from?.id ?? callback?.from?.id;
+  if (!Number.isSafeInteger(userId)) return;
+  const userKey = await analyticsUserKey(userId, env.ANALYTICS_HASH_SECRET);
+  const callbackPrefix = typeof callback?.data === "string" ? callback.data.split(":", 1)[0] : "";
+  env.PILOT_ANALYTICS.writeDataPoint({
+    blobs: [eventName, command || callbackPrefix, message?.chat?.type ?? callback?.message?.chat?.type ?? "unknown", callback ? "callback_query" : message?.text ? "text_message" : "message"],
+    doubles: [1],
+    indexes: [userKey],
+  });
+}
 
 function constantTimeEqual(left: string, right: string): boolean {
   const a = new TextEncoder().encode(left);
@@ -57,6 +92,8 @@ export default {
       return new Response("Invalid Telegram update", { status: 400 });
     }
     try {
+      await ensureApiReady(env);
+      await recordPilotEvent(update, env).catch(() => undefined);
       const { bot } = await prepareBot(env);
       await bot.handleUpdate(update as never);
       return new Response("ok", { status: 200 });
@@ -68,6 +105,7 @@ export default {
 
   async scheduled(_controller: { scheduledTime: number; cron: string }, env: Env, ctx: ExecutionContextLike): Promise<void> {
     ctx.waitUntil((async () => {
+      await ensureApiReady(env);
       const { runBackgroundJobs } = await prepareBot(env);
       await runBackgroundJobs();
     })());
