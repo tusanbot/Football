@@ -16,6 +16,7 @@ export type BotAppConfig = {
   apiUrl: string;
   botApiSecret: string;
   environment?: string;
+  apiFetch?: (input: URL, init?: RequestInit) => Promise<Response>;
 };
 
 export function createBotApp(config: BotAppConfig) {
@@ -23,6 +24,7 @@ const token = config.token;
 const webAppUrl = config.webAppUrl;
 const apiUrl = config.apiUrl;
 const botApiSecret = config.botApiSecret;
+const apiFetch = config.apiFetch ?? ((input: URL, init?: RequestInit) => fetch(input, init));
 let botTelegramId: number | undefined;
 if (!token) throw new Error("TELEGRAM_BOT_TOKEN is required to create the bot.");
 if (!apiUrl) throw new Error("FOOTBALL_API_URL is required to create the bot.");
@@ -93,7 +95,7 @@ async function api<T>(path: string, telegramId: number, method = "GET", body?: u
   if (!apiUrl || !botApiSecret) throw new Error("Bot API is not configured. Set FOOTBALL_API_URL and BOT_API_SECRET.");
   let response: Response;
   try {
-    response = await fetch(new URL(path, apiUrl), {
+    response = await apiFetch(new URL(path, apiUrl), {
       method,
       headers: {
         "content-type": "application/json",
@@ -123,7 +125,7 @@ async function publicApi<T>(path: string): Promise<T> {
   if (!apiUrl) throw new Error("FOOTBALL_API_URL is not configured.");
   let response: Response;
   try {
-    response = await fetch(new URL(path, apiUrl), { signal: AbortSignal.timeout(15_000) });
+    response = await apiFetch(new URL(path, apiUrl), { signal: AbortSignal.timeout(15_000) });
   } catch {
     throw new Error("ارتباط با سرور بازی برقرار نشد یا مهلت پاسخ به پایان رسید. لطفاً دوباره تلاش کنید.");
   }
@@ -173,7 +175,7 @@ async function awardGroupActivity(ctx: { chat: { type: string; id: number }; fro
 }
 async function apiSystem<T = unknown>(path:string,body:unknown):Promise<T>{
  if(!apiUrl||!botApiSecret)throw new Error("Bot API is not configured.");
- const response=await fetch(new URL(path,apiUrl),{method:"POST",headers:{"content-type":"application/json","x-football-bot-secret":botApiSecret},body:JSON.stringify(body),signal:AbortSignal.timeout(15_000)});
+ const response=await apiFetch(new URL(path,apiUrl),{method:"POST",headers:{"content-type":"application/json","x-football-bot-secret":botApiSecret},body:JSON.stringify(body),signal:AbortSignal.timeout(15_000)});
  const data=await response.json() as T & {error?:string};
  if(!response.ok)throw new Error("System API failed ("+response.status+"): "+(data.error??"unknown error"));
  return data as T;
