@@ -77,3 +77,6 @@ Use Telegram's `secret_token` parameter matching `TELEGRAM_WEBHOOK_SECRET` and t
 `message, edited_message, callback_query, chat_member, my_chat_member`
 
 Do not run `setWebhook` against the primary bot as part of CI or deployment. The production bot activation requires a separate explicit approval.
+
+## Staging Telegram UX release
+The staging Bot presents player rosters, club profiles, lineups, and competition tables as escaped HTML rich messages with a plain-text fallback for Telegram entity-parse failures. Private navigation uses a short inline category menu plus a persistent categorized ReplyKeyboard fallback; every submenu exposes a return-to-main-menu action.
