@@ -183,12 +183,13 @@ export default {
         const schemaChecks = await withPrismaClient(client, () => prisma.$queryRaw<Array<{ ready: boolean }>>`
           SELECT
             (
-              SELECT count(*) = 3
+              SELECT count(*) = 4
               FROM "_prisma_migrations"
               WHERE migration_name IN (
                 '20261116120000_in_game_store',
                 '20261117100000_lock_down_public_api',
-                '20261117110000_index_foreign_key_columns'
+                '20261117110000_index_foreign_key_columns',
+                '20261117120000_restore_alliance_foreign_keys'
               )
                 AND finished_at IS NOT NULL
                 AND rolled_back_at IS NULL
