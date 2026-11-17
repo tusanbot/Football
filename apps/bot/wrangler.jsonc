@@ -13,6 +13,6 @@
   "analytics_engine_datasets": [{ "binding": "PILOT_ANALYTICS", "dataset": "football_empire_pilot" }],
   "durable_objects": { "bindings": [{ "name": "BOT_UPDATE_GUARD", "class_name": "BotUpdateGuard" }] },
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["BotUpdateGuard"] }],
-  "triggers": { "crons": ["* * * * *"] },
+  // Keep the staging Bot dormant until explicit activation; webhook registration is separate.
   "observability": { "enabled": true, "head_sampling_rate": 1 }
 }
