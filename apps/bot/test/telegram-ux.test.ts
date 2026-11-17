@@ -124,6 +124,12 @@ test("private menu is categorized and each submenu has a return path", () => {
     assert.ok(menu.rows.flat().every((item) => Boolean(item.label && item.command)));
   }
   assert.ok(botSource.includes("↩️ بازگشت به منوی اصلی"));
+  assert.ok(botSource.includes('bot.callbackQuery(/^nav:/'));
+  assert.ok(botSource.includes("function inlineMenuKeyboard("));
+  assert.ok(botSource.includes("async function replyRich("));
+  assert.ok(botSource.includes("escapeHtml("));
+  assert.ok(botSource.includes("فهرست بازیکنان باشگاه"));
+  assert.ok(botSource.includes("جدول لیگ"));
 });
 
 test("admin command argument parsing uses whitespace-aware splitting", () => {
