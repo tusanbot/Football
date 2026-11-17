@@ -595,7 +595,193 @@ bot.command("redeem", async (ctx) => {
   }
 });
 
+
+const tournamentPlacements = [1, 2, 3, 0] as const;
+async function askTournamentPrize(ctx: Context, state: EventTournamentWizard) {
+  if (!ctx.from) return;
+  if (state.placementIndex >= tournamentPlacements.length) {
+    if (!state.prizes.length) {
+      state.placementIndex = 0;
+      const prompt = await ctx.reply("باید دست‌کم برای یکی از رتبه‌ها جایزه تعیین شود. جایزه نفر اول را انتخاب کن:", {
+        reply_markup: new InlineKeyboard().text("کش", "event-tournament:prize:CASH").text("طلا", "event-tournament:prize:GOLD").text("Honor", "event-tournament:prize:HONOR").row().text("آیتم", "event-tournament:prize:STORE_ITEM").text("بازیکن ویژه", "event-tournament:prize:SPECIAL_PLAYER"),
+      });
+      state.promptMessageId = prompt.message_id;
+      return;
+    }
+    try {
+      const now = Date.now();
+      const registrationEndsAt = new Date(now + (state.registrationDays ?? 1) * 86_400_000);
+      const startsAt = new Date(now + (state.startsInDays ?? 2) * 86_400_000);
+      const result = await api<{ tournament: { id: string; title: string } }>("/v1/admin/event-tournaments", ctx.from.id, "POST", {
+        idempotencyKey: randomUUID(), title: state.title, description: state.description,
+        ...(state.feeAsset ? { entryFeeAsset: state.feeAsset } : {}), entryFeeAmount: state.feeAmount ?? "0",
+        maxParticipants: state.maxParticipants, registrationEndsAt: registrationEndsAt.toISOString(),
+        startsAt: startsAt.toISOString(), prizes: state.prizes,
+      });
+      pendingEventTournamentWizards.delete(ctx.from.id);
+      await ctx.reply("✅ تورنمنت «" + result.tournament.title + "» ساخته شد و ثبت‌نام آن آغاز شده است. شناسه: " + result.tournament.id);
+    } catch (error) {
+      await ctx.reply("ساخت تورنمنت ناموفق بود: " + (error instanceof Error ? error.message : "خطای نامشخص"));
+      pendingEventTournamentWizards.delete(ctx.from.id);
+    }
+    return;
+  }
+  const placement = tournamentPlacements[state.placementIndex]!;
+  const label = placement === 0 ? "سایر شرکت‌کنندگان" : "نفر " + placement;
+  const prompt = await ctx.reply("جایزه " + label + " را انتخاب کن:", {
+    reply_markup: new InlineKeyboard()
+      .text("کش", "event-tournament:prize:CASH").text("طلا", "event-tournament:prize:GOLD").text("Honor", "event-tournament:prize:HONOR").row()
+      .text("آیتم فروشگاه", "event-tournament:prize:STORE_ITEM").text("بازیکن ویژه", "event-tournament:prize:SPECIAL_PLAYER").row()
+      .text("بدون جایزه", "event-tournament:prize:NONE"),
+  });
+  state.promptMessageId = prompt.message_id;
+}
+
+async function askTournamentText(ctx: Context, state: EventTournamentWizard, promptText: string) {
+  const prompt = await ctx.reply(promptText);
+  state.promptMessageId = prompt.message_id;
+}
+
 const adminOnlyInPrivate = (ctx: Context) => ctx.chat?.type === "private";
+
+bot.command("tournaments", async (ctx) => {
+  if (!ctx.from || ctx.chat.type !== "private") return;
+  try {
+    const data = await api<{ tournaments: Array<{ id: string; title: string; description: string; status: string; entryFeeAsset: string | null; entryFeeAmount: string; maxParticipants: number; participantCount: number; registrationEndsAt: string; startsAt: string; prizes: Array<{ placement: number; type: string; amount: string; itemKey: string | null; specialPlayerId: string | null }>; joined: boolean }> }>("/v1/event-tournaments", ctx.from.id);
+    if (!data.tournaments.length) return ctx.reply("در حال حاضر تورنمنت مناسبتی فعالی وجود ندارد.");
+    const keyboard = new InlineKeyboard();
+    const lines = data.tournaments.map((item) => {
+      const fee = item.entryFeeAmount === "0" ? "رایگان" : item.entryFeeAmount + " " + item.entryFeeAsset;
+      const status = item.status === "REGISTRATION" ? "ثبت‌نام" : item.status === "ACTIVE" ? "در حال برگزاری" : "پایان‌یافته";
+      if (item.status === "REGISTRATION" && !item.joined && item.participantCount < item.maxParticipants) keyboard.text("ثبت‌نام · " + item.title.slice(0, 24), "event-tournament:join:" + item.id).row();
+      return "🏆 <b>" + escapeHtml(item.title) + "</b>\n" + escapeHtml(item.description.slice(0, 240)) + "\nوضعیت: " + status + " · شرکت‌کننده: " + item.participantCount + "/" + item.maxParticipants + "\nورودی: " + fee + "\nپایان ثبت‌نام: " + new Date(item.registrationEndsAt).toLocaleString("fa-IR", { timeZone: "Asia/Tehran" }) + (item.joined ? "\n✅ شما ثبت‌نام کرده‌اید." : "");
+    });
+    await ctx.reply(lines.join("\n\n"), { parse_mode: "HTML", ...(keyboard.inline_keyboard.length ? { reply_markup: keyboard } : {}) });
+  } catch (error) { await ctx.reply("دریافت تورنمنت‌ها ناموفق بود: " + (error instanceof Error ? error.message : "خطای نامشخص")); }
+});
+
+bot.command("eventtournaments", async (ctx) => {
+  if (!ctx.from || !adminOnlyInPrivate(ctx)) return;
+  try {
+    const data = await api<{ tournaments: Array<{ id: string; title: string; status: string; participantCount: number; registrationEndsAt: string }> }>("/v1/admin/event-tournaments", ctx.from.id);
+    const keyboard = new InlineKeyboard().text("➕ ساخت تورنمنت", "event-tournament:create");
+    const lines = data.tournaments.map((item) => {
+      if (item.status !== "COMPLETED" && item.status !== "CANCELLED") keyboard.row().text("ثبت نتایج · " + item.title.slice(0, 24), "event-tournament:finalize:" + item.id);
+      return "• " + item.title + " · " + item.status + " · " + item.participantCount + " شرکت‌کننده\nID: " + item.id;
+    });
+    await ctx.reply("🏆 مدیریت تورنمنت‌ها\n\n" + (lines.join("\n\n") || "هنوز تورنمنتی ساخته نشده است."), { reply_markup: keyboard });
+  } catch (error) { await ctx.reply("دسترسی مدیریت تورنمنت‌ها تأیید نشد: " + (error instanceof Error ? error.message : "خطای نامشخص")); }
+});
+
+bot.callbackQuery(/^event-tournament:/, async (ctx) => {
+  if (!ctx.from || ctx.chat?.type !== "private") return ctx.answerCallbackQuery({ text: "این عملیات فقط در گفت‌وگوی خصوصی مجاز است." });
+  const parts = ctx.callbackQuery.data.split(":");
+  const action = parts[1];
+  try {
+    if (action === "join") {
+      const tournamentId = parts[2];
+      if (!tournamentId) return ctx.answerCallbackQuery({ text: "شناسه تورنمنت نامعتبر است." });
+      const result = await api<{ joined: boolean; replayed: boolean }>("/v1/event-tournaments/" + encodeURIComponent(tournamentId) + "/join", ctx.from.id, "POST", {});
+      await ctx.answerCallbackQuery({ text: result.replayed ? "قبلاً ثبت‌نام کرده‌ای." : "ثبت‌نام انجام شد." });
+      await ctx.reply(result.replayed ? "ثبت‌نام شما قبلاً ثبت شده بود." : "✅ ثبت‌نام شما در تورنمنت انجام شد.");
+      return;
+    }
+    if (action === "create") {
+      const prompt = await ctx.reply("عنوان تورنمنت را ارسال کن (۳ تا ۱۰۰ نویسه).");
+      pendingEventTournamentWizards.set(ctx.from.id, { promptMessageId: prompt.message_id, stage: "title", prizes: [], placementIndex: 0 });
+      await ctx.answerCallbackQuery({ text: "فرایند ساخت آغاز شد." });
+      return;
+    }
+    if (action === "fee") {
+      const state = pendingEventTournamentWizards.get(ctx.from.id);
+      if (!state) return ctx.answerCallbackQuery({ text: "فرایند ساخت منقضی شده است." });
+      const asset = parts[2];
+      if (asset === "FREE") {
+        state.feeAmount = "0";
+        await ctx.answerCallbackQuery({ text: "ورودی رایگان انتخاب شد." });
+        await askTournamentPrize(ctx, state);
+        return;
+      }
+      if (!["CASH", "GOLD", "HONOR"].includes(asset ?? "")) return ctx.answerCallbackQuery({ text: "نوع ورودی معتبر نیست." });
+      state.feeAsset = asset as "CASH" | "GOLD" | "HONOR";
+      state.stage = "feeAmount";
+      await ctx.answerCallbackQuery();
+      await askTournamentText(ctx, state, "مقدار ورودی " + asset + " را به عدد صحیح مثبت ارسال کن.");
+      return;
+    }
+    if (action === "prize") {
+      const state = pendingEventTournamentWizards.get(ctx.from.id);
+      if (!state) return ctx.answerCallbackQuery({ text: "فرایند ساخت منقضی شده است." });
+      const type = parts[2];
+      if (type === "NONE") {
+        state.placementIndex += 1;
+        await ctx.answerCallbackQuery({ text: "برای این رتبه جایزه‌ای ثبت نشد." });
+        await askTournamentPrize(ctx, state);
+        return;
+      }
+      if (!["CASH", "GOLD", "HONOR", "STORE_ITEM", "SPECIAL_PLAYER"].includes(type ?? "")) return ctx.answerCallbackQuery({ text: "نوع جایزه معتبر نیست." });
+      state.pendingPrizeType = type as EventTournamentPrizeDraft["type"];
+      if (["CASH", "GOLD", "HONOR"].includes(type ?? "")) {
+        state.stage = "prizeAmount";
+        await ctx.answerCallbackQuery();
+        await askTournamentText(ctx, state, "مقدار جایزه " + type + " را به عدد صحیح مثبت ارسال کن.");
+      } else if (type === "STORE_ITEM") {
+        state.stage = "itemKey";
+        await ctx.answerCallbackQuery();
+        await askTournamentText(ctx, state, "کلید فنی آیتم فروشگاه را ارسال کن؛ مثال: training_boost.");
+      } else {
+        state.stage = "specialPlayerId";
+        await ctx.answerCallbackQuery();
+        await askTournamentText(ctx, state, "شناسه بازیکن ویژه‌ای را که جایزه داده می‌شود ارسال کن.");
+      }
+      return;
+    }
+    if (action === "finalize") {
+      const tournamentId = parts[2];
+      if (!tournamentId) return ctx.answerCallbackQuery({ text: "شناسه تورنمنت نامعتبر است." });
+      const data = await api<{ participants: Array<{ id: string; displayName: string | null; username: string | null; clubName: string }> }>("/v1/admin/event-tournaments/" + encodeURIComponent(tournamentId) + "/participants", ctx.from.id);
+      if (!data.participants.length) return ctx.answerCallbackQuery({ text: "شرکت‌کننده‌ای برای ثبت نتایج وجود ندارد.", show_alert: true });
+      pendingTournamentFinalizations.set(ctx.from.id, { tournamentId, participants: data.participants, results: [], index: 0 });
+      const participant = data.participants[0]!;
+      const keyboard = new InlineKeyboard().text("🥇 اول", "event-tournament:rank:1").text("🥈 دوم", "event-tournament:rank:2").text("🥉 سوم", "event-tournament:rank:3").row().text("سایر", "event-tournament:rank:other");
+      await ctx.answerCallbackQuery({ text: "ثبت نتایج آغاز شد." });
+      await ctx.reply("رتبه باشگاه «" + participant.clubName + "» را انتخاب کن (۱ از " + data.participants.length + "):", { reply_markup: keyboard });
+      return;
+    }
+    if (action === "rank") {
+      const state = pendingTournamentFinalizations.get(ctx.from.id);
+      if (!state) return ctx.answerCallbackQuery({ text: "فرایند ثبت نتایج منقضی شده است." });
+      const participant = state.participants[state.index];
+      if (!participant) return ctx.answerCallbackQuery({ text: "شرکت‌کننده‌ای باقی نمانده است." });
+      const rawPlacement = parts[2];
+      const placement = rawPlacement === "other" ? state.index + 4 : Number(rawPlacement);
+      if (![1, 2, 3].includes(placement) && rawPlacement !== "other") return ctx.answerCallbackQuery({ text: "رتبه معتبر نیست." });
+      if ([1, 2, 3].includes(placement) && state.results.some((item) => item.placement === placement)) return ctx.answerCallbackQuery({ text: "این رتبه قبلاً ثبت شده است.", show_alert: true });
+      state.results.push({ participantId: participant.id, placement, score: 0 });
+      state.index += 1;
+      if (state.index >= state.participants.length) {
+        const result = await api<{ participants: number; awards: number }>("/v1/admin/event-tournaments/" + encodeURIComponent(state.tournamentId) + "/finalize", ctx.from.id, "POST", {
+          idempotencyKey: randomUUID(), results: state.results,
+        });
+        pendingTournamentFinalizations.delete(ctx.from.id);
+        await ctx.answerCallbackQuery({ text: "نتایج نهایی و جوایز تسویه شد." });
+        await ctx.reply("✅ تورنمنت نهایی شد. شرکت‌کنندگان: " + result.participants + " · جوایز پرداخت‌شده: " + result.awards);
+        return;
+      }
+      const next = state.participants[state.index]!;
+      const keyboard = new InlineKeyboard().text("🥇 اول", "event-tournament:rank:1").text("🥈 دوم", "event-tournament:rank:2").text("🥉 سوم", "event-tournament:rank:3").row().text("سایر", "event-tournament:rank:other");
+      await ctx.answerCallbackQuery({ text: "رتبه ثبت شد." });
+      await ctx.editMessageText("رتبه باشگاه «" + next.clubName + "» را انتخاب کن (" + (state.index + 1) + " از " + state.participants.length + "):", { reply_markup: keyboard });
+      return;
+    }
+    await ctx.answerCallbackQuery({ text: "عملیات معتبر نیست." });
+  } catch (error) {
+    await ctx.answerCallbackQuery({ text: "عملیات انجام نشد.", show_alert: true });
+    await ctx.reply("عملیات تورنمنت ناموفق بود: " + (error instanceof Error ? error.message : "خطای نامشخص"));
+  }
+});
+
+
 
 bot.command("admin", async (ctx) => {
   if (!ctx.from || !adminOnlyInPrivate(ctx)) return;
