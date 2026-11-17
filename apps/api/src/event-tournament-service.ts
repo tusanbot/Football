@@ -90,7 +90,14 @@ export async function finalizeEventTournamentFromCompetition(competitionId: stri
       data: tournament.participants.map((participant) => ({
         userId: participant.userId, kind: "EVENT_TOURNAMENT_RESULT",
         title: "نتیجه نهایی تورنمنت «" + tournament.title + "»",
-        body: "تورنمنت به پایان رسید.\n" + winners.join("\n") + "\n\nرتبه باشگاه شما: " + (positionByClub.get(participant.clubId)?.placement ?? "—"),
+        body: (() => {
+          const placement = positionByClub.get(participant.clubId)?.placement ?? 0;
+          const rewards = tournament.prizes.filter((prize) => prize.placement === placement || (placement > 3 && prize.placement === 0))
+            .map((prize) => prize.type === "CASH" || prize.type === "GOLD" || prize.type === "HONOR"
+              ? prize.type + " · " + prize.amount.toString()
+              : prize.type === "STORE_ITEM" ? "آیتم فروشگاه · " + (prize.itemKey ?? "") : "بازیکن ویژه").join("، ");
+          return "تورنمنت به پایان رسید.\n" + winners.join("\n") + "\n\nرتبه باشگاه شما: " + placement + "\nجوایز شما: " + (rewards || "جایزه‌ای برای این رتبه تعریف نشده است.");
+        })(),
         referenceId: tournament.id, dedupeKey: "event-tournament-result:" + tournament.id + ":" + participant.userId,
       })), skipDuplicates: true,
     });
