@@ -70,7 +70,7 @@ jobs:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/football_empire
       - name: Verify seeded special-player catalog
         run: |
-          pnpm --filter @football/api exec tsx -e 'import { createPrismaClient } from "./src/db.ts"; void (async () => { const prisma = createPrismaClient(); try { const count = await prisma.specialPlayer.count(); console.log(`Seeded special players: ${count}`); if (count !== 15) process.exitCode = 1; } finally { await prisma.$disconnect(); } })();'
+          pnpm --filter @football/api exec tsx -e 'import { createPrismaClient } from "./src/db.ts"; void (async () => { const prisma = createPrismaClient(); try { const count = await prisma.specialPlayer.count(); console.log(`Seeded special players: ${count}`); if (count !== 16) process.exitCode = 1; } finally { await prisma.$disconnect(); } })();'
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/football_empire
       - name: Build shared domain package
