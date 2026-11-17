@@ -194,9 +194,9 @@ export function registerEventTournamentRoutes(app: FastifyInstance) {
           data: {
             idempotencyKey: "event-tournament-create:" + value.idempotencyKey,
             title: value.title, description: value.description,
-            entryFeeAsset: value.entryFeeAsset, entryFeeAmount: BigInt(value.entryFeeAmount),
+            entryFeeAsset: value.entryFeeAsset ?? null, entryFeeAmount: BigInt(value.entryFeeAmount),
             maxParticipants: value.maxParticipants, registrationEndsAt: new Date(value.registrationEndsAt),
-            startsAt: new Date(value.startsAt), endsAt: value.endsAt ? new Date(value.endsAt) : undefined,
+            startsAt: new Date(value.startsAt), endsAt: value.endsAt ? new Date(value.endsAt) : null,
             createdByTelegramId: actor.telegramId,
             prizes: { create: value.prizes.map((prize) => ({
               placement: prize.placement, type: prize.type, amount: BigInt(prize.amount ?? "0"),
