@@ -610,6 +610,7 @@ model LeagueNotice {
   deliveryClaimToken String?
   deliveryLockedUntil DateTime?
   deliveryLastError String?
+  dedupeKey String? @unique
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
   @@index([userId, readAt, createdAt])
 }
