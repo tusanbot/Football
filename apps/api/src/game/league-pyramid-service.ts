@@ -578,7 +578,7 @@ export async function acceptFriendlyChallenge(userId: string, token: string, now
     const match = await tx.footballMatch.create({
       data: {
         idempotencyKey: `challenge:${challenge.id}`, type: "FRIENDLY", homeClubId: challenge.creatorClubId,
-        awayClubId: opponent.id, scheduledAt: new Date(now.getTime() + 5 * 60_000), seed: `challenge:${challenge.id}`,
+        awayClubId: opponent.id, scheduledAt: now, seed: `challenge:${challenge.id}`,
         rulesSnapshot: { ...LEAGUE_RULES, penaltiesOnDraw: false },
       },
     });
@@ -599,7 +599,11 @@ export async function grantPurchasedChallengeCredits(userId: string, quantity: n
 
 export async function getFriendlyChallengeInfo(token: string) {
   const challenge = await prisma.friendlyChallenge.findUnique({
-    where: { token }, include: { club: { select: { name: true, level: true, reputation: true } }, group: { select: { title: true, telegramId: true, isActive: true, isSuspended: true } } },
+    where: { token }, include: {
+      creator: { select: { telegramId: true } },
+      club: { select: { name: true, level: true, reputation: true } },
+      group: { select: { title: true, telegramId: true, isActive: true, isSuspended: true } },
+    },
   });
   if (!challenge) throw new PyramidLeagueError("FRIENDLY_CHALLENGE_NOT_FOUND");
   if (challenge.status === "OPEN" && challenge.expiresAt <= new Date()) {
@@ -607,7 +611,12 @@ export async function getFriendlyChallengeInfo(token: string) {
     throw new PyramidLeagueError("FRIENDLY_CHALLENGE_EXPIRED");
   }
   if (challenge.group && (!challenge.group.isActive || challenge.group.isSuspended)) throw new PyramidLeagueError("GROUP_INACTIVE");
-  return { id: challenge.id, token: challenge.token, status: challenge.status, expiresAt: challenge.expiresAt.toISOString(), creatorClub: challenge.club, groupTitle: challenge.group?.title ?? null, groupTelegramId: challenge.group?.telegramId ?? null };
+  return {
+    id: challenge.id, token: challenge.token, status: challenge.status,
+    expiresAt: challenge.expiresAt.toISOString(), creatorClub: challenge.club,
+    creatorTelegramId: challenge.creator.telegramId,
+    groupTitle: challenge.group?.title ?? null, groupTelegramId: challenge.group?.telegramId ?? null,
+  };
 }
 
 export async function markLeagueNoticesRead(userId: string) {
