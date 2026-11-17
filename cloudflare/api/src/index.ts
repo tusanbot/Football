@@ -195,6 +195,35 @@ async function deliverDueMatchLifecycle(env: Env): Promise<void> {
       await prisma.matchLifecycleNotification.updateMany({ where: { id: row.id, status: "PENDING", claimToken }, data: { availableAt: new Date(Date.now() + 15_000), claimToken: null, lockedUntil: null, lastError: error instanceof Error ? error.message.slice(0, 500) : "TELEGRAM_SEND_FAILED" } });
     }
   }
+  const results = await prisma.matchResultNotification.findMany({
+    where: { status: "PENDING", availableAt: { lte: now }, OR: [{ lockedUntil: null }, { lockedUntil: { lt: new Date(now.getTime() - 30_000) } }], match: { status: "COMPLETED" } },
+    include: { match: { include: { homeClub: { select: { id: true, name: true } }, awayClub: { select: { id: true, name: true } }, performances: { include: { player: { select: { firstName: true, lastName: true } } } } } } },
+    orderBy: { createdAt: "asc" }, take: 50,
+  });
+  for (const row of results) {
+    const claimToken = crypto.randomUUID();
+    const claim = await prisma.matchResultNotification.updateMany({ where: { id: row.id, status: "PENDING", claimToken: null }, data: { claimToken, lockedUntil: new Date(now.getTime() + 30_000), attempts: { increment: 1 } } });
+    if (claim.count !== 1) continue;
+    const match = row.match;
+    const homeStats = match.performances.filter((line) => line.clubId === match.homeClub.id);
+    const awayStats = match.performances.filter((line) => line.clubId === match.awayClub.id);
+    const sum = (items: typeof match.performances, key: "shots" | "passes" | "tackles") => items.reduce((total, item) => total + item[key], 0);
+    const scorers = match.performances.filter((line) => line.goals > 0).sort((a, b) => b.goals - a.goals).map((line) => line.player.firstName + " " + line.player.lastName + " · " + line.goals + " گل").join("\n");
+    const message = "🏁 <b>پایان مسابقه</b>\n<b>" + match.homeClub.name + "</b> " + match.homeScore + " : " + match.awayScore + " <b>" + match.awayClub.name + "</b>"
+      + "\n\n📊 <b>آمار مسابقه</b>"
+      + "\nشوت‌ها: " + sum(homeStats, "shots") + " - " + sum(awayStats, "shots")
+      + "\nپاس‌ها: " + sum(homeStats, "passes") + " - " + sum(awayStats, "passes")
+      + "\nتکل‌ها: " + sum(homeStats, "tackles") + " - " + sum(awayStats, "tackles")
+      + (scorers ? "\n\n⚽ <b>گلزنان</b>\n" + scorers : "\n\n⚽ بدون گل");
+    try {
+      const response = await fetch("https://api.telegram.org/bot" + token + "/sendMessage", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ chat_id: row.telegramChatId, text: message, parse_mode: "HTML" }) });
+      const body = await response.json() as { ok?: boolean };
+      const delivered = response.ok && body.ok === true;
+      await prisma.matchResultNotification.updateMany({ where: { id: row.id, status: "PENDING", claimToken }, data: delivered ? { status: "DELIVERED", deliveredAt: new Date(), claimToken: null, lockedUntil: null } : { availableAt: new Date(Date.now() + 15_000), claimToken: null, lockedUntil: null, lastError: "TELEGRAM_SEND_FAILED" } });
+    } catch (error) {
+      await prisma.matchResultNotification.updateMany({ where: { id: row.id, status: "PENDING", claimToken }, data: { availableAt: new Date(Date.now() + 15_000), claimToken: null, lockedUntil: null, lastError: error instanceof Error ? error.message.slice(0, 500) : "TELEGRAM_SEND_FAILED" } });
+    }
+  }
 }
 async function scheduledJobs(env: Env): Promise<void> {
   const missing = missingConfig(env);
