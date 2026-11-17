@@ -1329,6 +1329,12 @@ async function processClaimedMatchRuntime(
     .every((clubId) => decisions.some((decision) => decision.clubId === clubId
       && decision.submittedAt >= checkpoint.openedAt
       && decision.submittedAt < checkpoint.decisionDeadlineAt));
+  if (checkpoint.minute === 45 && now >= checkpoint.openedAt) {
+    await prisma.$transaction(async (tx) => enqueueMatchLifecycleNotifications(tx, runtime.match, [{
+      eventKey: "halftime", kind: "HALF_TIME", minute: 45,
+      homeScore: state.segment.home.score, awayScore: state.segment.away.score, availableAt: now,
+    }]));
+  }
   if (now < checkpoint.nextSegmentAt) return "WAITING";
 
   const kind = checkpoint.kind;
