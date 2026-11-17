@@ -10,6 +10,7 @@
     "FOOTBALL_API_URL": "https://staging-api.example.invalid",
     "TELEGRAM_WEB_APP_URL": "https://staging-football.example.invalid"
   },
+  "analytics_engine_datasets": [{ "binding": "PILOT_ANALYTICS", "dataset": "football_empire_pilot" }],
   "triggers": { "crons": ["* * * * *"] },
   "observability": { "enabled": true, "head_sampling_rate": 1 }
 }
