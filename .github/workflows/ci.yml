@@ -87,6 +87,8 @@ jobs:
         run: pnpm --dir cloudflare/api check:worker
       - name: Validate production API Worker config (dry run)
         run: pnpm --dir cloudflare/api check:worker:production
+      - name: Validate staging API Worker config (dry run)
+        run: pnpm --dir cloudflare/api check:worker:staging
       - name: Build production-targeted Cloudflare Mini App Worker
         run: pnpm --dir apps/web build:worker:production
         env:
@@ -102,7 +104,7 @@ jobs:
       - name: Build staging-targeted Cloudflare Mini App Worker
         run: pnpm --dir apps/web build:worker:staging
         env:
-          NEXT_PUBLIC_API_URL: https://staging-api.example.invalid
+          NEXT_PUBLIC_API_URL: https://football-empire-api-staging.mshmahyar9.workers.dev
           NEXT_PUBLIC_BOT_WEBHOOK_URL: https://football-empire-bot-staging.mshmahyar9.workers.dev
       - name: Archive staging Mini App Worker build
         uses: actions/upload-artifact@v4
