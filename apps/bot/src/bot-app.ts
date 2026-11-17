@@ -509,7 +509,7 @@ bot.command("start", async (ctx) => {
     const account = await api<{
       user: { displayName: string };
       club: { name: string; level: number } | null;
-      wallets: Array<{ asset: "CASH" | "GOLD"; balance: string }>;
+      wallets: Array<{ asset: "CASH" | "GOLD" | "HONOR"; balance: string }>;
     }>("/v1/auth/bot", ctx.from.id, "POST", {
       firstName: ctx.from.first_name,
       ...(ctx.from.last_name ? { lastName: ctx.from.last_name } : {}),
@@ -540,12 +540,13 @@ bot.command("start", async (ctx) => {
 
     const cashBalance = account.wallets.find((wallet) => wallet.asset === "CASH")?.balance ?? "0";
     const goldBalance = account.wallets.find((wallet) => wallet.asset === "GOLD")?.balance ?? "0";
+    const honorBalance = account.wallets.find((wallet) => wallet.asset === "HONOR")?.balance ?? "0";
     const keyboard = privateMenuKeyboard();
 
     await ctx.reply(
       `سلام ${account.user.displayName}، به Football Empire خوش آمدید!\n\n` +
       `🏟 باشگاه: ${account.club?.name ?? "هنوز ساخته نشده"} · سطح ${account.club?.level ?? 1}\n` +
-      `💰 سرمایه: ${cash(cashBalance)} کش · ${cash(goldBalance)} طلا\n\n` +
+      `💰 سرمایه: ${cash(cashBalance)} کش · ${cash(goldBalance)} طلا · ${cash(honorBalance)} افتخار\n\n` +
       `🎯 مأموریت شروع: ترکیب ۱۱ نفره‌ات را آماده کن، وارد یک رقابت شو و اولین چالش دوستانه‌ات را بساز.\n` +
       `هر انتخاب را می‌توانی با دکمه انجام بدهی؛ دستورات متنی هم همچنان فعال‌اند.`,
       { reply_markup: keyboard },
@@ -1081,7 +1082,7 @@ bot.callbackQuery(/^shop:/, async (ctx) => {
         .text("✅ تأیید خرید · ۱ عدد", "shop:buy:" + item.key)
         .text("↩️ بازگشت به فروشگاه", "shop:back");
       await ctx.reply(
-        `🛍 <b>${escapeHtml(item.name)}</b>\n${escapeHtml(item.description)}\nقیمت: <b>${cash(item.price)}</b> ${item.asset === "CASH" ? "کش" : "طلا"}\n\nخرید را تأیید می‌کنی؟`,
+        `🛍 <b>${escapeHtml(item.name)}</b>\n${escapeHtml(item.description)}\nقیمت: <b>${cash(item.price)}</b> ${item.asset === "CASH" ? "کش" : item.asset === "GOLD" ? "طلا" : "افتخار"}\n\nخرید را تأیید می‌کنی؟`,
         { parse_mode: "HTML", reply_markup: keyboard },
       );
       return;
@@ -1524,7 +1525,7 @@ bot.command("store", async (ctx) => {
       playerListings: Array<{ id: string; askingPrice: string; player: { firstName: string; lastName: string; overall: number }; sellerClub: { name: string } }>;
       packOffers: Array<{ method: string; rarity: string; priceGold: string }>;
     }>("/v1/store", ctx.from.id);
-    const balances = data.wallets.map((w) => (w.asset === "CASH" ? "کش" : "طلا") + ": " + cash(w.balance)).join(" · ");
+    const balances = data.wallets.map((w) => (w.asset === "CASH" ? "کش" : w.asset === "GOLD" ? "طلا" : "افتخار") + ": " + cash(w.balance)).join(" · ");
     const keyboard = new InlineKeyboard();
     for (const item of data.items) keyboard.text("🛒 " + item.name, "shop:item:" + item.key).row();
     const descriptions = data.items.map((item) =>
@@ -1594,8 +1595,8 @@ bot.command("wallet", async (ctx) => {
   if (!ctx.from) return;
   if (ctx.chat.type !== "private") return ctx.reply("برای مشاهده موجودی، دستور /wallet را در گفت‌وگوی خصوصی اجرا کنید.");
   try {
-    const result = await api<{ wallets: Array<{ asset: "CASH" | "GOLD"; balance: string }> }>("/v1/wallet", ctx.from.id);
-    const balances = result.wallets.map((wallet) => `${wallet.asset === "CASH" ? "کش" : "طلا"}: ${cash(wallet.balance)}`).join("\n");
+    const result = await api<{ wallets: Array<{ asset: "CASH" | "GOLD" | "HONOR"; balance: string }> }>("/v1/wallet", ctx.from.id);
+    const balances = result.wallets.map((wallet) => `${wallet.asset === "CASH" ? "کش" : wallet.asset === "GOLD" ? "طلا" : "افتخار"}: ${cash(wallet.balance)}`).join("\n");
     await ctx.reply(`کیف پول باشگاه:\n${balances || "موجودی‌ای ثبت نشده است."}`);
   } catch (error) {
     await ctx.reply(`دریافت کیف پول ناموفق بود: ${error instanceof Error ? error.message : "خطای نامشخص"}`);
