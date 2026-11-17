@@ -23,5 +23,5 @@
     "bindings": [{ "name": "MATCH_COORDINATOR", "class_name": "MatchCoordinator" }]
   },
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["MatchCoordinator"] }],
-  "triggers": { "crons": ["* * * * *"] }
+  "triggers": { "crons": ["*/15 * * * *"] }
 }

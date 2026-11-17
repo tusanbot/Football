@@ -58,6 +58,11 @@ jobs:
               echo "Staging API is healthy."
               exit 0
             fi
+            if echo "$response" | jq -e '.reason == "HYPERDRIVE_DAILY_LIMIT"' >/dev/null; then
+              echo "Hyperdrive daily query quota is exhausted; retry after the reported reset time."
+              echo "$response"
+              exit 1
+            fi
             sleep 3
           done
           echo "Staging API did not become healthy."

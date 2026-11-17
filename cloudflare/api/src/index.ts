@@ -149,8 +149,15 @@ export class MatchCoordinator {
         nextAlarm = candidates.length ? Math.min(...candidates) : null;
       });
     } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      const quotaLimited = /Usage limit for account exceeded/i.test(message);
       console.error("Match coordinator tick failed", describeRuntimeError(error));
-      nextAlarm = Date.now() + 10_000;
+      if (quotaLimited) {
+        const now = new Date();
+        nextAlarm = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1, 0, 0, 5);
+      } else {
+        nextAlarm = Date.now() + 60_000;
+      }
     } finally {
       await client.$disconnect();
     }
@@ -241,6 +248,10 @@ async function deliverDueMatchLifecycle(env: Env): Promise<void> {
   }
 }
 async function scheduledJobs(env: Env): Promise<void> {
+  if (env.MATCH_COORDINATOR) {
+    console.info("Scheduled fallback skipped; MatchCoordinator owns match and tournament processing.");
+    return;
+  }
   const missing = missingConfig(env);
   if (missing.length) { console.error("Scheduled game jobs skipped; missing configuration:", missing); return; }
   configureEnv(env);
@@ -395,8 +406,14 @@ export default {
         ctx.waitUntil(client.$disconnect().catch((error: unknown) => console.error("Prisma readiness cleanup failed", error)));
         return json({ status: "ready", service: "football-empire-api", database: "connected", schema: "current" });
       } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
         console.error("Cloudflare API readiness database check failed", describeRuntimeError(error));
         await client.$disconnect().catch(() => undefined);
+        if (/Usage limit for account exceeded/i.test(message)) {
+          const now = new Date();
+          const retryAt = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1, 0, 0, 5));
+          return json({ status: "not_ready", service: "football-empire-cloudflare-api", reason: "HYPERDRIVE_DAILY_LIMIT", retryAt: retryAt.toISOString() }, 429);
+        }
         return json({ status: "not_ready", service: "football-empire-cloudflare-api", missing: ["DATABASE_CONNECTION"] }, 503);
       }
     }
