@@ -65,6 +65,10 @@ async function createLeagueForEight(tx: Prisma.TransactionClient, tier: number, 
     data: { status: "ASSIGNED", assignedLeagueId: league.id },
   });
   const clubs = applications.map((application) => application.clubId);
+  for (let index = clubs.length - 1; index > 0; index--) {
+    const swapIndex = randomBytes(4).readUInt32BE(0) % (index + 1);
+    [clubs[index], clubs[swapIndex]] = [clubs[swapIndex]!, clubs[index]!];
+  }
   const slots: Array<string | null> = [...clubs];
   const rounds = slots.length - 1;
   const fixtures: Array<{ idempotencyKey: string; type: "LEAGUE"; competitionId: string; round: number; homeClubId: string; awayClubId: string; scheduledAt: Date; seed: string; rulesSnapshot: Prisma.InputJsonValue }> = [];
@@ -78,7 +82,7 @@ async function createLeagueForEight(tx: Prisma.TransactionClient, tier: number, 
       const key = `${idempotencyKey}:r${round + 1}:${homeClubId}:${awayClubId}`;
       fixtures.push({
         idempotencyKey: key, type: "LEAGUE", competitionId: competition.id, round: round + 1,
-        homeClubId, awayClubId, scheduledAt: new Date(now.getTime() + (round + 1) * 3 * DAY_MS),
+        homeClubId, awayClubId, scheduledAt: new Date(now.getTime() + DAY_MS + round * DAY_MS),
         seed: key, rulesSnapshot: LEAGUE_RULES as unknown as Prisma.InputJsonValue,
       });
     }
