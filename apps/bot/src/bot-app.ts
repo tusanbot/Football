@@ -48,6 +48,8 @@ const pendingClubNameEdits = new Map<number, { promptMessageId: number; expiresA
 const pendingGroupCreations = new Map<number, { chatId: number; promptMessageId: number; kind: "challenge" | "league"; expiresAt: number }>();
 const pendingLineupSelections = new Map<number, { formation: string; playerIds: string[]; lineupVersion: number; players: Array<{ id: string; firstName: string; lastName: string; position: string; overall: number }> }>();
 const pendingFallbackEdits = new Map<number, { plan: Record<string, string>; version: number }>();
+const pendingTrainingSelections = new Map<number, { playerId: string; focus?: string }>();
+const pendingContractSelections = new Map<number, { playerId: string; minWage: string; maxWage: string; days?: number }>();
 type EventTournamentPrizeDraft = { placement: number; type: "CASH" | "GOLD" | "HONOR" | "STORE_ITEM" | "SPECIAL_PLAYER"; amount?: string; itemKey?: string; specialPlayerId?: string };
 type EventTournamentWizard = {
   promptMessageId: number; stage: "title" | "description" | "registrationDays" | "startsInDays" | "maxParticipants" | "feeAmount" | "prizeAmount" | "itemKey" | "specialPlayerId";
