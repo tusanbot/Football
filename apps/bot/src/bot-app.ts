@@ -413,7 +413,7 @@ function playerName(player: ApiPlayer) { return `${player.firstName} ${player.la
 function escapeHtml(value: unknown): string {
   return String(value ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
-async function replyRich(ctx: Context, richText: string, plainText: string, replyMarkup?: Keyboard) {
+async function replyRich(ctx: Context, richText: string, plainText: string, replyMarkup?: Keyboard | InlineKeyboard) {
   try {
     await ctx.reply(richText, { parse_mode: "HTML", ...(replyMarkup ? { reply_markup: replyMarkup } : {}) });
   } catch (error) {
@@ -843,6 +843,79 @@ bot.command("adminhelp", async (ctx) => {
   );
 });
 
+bot.callbackQuery(/^shop:/, async (ctx) => {
+  if (!ctx.from || ctx.chat?.type !== "private") return ctx.answerCallbackQuery({ text: "خرید فقط در گفت‌وگوی خصوصی انجام می‌شود." });
+  const parts = ctx.callbackQuery.data.split(":");
+  const action = parts[1] ?? "";
+  const itemKey = parts[2] ?? "";
+  try {
+    if (action === "item") {
+      const data = await api<{items:Array<{key:string;name:string;description:string;asset:string;price:string}>}>("/v1/store", ctx.from.id);
+      const item = data.items.find((entry) => entry.key === itemKey);
+      if (!item) return ctx.answerCallbackQuery({ text: "این آیتم دیگر در فروشگاه موجود نیست." });
+      await ctx.answerCallbackQuery();
+      const keyboard = new InlineKeyboard()
+        .text("✅ تأیید خرید · ۱ عدد", "shop:buy:" + item.key)
+        .text("↩️ بازگشت به فروشگاه", "shop:back");
+      await ctx.reply(
+        `🛍 <b>${escapeHtml(item.name)}</b>\n${escapeHtml(item.description)}\nقیمت: <b>${cash(item.price)}</b> ${item.asset === "CASH" ? "کش" : "طلا"}\n\nخرید را تأیید می‌کنی؟`,
+        { parse_mode: "HTML", reply_markup: keyboard },
+      );
+      return;
+    }
+    if (action === "buy") {
+      const data = await api<{purchase:{itemKey:string;quantity:number;balance:string;inventory:number;replayed:boolean}}>("/v1/store/purchase", ctx.from.id, "POST", {
+        itemKey, quantity: 1, idempotencyKey: "tg-store-" + ctx.from.id + "-" + ctx.update.update_id,
+      });
+      await ctx.answerCallbackQuery({ text: "خرید با موفقیت انجام شد." });
+      await ctx.editMessageText(
+        "✅ <b>خرید موفق</b>\nآیتم: " + escapeHtml(data.purchase.itemKey) + "\nتعداد: " + data.purchase.quantity +
+        "\nموجودی کیف پول: " + cash(data.purchase.balance) + "\nموجودی انبار: " + data.purchase.inventory,
+        { parse_mode: "HTML", reply_markup: new InlineKeyboard().text("🛍 بازگشت به فروشگاه", "shop:back") },
+      );
+      return;
+    }
+    if (action === "back") {
+      await ctx.answerCallbackQuery();
+      await dispatchMenuCommand(ctx, "store");
+      return;
+    }
+    await ctx.answerCallbackQuery({ text: "گزینه خرید معتبر نیست." });
+  } catch (error) {
+    await ctx.answerCallbackQuery({ text: "خرید انجام نشد." }).catch(() => undefined);
+    await ctx.reply("خرید ناموفق بود: " + (error instanceof Error ? error.message : "خطای نامشخص"));
+  }
+});
+
+bot.callbackQuery(/^market:buy:/, async (ctx) => {
+  if (!ctx.from || ctx.chat?.type !== "private") return ctx.answerCallbackQuery({ text: "خرید بازیکن فقط در خصوصی انجام می‌شود." });
+  const listingId = ctx.callbackQuery.data.slice("market:buy:".length);
+  try {
+    const result = await api<{purchase:{price:string;replayed:boolean}}>(`/v1/market/listings/${encodeURIComponent(listingId)}/buy`, ctx.from.id, "POST");
+    await ctx.answerCallbackQuery({ text: "خرید بازیکن انجام شد." });
+    await ctx.reply("⚽ خرید بازیکن موفق بود. مبلغ پرداختی: " + cash(result.purchase.price) + " کش.");
+  } catch (error) {
+    await ctx.answerCallbackQuery({ text: "خرید ناموفق بود." }).catch(() => undefined);
+    await ctx.reply("خرید بازیکن ناموفق بود: " + (error instanceof Error ? error.message : "خطای نامشخص"));
+  }
+});
+
+bot.callbackQuery(/^pack:buy:/, async (ctx) => {
+  if (!ctx.from || ctx.chat?.type !== "private") return ctx.answerCallbackQuery({ text: "خرید بسته فقط در خصوصی انجام می‌شود." });
+  const method = ctx.callbackQuery.data.slice("pack:buy:".length);
+  if (!["epic_pack", "legendary_pack", "icon_pack"].includes(method)) return ctx.answerCallbackQuery({ text: "بسته معتبر نیست." });
+  try {
+    const result = await api<{acquisition:{specialPlayer:{fullName:string;rarity:string;overall:number};goldBalance:string}}>("/v1/players/special/acquire", ctx.from.id, "POST", {
+      method, idempotencyKey: "tg-pack-" + ctx.from.id + "-" + ctx.update.update_id,
+    });
+    await ctx.answerCallbackQuery({ text: "بازیکن ویژه جذب شد!" });
+    await ctx.reply("✨ بازیکن ویژه " + result.acquisition.specialPlayer.fullName + " جذب شد · قدرت " + result.acquisition.specialPlayer.overall + "\nطلای باقی‌مانده: " + cash(result.acquisition.goldBalance));
+  } catch (error) {
+    await ctx.answerCallbackQuery({ text: "خرید بسته انجام نشد." }).catch(() => undefined);
+    await ctx.reply("خرید بسته ناموفق بود: " + (error instanceof Error ? error.message : "خطای نامشخص"));
+  }
+});
+
 const menuActionCommands = new Set([
   ...PRIVATE_MENU_ROWS.flat().map((item) => item.command),
   ...Object.values(PRIVATE_MENU_SUBMENUS).flatMap((menu) => menu.rows.flat().map((item) => item.command)),
@@ -1156,11 +1229,35 @@ bot.command("store", async (ctx) => {
       packOffers: Array<{ method: string; rarity: string; priceGold: string }>;
     }>("/v1/store", ctx.from.id);
     const balances = data.wallets.map((w) => (w.asset === "CASH" ? "کش" : "طلا") + ": " + cash(w.balance)).join(" · ");
-    const items = data.items.map((item) => item.key + " — " + item.name + "\n" + item.description + "\nقیمت: " + cash(item.price) + " " + (item.asset === "CASH" ? "Cash" : "Gold") + "\nخرید: /buyitem " + item.key).join("\n\n");
-    const players = data.playerListings.slice(0, 10).map((listing) => listing.player.firstName + " " + listing.player.lastName + " · OVR " + listing.player.overall + " · " + cash(listing.askingPrice) + " Cash\nفروشنده: " + listing.sellerClub.name + "\nخرید: /buy " + listing.id).join("\n\n");
-    const packs = data.packOffers.map((pack) => pack.method + " · " + cash(pack.priceGold) + " Gold\nخرید: /pack " + pack.method.replace("_pack", "")).join("\n");
-    await ctx.reply("🛍 فروشگاه Football Empire\n" + balances + "\n\nآیتم‌ها:\n" + items + "\n\nبازیکنان قابل خرید:\n" + (players || "فعلاً آگهی فعالی وجود ندارد.") + "\n\nبسته‌های ستاره:\n" + packs);
-  } catch (error) { await ctx.reply("دریافت فروشگاه ناموفق بود: " + (error instanceof Error ? error.message : "خطای نامشخص")); }
+    const keyboard = new InlineKeyboard();
+    for (const item of data.items) keyboard.text("🛒 " + item.name, "shop:item:" + item.key).row();
+    const descriptions = data.items.map((item) =>
+      `<b>${escapeHtml(item.name)}</b>\n${escapeHtml(item.description)}\nقیمت: <b>${cash(item.price)}</b> ${item.asset === "CASH" ? "کش" : "طلا"}`
+    );
+    await replyRich(
+      ctx,
+      "🛍 <b>فروشگاه Football Empire</b>\n" + escapeHtml(balances) + "\n\n" + (descriptions.join("\n\n") || "فعلاً آیتمی در فروشگاه نیست.") + "\n\nبرای مشاهده جزئیات و خرید، روی آیتم دلخواه بزن.",
+      "🛍 فروشگاه Football Empire\n" + balances + "\n\n" + data.items.map((item) => item.name + " · " + item.description + " · " + cash(item.price)).join("\n") + "\nبرای خرید یکی از دکمه‌ها را انتخاب کنید.",
+      keyboard,
+    );
+    if (data.playerListings.length) {
+      const marketKeyboard = new InlineKeyboard();
+      for (const listing of data.playerListings.slice(0, 8)) {
+        marketKeyboard.text("⚽ " + listing.player.firstName + " · " + cash(listing.askingPrice), "market:buy:" + listing.id).row();
+      }
+      await ctx.reply(
+        "⚽ <b>بازیکنان قابل خرید</b>\n" + data.playerListings.slice(0, 8).map((listing) =>
+          escapeHtml(listing.player.firstName + " " + listing.player.lastName) + " · قدرت " + listing.player.overall + " · " + cash(listing.askingPrice) + " کش · فروشنده: " + escapeHtml(listing.sellerClub.name)
+        ).join("\n"),
+        { parse_mode: "HTML", reply_markup: marketKeyboard },
+      );
+    }
+    if (data.packOffers.length) {
+      const packs = new InlineKeyboard();
+      for (const pack of data.packOffers) packs.text("✨ " + pack.rarity + " · " + cash(pack.priceGold) + " طلا", "pack:buy:" + pack.method).row();
+      await ctx.reply("✨ <b>بسته‌های بازیکن ویژه</b>\nبرای جذب بازیکن ویژه بسته موردنظر را انتخاب کن.", { parse_mode: "HTML", reply_markup: packs });
+    }
+  } catch (error) { await ctx.reply(`دریافت فروشگاه ناموفق بود: ${error instanceof Error ? error.message : "خطای نامشخص"}`); }
 });
 
 bot.command("buyitem", async (ctx) => {
