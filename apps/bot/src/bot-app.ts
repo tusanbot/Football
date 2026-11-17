@@ -2125,8 +2125,17 @@ bot.command("operations", async (ctx) => {
     const club = result.club;
     const prospects = club.prospects.map((p) => `• ${p.firstName} ${p.lastName} · ${p.age}y · ${p.position} · OVR ${p.overall}/POT ${p.potential} · ${cash(p.recruitmentCost)} Cash\n  ID: ${p.id}`);
     const sponsor = club.activeSponsor ? `${club.activeSponsor.partnerName} · ${club.activeSponsor.tier} · ${cash(club.activeSponsor.dailyIncome)} Cash/day` : "No active sponsor";
+    const keyboard = new InlineKeyboard()
+      .text("ارتقای ورزشگاه", "clubop:upgrade:STADIUM").text("ارتقای زمین تمرین", "clubop:upgrade:TRAINING_GROUND").row()
+      .text("ارتقای آکادمی", "clubop:upgrade:ACADEMY").text("🔎 استعدادیابی", "clubop:scout").row()
+      .text("💼 ارتقای مربی", "clubop:coach-upgrade").row()
+      .text("بلیت ۵۰", "clubop:ticket:50").text("بلیت ۱۰۰", "clubop:ticket:100").text("بلیت ۲۵۰", "clubop:ticket:250").row();
+    for (const prospect of club.prospects.slice(0, 8)) keyboard.text("جذب " + (prospect.firstName + " " + prospect.lastName).slice(0, 18), "clubop:recruit:" + prospect.id).row();
+    for (const offer of club.sponsorOffers) keyboard.text("امضای حامی: " + offer.partnerName.slice(0, 20), "clubop:sponsor:" + offer.id).row();
+    for (const coachOffer of club.coachOffers) keyboard.text("استخدام مربی: " + coachOffer.name.slice(0, 20), "clubop:coach:" + coachOffer.id).row();
     await ctx.reply(
-      `امکانات باشگاه\nورزشگاه سطح ${club.stadiumLevel} · ظرفیت ${club.stadiumCapacity} نفر · بلیت ${cash(club.ticketPrice)} کش\nزمین تمرین سطح ${club.trainingGroundLevel} · آکادمی سطح ${club.academyLevel}\nهزینه نگهداری روزانه: ${cash(club.dailyMaintenance)} کش · معوقات عملیاتی: ${cash(club.operatingArrears)} کش\nمربی: ${club.coach?.name ?? "ندارد"} (سطح ${club.coach?.level ?? 0}) · دستمزد هفتگی ${cash(club.coach?.weeklySalary ?? "0")} کش\nحامی مالی: ${sponsor}\n\nاستعدادهای آکادمی:\n${prospects.join("\n\n") || "استعداد آماده‌ای وجود ندارد."}\n\n/upgrade stadium|training|academy\n/scout\n/recruit PROSPECT_ID\n/sponsor local-partner|regional-brand|national-network\n/coach-upgrade\n/hire-coach balanced|youth|performance`,
+      `امکانات باشگاه\nورزشگاه سطح ${club.stadiumLevel} · ظرفیت ${club.stadiumCapacity} نفر · بلیت ${cash(club.ticketPrice)} کش\nزمین تمرین سطح ${club.trainingGroundLevel} · آکادمی سطح ${club.academyLevel}\nهزینه نگهداری روزانه: ${cash(club.dailyMaintenance)} کش · معوقات عملیاتی: ${cash(club.operatingArrears)} کش\nمربی: ${club.coach?.name ?? "ندارد"} (سطح ${club.coach?.level ?? 0}) · دستمزد هفتگی ${cash(club.coach?.weeklySalary ?? "0")} کش\nحامی مالی: ${sponsor}\n\nاستعدادهای آکادمی:\n${prospects.join("\n\n") || "استعداد آماده‌ای وجود ندارد."}\n\nبرای هر عملیات، دکمه مربوط را انتخاب کن.`,
+      { reply_markup: keyboard },
     );
   } catch (error) { await ctx.reply(`دریافت امکانات باشگاه ناموفق بود: ${error instanceof Error ? error.message : "خطای نامشخص"}`); }
 });
@@ -2149,6 +2158,62 @@ bot.command("finance", async (ctx) => {
     );
   } catch (error) { await ctx.reply("دریافت صورت‌حساب مالی ناموفق بود: " + (error instanceof Error ? error.message : "خطای نامشخص")); }
 });
+bot.callbackQuery(/^clubop:/, async (ctx) => {
+  if (!ctx.from || ctx.chat?.type !== "private") return ctx.answerCallbackQuery({ text: "مدیریت باشگاه فقط در گفت‌وگوی خصوصی مجاز است." });
+  const [, action, value] = ctx.callbackQuery.data.split(":");
+  try {
+    if (action === "upgrade" && ["STADIUM","TRAINING_GROUND","ACADEMY"].includes(value ?? "")) {
+      const result = await api<{ upgrade: { level?: number; cost?: string; replayed: boolean } }>("/v1/club/facilities/" + value + "/upgrade", ctx.from.id, "POST", { idempotencyKey: "tg-upgrade-" + ctx.from.id + "-" + ctx.callbackQuery.id });
+      await ctx.answerCallbackQuery({ text: "ارتقا انجام شد." });
+      await ctx.editMessageText("✅ سطح امکان به " + result.upgrade.level + " ارتقا یافت. هزینه: " + cash(result.upgrade.cost ?? "0") + " کش.");
+      return;
+    }
+    if (action === "scout") {
+      const result = await api<{ scouting: { prospects: Array<{ id: string; firstName: string; lastName: string; overall: number; potential: number; recruitmentCost: string }>; scoutingCost?: string } }>("/v1/club/academy/scout", ctx.from.id, "POST", { idempotencyKey: "tg-scout-" + ctx.from.id + "-" + ctx.callbackQuery.id });
+      const keyboard = new InlineKeyboard();
+      for (const player of result.scouting.prospects) keyboard.text("جذب " + (player.firstName + " " + player.lastName).slice(0, 24), "clubop:recruit:" + player.id).row();
+      await ctx.answerCallbackQuery({ text: "استعدادیابی انجام شد." });
+      await ctx.editMessageText("🔎 استعدادهای جدید شناسایی شدند. هزینه استعدادیابی: " + cash(result.scouting.scoutingCost ?? "0") + " کش.\n" + result.scouting.prospects.map((p) => p.firstName + " " + p.lastName + " · قدرت " + p.overall + " · پتانسیل " + p.potential + " · هزینه جذب " + cash(p.recruitmentCost)).join("\n"), { reply_markup: keyboard });
+      return;
+    }
+    if (action === "recruit" && value) {
+      const result = await api<{ recruitment: { player?: { firstName: string; lastName: string; overall: number; potential: number }; cost?: string; replayed: boolean } }>("/v1/club/academy/" + encodeURIComponent(value) + "/recruit", ctx.from.id, "POST", { idempotencyKey: "tg-recruit-" + ctx.from.id + "-" + ctx.callbackQuery.id });
+      await ctx.answerCallbackQuery({ text: "بازیکن جذب شد." });
+      await ctx.reply(result.recruitment.replayed ? "این جذب قبلاً ثبت شده بود." : "✅ " + result.recruitment.player?.firstName + " " + result.recruitment.player?.lastName + " جذب شد · قدرت " + result.recruitment.player?.overall + " · پتانسیل " + result.recruitment.player?.potential + " · هزینه " + cash(result.recruitment.cost ?? "0") + " کش.");
+      return;
+    }
+    if (action === "sponsor" && value) {
+      const result = await api<{ contract: { sponsor?: { partnerName: string; dailyIncome: string }; replayed: boolean } }>("/v1/club/sponsors/sign", ctx.from.id, "POST", { offerId: value, idempotencyKey: "tg-sponsor-" + ctx.from.id + "-" + ctx.callbackQuery.id });
+      await ctx.answerCallbackQuery({ text: "قرارداد حامی مالی ثبت شد." });
+      await ctx.reply("🤝 قرارداد با " + result.contract.sponsor?.partnerName + " امضا شد. درآمد روزانه: " + cash(result.contract.sponsor?.dailyIncome ?? "0") + " کش.");
+      return;
+    }
+    if (action === "coach" && value) {
+      const result = await api<{ hiring: { coach?: { name: string; weeklySalary: string }; signingFee?: string; replayed: boolean } }>("/v1/club/coach/hire", ctx.from.id, "POST", { candidateId: value, idempotencyKey: "tg-coach-hire-" + ctx.from.id + "-" + ctx.callbackQuery.id });
+      await ctx.answerCallbackQuery({ text: "مربی استخدام شد." });
+      await ctx.reply("✅ مربی " + result.hiring.coach?.name + " استخدام شد · حق امضا " + cash(result.hiring.signingFee ?? "0") + " کش · دستمزد هفتگی " + cash(result.hiring.coach?.weeklySalary ?? "0") + " کش.");
+      return;
+    }
+    if (action === "coach-upgrade") {
+      const result = await api<{ upgrade: { coach?: { level: number }; cost?: string } }>("/v1/club/coach/upgrade", ctx.from.id, "POST", { idempotencyKey: "tg-coach-upgrade-" + ctx.from.id + "-" + ctx.callbackQuery.id });
+      await ctx.answerCallbackQuery({ text: "مربی ارتقا یافت." });
+      await ctx.reply("مربی به سطح " + result.upgrade.coach?.level + " ارتقا یافت. هزینه: " + cash(result.upgrade.cost ?? "0") + " کش.");
+      return;
+    }
+    if (action === "ticket" && value && /^(50|100|250)$/.test(value)) {
+      const current = await api<{ club: { ticketPrice: string } }>("/v1/club/operations", ctx.from.id);
+      const result = await api<{ ticketing: { ticketPrice: string } }>("/v1/club/stadium/ticket-price", ctx.from.id, "PATCH", { ticketPrice: value, expectedTicketPrice: current.club.ticketPrice });
+      await ctx.answerCallbackQuery({ text: "قیمت بلیت تغییر کرد." });
+      await ctx.reply("قیمت بلیت روی " + cash(result.ticketing.ticketPrice) + " کش تنظیم شد.");
+      return;
+    }
+    await ctx.answerCallbackQuery({ text: "گزینه معتبر نیست." });
+  } catch (error) {
+    await ctx.answerCallbackQuery({ text: "عملیات ناموفق بود.", show_alert: true });
+    await ctx.reply("عملیات باشگاه ناموفق بود: " + (error instanceof Error ? error.message : "خطای نامشخص"));
+  }
+});
+
 bot.command("upgrade", async (ctx) => {
   if (!ctx.from) return;
   if (ctx.chat.type !== "private") return ctx.reply("دستور /upgrade را در گفت‌وگوی خصوصی اجرا کنید.");
