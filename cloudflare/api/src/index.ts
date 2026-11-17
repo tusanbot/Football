@@ -47,6 +47,19 @@ function configureEnv(env: Env): void {
   process.env.ALLIANCE_REVIEWER_TELEGRAM_IDS = env.ALLIANCE_REVIEWER_TELEGRAM_IDS ?? "";
   process.env.GAME_ADMIN_ROLE_MAP = env.GAME_ADMIN_ROLE_MAP ?? "";
 }
+function shouldWakeMatchCoordinator(method: string, pathname: string): boolean {
+  if (!["POST", "PUT", "PATCH", "DELETE"].includes(method.toUpperCase())) return false;
+  return pathname === "/v1/matches/friendly"
+    || /^\/v1\/matches\/[^/]+\/simulate$/.test(pathname)
+    || /^\/v1\/matches\/[^/]+\/checkpoints\/[^/]+\/decisions$/.test(pathname)
+    || pathname === "/v1/competitions"
+    || /^\/v1\/competitions\/[^/]+\/(join|start)$/.test(pathname)
+    || pathname === "/v1/friendly-challenges"
+    || /^\/v1\/friendly-challenges\/[^/]+\/accept$/.test(pathname)
+    || pathname === "/v1/pyramid-leagues/apply"
+    || /^\/v1\/pyramid-leagues\/promotions\/[^/]+\/respond$/.test(pathname)
+    || /^\/v1\/event-tournaments\/[^/]+\/join$/.test(pathname);
+}
 const api = createWorkersApiRouter();
 
 const allowedPilotEvents = new Set(["bot_start", "bot_command", "bot_callback", "bot_update", "miniapp_session"]);
@@ -453,8 +466,7 @@ export default {
       }
     }
     const response = await handleApi(request, env, ctx);
-    if (env.MATCH_COORDINATOR && ["POST", "PUT", "PATCH", "DELETE"].includes(request.method.toUpperCase())
-      && url.pathname.startsWith("/v1/")) {
+    if (env.MATCH_COORDINATOR && shouldWakeMatchCoordinator(request.method, url.pathname)) {
       const coordinator = env.MATCH_COORDINATOR.get(env.MATCH_COORDINATOR.idFromName("football-empire-match-runtime"));
       ctx.waitUntil(coordinator.fetch("https://match-coordinator/ensure", { method: "POST" }).catch((error: unknown) => {
         console.error("Could not schedule match coordinator alarm", error);
