@@ -1235,6 +1235,7 @@ async function processClaimedMatchRuntime(
     });
     const checkpointAt = new Date(now.getTime() + 45 * MATCH_MINUTE_MS);
     const decisionDeadlineAt = new Date(checkpointAt.getTime() + MATCH_CHECKPOINT_WINDOW_MS);
+    const firstHalfNextSegmentAt = new Date(decisionDeadlineAt.getTime() + 15 * MATCH_MINUTE_MS);
     state = {
       segment: first.state,
       substitutions: { home: first.homeSubstitutions, away: first.awaySubstitutions },
@@ -1246,7 +1247,7 @@ async function processClaimedMatchRuntime(
         data: {
           status: "AWAITING_CHECKPOINT", currentMinute: 45, stateVersion: { increment: 1 },
           simulationState: jsonSafe(state), startedAt: runtime.startedAt ?? now,
-          nextActionAt: decisionDeadlineAt, lastError: null,
+          nextActionAt: checkpointAt, lastError: null,
         },
       });
       if (runtimeUpdated.count !== 1) throw new MatchServiceError("MATCH_RUNTIME_CONCURRENT_MODIFICATION");
@@ -1262,7 +1263,7 @@ async function processClaimedMatchRuntime(
       await tx.matchTacticalCheckpoint.createMany({
         data: [{
           matchId: runtime.matchId, checkpointKey: "minute-45", kind: "HALF_TIME", minute: 45,
-          openedAt: checkpointAt, decisionDeadlineAt, nextSegmentAt: decisionDeadlineAt,
+          openedAt: checkpointAt, decisionDeadlineAt, nextSegmentAt: firstHalfNextSegmentAt,
         }],
         skipDuplicates: true,
       });
@@ -1288,7 +1289,7 @@ async function processClaimedMatchRuntime(
     .every((clubId) => decisions.some((decision) => decision.clubId === clubId
       && decision.submittedAt >= checkpoint.openedAt
       && decision.submittedAt < checkpoint.decisionDeadlineAt));
-  if (!bothResponded && now < checkpoint.nextSegmentAt) return "WAITING";
+  if (now < checkpoint.nextSegmentAt) return "WAITING";
 
   const kind = checkpoint.kind;
   const checkpointName = kind === "HALF_TIME" ? "HALF_TIME" : kind === "MINUTE_60" ? "MINUTE_60" : "MINUTE_75";
@@ -1372,7 +1373,8 @@ async function processClaimedMatchRuntime(
     if (!isFullTime) {
       const nextKind = nextMinute === 60 ? "MINUTE_60" : "MINUTE_75";
       const nextAt = new Date(now.getTime() + 15 * MATCH_MINUTE_MS);
-      const decisionDeadlineAt = new Date(now.getTime() + MATCH_CHECKPOINT_WINDOW_MS);
+      const decisionDeadlineAt = new Date(nextAt.getTime() + MATCH_CHECKPOINT_WINDOW_MS);
+      const nextSegmentAt = new Date(decisionDeadlineAt.getTime() + 15 * MATCH_MINUTE_MS);
       await tx.matchTacticalCheckpoint.createMany({
         data: [{
           matchId: runtime.matchId, checkpointKey: "minute-" + nextMinute,
