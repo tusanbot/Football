@@ -297,7 +297,7 @@ export default {
         const schemaChecks = await withPrismaClient(client, () => prisma.$queryRaw<Array<{ ready: boolean }>>`
           SELECT
             (
-              SELECT count(*) = 9
+              SELECT count(*) = 10
               FROM "_prisma_migrations"
               WHERE migration_name IN (
                 '20261116120000_in_game_store',
@@ -308,7 +308,8 @@ export default {
                 '20261117200000_match_lifecycle_notifications',
                 '20261117210000_league_round_notice_dedupe',
                 '20261117220000_event_tournament_competitions',
-                '20261117230000_event_tournament_default_capacity'
+                '20261117230000_event_tournament_default_capacity',
+                '20261117240000_event_tournament_fk_indexes'
               )
                 AND finished_at IS NOT NULL
                 AND rolled_back_at IS NULL

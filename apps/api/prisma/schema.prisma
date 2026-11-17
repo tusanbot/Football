@@ -1409,6 +1409,7 @@ model EventTournamentParticipant {
   prizeAwards EventTournamentPrizeAward[]
   @@unique([tournamentId, userId])
   @@unique([tournamentId, clubId])
+  @@index([clubId])
   @@index([tournamentId, placement, score])
   @@index([userId, joinedAt])
 }
@@ -1426,6 +1427,7 @@ model EventTournamentPrize {
   specialPlayer SpecialPlayer? @relation(fields: [specialPlayerId], references: [id], onDelete: Restrict)
   awards EventTournamentPrizeAward[]
   @@index([tournamentId, placement])
+  @@index([specialPlayerId])
 }
 
 model EventTournamentPrizeAward {
@@ -1438,6 +1440,7 @@ model EventTournamentPrizeAward {
   participant EventTournamentParticipant @relation(fields: [participantId], references: [id], onDelete: Cascade)
   prize EventTournamentPrize @relation(fields: [prizeId], references: [id], onDelete: Restrict)
   @@unique([participantId, prizeId])
+  @@index([prizeId])
   @@index([createdAt])
 }
 
