@@ -7,6 +7,8 @@ test("match and competition endpoints require Telegram authentication", async (t
   await app.ready();
   t.after(async () => app.close());
   const requests = [
+    app.inject({ method: "GET", url: "/v1/me" }),
+    app.inject({ method: "PATCH", url: "/v1/club", payload: { name: "New Club" } }),
     app.inject({ method: "GET", url: "/v1/matches" }),
     app.inject({ method: "GET", url: "/v1/matches/opponents" }),
     app.inject({ method: "POST", url: "/v1/matches/friendly", payload: {} }),
@@ -23,7 +25,7 @@ test("match and competition endpoints require Telegram authentication", async (t
     app.inject({ method: "GET", url: "/v1/friendly-challenges/abcdefghijklmnop" }),
   ];
   const responses = await Promise.all(requests);
-  assert.deepEqual(responses.map((response) => response.statusCode), [401, 401, 401, 401, 401, 401, 401, 401, 401, 401, 401, 401, 401, 401]);
+  assert.deepEqual(responses.map((response) => response.statusCode), [401, 401, 401, 401, 401, 401, 401, 401, 401, 401, 401, 401, 401, 401, 401, 401]);
 });
 
 test("fallback-plan endpoints require Telegram authentication", async (t) => {
