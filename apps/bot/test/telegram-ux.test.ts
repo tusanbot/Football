@@ -116,7 +116,7 @@ test("bot source does not bypass the group reply retention wrapper with direct s
 });
 
 test("private menu is categorized and each submenu has a return path", () => {
-  assert.equal(PRIVATE_MENU_ROWS.length, 4);
+  assert.equal(PRIVATE_MENU_ROWS.length, 3);
   assert.ok(PRIVATE_MENU_ROWS.length < 6);
   assert.equal(Object.keys(PRIVATE_MENU_SUBMENUS).length, 5);
   for (const menu of Object.values(PRIVATE_MENU_SUBMENUS)) {
