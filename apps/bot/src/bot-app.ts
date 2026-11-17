@@ -1048,12 +1048,10 @@ bot.command("lineup", async (ctx) => {
       players: Array<{ id: string; firstName: string; lastName: string; position: string; overall: number; lineupSlot: number }>;
     } }>("/v1/club/lineup", ctx.from.id);
     const players = result.club.players.map((player) => `${player.lineupSlot}. ${player.firstName} ${player.lastName} — ${player.position} · قدرت ${player.overall}`);
-    await ctx.reply(
-      `Formation: ${result.club.formation} · Version: ${result.club.lineupVersion}\n` +
-      `Tactics: ${result.club.tactics.mentality}, ${result.club.tactics.pressing}, ${result.club.tactics.tempo}, ${result.club.tactics.passingStyle}\n\n` +
-      (players.join("\n") || "ترکیب اصلی هنوز تنظیم نشده است.") +
-      "\n\nبرای مشاهده شناسه بازیکنان از /players و برای ثبت ترکیب از /setlineup FORMATION ID1 ... ID11 استفاده کنید.\nآرایش‌ها: 4-3-3، 4-4-2، 3-5-2، 4-2-3-1",
-    );
+    const plain = `⚽ ترکیب اصلی · ${result.club.formation} · نسخه ${result.club.lineupVersion}\nذهنیت: ${result.club.tactics.mentality} · پرس: ${result.club.tactics.pressing}\nسرعت: ${result.club.tactics.tempo} · پاس: ${result.club.tactics.passingStyle}\n\n${players.join("\n") || "ترکیب اصلی هنوز تنظیم نشده است."}\n\nبرای مشاهده شناسه بازیکنان از /players و برای ثبت ترکیب از /setlineup استفاده کنید.`;
+    const richPlayers = result.club.players.map((player) => `<b>${player.lineupSlot}. ${escapeHtml(player.firstName + " " + player.lastName)}</b> · ${escapeHtml(player.position)} · قدرت <b>${player.overall}</b>`).join("\\n");
+    const rich = `⚽ <b>ترکیب اصلی · ${escapeHtml(result.club.formation)}</b> · نسخه ${result.club.lineupVersion}\nذهنیت: <b>${escapeHtml(result.club.tactics.mentality)}</b> · پرس: ${escapeHtml(result.club.tactics.pressing)}\nسرعت: ${escapeHtml(result.club.tactics.tempo)} · پاس: ${escapeHtml(result.club.tactics.passingStyle)}\n\n${richPlayers || "ترکیب اصلی هنوز تنظیم نشده است."}\n\nبرای ثبت ترکیب: /setlineup`;
+    await replyRich(ctx, rich, plain);
   } catch (error) {
     await ctx.reply(`دریافت ترکیب ناموفق بود: ${error instanceof Error ? error.message : "خطای نامشخص"}`);
   }
@@ -1470,10 +1468,13 @@ bot.command("pyramidtable", async (ctx) => {
     const scorers = result.topScorers.slice(0, 5).map((row) => row.playerName + " (" + row.clubName + ") · " + row.goals + " گل");
     const assists = result.topAssists.slice(0, 5).map((row) => row.playerName + " (" + row.clubName + ") · " + row.assists + " پاس گل");
     const awards = result.awards.map((row) => row.awardName + " · " + row.clubName);
-    await ctx.reply(result.league.name + " · " + result.league.tierName + " · فصل " + result.league.season + "\n\nجدول:\n" + table.join("\n")
+    const plain = result.league.name + " · " + result.league.tierName + " · فصل " + result.league.season + "\n\nجدول:\n" + table.join("\n")
       + "\n\nگلزنان برتر:\n" + (scorers.join("\n") || "هنوز گلی ثبت نشده")
       + "\n\nپاسورهای برتر:\n" + (assists.join("\n") || "هنوز پاس گلی ثبت نشده")
-      + (awards.length ? "\n\nجوایز:\n" + awards.join("\n") : ""));
+      + (awards.length ? "\n\nجوایز:\n" + awards.join("\n") : "");
+    const richTable = result.standings.map((row) => `<b>${row.position}. ${escapeHtml(row.clubName)}</b> · <b>${row.points}</b> امتیاز · ${row.played} بازی · ${row.won}-${row.drawn}-${row.lost} · گل ${row.goalsFor}:${row.goalsAgainst}`).join("\\n");
+    const rich = `🏆 <b>${escapeHtml(result.league.name)}</b> · ${escapeHtml(result.league.tierName)} · فصل ${result.league.season}\n\n<b>جدول لیگ</b>\n${richTable || "جدولی ثبت نشده است."}\n\n<b>گلزنان برتر</b>\n${scorers.map(escapeHtml).join("\\n") || "هنوز گلی ثبت نشده"}\n\n<b>پاسورهای برتر</b>\n${assists.map(escapeHtml).join("\\n") || "هنوز پاس گلی ثبت نشده"}${awards.length ? "\\n\\n<b>جوایز</b>\\n" + awards.map(escapeHtml).join("\\n") : ""}`;
+    await replyRich(ctx, rich, plain);
   } catch (error) { await ctx.reply("دریافت جدول لیگ ناموفق بود: " + (error instanceof Error ? error.message : "خطای نامشخص")); }
 });
 
@@ -1786,7 +1787,12 @@ bot.command("table", async (ctx) => {
     const rows = result.competition.format === "CUP"
       ? result.matches.map((match) => "دور " + match.round + ": " + match.homeClub.name + " " + (match.homeScore ?? "–") + "–" + (match.awayScore ?? "–") + " " + match.awayClub.name + (match.homePenalties !== null ? " (پنالتی " + match.homePenalties + "–" + match.awayPenalties + ")" : ""))
       : result.standings.map((row) => row.position + ". " + row.clubName + " · امتیاز " + row.points + " · بازی " + row.played + " · برد " + row.won + " · مساوی " + row.drawn + " · باخت " + row.lost + " · تفاضل " + row.goalDifference);
-    await ctx.reply(result.competition.name + " · " + ({DRAFT:"پیش‌نویس",REGISTRATION:"ثبت‌نام",ACTIVE:"در جریان",COMPLETED:"پایان‌یافته",CANCELLED:"لغوشده"} as Record<string,string>)[result.competition.status] + "\n\n" + rows.join("\n"));
+    const statusLabel = ({DRAFT:"پیش‌نویس",REGISTRATION:"ثبت‌نام",ACTIVE:"در جریان",COMPLETED:"پایان‌یافته",CANCELLED:"لغوشده"} as Record<string,string>)[result.competition.status] ?? result.competition.status;
+    const plain = result.competition.name + " · " + statusLabel + "\n\n" + rows.join("\n");
+    const richRows = result.competition.format === "CUP"
+      ? result.matches.map((match) => `<b>دور ${match.round ?? "—"}</b>\n${escapeHtml(match.homeClub.name)} <b>${match.homeScore ?? "–"}–${match.awayScore ?? "–"}</b> ${escapeHtml(match.awayClub.name)}${match.homePenalties !== null ? ` · پنالتی ${match.homePenalties}–${match.awayPenalties}` : ""}`)
+      : result.standings.map((row) => `<b>${row.position}. ${escapeHtml(row.clubName)}</b>\nامتیاز: <b>${row.points}</b> · بازی: ${row.played} · برد: ${row.won} · مساوی: ${row.drawn} · باخت: ${row.lost} · تفاضل: ${row.goalDifference}`);
+    await replyRich(ctx, `🏆 <b>${escapeHtml(result.competition.name)}</b> · ${escapeHtml(statusLabel)}\n\n${richRows.join("\\n\\n") || "هنوز اطلاعاتی ثبت نشده است."}`, plain);
   } catch (error) { await ctx.reply("دریافت جدول رقابت ناموفق بود: " + (error instanceof Error ? error.message : "خطای نامشخص")); }
 });
 
