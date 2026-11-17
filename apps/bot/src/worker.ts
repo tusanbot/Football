@@ -100,7 +100,7 @@ async function recordPilotEvent(update: unknown, env: Env) {
   const message = data.message ?? data.edited_message;
   const callback = data.callback_query;
   const text = typeof message?.text === "string" ? message.text : "";
-  const command = text.match(/^\\/([a-z0-9_]+)/i)?.[1]?.toLowerCase() ?? "";
+  const command = text.match(/^\/([a-z0-9_]+)/i)?.[1]?.toLowerCase() ?? "";
   const eventName = command === "start" ? "bot_start" : command ? "bot_command" : callback ? "bot_callback" : "bot_update";
   const userId = message?.from?.id ?? callback?.from?.id;
   if (typeof userId !== "number" || !Number.isSafeInteger(userId)) return;
