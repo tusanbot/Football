@@ -72,6 +72,8 @@ jobs:
         run: pnpm --filter @football/domain build
       - name: Generate Prisma Client
         run: pnpm db:generate
+      - name: Build shared domain package
+        run: pnpm --filter @football/domain build
       # Staging SQL and Prisma migration history are already applied and verified
       # through the Supabase management connection. The GitHub runner does not
       # need direct PostgreSQL connectivity; the deployed API uses staging Hyperdrive.
