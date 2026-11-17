@@ -9,7 +9,21 @@ interface Env {
   ENVIRONMENT?: string;
 }
 
+interface ExecutionContextLike {
+  waitUntil(promise: Promise<unknown>): void;
+}
+
 let cachedBotId: number | undefined;
+
+function constantTimeEqual(left: string, right: string): boolean {
+  const a = new TextEncoder().encode(left);
+  const b = new TextEncoder().encode(right);
+  if (a.length !== b.length) return false;
+  let mismatch = 0;
+  for (let i = 0; i < a.length; i++) mismatch |= a[i]! ^ b[i]!;
+  return mismatch === 0;
+}
+
 async function prepareBot(env: Env) {
   const instance = createBotApp({
     token: env.TELEGRAM_BOT_TOKEN,
@@ -22,19 +36,6 @@ async function prepareBot(env: Env) {
   instance.setBotTelegramId(cachedBotId);
   return instance;
 }
-
-/*
-}
-
-function constantTimeEqual(left: string, right: string): boolean {
-  const a = new TextEncoder().encode(left);
-  const b = new TextEncoder().encode(right);
-  if (a.length !== b.length) return false;
-  let mismatch = 0;
-  for (let i = 0; i < a.length; i++) mismatch |= a[i]! ^ b[i]!;
-  return mismatch === 0;
-}
-
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
@@ -65,7 +66,7 @@ export default {
     }
   },
 
-  async scheduled(_controller: { scheduledTime: number; cron: string }, env: Env, ctx: { waitUntil(promise: Promise<unknown>): void }): Promise<void> {
+  async scheduled(_controller: { scheduledTime: number; cron: string }, env: Env, ctx: ExecutionContextLike): Promise<void> {
     ctx.waitUntil((async () => {
       const { runBackgroundJobs } = await prepareBot(env);
       await runBackgroundJobs();
