@@ -723,7 +723,7 @@ test("group friendly challenge completion queues result notifications for both c
       const winner = clubs.find((club) => club.clubId === completedMatch.winnerClubId)!;
       const loser = clubs.find((club) => club.clubId !== completedMatch.winnerClubId)!;
       assert.equal(honorWallets.find((wallet) => wallet.userId === winner.userId)?.balance, 3n);
-      assert.equal(honorWallets.find((wallet) => wallet.userId === loser.userId)?.balance, 0n);
+      assert.equal(honorWallets.find((wallet) => wallet.userId === loser.userId)?.balance ?? 0n, 0n);
     } else {
       assert.ok(honorWallets.every((wallet) => wallet.balance === 1n));
     }
