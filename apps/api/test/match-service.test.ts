@@ -712,6 +712,24 @@ test("group friendly challenge completion queues result notifications for both c
     });
     assert.deepEqual(notifications.map((item) => item.channel), ["AWAY", "GROUP", "HOME"]);
     assert.equal(notifications.find((item) => item.channel === "GROUP")?.telegramChatId, group.telegramId);
+    const completedMatch = await prisma.footballMatch.findUniqueOrThrow({
+      where: { id: matchId }, select: { winnerClubId: true },
+    });
+    const honorWallets = await prisma.wallet.findMany({
+      where: { userId: { in: clubs.map((club) => club.userId) }, asset: "HONOR" },
+      select: { userId: true, balance: true },
+    });
+    if (completedMatch.winnerClubId) {
+      const winner = clubs.find((club) => club.clubId === completedMatch.winnerClubId)!;
+      const loser = clubs.find((club) => club.clubId !== completedMatch.winnerClubId)!;
+      assert.equal(honorWallets.find((wallet) => wallet.userId === winner.userId)?.balance, 3n);
+      assert.equal(honorWallets.find((wallet) => wallet.userId === loser.userId)?.balance, 0n);
+    } else {
+      assert.ok(honorWallets.every((wallet) => wallet.balance === 1n));
+    }
+    assert.equal(await prisma.ledgerTransaction.count({
+      where: { referenceType: "FRIENDLY_CHALLENGE", referenceId: created.challenge.id, asset: "HONOR" },
+    }), completedMatch.winnerClubId ? 1 : 2);
   } finally {
     const userIds = clubs.map((club) => club.userId);
     if (matchId) await prisma.footballMatch.deleteMany({ where: { id: matchId } });
