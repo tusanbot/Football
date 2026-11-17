@@ -1266,6 +1266,36 @@ bot.callbackQuery(/^league:/, async (ctx) => {
   }
 });
 
+bot.callbackQuery(/^leagueview:/, async (ctx) => {
+  if (!ctx.from || ctx.chat?.type !== "private") return ctx.answerCallbackQuery({ text: "این بخش در گفت‌وگوی خصوصی در دسترس است." });
+  const [, view, competitionId] = ctx.callbackQuery.data.split(":");
+  if (!competitionId || !["next", "table", "scorers"].includes(view ?? "")) return ctx.answerCallbackQuery({ text: "گزینه معتبر نیست." });
+  try {
+    const data = await api<{
+      competition: { name: string; status: string };
+      standings: Array<{ position: number; clubName: string; played: number; won: number; drawn: number; lost: number; goalDifference: number; points: number }>;
+      nextRound: number | null;
+      nextRoundMatches: Array<{ scheduledAt: string; status: string; homeClub: { name: string }; awayClub: { name: string }; homeScore: number | null; awayScore: number | null }>;
+      topScorers: Array<{ playerName: string; clubName: string; goals: number; assists: number }>;
+    }>("/v1/competitions/" + encodeURIComponent(competitionId), ctx.from.id);
+    const keyboard = new InlineKeyboard().text("بازی‌های هفته بعد", "leagueview:next:" + competitionId).text("جدول لیگ", "leagueview:table:" + competitionId).row().text("جدول گلزنان", "leagueview:scorers:" + competitionId);
+    if (view === "next") {
+      const fixtures = data.nextRoundMatches;
+      const body = fixtures.length ? fixtures.map((match) => match.homeClub.name + " مقابل " + match.awayClub.name + " · " + new Date(match.scheduledAt).toLocaleString("fa-IR", { timeZone: "Asia/Tehran" })).join("\n") : "مسابقه برنامه‌ریزی‌نشده‌ای باقی نمانده است. لیگ به پایان رسیده است.";
+      await ctx.reply("📅 <b>بازی‌های هفته " + (data.nextRound ?? "بعد") + "</b> · " + escapeHtml(data.competition.name) + "\n\n" + escapeHtml(body), { parse_mode: "HTML", reply_markup: keyboard });
+    } else if (view === "table") {
+      const body = data.standings.map((row) => row.position + ". " + row.clubName + " · " + row.points + " امتیاز · " + row.played + " بازی · " + row.won + " برد · " + row.drawn + " مساوی · " + row.lost + " باخت · تفاضل " + row.goalDifference).join("\n");
+      await ctx.reply("🏆 <b>جدول لیگ</b> · " + escapeHtml(data.competition.name) + "\n\n" + escapeHtml(body || "جدول هنوز تشکیل نشده است."), { parse_mode: "HTML", reply_markup: keyboard });
+    } else {
+      const body = data.topScorers.map((row, index) => (index + 1) + ". " + row.playerName + " · " + row.clubName + " · " + row.goals + " گل · " + row.assists + " پاس گل").join("\n");
+      await ctx.reply("⚽ <b>جدول گلزنان</b> · " + escapeHtml(data.competition.name) + "\n\n" + escapeHtml(body || "هنوز گلی ثبت نشده است."), { parse_mode: "HTML", reply_markup: keyboard });
+    }
+    await ctx.answerCallbackQuery();
+  } catch (error) {
+    await ctx.answerCallbackQuery({ text: "دریافت اطلاعات لیگ ناموفق بود." });
+    await ctx.reply("دریافت اطلاعات لیگ ناموفق بود: " + (error instanceof Error ? error.message : "خطای نامشخص"));
+  }
+});
 bot.callbackQuery(/^opp:/, async (ctx) => {
   if (!ctx.from || ctx.chat?.type !== "private") return ctx.answerCallbackQuery({ text: "چالش حریف فقط در گفت‌وگوی خصوصی ساخته می‌شود." });
   const [, action, clubId] = ctx.callbackQuery.data.split(":");
