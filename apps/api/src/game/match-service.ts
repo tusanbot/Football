@@ -1070,9 +1070,15 @@ export async function simulateScheduledMatch(userId: string, matchId: string, no
       }
     }
   }
-  if (settlement.competitionId && settlement.round !== null && settlement.round !== undefined) {
-    const competition = await prisma.competition.findUnique({ where: { id: settlement.competitionId }, select: { format: true } });
-    if (competition?.format === "LEAGUE") await publishLeagueRoundSummary(settlement.competitionId, settlement.round, now);
+  if (settlement.competitionId) {
+    const eventTournament = await prisma.eventTournament.findUnique({ where: { competitionId: settlement.competitionId }, select: { id: true } });
+    if (eventTournament) {
+      const tournamentService = await import("../event-tournament-service.js");
+      await tournamentService.finalizeEventTournamentFromCompetition(settlement.competitionId, now);
+    } else if (settlement.round !== null && settlement.round !== undefined) {
+      const competition = await prisma.competition.findUnique({ where: { id: settlement.competitionId }, select: { format: true } });
+      if (competition?.format === "LEAGUE") await publishLeagueRoundSummary(settlement.competitionId, settlement.round, now);
+    }
   }
   return settlement;
 }
