@@ -47,6 +47,17 @@ function configureEnv(env: Env): void {
 }
 const api = createWorkersApiRouter();
 
+const allowedPilotEvents = new Set(["bot_start", "bot_command", "bot_callback", "bot_update", "miniapp_session"]);
+function constantTimeSecretEqual(left: string, right: string): boolean {
+  const a = new TextEncoder().encode(left);
+  const b = new TextEncoder().encode(right);
+  if (!a.length || a.length !== b.length) return false;
+  let mismatch = 0;
+  for (let i = 0; i < a.length; i++) mismatch |= a[i]! ^ b[i]!;
+  return mismatch === 0;
+}
+
+
 async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
   const missing = missingConfig(env);
   if (missing.length) return json({ status: "not_ready", service: "football-empire-cloudflare-api", missing }, 503);
@@ -172,6 +183,35 @@ export default {
     const url = new URL(request.url);
     if (request.method === "GET" && url.pathname === "/health") {
       return json({ status: "ok", service: "football-empire-cloudflare-api", mode: "hono-prisma-runtime", build: "2026-11-16-hono-router-1" });
+    }
+    if (url.pathname === "/internal/pilot/events") {
+      if (request.method !== "POST") return json({ error: "METHOD_NOT_ALLOWED" }, 405);
+      const supplied = request.headers.get("x-football-bot-secret") ?? "";
+      if (!env.BOT_API_SECRET || !constantTimeSecretEqual(supplied, env.BOT_API_SECRET)) return json({ error: "UNAUTHORIZED" }, 401);
+      const length = Number(request.headers.get("content-length") ?? "0");
+      if (Number.isFinite(length) && length > 4096) return json({ error: "PAYLOAD_TOO_LARGE" }, 413);
+      const raw = await request.text();
+      if (new TextEncoder().encode(raw).byteLength > 4096) return json({ error: "PAYLOAD_TOO_LARGE" }, 413);
+      let event: { eventName?: unknown; userKey?: unknown; actionKey?: unknown; chatType?: unknown; source?: unknown };
+      try { event = JSON.parse(raw) as typeof event; } catch { return json({ error: "INVALID_JSON" }, 400); }
+      if (typeof event.eventName !== "string" || !allowedPilotEvents.has(event.eventName)
+        || typeof event.userKey !== "string" || !/^[a-f0-9]{32}$/.test(event.userKey)
+        || (event.actionKey !== undefined && (typeof event.actionKey !== "string" || event.actionKey.length > 64 || !/^[a-z0-9_-]*$/i.test(event.actionKey)))
+        || (event.chatType !== undefined && !["private", "group", "supergroup", "channel", "unknown"].includes(String(event.chatType)))
+        || !["bot", "miniapp"].includes(String(event.source))) return json({ error: "INVALID_EVENT" }, 400);
+      const client = createPrismaClient(dbUrl(env) ?? undefined, 1);
+      try {
+        await withPrismaClient(client, () => prisma.$executeRaw`
+          INSERT INTO "PilotAnalyticsEvent" ("eventName", "userKey", "actionKey", "chatType", "source")
+          VALUES (${event.eventName}, ${event.userKey}, ${typeof event.actionKey === "string" ? event.actionKey : ""}, ${typeof event.chatType === "string" ? event.chatType : "unknown"}, ${event.source})
+        `);
+        ctx.waitUntil(client.$disconnect().catch((error: unknown) => console.error("Pilot analytics cleanup failed", error)));
+        return json({ accepted: true }, 202);
+      } catch (error) {
+        await client.$disconnect().catch(() => undefined);
+        console.error("Pilot analytics persistence failed", error);
+        return json({ error: "ANALYTICS_UNAVAILABLE" }, 503);
+      }
     }
     configureEnv(env);
     if (request.method === "OPTIONS") return api.fetch(request);
