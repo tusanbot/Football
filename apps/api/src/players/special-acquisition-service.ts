@@ -3,9 +3,9 @@ import { Prisma, type PlayerPosition, type SpecialRarity } from "@prisma/client"
 import { prisma } from "../db.js";
 
 const PACKS = {
-  epic_pack: { rarity: "EPIC", price: 10 },
-  legendary_pack: { rarity: "LEGENDARY", price: 25 },
-  icon_pack: { rarity: "ICON", price: 50 },
+  epic_pack: { rarity: "EPIC", price: 250, maxCopies: 10 },
+  legendary_pack: { rarity: "LEGENDARY", price: 2_500, maxCopies: 3 },
+  icon_pack: { rarity: "ICON", price: 25_000, maxCopies: 1 },
 } as const;
 
 export type SpecialPackMethod = keyof typeof PACKS;
@@ -22,6 +22,7 @@ export function getSpecialPackOffers() {
     method,
     rarity: pack.rarity,
     priceGold: String(pack.price),
+    maxCopiesPerPlayer: pack.maxCopies,
   }));
 }
 
@@ -75,16 +76,28 @@ export async function acquireSpecialPlayer(userId: string, method: SpecialPackMe
       where: {
         active: true,
         rarity: pack.rarity as SpecialRarity,
+        acquisitionMethods: { has: method },
         players: { none: { clubId: club.id } },
       },
       select: {
         id: true, fullName: true, nationality: true, birthDate: true,
         positions: true, rarity: true, overall: true, potential: true, attributes: true,
+        _count: { select: { acquisitions: true } },
       },
     });
-    if (!candidates.length) throw new SpecialAcquisitionError("NO_AVAILABLE_PLAYERS");
+    const available = candidates.filter((candidate) => candidate._count.acquisitions < pack.maxCopies);
+    if (!available.length) throw new SpecialAcquisitionError("NO_AVAILABLE_PLAYERS");
 
-    const selected = candidates[randomInt(0, candidates.length)]!;
+    const selected = available[randomInt(0, available.length)]!;
+    // Serialize acquisitions for this exact card across all clubs. A concurrent
+    // transaction that selected the same card must retry after this row lock.
+    const cardLock = await tx.specialPlayer.updateMany({
+      where: { id: selected.id, active: true },
+      data: { updatedAt: new Date() },
+    });
+    if (cardLock.count !== 1) throw new SpecialAcquisitionError("NO_AVAILABLE_PLAYERS");
+    const currentCopies = await tx.specialPlayerAcquisition.count({ where: { specialPlayerId: selected.id } });
+    if (currentCopies >= pack.maxCopies) throw new SpecialAcquisitionError("NO_AVAILABLE_PLAYERS");
     const updated = await tx.wallet.updateMany({
       where: { id: wallet.id, balance: wallet.balance, version: wallet.version },
       data: { balance: { decrement: price }, version: { increment: 1 } },
