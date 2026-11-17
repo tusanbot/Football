@@ -109,7 +109,7 @@ test("bot source does not bypass the group reply retention wrapper with direct s
   // Background sends and explicit challenge/result DMs are intentional; ordinary command
   // responses continue through ctx.reply and the transient-retention wrapper.
   assert.deepEqual(directSends, ["bot.api.sendMessage", "bot.api.sendMessage", "bot.api.sendMessage", "bot.api.sendMessage", "ctx.api.sendMessage", "ctx.api.sendMessage"]);
-  assert.equal((botSource.match(/bot\\.api\\.sendMessage\\(telegramId/g) ?? []).length, 3);
+  assert.equal((botSource.match(/bot\.api\.sendMessage\(telegramId/g) ?? []).length, 3);
   assert.ok(botSource.includes("bot.api.sendMessage(Number(delivery.telegramGroupId), delivery.message)"));
   assert.ok(botSource.includes("/v1/bot/admin-group-broadcasts/"));
   assert.ok(/" \+ delivery\.id \+ "\/complete"/.test(botSource));
