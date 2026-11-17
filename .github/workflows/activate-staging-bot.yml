@@ -50,10 +50,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          me="$(curl --fail --silent --show-error "https://api.telegram.org/bot${STAGING_TELEGRAM_BOT_TOKEN}/getMe")"
+          me="$(curl --fail --silent --show-error --retry 5 --retry-all-errors --retry-delay 2 --connect-timeout 10 --max-time 30 "https://api.telegram.org/bot${STAGING_TELEGRAM_BOT_TOKEN}/getMe")"
           echo "$me" | jq -e '.ok == true and .result.is_bot == true' >/dev/null
           echo "Verified staging Bot identity: @$(echo "$me" | jq -r '.result.username')"
-          current="$(curl --fail --silent --show-error "https://api.telegram.org/bot${STAGING_TELEGRAM_BOT_TOKEN}/getWebhookInfo")"
+          current="$(curl --fail --silent --show-error --retry 5 --retry-all-errors --retry-delay 2 --connect-timeout 10 --max-time 30 "https://api.telegram.org/bot${STAGING_TELEGRAM_BOT_TOKEN}/getWebhookInfo")"
           current_url="$(echo "$current" | jq -r '.result.url // ""')"
           if [[ -n "$current_url" && "$current_url" != "$BOT_WEBHOOK_URL" ]]; then
             echo "Refusing to overwrite an unexpected webhook URL on the staging Bot."
@@ -71,13 +71,13 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          payload="$(curl --fail --silent --show-error --request POST "https://api.telegram.org/bot${STAGING_TELEGRAM_BOT_TOKEN}/setWebhook" \
+          payload="$(curl --fail --silent --show-error --retry 5 --retry-all-errors --retry-delay 2 --connect-timeout 10 --max-time 30 --request POST "https://api.telegram.org/bot${STAGING_TELEGRAM_BOT_TOKEN}/setWebhook" \
             --data-urlencode "url=$BOT_WEBHOOK_URL" \
             --data-urlencode "secret_token=$STAGING_WEBHOOK_SECRET" \
             --data-urlencode 'allowed_updates=["message","edited_message","callback_query","chat_member","my_chat_member"]' \
             --data-urlencode "drop_pending_updates=false")"
           echo "$payload" | jq -e '.ok == true and .result == true' >/dev/null
-          verified="$(curl --fail --silent --show-error "https://api.telegram.org/bot${STAGING_TELEGRAM_BOT_TOKEN}/getWebhookInfo")"
+          verified="$(curl --fail --silent --show-error --retry 5 --retry-all-errors --retry-delay 2 --connect-timeout 10 --max-time 30 "https://api.telegram.org/bot${STAGING_TELEGRAM_BOT_TOKEN}/getWebhookInfo")"
           echo "$verified" | jq -e --arg url "$BOT_WEBHOOK_URL" '
             .ok == true and
             .result.url == $url and
