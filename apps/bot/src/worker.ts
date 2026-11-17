@@ -115,6 +115,47 @@ async function recordPilotEvent(update: unknown, env: Env) {
   });
 }
 
+async function hmacSha256(keyBytes: Uint8Array, message: string): Promise<Uint8Array> {
+  const key = await crypto.subtle.importKey("raw", keyBytes, { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  return new Uint8Array(await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(message)));
+}
+
+export async function verifyTelegramInitData(initData: string, botToken: string): Promise<number | null> {
+  if (!initData || initData.length > 8192) return null;
+  const params = new URLSearchParams(initData);
+  const suppliedHash = params.get("hash");
+  const authDate = Number(params.get("auth_date"));
+  if (!suppliedHash || !/^[a-f0-9]{64}$/i.test(suppliedHash)
+    || !Number.isSafeInteger(authDate) || authDate > Math.floor(Date.now() / 1000) + 60
+    || authDate < Math.floor(Date.now() / 1000) - 86_400) return null;
+  const userRaw = params.get("user");
+  if (!userRaw) return null;
+  let user: { id?: unknown };
+  try { user = JSON.parse(userRaw) as { id?: unknown }; } catch { return null; }
+  if (typeof user.id !== "number" || !Number.isSafeInteger(user.id) || user.id <= 0) return null;
+  const dataCheckString = [...params.entries()]
+    .filter(([key]) => key !== "hash")
+    .sort(([left], [right]) => left < right ? -1 : left > right ? 1 : 0)
+    .map(([key, value]) => key + "=" + value)
+    .join("\\n");
+  const secretKey = await hmacSha256(new TextEncoder().encode("WebAppData"), botToken);
+  const signature = await hmacSha256(secretKey, dataCheckString);
+  const calculatedHash = Array.from(signature, byte => byte.toString(16).padStart(2, "0")).join("");
+  return constantTimeEqual(calculatedHash, suppliedHash) ? user.id : null;
+}
+
+async function recordMiniAppSession(userId: number, env: Env) {
+  const analytics = env.PILOT_ANALYTICS;
+  const hashSecret = env.ANALYTICS_HASH_SECRET;
+  if (!analytics || !hashSecret || hashSecret.length < 32) return;
+  const userKey = await analyticsUserKey(userId, hashSecret);
+  analytics.writeDataPoint({
+    blobs: ["miniapp_session", "miniapp_launch", "private", "miniapp"],
+    doubles: [1],
+    indexes: [userKey],
+  });
+}
+
 function constantTimeEqual(left: string, right: string): boolean {
   const a = new TextEncoder().encode(left);
   const b = new TextEncoder().encode(right);
@@ -151,6 +192,23 @@ export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
     if (url.pathname === "/health") return new Response("ok", { status: 200 });
+    if (url.pathname === "/miniapp/launch") {
+      const allowedOrigin = env.TELEGRAM_WEB_APP_URL ? new URL(env.TELEGRAM_WEB_APP_URL).origin : "";
+      const origin = request.headers.get("origin") ?? "";
+      if (!allowedOrigin || origin !== allowedOrigin) return new Response("Forbidden", { status: 403 });
+      const corsHeaders = { "access-control-allow-origin": allowedOrigin, "access-control-allow-methods": "POST, OPTIONS", "access-control-allow-headers": "content-type", "vary": "Origin" };
+      if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: corsHeaders });
+      if (request.method !== "POST") return new Response("Method not allowed", { status: 405, headers: { ...corsHeaders, allow: "POST, OPTIONS" } });
+      const length = Number(request.headers.get("content-length") ?? "0");
+      if (Number.isFinite(length) && length > 16_384) return new Response("Payload too large", { status: 413, headers: corsHeaders });
+      let body: { initData?: unknown };
+      try { body = await request.json() as { initData?: unknown }; } catch { return new Response("Invalid JSON", { status: 400, headers: corsHeaders }); }
+      if (typeof body.initData !== "string") return new Response("Invalid initData", { status: 400, headers: corsHeaders });
+      const userId = await verifyTelegramInitData(body.initData, env.TELEGRAM_BOT_TOKEN);
+      if (!userId) return new Response("Invalid Telegram Mini App signature", { status: 401, headers: corsHeaders });
+      await recordMiniAppSession(userId, env).catch(() => undefined);
+      return new Response(null, { status: 204, headers: corsHeaders });
+    }
     if (url.pathname !== "/telegram/webhook") return new Response("Not found", { status: 404 });
     if (request.method !== "POST") return new Response("Method not allowed", { status: 405, headers: { allow: "POST" } });
     const suppliedSecret = request.headers.get("x-telegram-bot-api-secret-token") ?? "";
