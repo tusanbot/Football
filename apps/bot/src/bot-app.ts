@@ -75,7 +75,7 @@ bot.use(async (ctx, next) => {
   if (chat && (chat.type === "group" || chat.type === "supergroup")) {
     const chatId = chat.id;
     const originalReply = ctx.reply.bind(ctx);
-    const command = ctx.message?.text?.match(/^\/([a-z0-9_-]+)/i)?.[1]?.toLowerCase();
+    const command = ctx.message?.text?.match(/^\/([a-z0-9_-]+)/i)?.[1]?.toLowerCase() ?? (ctx.callbackQuery?.data.startsWith("g:") ? "group-challenges" : undefined);
     Object.defineProperty(ctx, "reply", {
       configurable: true,
       value: async (...args: Parameters<typeof ctx.reply>) => {
