@@ -203,7 +203,7 @@ export default {
       try {
         await withPrismaClient(client, () => prisma.$executeRaw`
           INSERT INTO "PilotAnalyticsEvent" ("eventName", "userKey", "actionKey", "chatType", "source")
-          VALUES (${event.eventName}, ${event.userKey}, ${typeof event.actionKey === "string" ? event.actionKey : ""}, ${typeof event.chatType === "string" ? event.chatType : "unknown"}, ${event.source})
+          VALUES (${event.eventName}, ${event.userKey}, ${typeof event.actionKey === "string" ? event.actionKey : ""}, ${typeof event.chatType === "string" ? event.chatType : "unknown"}, ${String(event.source)})
         `);
         ctx.waitUntil(client.$disconnect().catch((error: unknown) => console.error("Pilot analytics cleanup failed", error)));
         return json({ accepted: true }, 202);
