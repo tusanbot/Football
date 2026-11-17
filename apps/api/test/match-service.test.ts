@@ -8,6 +8,7 @@ import {
   simulateScheduledMatch, startLeague, submitMatchCheckpointDecision, claimDueMatchRuntimes,
   releaseMatchRuntimeLease, processDueMatchRuntimes, updateCompetitionRules,
 } from "../src/game/match-service.js";
+import { acceptFriendlyChallenge, createFriendlyChallenge } from "../src/game/league-pyramid-service.js";
 
 const positions = ["GK","RB","CB","CB","LB","CDM","CM","CAM","RW","ST","LW"] as const;
 const squadPositions = [...positions, "GK", "CB", "RB", "LB", "CM", "ST", "RW"] as const;
@@ -675,6 +676,60 @@ test("opponent discovery returns the ten most recently active valid clubs and su
     }
     const userIds = clubs.map((club) => club.userId);
     if (userIds.length) {
+      await prisma.wallet.deleteMany({ where: { userId: { in: userIds } } });
+      await prisma.user.deleteMany({ where: { id: { in: userIds } } });
+    }
+  }
+});
+
+test("group friendly challenge completion queues result notifications for both clubs and the group", async (t) => {
+  if (!process.env.DATABASE_URL) {
+    t.skip("DATABASE_URL is only configured in the ephemeral PostgreSQL CI job.");
+    return;
+  }
+  const suffix = randomUUID().replaceAll("-", "");
+  const clubs: Array<{ userId: string; clubId: string }> = [];
+  let groupId = "";
+  let matchId = "";
+  try {
+    clubs.push(await makeClub(suffix, 200), await makeClub(suffix, 201));
+    const group = await prisma.telegramGroup.create({
+      data: { telegramId: "-100" + suffix.slice(0, 10), title: "Challenge Group " + suffix, isActive: true },
+    });
+    groupId = group.id;
+    await prisma.groupMembership.createMany({
+      data: clubs.map((club) => ({ groupId, userId: club.userId })),
+    });
+    const created = await createFriendlyChallenge(
+      clubs[0]!.userId, 100n, new Date(), group.telegramId, "group-challenge-" + suffix,
+    );
+    const accepted = await acceptFriendlyChallenge(clubs[1]!.userId, created.challenge.token, new Date());
+    matchId = accepted.match.id;
+    await simulateScheduledMatch(clubs[0]!.userId, matchId, new Date(Date.now() + 60_000));
+    const notifications = await prisma.matchResultNotification.findMany({
+      where: { matchId }, orderBy: { channel: "asc" },
+      select: { channel: true, telegramChatId: true },
+    });
+    assert.deepEqual(notifications.map((item) => item.channel), ["AWAY", "GROUP", "HOME"]);
+    assert.equal(notifications.find((item) => item.channel === "GROUP")?.telegramChatId, group.telegramId);
+  } finally {
+    const userIds = clubs.map((club) => club.userId);
+    if (matchId) await prisma.footballMatch.deleteMany({ where: { id: matchId } });
+    if (userIds.length) {
+      await prisma.friendlyChallenge.deleteMany({ where: { creatorUserId: { in: userIds } } });
+      await prisma.challengeDailyUsage.deleteMany({ where: { userId: { in: userIds } } });
+    }
+    if (groupId) {
+      await prisma.groupMembership.deleteMany({ where: { groupId } });
+      await prisma.telegramGroup.deleteMany({ where: { id: groupId } });
+    }
+    const clubIds = clubs.map((club) => club.clubId);
+    if (clubIds.length) {
+      await prisma.player.deleteMany({ where: { clubId: { in: clubIds } } });
+      await prisma.club.deleteMany({ where: { id: { in: clubIds } } });
+    }
+    if (userIds.length) {
+      await prisma.ledgerTransaction.deleteMany({ where: { userId: { in: userIds } } });
       await prisma.wallet.deleteMany({ where: { userId: { in: userIds } } });
       await prisma.user.deleteMany({ where: { id: { in: userIds } } });
     }
