@@ -856,6 +856,12 @@ bot.callbackQuery(/^league:/, async (ctx) => {
       await ctx.reply("🏆 ثبت‌نام شما در رقابت انجام شد. تعداد تیم‌ها: " + result.teams + (result.replayed ? " · عضویت قبلاً ثبت شده بود." : ""));
       return;
     }
+    if (action === "start" && id) {
+      const result = await api<{fixturesCreated:number;rounds:number;teams:number}>(`/v1/competitions/${encodeURIComponent(id)}/start`, ctx.from.id, "POST", {});
+      await ctx.answerCallbackQuery({ text: "رقابت آغاز شد." });
+      await ctx.reply("🚦 لیگ با " + result.teams + " باشگاه آغاز شد. " + result.fixturesCreated + " مسابقه در " + result.rounds + " هفته برنامه‌ریزی شد.");
+      return;
+    }
     if (action === "apply" && id) {
       const tier = Number(id);
       if (!Number.isInteger(tier) || tier < 1 || tier > 7) return ctx.answerCallbackQuery({ text: "سطح لیگ معتبر نیست." });
@@ -2199,8 +2205,10 @@ bot.command("leagues", async (ctx) => {
   try {
     const result = await api<{ competitions: Array<{ id: string; name: string; season: number; format: string; status?: string; teams: number; maxTeams: number; joined: boolean; isCreator: boolean }> }>("/v1/competitions", ctx.from.id);
     const keyboard = new InlineKeyboard();
-    const available = result.competitions.filter((item) => !item.joined && item.teams < item.maxTeams && (!item.status || item.status === "REGISTRATION"));
-    for (const item of available.slice(0, 20)) keyboard.text("➕ عضویت · " + item.name.slice(0, 24), "league:join:" + item.id).row();
+    for (const item of result.competitions.slice(0, 20)) {
+      if (item.joined && item.isCreator && item.teams >= 4) keyboard.text("🚦 آغاز · " + item.name.slice(0, 20), "league:start:" + item.id).row();
+      else if (!item.joined && item.teams < item.maxTeams && (!item.status || item.status === "REGISTRATION")) keyboard.text("➕ عضویت · " + item.name.slice(0, 24), "league:join:" + item.id).row();
+    }
     keyboard.text("🏅 درخواست لیگ پایه", "league:apply:1").text("⚔️ ساخت چالش", "act:challenge");
     const lines = result.competitions.map((item) =>
       `• <b>${escapeHtml(item.name)}</b> · ${item.format === "CUP" ? "جام حذفی" : "لیگ"} · ${item.teams}/${item.maxTeams} باشگاه · فصل ${item.season}${item.joined ? " · عضو هستید" : ""}`
