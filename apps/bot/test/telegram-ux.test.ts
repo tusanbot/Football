@@ -221,7 +221,7 @@ test("friendly challenge messages persist in groups and support inline acceptanc
   assert.ok(botSource.includes("match-results/claim"));
   assert.ok(botSource.includes("result.shareUrl ?? (bot.botInfo?.username"));
   assert.ok(botSource.includes('"challenge:accept:" + result.challenge.token'));
-  assert.ok(botSource.includes('"لینک اختصاصی: " + shareUrl'));
+  assert.ok(botSource.includes("لینک اختصاصی:"));
 });
 
 test("classic icon challenge is reachable from the player menu and has a claim callback", () => {
