@@ -235,9 +235,10 @@ export default {
     if (claimResult.result === "duplicate") return new Response("ok", { status: 200 });
     try {
       await ensureApiReady(env);
-      await recordPilotEvent(update, env).catch(() => undefined);
       const { bot } = await prepareBot(env);
       await bot.handleUpdate(update as never);
+      // Count successfully handled updates only; failed handlers are retried by Telegram.
+      await recordPilotEvent(update, env).catch(() => undefined);
       await guard.fetch(new Request("https://bot-update-guard/complete", { method: "POST", body: JSON.stringify({ updateId }) }));
       return new Response("ok", { status: 200 });
     } catch (error) {
