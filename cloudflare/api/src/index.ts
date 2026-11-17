@@ -72,7 +72,7 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
     ctx.waitUntil(client.$disconnect().catch((error: unknown) => console.error("Prisma request client cleanup failed", error)));
     return response;
   } catch (error) {
-    console.error("Cloudflare API request failed", error);
+    console.error("Cloudflare API request failed", describeRuntimeError(error));
     return json({ error: "INTERNAL_SERVER_ERROR" }, 500);
   } finally {
     if (!cleanupScheduled) await client.$disconnect().catch(() => undefined);
@@ -149,7 +149,7 @@ export class MatchCoordinator {
         nextAlarm = candidates.length ? Math.min(...candidates) : null;
       });
     } catch (error) {
-      console.error("Match coordinator tick failed", error);
+      console.error("Match coordinator tick failed", describeRuntimeError(error));
       nextAlarm = Date.now() + 10_000;
     } finally {
       await client.$disconnect();
@@ -395,7 +395,7 @@ export default {
         ctx.waitUntil(client.$disconnect().catch((error: unknown) => console.error("Prisma readiness cleanup failed", error)));
         return json({ status: "ready", service: "football-empire-api", database: "connected", schema: "current" });
       } catch (error) {
-        console.error("Cloudflare API readiness database check failed", error);
+        console.error("Cloudflare API readiness database check failed", describeRuntimeError(error));
         await client.$disconnect().catch(() => undefined);
         return json({ status: "not_ready", service: "football-empire-cloudflare-api", missing: ["DATABASE_CONNECTION"] }, 503);
       }
