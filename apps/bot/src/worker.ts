@@ -93,7 +93,9 @@ async function analyticsUserKey(telegramUserId: number, secret: string): Promise
 }
 
 async function recordPilotEvent(update: unknown, env: Env) {
-  if (!env.PILOT_ANALYTICS || !env.ANALYTICS_HASH_SECRET || env.ANALYTICS_HASH_SECRET.length < 32) return;
+  const analytics = env.PILOT_ANALYTICS;
+  const hashSecret = env.ANALYTICS_HASH_SECRET;
+  if (!analytics || !hashSecret || hashSecret.length < 32) return;
   type MessageLike = { text?: unknown; chat?: { type?: string }; from?: { id?: number } };
   type CallbackLike = { data?: unknown; from?: { id?: number }; message?: { chat?: { type?: string } } };
   const data = update as { message?: MessageLike; edited_message?: MessageLike; callback_query?: CallbackLike };
@@ -104,9 +106,9 @@ async function recordPilotEvent(update: unknown, env: Env) {
   const eventName = command === "start" ? "bot_start" : command ? "bot_command" : callback ? "bot_callback" : "bot_update";
   const userId = message?.from?.id ?? callback?.from?.id;
   if (typeof userId !== "number" || !Number.isSafeInteger(userId)) return;
-  const userKey = await analyticsUserKey(userId, env.ANALYTICS_HASH_SECRET);
+  const userKey = await analyticsUserKey(userId, hashSecret);
   const callbackPrefix = typeof callback?.data === "string" ? callback.data.split(":", 1)[0] : "";
-  env.PILOT_ANALYTICS.writeDataPoint({
+  analytics.writeDataPoint({
     blobs: [eventName, command || callbackPrefix, message?.chat?.type ?? callback?.message?.chat?.type ?? "unknown", callback ? "callback_query" : message?.text ? "text_message" : "message"],
     doubles: [1],
     indexes: [userKey],
