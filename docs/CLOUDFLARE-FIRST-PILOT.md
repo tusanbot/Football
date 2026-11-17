@@ -4,7 +4,7 @@
 
 The first invited-user pilot should run without a VPS. Telegram updates enter through a Cloudflare Worker webhook, while the Mini App and game API remain separate Workers.
 
-No production Worker, primary Telegram bot webhook, BotFather setting, or live database was changed as part of this implementation. The staging database and Hyperdrive are now provisioned independently from production. The API, Bot, and Mini App staging configs point to the dedicated staging endpoints; staging deployment and test-Bot activation remain gated on test credentials and final connection validation.
+No production Worker, primary Telegram bot webhook, BotFather setting, or production database was changed. The isolated staging database and Hyperdrive are provisioned independently. The API, Bot, and Mini App staging Workers are now deployed and passed their deployment health checks. The test Bot remains dormant: no Telegram webhook has been registered and its Cron trigger is disabled.
 
 ## Implemented in the release branch
 
@@ -45,7 +45,7 @@ No production Worker, primary Telegram bot webhook, BotFather setting, or live d
 - Analytics Engine is not required or enabled for this pilot. The staging PostgreSQL table and Prisma migration ledger are applied; events are persisted through the private API endpoint `POST /internal/pilot/events`.
 - Bot updates record successful starts, command/callback usage, and private/group context. Mini App launch/session events are recorded after Telegram `initData` signature and freshness validation.
 - Telegram user IDs are HMAC-pseudonymized with a staging-only `ANALYTICS_HASH_SECRET`. The event table stores only the truncated 128-bit HMAC key, event/action category, chat type, source, and timestamp. Raw Telegram IDs, message text, raw callback payloads, Bot tokens, and raw `initData` are never persisted.
-- The API accepts analytics writes only with the private Bot/API shared secret, validates a strict event allowlist and payload bounds, and writes through Hyperdrive. [Staging deployment trigger] RLS is enabled and browser-role grants are revoked on the analytics table.
+- The API accepts analytics writes only with the private Bot/API shared secret, validates a strict event allowlist and payload bounds, and writes through Hyperdrive. RLS is enabled and browser-role grants are revoked on the analytics table.
 - Analytics writes are best-effort and do not block gameplay. Bot events are recorded only after successful handler completion. Cloudflare Worker observability separately provides request, CPU, duration, and exception metrics.
 - Business-event analytics (challenge creation/join, match participation), retention cohorts, and admin dashboards remain follow-up work.
 
@@ -56,26 +56,35 @@ No production Worker, primary Telegram bot webhook, BotFather setting, or live d
 - It embeds the staging API URL and staging Bot Worker URL, not the production API URL.
 - CI builds and archives production and staging Mini App bundles separately.
 
-## Staging prerequisites that remain
+## Staging deployment status and remaining launch gates
 
-The separate staging infrastructure is now provisioned, but deployment and live Telegram testing remain gated:
+The isolated staging environment is deployed. The remaining work is live Telegram acceptance testing, not infrastructure provisioning:
 
-1. Supabase project `Football Empire Staging` (`uiwzbinjtglzqerymdwp`) is active in `eu-north-1`. All 42 SQL migrations are applied, all 61 Prisma models/tables exist, RLS is enabled on every public table, browser-facing roles have no table grants, all 9 foreign-key indexes and both alliance-FK repairs are present, and 15 curated special players are active. User, club, and group tables remain empty.
-2. Hyperdrive `footballtest` (`3d3a95b34ee74952b551c0b28be61a00`) is dedicated to this staging project and now targets its direct PostgreSQL endpoint, `db.uiwzbinjtglzqerymdwp.supabase.co:5432`. It does not reference production.
-3. The staging API config is `cloudflare/api/wrangler.staging.jsonc`, Worker name `football-empire-api-staging`. Its separate Durable Object namespace and staging CORS origin are configured in source.
-4. Bot and Mini App staging configs point to `https://football-empire-api-staging.mshmahyar9.workers.dev`; Mini App origin is `https://football-empire-web-staging.mshmahyar9.workers.dev`; Bot Worker origin is `https://football-empire-bot-staging.mshmahyar9.workers.dev`. The three Worker script names have been pre-created with inert HTTP 503 placeholders so deployment can use a least-privilege Workers Editor token instead of account-level Workers Admin. The placeholders are not the game application.
-5. Both migration ledgers are now registered: Supabase has all 42 SQL migrations, and Prisma's `public._prisma_migrations` contains all 42 matching records through `20261117120000_restore_alliance_foreign_keys`, with no unfinished migrations. This was verified directly against the isolated staging database. The temporary manual migration-registration workflow has therefore been retired; the staging deploy job does not need a direct PostgreSQL connection from GitHub Actions.
-6. For staging deployment, add repository secrets `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, `STAGING_TELEGRAM_BOT_TOKEN`, and `STAGING_GAME_ADMIN_TELEGRAM_IDS`. Give the Cloudflare API token Workers Editor permission scoped to the three staging Workers. The deploy workflow generates unique staging-only API, webhook, and analytics secrets at runtime and stores them as Cloudflare Worker secrets.
-7. Create a separate Telegram test Bot with BotFather. Never use the primary Bot token. Add repository secrets `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, `STAGING_TELEGRAM_BOT_TOKEN`, and `STAGING_GAME_ADMIN_TELEGRAM_IDS`. The Cloudflare token should have Workers Editor access scoped to the three staging Workers. The staging deployment workflow `.github/workflows/deploy-staging.yml` uses the dedicated staging Hyperdrive binding and generates unique staging-only API, webhook, and analytics secrets. It is gated by an explicit commit message containing `[deploy-staging]` or the `DEPLOY_STAGING` dispatch input. It deploys only the three staging Workers, verifies API readiness and web/Bot health, and deliberately does not call Telegram `setWebhook`. Ordinary pushes do not deploy.
-8. The staging Bot Worker is deployed with its Cron trigger disabled. Webhook registration and Cron activation are separate steps and must happen only after the user explicitly approves starting the test Bot. No Bot webhook has been registered and no Bot has been started.
+1. Supabase project `Football Empire Staging` (`uiwzbinjtglzqerymdwp`) is active in `eu-north-1`. The 42 original migrations plus `20261117140000_pilot_analytics_events` are applied. Prisma's `public._prisma_migrations` ledger contains 43/43 finished records. The new analytics table has RLS enabled, no browser-role SELECT grants, and INSERT permission for the dedicated `football_runtime` role. No pilot events exist yet because the Bot has not been activated.
+2. Hyperdrive `footballtest` (`3d3a95b34ee74952b551c0b28be61a00`) targets only the staging PostgreSQL endpoint `db.uiwzbinjtglzqerymdwp.supabase.co:5432`; it does not reference production.
+3. API Worker `football-empire-api-staging` is deployed. Its deployment workflow verified `/ready` successfully against the staging database.
+4. Mini App Worker `football-empire-web-staging` and Bot Worker `football-empire-bot-staging` are deployed. The deployment workflow verified the Mini App HTTP smoke test and Bot `/health` successfully. All three Workers have their staging-only database, Durable Object, and application bindings configured.
+5. The staging deployment workflow generates unique API, webhook, and analytics HMAC secrets at runtime and stores them as Worker secrets. Secret values are not exposed in source or logs.
+6. The staging deployment completed successfully in [workflow run 44045746154](https://github.com/tusanbot/Football/actions/runs/44045746154). CI for the same analytics implementation passed in [workflow run 44045194345](https://github.com/tusanbot/Football/actions/runs/44045194345).
+7. The Bot Worker has no Cron trigger. No Telegram `setWebhook` call was made, no test Bot has been started, and no production Worker, secret, webhook, or database was changed.
 
-## Validation status
+## Pilot acceptance criteria
 
-- Unit tests cover webhook route security, update claim/duplicate/release behavior, Telegram Mini App signature verification, freshness checks, and pseudonymous analytics events.
-- CI includes Bot typechecking/tests, Wrangler dry-runs for the Bot and both API configs, and separate production/staging Mini App builds.
-- CI run [44037628635](https://github.com/tusanbot/Football/actions/runs/44037628635) completed successfully on the current staging-config revision. It passed Bot/API typechecks and tests, Bot Worker dry-run, production and staging API dry-runs, and both Mini App builds.
-- The three Cloudflare staging Worker names exist only as inert 503 placeholders with no application bindings; the release workflow has not deployed the real API, Mini App, or Bot code.
-- No staging Worker has been deployed, no Telegram webhook has been registered, and no Telegram end-to-end test has been completed.
+The pilot is ready for invited users only when:
+
+1. The test Bot receives webhook updates on Cloudflare without a VPS.
+2. Private commands, Mini App launch, group commands, challenges, and match decisions pass end-to-end tests.
+3. Background notifications and message deletion survive Worker restarts and retry transient failures.
+4. Analytics reports starts, active users, command usage, Mini App sessions, API errors, and platform resource consumption without storing message content or raw Telegram IDs.
+5. API readiness and Mini App smoke tests pass against the staging database.
+6. A rollback plan exists and preserves game data.
+
+After measuring real usage, resource consumption, and retention, decide whether to remain Cloudflare-only or add one or more Node.js workers/servers. Future multi-bot support still requires a bot registry, per-bot secrets, and bot-specific routing; the current staging Worker is intentionally single-bot.## Validation status
+
+- CI passed Prisma schema validation and migration deployment, Bot tests, Cloudflare API typechecking and runtime tests (including authenticated analytics persistence and invalid-payload rejection), Worker dry-runs, and production/staging Mini App builds.
+- Staging deployment run [44045746154](https://github.com/tusanbot/Football/actions/runs/44045746154) completed successfully: API readiness, Mini App smoke test, and Bot health checks all passed.
+- The analytics table is ready but currently contains zero events. Real usage metrics will begin only after the test Bot is explicitly activated and Mini App sessions are launched by testers.
+- No Telegram webhook has been registered; no live Telegram end-to-end test has been performed.
 
 ## Pilot acceptance criteria
 
