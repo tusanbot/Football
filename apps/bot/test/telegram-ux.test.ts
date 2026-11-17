@@ -56,7 +56,7 @@ test("unknown private text is not converted into a command", () => {
 test("every registered group command has an explicit transient or persistent classification", () => {
   const staticGroupCommands = [...botSource.matchAll(/bot\.command\(\s*["']([^"']+)["']/g)]
     .map((match) => match[1])
-    .filter((command) => command === "start" || command === "group" || command.startsWith("group-") || command.startsWith("alliance"));
+    .filter((command) => command === "start" || command === "group" || command === "challenge" || command.startsWith("group-") || command.startsWith("alliance"));
   // These two aliases are registered from the alliance response loop rather than bot.command literals.
   const dynamicGroupCommands = ["alliance-accept", "alliance-decline"];
   for (const command of dynamicGroupCommands) {
