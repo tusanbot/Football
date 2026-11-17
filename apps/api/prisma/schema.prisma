@@ -1378,7 +1378,7 @@ model EventTournament {
   status EventTournamentStatus @default(REGISTRATION)
   entryFeeAsset WalletAsset?
   entryFeeAmount BigInt @default(0)
-  maxParticipants Int @default(128)
+  maxParticipants Int @default(8)
   registrationEndsAt DateTime
   startsAt DateTime
   endsAt DateTime?
