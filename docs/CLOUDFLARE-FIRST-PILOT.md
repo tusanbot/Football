@@ -35,10 +35,10 @@ No production Worker, primary Telegram bot webhook, BotFather setting, or live d
 ### Background jobs
 
 - The four existing workers (group-message deletion, match checkpoint notifications, league notices, and admin group broadcasts) are exposed through a single bounded `runBackgroundJobs()` entry point.
-- Cloudflare Cron invokes it every minute.
+- The Worker exposes a scheduled handler for the four queues. The staging Wrangler config intentionally has no Cron trigger yet, so background jobs remain dormant until the test Bot is explicitly activated.
 - The jobs continue using the existing PostgreSQL-backed claim/complete/fail API endpoints; the Worker does not depend on process-local timers.
 - This is database-backed queue polling, not Cloudflare Queues. The existing database claim tokens and retry rules remain authoritative.
-- Group replies target a 60-second deletion delay, but one-minute Cron polling means actual deletion can be later than 60 seconds.
+- Once the staging Cron trigger is explicitly enabled, one-minute polling means group-message deletion can occur later than the configured 60-second target.
 
 ### Pilot analytics
 
@@ -68,7 +68,7 @@ The separate staging infrastructure is now provisioned, but deployment and live 
 5. Both migration ledgers are now registered: Supabase has all 42 SQL migrations, and Prisma's `public._prisma_migrations` contains all 42 matching records through `20261117120000_restore_alliance_foreign_keys`, with no unfinished migrations. This was verified directly against the isolated staging database. The temporary manual migration-registration workflow has therefore been retired; the staging deploy job does not need a direct PostgreSQL connection from GitHub Actions.
 6. For staging deployment, add repository secrets `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, `STAGING_TELEGRAM_BOT_TOKEN`, and `STAGING_GAME_ADMIN_TELEGRAM_IDS`. Give the Cloudflare API token Workers Editor permission scoped to the three staging Workers. The deploy workflow generates unique staging-only API, webhook, and analytics secrets at runtime and stores them as Cloudflare Worker secrets.
 7. Create a separate Telegram test Bot with BotFather. Never use the primary Bot token. Add repository secrets `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, `STAGING_TELEGRAM_BOT_TOKEN`, and `STAGING_GAME_ADMIN_TELEGRAM_IDS`. The Cloudflare token should have Workers Editor access scoped to the three staging Workers. The staging deployment workflow `.github/workflows/deploy-staging.yml` uses the dedicated staging Hyperdrive binding and generates unique staging-only API, webhook, and analytics secrets. It is gated by an explicit commit message containing `[deploy-staging]` or the `DEPLOY_STAGING` dispatch input. It deploys only the three staging Workers, verifies API readiness and web/Bot health, and deliberately does not call Telegram `setWebhook`. Ordinary pushes do not deploy.
-8. Webhook registration is a separate activation step and must only happen after the user explicitly approves starting the test Bot. No Bot webhook has been registered and no Bot has been started.
+8. The staging Bot Worker is deployed with its Cron trigger disabled. Webhook registration and Cron activation are separate steps and must happen only after the user explicitly approves starting the test Bot. No Bot webhook has been registered and no Bot has been started.
 
 ## Validation status
 
