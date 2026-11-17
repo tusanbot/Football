@@ -90,7 +90,7 @@ export function registerEventTournamentRoutes(app: FastifyInstance) {
       },
     });
     return { tournaments: tournaments.map((item) => ({
-      id: item.id, title: item.title, description: item.description, status: item.status,
+      id: item.id, title: item.title, description: item.description, status: item.status, competitionId: item.competitionId,
       entryFeeAsset: item.entryFeeAsset, entryFeeAmount: item.entryFeeAmount.toString(),
       maxParticipants: item.maxParticipants, participantCount: item._count.participants,
       registrationEndsAt: item.registrationEndsAt.toISOString(), startsAt: item.startsAt.toISOString(),
