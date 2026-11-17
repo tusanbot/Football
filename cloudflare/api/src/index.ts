@@ -390,7 +390,7 @@ export default {
       }
     }
     configureEnv(env);
-    if (request.method === "OPTIONS") return api.fetch(request);
+    if (request.method === "OPTIONS") return createWorkersApiRouter().fetch(request);
     if (request.method === "GET" && url.pathname === "/ready") {
       const missing = missingConfig(env);
       if (missing.length) return json({ status: "not_ready", service: "football-empire-cloudflare-api", missing }, 503);
