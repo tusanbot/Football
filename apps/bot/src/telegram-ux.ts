@@ -49,7 +49,7 @@ export const PERSISTENT_GROUP_COMMANDS = new Set([
   "start", "challenge",
   "group-register", "group-check", "group-give", "group-challenges", "group-challenge",
   "group-challenge-complete", "group-challenge-cancel", "group-rewards", "group-treasury",
-  "group-league", "group-league-start", "group-league-table", "group-leagues",
+  "group-league", "group-league-table", "group-leagues",
   "alliance", "alliance-create", "alliance-invite", "alliance-accept", "alliance-decline",
   "alliance-championship", "alliance-championship-join", "alliance-championship-start",
   "alliance-season-start", "alliance-season-close", "alliance-season-review", "alliance-contribute",
