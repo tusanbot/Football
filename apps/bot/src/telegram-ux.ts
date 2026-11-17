@@ -99,7 +99,7 @@ export const PRIVATE_MENU_SUBMENUS = {
     title: "⚽ مسابقات",
     rows: [
       [{ label: "🗓 مسابقات من", command: "matches" }, { label: "⚔️ حریفان", command: "opponents" }],
-      [{ label: "🏆 لیگ‌ها", command: "leagues" }, { label: "📊 جدول لیگ", command: "table" }],
+      [{ label: "🏆 لیگ‌ها", command: "leagues" }, { label: "🧠 تاکتیک جایگزین", command: "fallback" }],
     ],
   },
   menu_competitions: {
