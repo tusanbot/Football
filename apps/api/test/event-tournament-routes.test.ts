@@ -119,9 +119,13 @@ test("event tournament auto-starts at capacity and settles HONOR prizes from sim
   assert.equal(fixtures.length, 6);
   assert.equal(new Set(fixtures.map((fixture) => fixture.round)).size, 3);
   assert.equal(fixtures[0]!.scheduledAt.getTime() - Date.now() >= 23 * 60 * 60_000, true);
-  for (const fixture of fixtures) {
+  for (const [index, fixture] of fixtures.entries()) {
     const owner = players.find((player) => player.clubId === fixture.homeClubId || player.clubId === fixture.awayClubId)!;
     await simulateScheduledMatch(owner.userId, fixture.id, new Date(fixture.scheduledAt.getTime() + 90_000));
+    if (index === 0) {
+      const stillActive = await prisma.competition.findUniqueOrThrow({ where: { id: competitionId }, select: { status: true } });
+      assert.equal(stillActive.status, "ACTIVE");
+    }
   }
   const completed = await prisma.eventTournament.findUniqueOrThrow({ where: { id: tournamentId }, include: { participants: true } });
   assert.equal(completed.status, "COMPLETED");
