@@ -215,3 +215,10 @@ test("friendly challenge messages persist in groups and support inline acceptanc
   assert.ok(botSource.includes("start=challenge_"));
   assert.ok(botSource.includes("match-results/claim"));
 });
+
+test("classic icon challenge is reachable from the player menu and has a claim callback", () => {
+  const playerMenu = PRIVATE_MENU_SUBMENUS.menu_players.rows.flat();
+  assert.ok(playerMenu.some((item) => item.command === "specialchallenges"));
+  assert.ok(botSource.includes('bot.command("specialchallenges"'));
+  assert.ok(botSource.includes("legacy:claim:"));
+});
