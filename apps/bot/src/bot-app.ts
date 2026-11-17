@@ -1231,7 +1231,7 @@ bot.callbackQuery(/^league:/, async (ctx) => {
 });
 
 bot.callbackQuery(/^leagueview:/, async (ctx) => {
-  if (!ctx.from || ctx.chat?.type !== "private") return ctx.answerCallbackQuery({ text: "این بخش در گفت‌وگوی خصوصی در دسترس است." });
+  if (!ctx.from || !ctx.chat) return ctx.answerCallbackQuery({ text: "این بخش در گفت‌وگوی خصوصی در دسترس است." });
   const [, view, competitionId] = ctx.callbackQuery.data.split(":");
   if (!competitionId || !["next", "table", "scorers"].includes(view ?? "")) return ctx.answerCallbackQuery({ text: "گزینه معتبر نیست." });
   try {
@@ -1515,6 +1515,9 @@ bot.callbackQuery(/^g:/, async (ctx) => {
       const keyboard = new InlineKeyboard();
       const open = result.leagues.filter((item) => item.status === "REGISTRATION" && !item.joined && item.teams < item.maxTeams);
       for (const item of open) keyboard.text("عضویت در «" + item.name.slice(0, 24) + "»", "g:joinleague:" + item.id).row();
+      for (const item of result.leagues.filter((league) => league.joined && ["ACTIVE", "COMPLETED"].includes(league.status))) {
+        keyboard.text("بازی بعدی", "leagueview:next:" + item.id).text("جدول", "leagueview:table:" + item.id).row().text("گلزنان", "leagueview:scorers:" + item.id);
+      }
       await ctx.answerCallbackQuery();
       await ctx.reply(
         "🏆 <b>لیگ‌های گروه</b>\n\n" + (result.leagues.map((item) =>
