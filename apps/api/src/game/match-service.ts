@@ -1409,7 +1409,7 @@ async function processClaimedMatchRuntime(
       where: { id: runtime.id, stateVersion: runtime.stateVersion, leaseToken: runtime.leaseToken },
       data: {
         status: "RUNNING", currentMinute: nextMinute, stateVersion: { increment: 1 },
-        simulationState: jsonSafe(nextState), nextActionAt: isFullTime ? now : nextAt,
+        simulationState: jsonSafe(nextState), nextActionAt: isFullTime ? now : new Date(now.getTime() + 1_000),
         lastError: null,
       },
     });
@@ -1424,7 +1424,7 @@ async function processClaimedMatchRuntime(
     await enqueueMatchLifecycleNotifications(tx, runtime.match, lifecycleEvents);
     if (!isFullTime) {
       const nextKind = nextMinute === 60 ? "MINUTE_60" : "MINUTE_75";
-      const nextAt = new Date(now.getTime() + 15 * MATCH_MINUTE_MS);
+      const nextAt = now;
       const decisionDeadlineAt = new Date(nextAt.getTime() + MATCH_CHECKPOINT_WINDOW_MS);
       const nextSegmentAt = new Date(decisionDeadlineAt.getTime() + 15 * MATCH_MINUTE_MS);
       await tx.matchTacticalCheckpoint.createMany({
