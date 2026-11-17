@@ -77,9 +77,13 @@ BEGIN
     ('AllianceLedger_allianceId_fkey')
   ) AS required(conname)
   WHERE NOT EXISTS (
-    SELECT 1 FROM pg_constraint c
+    SELECT 1
+    FROM pg_constraint c
+    JOIN pg_class rel ON rel.oid = c.conrelid
+    JOIN pg_namespace n ON n.oid = rel.relnamespace
     WHERE c.conname = required.conname
       AND c.contype = 'f'
+      AND n.nspname = 'public'
   );
 
   IF missing_alliance_fk IS NOT NULL THEN
