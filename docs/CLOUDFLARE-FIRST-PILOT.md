@@ -42,13 +42,12 @@ No production Worker, primary Telegram bot webhook, BotFather setting, or live d
 
 ### Pilot analytics
 
-- Worker Analytics Engine dataset: `football_empire_pilot`.
-- Bot updates record starts, command/callback usage, and private/group context.
-- Mini App launch/session events are sent to `POST /miniapp/launch`. The Worker verifies Telegram Mini App `initData` with the Bot token, checks a 24-hour freshness window, and enforces the configured Mini App origin.
-- Telegram user IDs are HMAC-pseudonymized using `ANALYTICS_HASH_SECRET`; raw IDs, message text, Bot tokens, and raw `initData` are not stored in Analytics Engine.
-- Analytics writes are best-effort and cannot block gameplay. Bot command/update events are recorded only after the shared Bot handler completes successfully, avoiding counting failed attempts as successful engagement.
-- Cloudflare Worker observability provides request, CPU, duration, and exception metrics.
-- Business-event analytics for every Mini App action (for example challenge creation/join and match participation) and retention cohort dashboards remain follow-up work. Bot command usage and Mini App sessions are available as the initial pilot signals.
+- Analytics Engine is not required or enabled for this pilot. Events are persisted in the isolated staging PostgreSQL database through the private API endpoint `POST /internal/pilot/events`.
+- Bot updates record successful starts, command/callback usage, and private/group context. Mini App launch/session events are recorded after Telegram `initData` signature and freshness validation.
+- Telegram user IDs are HMAC-pseudonymized with a staging-only `ANALYTICS_HASH_SECRET`. The event table stores only the truncated 128-bit HMAC key, event/action category, chat type, source, and timestamp. Raw Telegram IDs, message text, raw callback payloads, Bot tokens, and raw `initData` are never persisted.
+- The API accepts analytics writes only with the private Bot/API shared secret, validates a strict event allowlist and payload bounds, and writes through Hyperdrive. RLS is enabled and browser-role grants are revoked on the analytics table.
+- Analytics writes are best-effort and do not block gameplay. Bot events are recorded only after successful handler completion. Cloudflare Worker observability separately provides request, CPU, duration, and exception metrics.
+- Business-event analytics (challenge creation/join, match participation), retention cohorts, and admin dashboards remain follow-up work.
 
 ### Mini App staging build
 
