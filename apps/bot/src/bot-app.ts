@@ -2986,6 +2986,76 @@ bot.command("clubprofile", async (ctx) => {
 });
 
 bot.on("message:text", async (ctx, next) => {
+  if (ctx.from && ctx.chat.type === "private" && ctx.message.reply_to_message) {
+    const wizard = pendingEventTournamentWizards.get(ctx.from.id);
+    if (wizard && wizard.promptMessageId === ctx.message.reply_to_message.message_id) {
+      const value = ctx.message.text.trim();
+      const ask = async (promptText: string) => {
+        const prompt = await ctx.reply(promptText);
+        wizard.promptMessageId = prompt.message_id;
+      };
+      if (wizard.stage === "title") {
+        if (value.length < 3 || value.length > 100) return ask("عنوان باید بین ۳ تا ۱۰۰ نویسه باشد. دوباره ارسال کن.");
+        wizard.title = value; wizard.stage = "description";
+        return ask("توضیحات تورنمنت را ارسال کن (۵ تا ۲۰۰۰ نویسه).");
+      }
+      if (wizard.stage === "description") {
+        if (value.length < 5 || value.length > 2000) return ask("توضیحات باید بین ۵ تا ۲۰۰۰ نویسه باشد. دوباره ارسال کن.");
+        wizard.description = value; wizard.stage = "registrationDays";
+        return ask("ثبت‌نام چند روز باز بماند؟ عددی بین ۱ تا ۶۰ ارسال کن.");
+      }
+      if (wizard.stage === "registrationDays") {
+        const days = Number(value);
+        if (!Number.isInteger(days) || days < 1 || days > 60) return ask("مدت ثبت‌نام باید عددی بین ۱ تا ۶۰ روز باشد.");
+        wizard.registrationDays = days; wizard.stage = "startsInDays";
+        return ask("تورنمنت چند روز دیگر شروع شود؟ باید بیشتر از مدت ثبت‌نام و حداکثر ۹۰ روز باشد.");
+      }
+      if (wizard.stage === "startsInDays") {
+        const days = Number(value);
+        if (!Number.isInteger(days) || days <= (wizard.registrationDays ?? 0) || days > 90) return ask("زمان شروع باید بیشتر از مدت ثبت‌نام و حداکثر ۹۰ روز باشد.");
+        wizard.startsInDays = days; wizard.stage = "maxParticipants";
+        return ask("حداکثر تعداد شرکت‌کنندگان را بین ۲ تا ۵۰۰ وارد کن.");
+      }
+      if (wizard.stage === "maxParticipants") {
+        const count = Number(value);
+        if (!Number.isInteger(count) || count < 2 || count > 500) return ask("ظرفیت باید عددی بین ۲ تا ۵۰۰ باشد.");
+        wizard.maxParticipants = count;
+        const prompt = await ctx.reply("ورودی تورنمنت را انتخاب کن:", { reply_markup: new InlineKeyboard()
+          .text("رایگان", "event-tournament:fee:FREE").row()
+          .text("کش", "event-tournament:fee:CASH").text("طلا", "event-tournament:fee:GOLD").text("Honor", "event-tournament:fee:HONOR") });
+        wizard.promptMessageId = prompt.message_id;
+        return;
+      }
+      if (wizard.stage === "feeAmount") {
+        if (!/^[1-9][0-9]{0,17}$/.test(value)) return ask("مبلغ ورودی باید عدد صحیح مثبت باشد.");
+        wizard.feeAmount = value;
+        await askTournamentPrize(ctx, wizard);
+        return;
+      }
+      if (wizard.stage === "prizeAmount") {
+        if (!/^[1-9][0-9]{0,17}$/.test(value)) return ask("مبلغ جایزه باید عدد صحیح مثبت باشد.");
+        const placement = tournamentPlacements[wizard.placementIndex]!;
+        wizard.prizes.push({ placement, type: wizard.pendingPrizeType!, amount: value });
+        wizard.pendingPrizeType = undefined; wizard.placementIndex += 1;
+        await askTournamentPrize(ctx, wizard);
+        return;
+      }
+      if (wizard.stage === "itemKey") {
+        if (!/^[a-z0-9][a-z0-9_-]{1,79}$/i.test(value)) return ask("کلید آیتم معتبر نیست؛ فقط حروف، عدد، خط تیره و زیرخط مجاز است.");
+        wizard.prizes.push({ placement: tournamentPlacements[wizard.placementIndex]!, type: "STORE_ITEM", itemKey: value });
+        wizard.placementIndex += 1; wizard.pendingPrizeType = undefined;
+        await askTournamentPrize(ctx, wizard);
+        return;
+      }
+      if (wizard.stage === "specialPlayerId") {
+        if (value.length < 1 || value.length > 128) return ask("شناسه بازیکن ویژه معتبر نیست.");
+        wizard.prizes.push({ placement: tournamentPlacements[wizard.placementIndex]!, type: "SPECIAL_PLAYER", specialPlayerId: value });
+        wizard.placementIndex += 1; wizard.pendingPrizeType = undefined;
+        await askTournamentPrize(ctx, wizard);
+        return;
+      }
+    }
+  }
   if (!ctx.from || !ctx.message.reply_to_message) return next();
   const groupPending = pendingGroupCreations.get(ctx.from.id);
   if ((ctx.chat.type === "group" || ctx.chat.type === "supergroup") && groupPending
