@@ -58,7 +58,10 @@ test("production readiness rejects direct or session-pooled database URLs", asyn
   }, context);
   assert.equal(response.status, 503);
   const body = await response.json() as { missing: string[] };
-  assert.ok(body.missing.includes("DATABASE_URL_MUST_USE_SUPABASE_TRANSACTION_POOLER"));
+  assert.ok(body.missing.includes("DATABASE_URL_HOST_MUST_BE_SUPABASE_POOLER"));
+  assert.ok(body.missing.includes("DATABASE_URL_PORT_MUST_BE_6543"));
+  assert.ok(body.missing.includes("DATABASE_URL_PGBOUNCER_MUST_BE_TRUE"));
+  assert.ok(body.missing.includes("DATABASE_URL_SSLMODE_MUST_BE_REQUIRE"));
 });
 
 test("pilot analytics endpoint rejects requests without the Bot/API secret", async () => {
