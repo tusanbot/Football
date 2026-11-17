@@ -9,7 +9,11 @@ test("Supabase transaction pooler connections always use verified TLS", () => {
   );
   const parsed = new URL(String(config.connectionString));
 
-  assert.deepEqual(config.ssl, { rejectUnauthorized: true });
+  assert.equal(typeof config.ssl, "object");
+  if (!config.ssl || typeof config.ssl !== "object") throw new Error("Expected TLS options.");
+  assert.equal(config.ssl.rejectUnauthorized, true);
+  assert.match(String(config.ssl.ca), /BEGIN CERTIFICATE/);
+  assert.match(String(config.ssl.ca), /Supabase Root 2021 CA/);
   assert.equal(parsed.searchParams.get("pgbouncer"), "true");
   assert.equal(parsed.searchParams.has("sslmode"), false);
   assert.equal(parsed.searchParams.has("ssl"), false);
