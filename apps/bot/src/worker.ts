@@ -8,7 +8,6 @@ interface Env {
   TELEGRAM_WEB_APP_URL?: string;
   ENVIRONMENT?: string;
   ANALYTICS_HASH_SECRET?: string;
-  PILOT_ANALYTICS?: { writeDataPoint(data: { blobs?: string[]; doubles?: number[]; indexes?: string[] }): void };
   BOT_UPDATE_GUARD: { idFromName(name: string): unknown; get(id: unknown): { fetch(request: Request): Promise<Response> } };
 }
 
@@ -92,10 +91,21 @@ async function analyticsUserKey(telegramUserId: number, secret: string): Promise
   return Array.from(new Uint8Array(signature).slice(0, 16), byte => byte.toString(16).padStart(2, "0")).join("");
 }
 
+async function sendPilotEvent(env: Env, event: {
+  eventName: string; userKey: string; actionKey?: string; chatType?: string; source: "bot" | "miniapp";
+}) {
+  const response = await fetch(new URL("/internal/pilot/events", env.FOOTBALL_API_URL), {
+    method: "POST",
+    headers: { "content-type": "application/json", "x-football-bot-secret": env.BOT_API_SECRET },
+    body: JSON.stringify(event),
+    signal: AbortSignal.timeout(5_000),
+  });
+  if (!response.ok) throw new Error("Pilot analytics API rejected event (HTTP " + response.status + ").");
+}
+
 async function recordPilotEvent(update: unknown, env: Env) {
-  const analytics = env.PILOT_ANALYTICS;
   const hashSecret = env.ANALYTICS_HASH_SECRET;
-  if (!analytics || !hashSecret || hashSecret.length < 32) return;
+  if (!hashSecret || hashSecret.length < 32) return;
   type MessageLike = { text?: unknown; chat?: { type?: string }; from?: { id?: number } };
   type CallbackLike = { data?: unknown; from?: { id?: number }; message?: { chat?: { type?: string } } };
   const data = update as { message?: MessageLike; edited_message?: MessageLike; callback_query?: CallbackLike };
@@ -108,11 +118,10 @@ async function recordPilotEvent(update: unknown, env: Env) {
   if (typeof userId !== "number" || !Number.isSafeInteger(userId)) return;
   const userKey = await analyticsUserKey(userId, hashSecret);
   const callbackPrefix = typeof callback?.data === "string" ? (callback.data.split(":", 1)[0] ?? "") : "";
-  analytics.writeDataPoint({
-    blobs: [eventName, command || callbackPrefix, message?.chat?.type ?? callback?.message?.chat?.type ?? "unknown", callback ? "callback_query" : message?.text ? "text_message" : "message"],
-    doubles: [1],
-    indexes: [userKey],
-  });
+  const actionKey = (command || callbackPrefix).replace(/[^a-z0-9_-]/gi, "").slice(0, 64);
+  const rawChatType = message?.chat?.type ?? callback?.message?.chat?.type ?? "unknown";
+  const chatType = ["private", "group", "supergroup", "channel"].includes(rawChatType) ? rawChatType : "unknown";
+  await sendPilotEvent(env, { eventName, userKey, actionKey, chatType, source: "bot" });
 }
 
 async function hmacSha256(keyBytes: Uint8Array<ArrayBuffer>, message: string): Promise<Uint8Array<ArrayBuffer>> {
@@ -145,15 +154,10 @@ export async function verifyTelegramInitData(initData: string, botToken: string)
 }
 
 async function recordMiniAppSession(userId: number, env: Env) {
-  const analytics = env.PILOT_ANALYTICS;
   const hashSecret = env.ANALYTICS_HASH_SECRET;
-  if (!analytics || !hashSecret || hashSecret.length < 32) return;
+  if (!hashSecret || hashSecret.length < 32) return;
   const userKey = await analyticsUserKey(userId, hashSecret);
-  analytics.writeDataPoint({
-    blobs: ["miniapp_session", "miniapp_launch", "private", "miniapp"],
-    doubles: [1],
-    indexes: [userKey],
-  });
+  await sendPilotEvent(env, { eventName: "miniapp_session", userKey, actionKey: "miniapp_launch", chatType: "private", source: "miniapp" });
 }
 
 function constantTimeEqual(left: string, right: string): boolean {
