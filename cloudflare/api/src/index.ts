@@ -121,12 +121,12 @@ export class MatchCoordinator {
           prisma.matchLifecycleNotification.findFirst({
             where: { status: "PENDING" },
             orderBy: { availableAt: "asc" },
-            select: { availableAt: true },
+            select: { availableAt: true, lockedUntil: true },
           }),
           prisma.matchResultNotification.findFirst({
             where: { status: "PENDING" },
             orderBy: { availableAt: "asc" },
-            select: { availableAt: true },
+            select: { availableAt: true, lockedUntil: true },
           }),
         ]);
         const candidates: number[] = [];
@@ -136,8 +136,8 @@ export class MatchCoordinator {
         }
         if (futureFixture) candidates.push(futureFixture.scheduledAt.getTime());
         if (overdueFixture) candidates.push(now.getTime() + 5_000);
-        if (lifecycleNotification) candidates.push(Math.max(now.getTime() + 1_000, lifecycleNotification.availableAt.getTime()));
-        if (resultNotification) candidates.push(Math.max(now.getTime() + 1_000, resultNotification.availableAt.getTime()));
+        if (lifecycleNotification) candidates.push(Math.max(now.getTime() + 1_000, lifecycleNotification.availableAt.getTime(), lifecycleNotification.lockedUntil?.getTime() ?? 0));
+        if (resultNotification) candidates.push(Math.max(now.getTime() + 1_000, resultNotification.availableAt.getTime(), resultNotification.lockedUntil?.getTime() ?? 0));
         nextAlarm = candidates.length ? Math.min(...candidates) : null;
       });
     } catch (error) {
