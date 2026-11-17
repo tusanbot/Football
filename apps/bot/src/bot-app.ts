@@ -41,7 +41,6 @@ if (webAppUrl) {
   if (webAppEndpoint.username || webAppEndpoint.password || webAppEndpoint.search || webAppEndpoint.hash || (config.environment === "production" && webAppEndpoint.protocol !== "https:")) throw new Error("TELEGRAM_WEB_APP_URL must not contain credentials, query, or fragment and must use HTTPS in production.");
 }
 const bot = new Bot(token);
-let botTelegramId: number | undefined;
 
 bot.use(async (ctx, next) => {
   const originalReply = ctx.reply.bind(ctx);
@@ -1942,7 +1941,6 @@ bot.on(["chat_member","my_chat_member"],async ctx=>{
   }
  }catch(error){console.warn("Could not refresh Telegram group membership:",error instanceof Error?error.message:error);}
 });
-bot.catch((error) => console.error("Telegram bot error:", error));
 
   async function runBackgroundJobs() {
     await pollGroupMessageDeletionQueue();
