@@ -35,6 +35,8 @@ import { SupabaseMatchRuntimeCheckpointRepository } from "./repositories/match-r
 import { SupabaseMatchRuntimeSettlementRepository } from "./repositories/match-runtime-settlement.js";
 import { SupabaseMatchRuntimeLeaseRepository } from "./repositories/match-runtime-lease.js";
 import { SupabaseMatchNotificationRepository, type MatchNotificationRow, type MatchNotificationPerformance } from "./repositories/match-notifications.js";
+import { withGameDashboardPort } from "../../../apps/api/src/game/game-dashboard-context.js";
+import { SupabaseGameDashboardRepository } from "./repositories/game-dashboard.js";
 
 interface MatchCoordinatorNamespace { idFromName(name: string): unknown; get(id: unknown): { fetch(input: string, init?: RequestInit): Promise<Response> }; }
 interface MatchCoordinatorState { storage: { setAlarm(scheduledTime: number): Promise<void>; deleteAlarm(): Promise<void>; }; }
@@ -124,6 +126,7 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
         ? new SupabaseHttpClient({ url: env.SUPABASE_URL, serviceRoleKey: env.SUPABASE_SERVICE_ROLE_KEY })
         : undefined;
       const publicPlayerRecords = supabaseClient ? new SupabasePublicPlayerRecordRepository(supabaseClient) : undefined;
+      const gameDashboard = supabaseClient ? new SupabaseGameDashboardRepository(supabaseClient) : undefined;
       const seasonAwards = supabaseClient ? new SupabaseSeasonAwardRepository(supabaseClient) : undefined;
       const walletEntry = supabaseClient ? new SupabaseWalletEntryRepository(supabaseClient) : undefined;
       const storePurchase = supabaseClient ? new SupabaseStorePurchaseRepository(supabaseClient) : undefined;
@@ -137,8 +140,9 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
       const matchRuntimeSettlement = supabaseClient ? new SupabaseMatchRuntimeSettlementRepository(supabaseClient) : undefined;
       const router = createWorkersApiRouter({ publicPlayerRecords, seasonAwards, specialPlayers });
       const handle = async (): Promise<Response> => await router.fetch(request);
+      const withDashboard = gameDashboard ? () => withGameDashboardPort(gameDashboard, handle) : handle;
       const withCheckpoint = matchRuntimeCheckpoint
-        ? () => withMatchRuntimeCheckpointPort(matchRuntimeCheckpoint, handle) : handle;
+        ? () => withMatchRuntimeCheckpointPort(matchRuntimeCheckpoint, withDashboard) : withDashboard;
       const withSettlement = matchRuntimeSettlement
         ? () => withMatchRuntimeSettlementPort(matchRuntimeSettlement, withCheckpoint) : withCheckpoint;
       const withWallet = walletEntry ? () => withWalletEntryPort(walletEntry, withSettlement) : withSettlement;

@@ -3,6 +3,7 @@ import { z } from "zod";
 import { validateLineup, type Formation, type LineupCandidate } from "@football/domain";
 import { prisma } from "../db.js";
 import { requireTelegramUser } from "../auth/require-telegram-user.js";
+import { getGameDashboardPort } from "./game-dashboard-context.js";
 
 const clubUpdateSchema = z.object({
   name: z.string().trim().min(2).max(32).regex(/^[\p{L}\p{N} .'-]+$/u),
@@ -26,6 +27,14 @@ export function registerGameRoutes(app: FastifyInstance) {
   app.get("/v1/me", async (request, reply) => {
     const user = await requireTelegramUser(request);
     if (!user) return reply.code(401).send({ error: "UNAUTHENTICATED" });
+    const dashboardPort = getGameDashboardPort();
+    if (dashboardPort) {
+      try { return await dashboardPort.getDashboard(user.id); }
+      catch (error) {
+        request.log.error({ error }, "Supabase game dashboard read failed");
+        return reply.code(503).send({ error: "GAME_DASHBOARD_UNAVAILABLE" });
+      }
+    }
     const [club, wallets] = await Promise.all([
       prisma.club.findUnique({
         where: { ownerId: user.id },
