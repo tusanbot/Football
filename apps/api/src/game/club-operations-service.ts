@@ -13,6 +13,7 @@ import {
 } from "@football/domain";
 import { prisma } from "../db.js";
 import { settleClubDailyState } from "../players/player-development-service.js";
+import { getClubTicketPricePort } from "./club-ticket-price-context.js";
 
 const DAY_MS = 86_400_000;
 const POSITIONS = ["GK", "RB", "LB", "CB", "CDM", "CM", "CAM", "RW", "LW", "ST"] as const;
@@ -447,6 +448,16 @@ export async function updateStadiumTicketPrice(
   userId: string, ticketPrice: bigint, expectedTicketPrice: bigint,
 ) {
   if (ticketPrice < 10n || ticketPrice > 500n) throw new ClubOperationsError("INVALID_TICKET_PRICE");
+  const httpPort = getClubTicketPricePort();
+  if (httpPort) {
+    try { return await httpPort.update(userId, ticketPrice, expectedTicketPrice); }
+    catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      const code = ["CLUB_NOT_FOUND", "TICKET_PRICE_CONFLICT", "INVALID_TICKET_PRICE"].find((candidate) => message.includes(candidate));
+      if (code) throw new ClubOperationsError(code);
+      throw error;
+    }
+  }
   const club = await prisma.club.findUnique({ where: { ownerId: userId }, select: { id: true, ticketPrice: true } });
   if (!club) throw new ClubOperationsError("CLUB_NOT_FOUND");
   if (club.ticketPrice === ticketPrice) {

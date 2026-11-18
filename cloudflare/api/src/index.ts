@@ -41,6 +41,8 @@ import { withTelegramUserLookupPort } from "../../../apps/api/src/auth/telegram-
 import { SupabaseTelegramUserLookupRepository } from "./repositories/telegram-user-lookup.js";
 import { withTelegramAccountProvisioningPort } from "../../../apps/api/src/auth/account-provisioning-context.js";
 import { SupabaseTelegramAccountProvisioningRepository } from "./repositories/telegram-account-provisioning.js";
+import { withClubTicketPricePort } from "../../../apps/api/src/game/club-ticket-price-context.js";
+import { SupabaseClubTicketPriceRepository } from "./repositories/club-ticket-price.js";
 
 interface MatchCoordinatorNamespace { idFromName(name: string): unknown; get(id: unknown): { fetch(input: string, init?: RequestInit): Promise<Response> }; }
 interface MatchCoordinatorState { storage: { setAlarm(scheduledTime: number): Promise<void>; deleteAlarm(): Promise<void>; }; }
@@ -133,6 +135,7 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
       const gameDashboard = supabaseClient ? new SupabaseGameDashboardRepository(supabaseClient) : undefined;
       const telegramUserLookup = supabaseClient ? new SupabaseTelegramUserLookupRepository(supabaseClient) : undefined;
       const telegramAccountProvisioning = supabaseClient ? new SupabaseTelegramAccountProvisioningRepository(supabaseClient) : undefined;
+      const clubTicketPrice = supabaseClient ? new SupabaseClubTicketPriceRepository(supabaseClient) : undefined;
       const seasonAwards = supabaseClient ? new SupabaseSeasonAwardRepository(supabaseClient) : undefined;
       const walletEntry = supabaseClient ? new SupabaseWalletEntryRepository(supabaseClient) : undefined;
       const storePurchase = supabaseClient ? new SupabaseStorePurchaseRepository(supabaseClient) : undefined;
@@ -150,8 +153,9 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
       const withTelegramUserLookup = telegramUserLookup ? () => withTelegramUserLookupPort(telegramUserLookup, withDashboard) : withDashboard;
       const withTelegramAccountProvisioning = telegramAccountProvisioning
         ? () => withTelegramAccountProvisioningPort(telegramAccountProvisioning, withTelegramUserLookup) : withTelegramUserLookup;
+      const withClubTicketPrice = clubTicketPrice ? () => withClubTicketPricePort(clubTicketPrice, withTelegramAccountProvisioning) : withTelegramAccountProvisioning;
       const withCheckpoint = matchRuntimeCheckpoint
-        ? () => withMatchRuntimeCheckpointPort(matchRuntimeCheckpoint, withTelegramAccountProvisioning) : withTelegramAccountProvisioning;
+        ? () => withMatchRuntimeCheckpointPort(matchRuntimeCheckpoint, withClubTicketPrice) : withClubTicketPrice;
       const withSettlement = matchRuntimeSettlement
         ? () => withMatchRuntimeSettlementPort(matchRuntimeSettlement, withCheckpoint) : withCheckpoint;
       const withWallet = walletEntry ? () => withWalletEntryPort(walletEntry, withSettlement) : withSettlement;
