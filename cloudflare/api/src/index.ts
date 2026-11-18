@@ -1,5 +1,6 @@
 import { createPrismaClient, prisma, withPrismaClient } from "../../../apps/api/src/db.js";
 import { withWalletEntryPort } from "../../../apps/api/src/economy/wallet-entry-context.js";
+import { withStorePurchasePort } from "../../../apps/api/src/store/store-purchase-context.js";
 import { processDueMatchRuntimes } from "../../../apps/api/src/game/match-service.js";
 import { processDueEventTournamentFinalizations } from "../../../apps/api/src/event-tournament-service.js";
 import { processDuePromotionOffers } from "../../../apps/api/src/game/league-pyramid-service.js";
@@ -9,6 +10,7 @@ import { SupabaseHttpClient } from "./supabase-http.js";
 import { SupabasePublicPlayerRecordRepository } from "./repositories/public-player-records.js";
 import { SupabaseSeasonAwardRepository } from "./repositories/season-awards.js";
 import { SupabaseWalletEntryRepository } from "./repositories/wallet-entry.js";
+import { SupabaseStorePurchaseRepository } from "./repositories/store-purchase.js";
 
 interface MatchCoordinatorNamespace { idFromName(name: string): unknown; get(id: unknown): { fetch(input: string, init?: RequestInit): Promise<Response> }; }
 interface MatchCoordinatorState { storage: { setAlarm(scheduledTime: number): Promise<void>; deleteAlarm(): Promise<void>; }; }
@@ -100,8 +102,11 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
       const publicPlayerRecords = supabaseClient ? new SupabasePublicPlayerRecordRepository(supabaseClient) : undefined;
       const seasonAwards = supabaseClient ? new SupabaseSeasonAwardRepository(supabaseClient) : undefined;
       const walletEntry = supabaseClient ? new SupabaseWalletEntryRepository(supabaseClient) : undefined;
+      const storePurchase = supabaseClient ? new SupabaseStorePurchaseRepository(supabaseClient) : undefined;
       const router = createWorkersApiRouter({ publicPlayerRecords, seasonAwards });
-      return walletEntry ? withWalletEntryPort(walletEntry, () => router.fetch(request)) : router.fetch(request);
+      const handle = () => router.fetch(request);
+      const withWallet = walletEntry ? () => withWalletEntryPort(walletEntry, handle) : handle;
+      return storePurchase ? withStorePurchasePort(storePurchase, withWallet) : withWallet();
     });
     cleanupScheduled = true;
     ctx.waitUntil(client.$disconnect().catch((error: unknown) => console.error("Prisma request client cleanup failed", error)));

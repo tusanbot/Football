@@ -1,6 +1,7 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "../db.js";
 import { getStoreItem, STORE_CATALOG } from "./catalog.js";
+import { getStorePurchasePort } from "./store-purchase-context.js";
 import { getOpenMarketListings } from "../players/market-service.js";
 import { getSpecialPackOffers } from "../players/special-acquisition-service.js";
 
@@ -37,6 +38,16 @@ export async function purchaseStoreItem(userId: string, itemKey: string, quantit
   if (!Number.isInteger(quantity) || quantity < 1 || quantity > item.maxPerPurchase) throw new StoreError("INVALID_QUANTITY");
   const total = BigInt(item.price) * BigInt(quantity);
   const ledgerKey = "store-purchase:" + idempotencyKey;
+  const purchasePort = getStorePurchasePort();
+  if (purchasePort) {
+    try {
+      return await purchasePort.purchase({ userId, itemKey, asset: item.asset, unitPrice: item.price, quantity, idempotencyKey });
+    } catch (error) {
+      const code = error && typeof error === "object" && "code" in error ? String(error.code) : "";
+      if (code) throw new StoreError(code);
+      throw error;
+    }
+  }
 
   try {
     return await prisma.$transaction(async (tx) => {
