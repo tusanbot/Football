@@ -95,3 +95,12 @@ The migration is `20261118120000_store_purchase_rpc`. Apply and rollback-test it
 `use_store_item` validates club ownership and player eligibility, locks the player and inventory rows, rechecks idempotency after acquiring locks, records the use, decrements inventory, and updates fitness/morale in one PostgreSQL transaction. The recheck prevents concurrent duplicate requests from consuming multiple items. The function is `SECURITY INVOKER` with a fixed search path and execution restricted to `service_role`.
 
 The migration is `20261118130000_store_item_use_rpc`. Apply and rollback-test it on Staging before enabling this route. Store snapshot reads remain on Prisma.
+
+
+## Sixth migrated operation: player-market purchase
+
+`buyMarketListing` now supports a request-scoped `MarketPurchasePort`. After the existing daily-settlement preflight, Cloudflare routes the financial transfer through `SupabaseMarketPurchaseRepository`; the standard Fastify runtime retains its Prisma transaction.
+
+`buy_market_listing` locks the listing and player, checks ownership/contract/expiry, locks buyer and seller cash wallets in stable user-id order, transfers funds, moves the player, and writes both ledger and club-finance entries in one PostgreSQL transaction. Expired listings retain their existing state-transition outcomes. Bigint prices are returned as decimal strings. The function is `SECURITY INVOKER` and restricted to `service_role`.
+
+The migration is `20261118140000_market_purchase_rpc`. Listing creation, cancellation, expiry sweeping, and market snapshot reads remain on Prisma; this RPC covers purchase settlement only.
