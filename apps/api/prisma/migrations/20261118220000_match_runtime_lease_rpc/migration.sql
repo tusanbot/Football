@@ -1,8 +1,8 @@
 -- Atomic, concurrency-safe match runtime leases for the Cloudflare HTTP worker.
 CREATE OR REPLACE FUNCTION public.claim_due_match_runtimes(
-  p_worker_id text, p_now timestamptz, p_lease_ms integer, p_limit integer
+  p_worker_id text, p_now timestamp without time zone, p_lease_ms integer, p_limit integer
 )
-RETURNS TABLE(runtime_id text, lease_token text, lease_expires_at timestamptz)
+RETURNS TABLE(runtime_id text, lease_token text, lease_expires_at timestamp without time zone)
 LANGUAGE plpgsql
 SECURITY INVOKER
 SET search_path = public, pg_temp
@@ -35,7 +35,7 @@ END;
 $function$;
 
 CREATE OR REPLACE FUNCTION public.release_match_runtime_lease(
-  p_runtime_id text, p_lease_token text, p_next_action_at timestamptz, p_last_error text
+  p_runtime_id text, p_lease_token text, p_next_action_at timestamp without time zone, p_last_error text
 )
 RETURNS TABLE(released boolean)
 LANGUAGE sql
@@ -46,20 +46,20 @@ AS $function$
     UPDATE public."MatchRuntime"
     SET "leaseOwner" = NULL, "leaseToken" = NULL, "leaseExpiresAt" = NULL,
         "nextActionAt" = p_next_action_at, "lastError" = left(p_last_error, 500),
-        "updatedAt" = now()
+        "updatedAt" = now()::timestamp
     WHERE "id" = p_runtime_id AND "leaseToken" = p_lease_token
     RETURNING 1
   )
   SELECT EXISTS (SELECT 1 FROM changed);
 $function$;
 
-REVOKE ALL ON FUNCTION public.claim_due_match_runtimes(text, timestamptz, integer, integer) FROM PUBLIC, anon, authenticated;
-REVOKE ALL ON FUNCTION public.release_match_runtime_lease(text, text, timestamptz, text) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.claim_due_match_runtimes(text, timestamp without time zone, integer, integer) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.release_match_runtime_lease(text, text, timestamp without time zone, text) FROM PUBLIC, anon, authenticated;
 DO $grant$
 BEGIN
   IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'service_role') THEN
-    GRANT EXECUTE ON FUNCTION public.claim_due_match_runtimes(text, timestamptz, integer, integer) TO service_role;
-    GRANT EXECUTE ON FUNCTION public.release_match_runtime_lease(text, text, timestamptz, text) TO service_role;
+    GRANT EXECUTE ON FUNCTION public.claim_due_match_runtimes(text, timestamp without time zone, integer, integer) TO service_role;
+    GRANT EXECUTE ON FUNCTION public.release_match_runtime_lease(text, text, timestamp without time zone, text) TO service_role;
   END IF;
 END;
 $grant$;
