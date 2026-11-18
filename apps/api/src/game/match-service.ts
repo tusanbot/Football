@@ -10,6 +10,7 @@ import {
 import { prisma } from "../db.js";
 import { getMatchRuntimeLeasePort } from "./match-runtime-lease-context.js";
 import { getMatchRuntimeEnqueuePort } from "./match-runtime-enqueue-context.js";
+import { getMatchRuntimeAdvancePort } from "./match-runtime-advance-context.js";
 import { competitionKickoffAfterDays } from "./match-schedule.js";
 
 const DAY_MS = 86_400_000;
@@ -1297,33 +1298,49 @@ async function processClaimedMatchRuntime(
       substitutions: { home: first.homeSubstitutions, away: first.awaySubstitutions },
       substitutionErrors: first.substitutionErrors,
     };
-    await prisma.$transaction(async (tx) => {
-      const runtimeUpdated = await tx.matchRuntime.updateMany({
-        where: { id: runtime.id, stateVersion: runtime.stateVersion, leaseToken: runtime.leaseToken },
-        data: {
-          status: "AWAITING_CHECKPOINT", currentMinute: 45, stateVersion: { increment: 1 },
-          simulationState: jsonSafe(state), startedAt: runtime.startedAt ?? now,
-          nextActionAt: checkpointAt, lastError: null,
-        },
+    const lifecycleEvents: MatchLifecycleEventInput[] = [
+      { eventKey: "kickoff", kind: "KICKOFF", minute: 0, homeScore: 0, awayScore: 0, availableAt: now },
+      ...goalLifecycleEvents(first.events, snapshot.home, snapshot.away, { home: 0, away: 0 }, now),
+    ];
+    const advancePort = getMatchRuntimeAdvancePort();
+    if (advancePort) {
+      if (!runtime.leaseToken) throw new MatchServiceError("MATCH_RUNTIME_LEASE_MISSING");
+      await advancePort.advanceFirstHalf({
+        runtimeId: runtime.id, expectedStateVersion: runtime.stateVersion, leaseToken: runtime.leaseToken,
+        simulationState: jsonSafe(state), startedAt: (runtime.startedAt ?? now).toISOString(),
+        checkpointAt: checkpointAt.toISOString(), decisionDeadlineAt: decisionDeadlineAt.toISOString(),
+        events: lifecycleEvents.map((event) => ({
+          eventKey: event.eventKey, kind: event.kind, minute: event.minute,
+          homeScore: event.homeScore, awayScore: event.awayScore, payload: event.payload ?? null,
+          availableAt: event.availableAt.toISOString(),
+        })),
       });
-      if (runtimeUpdated.count !== 1) throw new MatchServiceError("MATCH_RUNTIME_CONCURRENT_MODIFICATION");
-      const matchUpdated = await tx.footballMatch.updateMany({
-        where: { id: runtime.matchId, status: "SCHEDULED" },
-        data: { status: "IN_PROGRESS", startedAt: runtime.match.startedAt ?? now },
+    } else {
+      await prisma.$transaction(async (tx) => {
+        const runtimeUpdated = await tx.matchRuntime.updateMany({
+          where: { id: runtime.id, stateVersion: runtime.stateVersion, leaseToken: runtime.leaseToken },
+          data: {
+            status: "AWAITING_CHECKPOINT", currentMinute: 45, stateVersion: { increment: 1 },
+            simulationState: jsonSafe(state), startedAt: runtime.startedAt ?? now,
+            nextActionAt: checkpointAt, lastError: null,
+          },
+        });
+        if (runtimeUpdated.count !== 1) throw new MatchServiceError("MATCH_RUNTIME_CONCURRENT_MODIFICATION");
+        const matchUpdated = await tx.footballMatch.updateMany({
+          where: { id: runtime.matchId, status: "SCHEDULED" },
+          data: { status: "IN_PROGRESS", startedAt: runtime.match.startedAt ?? now },
+        });
+        if (matchUpdated.count !== 1) throw new MatchServiceError("MATCH_NOT_SCHEDULED");
+        await enqueueMatchLifecycleNotifications(tx, runtime.match, lifecycleEvents);
+        await tx.matchTacticalCheckpoint.createMany({
+          data: [{
+            matchId: runtime.matchId, checkpointKey: "minute-45", kind: "HALF_TIME", minute: 45,
+            openedAt: checkpointAt, decisionDeadlineAt, nextSegmentAt: firstHalfNextSegmentAt,
+          }],
+          skipDuplicates: true,
+        });
       });
-      if (matchUpdated.count !== 1) throw new MatchServiceError("MATCH_NOT_SCHEDULED");
-      await enqueueMatchLifecycleNotifications(tx, runtime.match, [
-        { eventKey: "kickoff", kind: "KICKOFF", minute: 0, homeScore: 0, awayScore: 0, availableAt: now },
-        ...goalLifecycleEvents(first.events, snapshot.home, snapshot.away, { home: 0, away: 0 }, now),
-      ]);
-      await tx.matchTacticalCheckpoint.createMany({
-        data: [{
-          matchId: runtime.matchId, checkpointKey: "minute-45", kind: "HALF_TIME", minute: 45,
-          openedAt: checkpointAt, decisionDeadlineAt, nextSegmentAt: firstHalfNextSegmentAt,
-        }],
-        skipDuplicates: true,
-      });
-    });
+    }
     return "ADVANCED";
   }
 
