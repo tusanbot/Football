@@ -1,3 +1,5 @@
+import { AsyncLocalStorage } from "node:async_hooks";
+
 export interface GiftCodeRedemptionCommand {
   userId: string;
   code: string;
@@ -13,4 +15,15 @@ export interface GiftCodeRedemptionResult {
 
 export interface GiftCodeRedemptionPort {
   redeem(input: GiftCodeRedemptionCommand): Promise<GiftCodeRedemptionResult>;
+}
+
+
+const giftCodeRedemptionScope = new AsyncLocalStorage<GiftCodeRedemptionPort>();
+
+export function withGiftCodeRedemptionPort<T>(port: GiftCodeRedemptionPort, operation: () => T): T {
+  return giftCodeRedemptionScope.run(port, operation);
+}
+
+export function getGiftCodeRedemptionPort(): GiftCodeRedemptionPort | undefined {
+  return giftCodeRedemptionScope.getStore();
 }
