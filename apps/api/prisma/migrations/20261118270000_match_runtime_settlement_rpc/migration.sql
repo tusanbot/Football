@@ -191,10 +191,12 @@ BEGIN
  SELECT fc."id",tg."telegramId" INTO challenge_row
  FROM public."FriendlyChallenge" fc LEFT JOIN public."TelegramGroup" tg ON tg."id"=fc."groupId"
  WHERE fc."matchId"=p_match_id LIMIT 1;
- IF FOUND AND challenge_row.telegramId IS NOT NULL THEN
-  INSERT INTO public."MatchResultNotification"("id","matchId","channel","telegramChatId","status","availableAt","createdAt","updatedAt")
-  VALUES(gen_random_uuid()::text,p_match_id,'GROUP',challenge_row.telegramId,'PENDING',p_now,p_now,p_now)
-  ON CONFLICT ("matchId","channel") DO NOTHING;
+ IF FOUND THEN
+  IF challenge_row.telegramId IS NOT NULL THEN
+   INSERT INTO public."MatchResultNotification"("id","matchId","channel","telegramChatId","status","availableAt","createdAt","updatedAt")
+   VALUES(gen_random_uuid()::text,p_match_id,'GROUP',challenge_row.telegramId,'PENDING',p_now,p_now,p_now)
+   ON CONFLICT ("matchId","channel") DO NOTHING;
+  END IF;
   FOR credit IN
    SELECT home_club."ownerId" AS user_id,home_club."id" AS club_id,
     CASE WHEN p_result->>'winnerClubId'=home_club."id" THEN 3 WHEN p_result->>'winnerClubId' IS NULL THEN 1 ELSE 0 END AS amount
