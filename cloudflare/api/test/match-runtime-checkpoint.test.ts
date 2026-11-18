@@ -118,3 +118,30 @@ test("tactical decision submission uses the atomic idempotent RPC", async () => 
     },
   });
 });
+
+test("halftime lifecycle events are persisted through one idempotent RPC", async () => {
+  let call: { name: string; args: Record<string, unknown> } | undefined;
+  const repository = new SupabaseMatchRuntimeCheckpointRepository({
+    rpc: async (name: string, args: Record<string, unknown>) => {
+      call = { name, args };
+      return 3;
+    },
+  } as never);
+  const events = [{
+    eventKey: "halftime", kind: "HALF_TIME", minute: 45,
+    homeScore: 1, awayScore: 0, payload: null,
+    availableAt: "2026-11-18T20:01:00.000Z",
+  }];
+  assert.equal(await repository.enqueueLifecycleEvents("match-1", events), 3);
+  assert.deepEqual(call, {
+    name: "enqueue_match_lifecycle_events",
+    args: {
+      p_match_id: "match-1",
+      p_events: [{
+        event_key: "halftime", kind: "HALF_TIME", minute: 45,
+        home_score: 1, away_score: 0, payload: null,
+        available_at: "2026-11-18T20:01:00.000Z",
+      }],
+    },
+  });
+});
