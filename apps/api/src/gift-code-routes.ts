@@ -4,6 +4,7 @@ import { prisma } from "./db.js";
 import { requireTelegramUser } from "./auth/require-telegram-user.js";
 import { TelegramGroupAuthorizationError, verifyTelegramGroupActor } from "./groups/telegram-group-authorization.js";
 import { consumeAllianceActionRateLimit } from "./groups/alliance-rate-limit.js";
+import { getGiftCodeRedemptionPort } from "./gift-code-redemption-context.js";
 
 export function registerGiftCodeRoutes(app: FastifyInstance) {
   app.post("/v1/gift-codes/redeem", async (req: FastifyRequest, reply: FastifyReply) => {
