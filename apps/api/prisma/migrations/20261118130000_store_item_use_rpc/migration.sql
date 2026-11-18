@@ -19,6 +19,7 @@ DECLARE
   inventory_row public."StoreInventoryItem"%ROWTYPE;
   previous public."StoreItemUse"%ROWTYPE;
   inserted_id text;
+  inventory_found boolean;
   remaining_quantity integer;
   updated_fitness integer;
   updated_morale integer;
@@ -73,9 +74,7 @@ BEGIN
   FROM public."StoreInventoryItem"
   WHERE "userId" = p_user_id AND "itemKey" = p_item_key
   FOR UPDATE;
-  IF NOT FOUND OR inventory_row.quantity < 1 THEN
-    RAISE EXCEPTION USING MESSAGE = 'ITEM_NOT_IN_INVENTORY', ERRCODE = 'P0001';
-  END IF;
+  inventory_found := FOUND;
 
   -- Recheck after acquiring both locks so concurrent identical requests replay safely.
   SELECT * INTO previous
@@ -85,8 +84,12 @@ BEGIN
     IF previous."userId" <> p_user_id OR previous."itemKey" <> p_item_key OR previous."playerId" <> p_player_id THEN
       RAISE EXCEPTION USING MESSAGE = 'IDEMPOTENCY_CONFLICT', ERRCODE = 'P0001';
     END IF;
-    RETURN QUERY SELECT p_item_key, p_player_id, inventory_row.quantity, NULL::integer, NULL::integer, TRUE;
+    RETURN QUERY SELECT p_item_key, p_player_id, COALESCE(inventory_row.quantity, 0), NULL::integer, NULL::integer, TRUE;
     RETURN;
+  END IF;
+
+  IF NOT inventory_found OR COALESCE(inventory_row.quantity, 0) < 1 THEN
+    RAISE EXCEPTION USING MESSAGE = 'ITEM_NOT_IN_INVENTORY', ERRCODE = 'P0001';
   END IF;
 
   IF (p_fitness_delta > 0 AND player_row.fitness >= 100)
