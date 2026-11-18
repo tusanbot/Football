@@ -1,4 +1,4 @@
-import { createPrismaClient, prisma, withPrismaClient } from "../../../apps/api/src/db.js";
+import { createPrismaClient, withPrismaClient } from "../../../apps/api/src/db.js";
 import { withWalletEntryPort } from "../../../apps/api/src/economy/wallet-entry-context.js";
 import { withStorePurchasePort } from "../../../apps/api/src/store/store-purchase-context.js";
 import { withStoreItemUsePort } from "../../../apps/api/src/store/store-item-use-context.js";
@@ -13,6 +13,7 @@ import { isValidTelegramBotToken, parseAdminTelegramIds, parseCorsOrigins } from
 import { createWorkersApiRouter } from "./workers-router.js";
 import { SupabaseHttpClient } from "./supabase-http.js";
 import { SupabasePilotAnalyticsRepository } from "./repositories/pilot-analytics.js";
+import { SupabaseRuntimeReadinessRepository } from "./repositories/runtime-readiness.js";
 import { SupabasePublicPlayerRecordRepository } from "./repositories/public-player-records.js";
 import { SupabaseSeasonAwardRepository } from "./repositories/season-awards.js";
 import { SupabaseWalletEntryRepository } from "./repositories/wallet-entry.js";
@@ -357,105 +358,36 @@ export default {
     configureEnv(env);
     if (request.method === "OPTIONS") return createWorkersApiRouter().fetch(request);
     if (request.method === "GET" && url.pathname === "/ready") {
-      const missing = missingConfig(env);
+      const missing = missingConfig(env).filter((item) =>
+        !["DATABASE_URL", "DATABASE_URL_INVALID", "DATABASE_URL_MUST_USE_SUPABASE_TRANSACTION_POOLER"].includes(item));
+      if (!env.SUPABASE_URL) missing.push("SUPABASE_URL");
+      if (!env.SUPABASE_SERVICE_ROLE_KEY || env.SUPABASE_SERVICE_ROLE_KEY.length < 32) missing.push("SUPABASE_SERVICE_ROLE_KEY");
       if (missing.length) return json({ status: "not_ready", service: "football-empire-cloudflare-api", missing }, 503);
-      const client = createPrismaClient(dbUrl(env) ?? undefined, 1);
       try {
-        const schemaChecks = await withPrismaClient(client, () => prisma.$queryRaw<Array<{ ready: boolean }>>`
-          SELECT
-            (
-              SELECT count(*) = 10
-              FROM "_prisma_migrations"
-              WHERE migration_name IN (
-                '20261116120000_in_game_store',
-                '20261117100000_lock_down_public_api',
-                '20261117110000_index_foreign_key_columns',
-                '20261117120000_restore_alliance_foreign_keys',
-                '20261117180000_event_tournaments',
-                '20261117200000_match_lifecycle_notifications',
-                '20261117210000_league_round_notice_dedupe',
-                '20261117220000_event_tournament_competitions',
-                '20261117230000_event_tournament_default_capacity',
-                '20261117240000_event_tournament_fk_indexes'
-              )
-                AND finished_at IS NOT NULL
-                AND rolled_back_at IS NULL
-            )
-            AND to_regclass('"PyramidLeague"') IS NOT NULL
-            AND to_regclass('"LeaguePromotionOffer"') IS NOT NULL
-            AND to_regclass('"EventTournament"') IS NOT NULL
-            AND to_regclass('"EventTournamentParticipant"') IS NOT NULL
-            AND to_regclass('"EventTournamentPrize"') IS NOT NULL
-            AND to_regclass('"EventTournamentPrizeAward"') IS NOT NULL
-            AND to_regclass('"MatchLifecycleNotification"') IS NOT NULL
-            AND EXISTS (
-              SELECT 1 FROM information_schema.columns
-              WHERE table_schema = 'public'
-                AND table_name = 'LeagueNotice'
-                AND column_name = 'dedupeKey'
-            )
-            AND (SELECT count(*) >= 15 FROM "SpecialPlayer" WHERE active = true)
-            AND EXISTS (
-              SELECT 1 FROM pg_roles
-              WHERE rolname = current_user
-                AND (rolsuper OR rolbypassrls)
-            )
-            AND NOT EXISTS (
-              SELECT 1
-              FROM pg_class c
-              JOIN pg_namespace n ON n.oid = c.relnamespace
-              WHERE n.nspname = 'public'
-                AND c.relkind IN ('r', 'p')
-                AND NOT c.relrowsecurity
-            )
-            AND NOT EXISTS (
-              SELECT 1
-              FROM information_schema.role_table_grants
-              WHERE table_schema = 'public'
-                AND grantee IN ('anon', 'authenticated')
-            )
-            AND NOT EXISTS (
-              SELECT 1
-              FROM pg_class c
-              JOIN pg_namespace n ON n.oid = c.relnamespace
-              WHERE n.nspname = 'public'
-                AND c.relkind = 'S'
-                AND (
-                  has_sequence_privilege('anon', c.oid, 'USAGE')
-                  OR has_sequence_privilege('anon', c.oid, 'SELECT')
-                  OR has_sequence_privilege('anon', c.oid, 'UPDATE')
-                  OR has_sequence_privilege('authenticated', c.oid, 'USAGE')
-                  OR has_sequence_privilege('authenticated', c.oid, 'SELECT')
-                  OR has_sequence_privilege('authenticated', c.oid, 'UPDATE')
-                )
-            )
-            AND NOT EXISTS (
-              SELECT 1
-              FROM pg_proc p
-              JOIN pg_namespace n ON n.oid = p.pronamespace
-              WHERE n.nspname = 'public'
-                AND (
-                  has_function_privilege('anon', p.oid, 'EXECUTE')
-                  OR has_function_privilege('authenticated', p.oid, 'EXECUTE')
-                )
-            ) AS ready
-        `);
-        if (!schemaChecks[0]?.ready) {
-          ctx.waitUntil(client.$disconnect().catch((error: unknown) => console.error("Prisma readiness cleanup failed", error)));
+        const supabase = new SupabaseHttpClient({
+          url: env.SUPABASE_URL!,
+          serviceRoleKey: env.SUPABASE_SERVICE_ROLE_KEY!,
+        });
+        const schemaReady = await new SupabaseRuntimeReadinessRepository(supabase).check();
+        if (!schemaReady) {
           return json({
             status: "not_ready",
-            service: "football-empire-api",
+            service: "football-empire-cloudflare-api",
             database: "connected",
+            database_transport: "supabase_https",
             missing: ["DATABASE_SCHEMA_MIGRATIONS"],
           }, 503);
         }
-        ctx.waitUntil(client.$disconnect().catch((error: unknown) => console.error("Prisma readiness cleanup failed", error)));
-        return json({ status: "ready", service: "football-empire-api", database: "connected", schema: "current" });
+        return json({
+          status: "ready",
+          service: "football-empire-cloudflare-api",
+          database: "connected",
+          database_transport: "supabase_https",
+          schema: "current",
+        });
       } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        console.error("Cloudflare API readiness database check failed", describeRuntimeError(error));
-        await client.$disconnect().catch(() => undefined);
-        return json({ status: "not_ready", service: "football-empire-cloudflare-api", missing: ["DATABASE_CONNECTION"] }, 503);
+        console.error("Cloudflare API Supabase readiness check failed", describeRuntimeError(error));
+        return json({ status: "not_ready", service: "football-empire-cloudflare-api", missing: ["SUPABASE_DATABASE_CHECK"] }, 503);
       }
     }
     const response = await handleApi(request, env, ctx);
