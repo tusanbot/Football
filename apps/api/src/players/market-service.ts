@@ -152,6 +152,15 @@ export async function buyMarketListing(userId: string, listingId: string) {
 
 export async function cancelMarketListing(userId: string, listingId: string) {
   await settleClubDailyState(userId);
+  const listingPort = getMarketListingPort();
+  if (listingPort) {
+    try { return await listingPort.cancel({ userId, listingId }); }
+    catch (error) {
+      const code = error && typeof error === "object" && "code" in error ? String(error.code) : "";
+      if (code) throw new MarketError(code);
+      throw error;
+    }
+  }
   const club = await prisma.club.findUnique({ where: { ownerId: userId }, select: { id: true } });
   if (!club) throw new MarketError("CLUB_NOT_FOUND");
   return prisma.$transaction(async (tx) => {
