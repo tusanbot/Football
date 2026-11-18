@@ -1,6 +1,7 @@
 import { createPrismaClient, prisma, withPrismaClient } from "../../../apps/api/src/db.js";
 import { withWalletEntryPort } from "../../../apps/api/src/economy/wallet-entry-context.js";
 import { withStorePurchasePort } from "../../../apps/api/src/store/store-purchase-context.js";
+import { withStoreItemUsePort } from "../../../apps/api/src/store/store-item-use-context.js";
 import { processDueMatchRuntimes } from "../../../apps/api/src/game/match-service.js";
 import { processDueEventTournamentFinalizations } from "../../../apps/api/src/event-tournament-service.js";
 import { processDuePromotionOffers } from "../../../apps/api/src/game/league-pyramid-service.js";
@@ -11,6 +12,7 @@ import { SupabasePublicPlayerRecordRepository } from "./repositories/public-play
 import { SupabaseSeasonAwardRepository } from "./repositories/season-awards.js";
 import { SupabaseWalletEntryRepository } from "./repositories/wallet-entry.js";
 import { SupabaseStorePurchaseRepository } from "./repositories/store-purchase.js";
+import { SupabaseStoreItemUseRepository } from "./repositories/store-item-use.js";
 
 interface MatchCoordinatorNamespace { idFromName(name: string): unknown; get(id: unknown): { fetch(input: string, init?: RequestInit): Promise<Response> }; }
 interface MatchCoordinatorState { storage: { setAlarm(scheduledTime: number): Promise<void>; deleteAlarm(): Promise<void>; }; }
@@ -103,10 +105,12 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
       const seasonAwards = supabaseClient ? new SupabaseSeasonAwardRepository(supabaseClient) : undefined;
       const walletEntry = supabaseClient ? new SupabaseWalletEntryRepository(supabaseClient) : undefined;
       const storePurchase = supabaseClient ? new SupabaseStorePurchaseRepository(supabaseClient) : undefined;
+      const storeItemUse = supabaseClient ? new SupabaseStoreItemUseRepository(supabaseClient) : undefined;
       const router = createWorkersApiRouter({ publicPlayerRecords, seasonAwards });
       const handle = () => router.fetch(request);
       const withWallet = walletEntry ? () => withWalletEntryPort(walletEntry, handle) : handle;
-      return storePurchase ? withStorePurchasePort(storePurchase, withWallet) : withWallet();
+      const withStorePurchase = storePurchase ? () => withStorePurchasePort(storePurchase, withWallet) : withWallet;
+      return storeItemUse ? withStoreItemUsePort(storeItemUse, withStorePurchase) : withStorePurchase();
     });
     cleanupScheduled = true;
     ctx.waitUntil(client.$disconnect().catch((error: unknown) => console.error("Prisma request client cleanup failed", error)));

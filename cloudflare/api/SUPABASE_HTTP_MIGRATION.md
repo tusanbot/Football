@@ -86,3 +86,12 @@ This is a scoped migration, not full Prisma removal. The Worker still creates a 
 `purchase_store_item` locks the wallet, validates the purchase idempotency key and price/quantity, inserts the purchase and debit ledger entry, updates the wallet balance/version, and grants inventory in one PostgreSQL transaction. Bigint balances are returned as decimal text to avoid JavaScript precision loss. The function is `SECURITY INVOKER` and executable only by `service_role` when that role exists; public, anon, and authenticated execution are revoked.
 
 The migration is `20261118120000_store_purchase_rpc`. Apply and rollback-test it on Staging before enabling the route. The existing `useStoreItem` player-stat mutation and store snapshot reads still use Prisma; this RPC covers only purchase execution.
+
+
+## Fifth migrated operation: store-item use
+
+`useStoreItem` now supports a request-scoped `StoreItemUsePort`. The Cloudflare API routes it through `SupabaseStoreItemUseRepository`, while standard Fastify execution retains the Prisma transaction.
+
+`use_store_item` validates club ownership and player eligibility, locks the player and inventory rows, rechecks idempotency after acquiring locks, records the use, decrements inventory, and updates fitness/morale in one PostgreSQL transaction. The recheck prevents concurrent duplicate requests from consuming multiple items. The function is `SECURITY INVOKER` with a fixed search path and execution restricted to `service_role`.
+
+The migration is `20261118130000_store_item_use_rpc`. Apply and rollback-test it on Staging before enabling this route. Store snapshot reads remain on Prisma.
