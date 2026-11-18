@@ -1,6 +1,7 @@
 import { randomInt } from "node:crypto";
 import { Prisma, type PlayerPosition, type SpecialRarity } from "@prisma/client";
 import { prisma } from "../db.js";
+import { getSpecialAcquisitionPort } from "./special-acquisition-context.js";
 
 const PACKS = {
   epic_pack: { rarity: "EPIC", price: 250, maxCopies: 10 },
@@ -32,6 +33,15 @@ export async function acquireSpecialPlayer(userId: string, method: SpecialPackMe
   }
   const pack = PACKS[method];
   if (!pack) throw new SpecialAcquisitionError("INVALID_ACQUISITION_METHOD");
+  const acquisitionPort = getSpecialAcquisitionPort();
+  if (acquisitionPort) {
+    try { return await acquisitionPort.acquire({ userId, method, idempotencyKey }); }
+    catch (error) {
+      const code = error && typeof error === "object" && "code" in error ? String(error.code) : error instanceof Error ? error.message : "";
+      if (code) throw new SpecialAcquisitionError(code);
+      throw error;
+    }
+  }
 
   const execute = () => prisma.$transaction(async (tx) => {
     const previous = await tx.specialPlayerAcquisition.findUnique({

@@ -113,3 +113,12 @@ The migration is `20261118140000_market_purchase_rpc`. Listing creation, cancell
 `redeem_gift_code` locks the gift code, rechecks idempotency, enforces total/per-user limits and time windows, validates persisted group membership for group rewards, increments redemption count, and credits wallet balances/ledger or group points/ledger atomically. Wallet credits and reward amounts remain exact decimal strings. The function is `SECURITY INVOKER`, uses a fixed search path, and is restricted to `service_role`.
 
 The migration is `20261118150000_gift_code_redemption_rpc`. The route's preliminary replay lookup and Telegram membership preflight still use Prisma; the redemption transaction itself is migrated.
+
+
+## Eighth migrated operation: special-player pack acquisition
+
+`acquireSpecialPlayer` now supports a request-scoped `SpecialAcquisitionPort`. Cloudflare routes pack purchases through `SupabaseSpecialAcquisitionRepository`; the standard Fastify runtime retains the Prisma transaction. Pack price, rarity and per-card copy limits are enforced inside PostgreSQL, not trusted from the caller.
+
+`acquire_special_player` serializes idempotency keys, locks the selected special-player card and gold wallet, rechecks copy limits and per-club uniqueness, debits gold, creates the player and acquisition record, and inserts the ledger debit in one transaction. The selected player and exact gold balance are returned. The function is `SECURITY INVOKER`, uses a fixed search path, and is restricted to `service_role`.
+
+The migration is `20261118160000_special_player_acquisition_rpc`. Legacy challenge claims, special-player offers, and other special-player read paths remain on Prisma.
