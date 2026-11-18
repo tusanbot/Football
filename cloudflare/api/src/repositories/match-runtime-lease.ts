@@ -5,9 +5,36 @@ import { SupabaseHttpClient } from "../supabase-http.js";
 
 interface ClaimRow { runtime_id: string; lease_token: string; lease_expires_at: string; }
 interface ReleaseRow { released: boolean; }
+interface ScheduleRow {
+  next_alarm: string | null; has_due_runtime: boolean; has_due_fixture: boolean;
+  has_due_notifications: boolean; has_pending_tournament_finalization: boolean; has_pending_promotion_work: boolean;
+}
+export interface MatchCoordinatorSchedule {
+  nextAlarm: Date | null; hasDueRuntime: boolean; hasDueFixture: boolean; hasDueNotifications: boolean;
+  hasPendingTournamentFinalization: boolean; hasPendingPromotionWork: boolean;
+}
 
 export class SupabaseMatchRuntimeLeaseRepository implements MatchRuntimeLeasePort {
   constructor(private readonly client: SupabaseHttpClient) {}
+
+  async getSchedule(): Promise<MatchCoordinatorSchedule> {
+    const rows = await this.client.rpc<ScheduleRow[]>("get_match_coordinator_schedule", {});
+    if (!Array.isArray(rows) || rows.length !== 1) throw new Error("SUPABASE_MATCH_SCHEDULE_INVALID_RESPONSE");
+    const row = rows[0];
+    if (typeof row.has_due_runtime !== "boolean" || typeof row.has_due_fixture !== "boolean"
+      || typeof row.has_due_notifications !== "boolean" || typeof row.has_pending_tournament_finalization !== "boolean"
+      || typeof row.has_pending_promotion_work !== "boolean"
+      || (row.next_alarm !== null && (typeof row.next_alarm !== "string" || !Number.isFinite(Date.parse(row.next_alarm))))) {
+      throw new Error("SUPABASE_MATCH_SCHEDULE_INVALID_RESPONSE");
+    }
+    return {
+      nextAlarm: row.next_alarm ? new Date(row.next_alarm) : null,
+      hasDueRuntime: row.has_due_runtime, hasDueFixture: row.has_due_fixture,
+      hasDueNotifications: row.has_due_notifications,
+      hasPendingTournamentFinalization: row.has_pending_tournament_finalization,
+      hasPendingPromotionWork: row.has_pending_promotion_work,
+    };
+  }
 
   async claim(input: MatchRuntimeLeaseClaimCommand): Promise<MatchRuntimeLease[]> {
     const rows = await this.client.rpc<ClaimRow[]>("claim_due_match_runtimes", {

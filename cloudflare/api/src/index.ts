@@ -170,77 +170,8 @@ export class MatchCoordinator {
         const now = new Date();
         // One indexed scheduler statement replaces six independent findFirst queries.
         // Its flags also let us skip queue scans and workers that have no due work.
-        const scheduleRows = await prisma.$queryRaw<Array<{
-          nextAlarm: Date | null; hasDueRuntime: boolean; hasDueFixture: boolean;
-          hasDueNotifications: boolean; hasPendingTournamentFinalization: boolean;
-          hasPendingPromotionWork: boolean;
-        }>>`
-          WITH clock AS (SELECT NOW() AS now),
-          candidates AS (
-            SELECT GREATEST(COALESCE(runtime."nextActionAt", clock.now + INTERVAL '10 seconds'),
-                COALESCE(runtime."leaseExpiresAt", '-infinity'::timestamptz)) AS candidate_at,
-              (runtime."nextActionAt" <= clock.now
-                AND (runtime."leaseExpiresAt" IS NULL OR runtime."leaseExpiresAt" <= clock.now)) AS due_runtime,
-              FALSE AS due_fixture, FALSE AS due_notifications, FALSE AS pending_tournament, FALSE AS pending_promotion
-            FROM "MatchRuntime" runtime CROSS JOIN clock
-            WHERE runtime."status"::text IN ('QUEUED', 'RUNNING', 'AWAITING_CHECKPOINT')
-            UNION ALL
-            SELECT fixture."scheduledAt", FALSE, FALSE, FALSE, FALSE, FALSE
-            FROM "FootballMatch" fixture CROSS JOIN clock
-            WHERE fixture."status"::text = 'SCHEDULED' AND fixture."scheduledAt" > clock.now
-              AND NOT EXISTS (SELECT 1 FROM "MatchRuntime" runtime WHERE runtime."matchId" = fixture."id")
-            UNION ALL
-            SELECT clock.now + INTERVAL '5 seconds', FALSE, TRUE, FALSE, FALSE, FALSE
-            FROM "FootballMatch" fixture CROSS JOIN clock
-            WHERE fixture."status"::text = 'SCHEDULED' AND fixture."scheduledAt" <= clock.now
-              AND NOT EXISTS (SELECT 1 FROM "MatchRuntime" runtime WHERE runtime."matchId" = fixture."id")
-            UNION ALL
-            SELECT GREATEST(clock.now + INTERVAL '1 second', notice."availableAt",
-                COALESCE(notice."lockedUntil", '-infinity'::timestamptz)),
-              FALSE, FALSE,
-              (notice."availableAt" <= clock.now
-                AND (notice."lockedUntil" IS NULL OR notice."lockedUntil" < clock.now - INTERVAL '30 seconds')),
-              FALSE, FALSE
-            FROM "MatchLifecycleNotification" notice CROSS JOIN clock
-            WHERE notice."status" = 'PENDING'
-            UNION ALL
-            SELECT GREATEST(clock.now + INTERVAL '1 second', notice."availableAt",
-                COALESCE(notice."lockedUntil", '-infinity'::timestamptz)),
-              FALSE, FALSE,
-              (notice."availableAt" <= clock.now
-                AND (notice."lockedUntil" IS NULL OR notice."lockedUntil" < clock.now - INTERVAL '30 seconds')),
-              FALSE, FALSE
-            FROM "MatchResultNotification" notice
-            JOIN "FootballMatch" fixture ON fixture."id" = notice."matchId"
-            CROSS JOIN clock
-            WHERE notice."status" = 'PENDING' AND fixture."status"::text = 'COMPLETED'
-            UNION ALL
-            SELECT clock.now + INTERVAL '10 seconds', FALSE, FALSE, FALSE, TRUE, FALSE
-            FROM "EventTournament" tournament
-            JOIN "Competition" competition ON competition."id" = tournament."competitionId"
-            CROSS JOIN clock
-            WHERE tournament."status"::text = 'ACTIVE' AND competition."status"::text = 'COMPLETED'
-            UNION ALL
-            SELECT clock.now + INTERVAL '10 seconds', FALSE, FALSE, FALSE, FALSE, TRUE
-            FROM "PyramidLeague" league
-            JOIN "Competition" competition ON competition."id" = league."competitionId"
-            CROSS JOIN clock
-            WHERE league."promotionProcessedAt" IS NULL AND competition."status"::text = 'COMPLETED'
-            UNION ALL
-            SELECT offer."expiresAt", FALSE, FALSE, FALSE, FALSE, (offer."expiresAt" <= clock.now)
-            FROM "LeaguePromotionOffer" offer CROSS JOIN clock
-            WHERE offer."status"::text = 'PENDING'
-          )
-          SELECT MIN(candidate_at) AS "nextAlarm",
-            COALESCE(BOOL_OR(due_runtime), FALSE) AS "hasDueRuntime",
-            COALESCE(BOOL_OR(due_fixture), FALSE) AS "hasDueFixture",
-            COALESCE(BOOL_OR(due_notifications), FALSE) AS "hasDueNotifications",
-            COALESCE(BOOL_OR(pending_tournament), FALSE) AS "hasPendingTournamentFinalization",
-            COALESCE(BOOL_OR(pending_promotion), FALSE) AS "hasPendingPromotionWork"
-          FROM candidates
-        `;
-        const schedule = scheduleRows[0];
-        if (!schedule) throw new Error("MATCH_COORDINATOR_SCHEDULE_UNAVAILABLE");
+        if (!matchRuntimeLease) throw new Error("SUPABASE_MATCH_RUNTIME_REPOSITORY_UNAVAILABLE");
+        const schedule = await matchRuntimeLease.getSchedule();
         const runMatchWork = () => processDueMatchRuntimes("cloudflare-match-coordinator", now, 10, {
           enqueue: schedule.hasDueFixture,
           claim: schedule.hasDueRuntime || schedule.hasDueFixture,
