@@ -23,7 +23,7 @@ export function roundCompetitionKickoffToTehranHour(value: Date): Date {
   const fields = Object.fromEntries(parts.map((part) => [part.type, Number(part.value)]));
   const localHour = fields.hour ?? 0;
   const hasRemainder = (fields.minute ?? 0) > 0 || (fields.second ?? 0) > 0 || value.getUTCMilliseconds() > 0;
-  const currentLocalAsUtc = Date.UTC(fields.year!, fields.month! - 1, fields.day!, localHour, fields.minute, fields.second);
+  const currentLocalAsUtc = Date.UTC(fields.year!, fields.month! - 1, fields.day!, localHour, fields.minute ?? 0, fields.second ?? 0, value.getUTCMilliseconds());
   const offsetMs = currentLocalAsUtc - value.getTime();
   const roundedLocalAsUtc = Date.UTC(fields.year!, fields.month! - 1, fields.day!, localHour + (hasRemainder ? 1 : 0), 0, 0, 0);
   return new Date(roundedLocalAsUtc - offsetMs);
