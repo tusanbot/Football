@@ -33,7 +33,7 @@ export async function requireTelegramUser(request: FastifyRequest) {
   const receivedBotSecret = request.headers["x-football-bot-secret"];
   const telegramUserId = request.headers["x-telegram-user-id"];
   if (botSecret && typeof receivedBotSecret === "string" && safeSecretMatch(receivedBotSecret, botSecret)
-    && typeof telegramUserId === "string" && /^\\d{1,20}$/.test(telegramUserId)) {
+    && typeof telegramUserId === "string" && /^\d{1,20}$/.test(telegramUserId)) {
     return loadActiveUser(telegramUserId);
   }
 
