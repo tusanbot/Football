@@ -25,6 +25,7 @@ test("Supabase client sends authenticated HTTPS PostgREST requests", async () =>
   assert.equal(headers.get("apikey"), config.serviceRoleKey);
   assert.equal(headers.get("authorization"), "Bearer " + config.serviceRoleKey);
   assert.equal(captured?.init.method, "GET");
+  assert.equal(captured?.init.redirect, "error");
 });
 
 test("RPC calls use PostgREST RPC endpoint and JSON arguments", async () => {

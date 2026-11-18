@@ -132,6 +132,8 @@ export class SupabaseHttpClient {
     try {
       response = await this.fetchImpl(url, {
         method, headers, body: body === undefined ? undefined : JSON.stringify(body), signal,
+        // Never forward service-role credentials through an HTTP redirect.
+        redirect: "error",
       });
     } catch (error) {
       const message = error instanceof Error && error.name === "TimeoutError"
