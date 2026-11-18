@@ -42,7 +42,7 @@ Initial RPC candidates: wallet deltas, player-market transfers, reward purchases
 
 ## Safety
 
-This stage does not change API routing, readiness, Worker secrets, database migrations, bot webhook, DNS, or production. Existing Prisma runtime remains in place until each route family has a verified HTTP implementation. Do not configure plaintext PostgreSQL or disable TLS as a fallback.
+The first Staging-only database RPC migrations are now applied and verified. No API routing, readiness, Worker secrets, bot webhook, DNS, or production configuration was changed. Existing Prisma runtime remains in place for route families that do not yet have a verified HTTP implementation. Do not configure plaintext PostgreSQL or disable TLS as a fallback.
 
 
 ## First migrated route: public player records
@@ -66,3 +66,14 @@ The `GET /v1/seasons/:season/awards` route now supports an injected repository. 
 The `get_season_award_data(p_season)` RPC returns season-scoped completed-match performance aggregates, manual player awards, and the completed-match count in one HTTPS RPC. The existing TypeScript award-selection logic remains authoritative for minimum appearances, position-group team-of-season slots, tie-breaks, and leaderboards. Manual awards are included unchanged. The migration is `20261118100000_season_award_data_rpc`; it is `SECURITY INVOKER` and executable only by `service_role` (with public, anon, and authenticated execution revoked).
 
 Tests cover the repository RPC contract, numeric conversion and malformed payload rejection, plus the route response envelope, team selection, manual awards, and query validation. As with the first route, apply the migration to an isolated target and compare Prisma and RPC-backed responses against the same fixture before enabling Supabase secrets in staging. No remote migration, secrets, Worker deployment, or production change is part of this code commit.
+
+
+## Third migrated operation: wallet ledger entry
+
+`apps/api/src/economy/wallet-service.ts` now supports a request-scoped wallet port. The Cloudflare API creates `SupabaseWalletEntryRepository` per request and binds it with `AsyncLocalStorage`; standard Fastify execution retains the existing Prisma transaction. The context is request-local, not a mutable Worker-global singleton.
+
+`apply_wallet_entry` performs the wallet lock, idempotency comparison, balance validation, ledger insert, and balance/version update inside one PostgreSQL transaction. It uses `SECURITY INVOKER`, a fixed search path, row locking, a unique idempotency key, and explicit execution grants: `service_role` only; `PUBLIC`, `anon`, and `authenticated` are revoked.
+
+The migration is `20261118110000_wallet_entry_rpc`. It has been applied to the isolated Football Empire Staging database. A rollback-scoped SQL verification exercised first application and replay behavior, asserted the balance/version results, and confirmed that the test ledger insert was rolled back. Privilege checks confirmed `service_role` can execute the function while `anon` and `authenticated` cannot.
+
+This is a scoped migration, not full Prisma removal. The Worker still creates a Prisma client for the remaining API routes and Durable Object scheduler. The wallet HTTP path must still pass the repository test suite and end-to-end API validation before this operation is considered production-ready.
