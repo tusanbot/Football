@@ -125,16 +125,21 @@ BEGIN
  END LOOP;
 
  IF COALESCE((p_result->>'forfeit')::boolean,false)=false THEN
+  lineup_changed := lineup_changed || COALESCE((SELECT array_agg(DISTINCT "clubId")
+   FROM public."Player" WHERE "clubId" IN (home_club."id",away_club."id")
+    AND "suspensionMatchesRemaining">0),ARRAY[]::text[]);
   UPDATE public."Player" SET "suspensionMatchesRemaining"="suspensionMatchesRemaining"-1,"updatedAt"=p_now
   WHERE "clubId" IN (home_club."id",away_club."id") AND "suspensionMatchesRemaining">0;
  END IF;
  SELECT COALESCE(array_agg(DISTINCT value),ARRAY[]::text[]) INTO red_ids
  FROM jsonb_array_elements_text(COALESCE(p_result->'redCardPlayerIds','[]'::jsonb));
- IF p_red_card_suspension_matches>0 AND cardinality(red_ids)>0 THEN
-  UPDATE public."Player" SET "suspensionMatchesRemaining"=p_red_card_suspension_matches,"updatedAt"=p_now
-  WHERE "id"=ANY(red_ids) AND "status"='ACTIVE';
+ IF cardinality(red_ids)>0 THEN
   lineup_changed := lineup_changed || COALESCE((SELECT array_agg(DISTINCT "clubId")
    FROM public."Player" WHERE "id"=ANY(red_ids)),ARRAY[]::text[]);
+  IF p_red_card_suspension_matches>0 THEN
+   UPDATE public."Player" SET "suspensionMatchesRemaining"=p_red_card_suspension_matches,"updatedAt"=p_now
+   WHERE "id"=ANY(red_ids) AND "status"='ACTIVE';
+  END IF;
  END IF;
  IF match_row."competitionId" IS NOT NULL AND p_yellow_cards_to_suspend>0 AND p_yellow_card_suspension_matches>0 THEN
   FOR item IN
