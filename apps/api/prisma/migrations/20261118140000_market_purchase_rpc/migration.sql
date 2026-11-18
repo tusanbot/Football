@@ -161,7 +161,7 @@ BEGIN
       'Transfer purchase: ' || player_row."firstName" || ' ' || player_row."lastName"),
     (gen_random_uuid()::text, 'club-finance-market:' || listing_row.id || ':seller', listing_row."sellerClubId",
       'PLAYER_MARKET_SALE', 'CREDIT', listing_row."askingPrice",
-      'Transfer sale: ' || player_row."firstName" || ' ' || player_row."lastName');
+      'Transfer sale: ' || player_row."firstName" || ' ' || player_row."lastName");
 
 
   RETURN QUERY SELECT listing_row.id, player_row.id, price_text, FALSE, NULL::text;
