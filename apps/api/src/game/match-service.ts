@@ -1476,7 +1476,6 @@ async function processClaimedMatchRuntime(
     { home: state.segment.home.score, away: state.segment.away.score }, runtime.startedAt ?? now));
   const nextKind = nextMinute === 60 ? "MINUTE_60" : "MINUTE_75";
   const decisionDeadlineAt = new Date(nextAt.getTime() + MATCH_CHECKPOINT_WINDOW_MS);
-  const checkpointPort = getMatchRuntimeCheckpointPort();
   if (checkpointPort) {
     if (!runtime.leaseToken) throw new MatchServiceError("MATCH_RUNTIME_LEASE_MISSING");
     await checkpointPort.resolveCheckpoint({
