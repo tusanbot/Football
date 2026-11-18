@@ -125,3 +125,62 @@ REVOKE ALL ON FUNCTION public.get_match_runtime_open_checkpoint(text) FROM PUBLI
 DO $grant$ BEGIN IF EXISTS(SELECT 1 FROM pg_roles WHERE rolname='service_role') THEN
  GRANT EXECUTE ON FUNCTION public.get_match_runtime_open_checkpoint(text) TO service_role;
 END IF; END $grant$;
+
+CREATE OR REPLACE FUNCTION public.submit_match_runtime_tactical_decision(
+ p_user_id text,p_match_id text,p_checkpoint_key text,p_idempotency_key text,
+ p_instruction jsonb,p_submitted_at timestamp without time zone
+) RETURNS jsonb
+LANGUAGE plpgsql VOLATILE SECURITY INVOKER SET search_path=public,pg_temp AS $function$
+DECLARE
+ match_row public."FootballMatch"%ROWTYPE;
+ checkpoint_row public."MatchTacticalCheckpoint"%ROWTYPE;
+ club_id text;
+ decision_row public."MatchTacticalDecision"%ROWTYPE;
+BEGIN
+ IF p_user_id IS NULL OR p_match_id IS NULL OR p_checkpoint_key IS NULL OR p_checkpoint_key=''
+  OR p_idempotency_key IS NULL OR p_idempotency_key='' OR p_instruction IS NULL
+  OR jsonb_typeof(p_instruction)<>'object' OR p_submitted_at IS NULL THEN
+  RAISE EXCEPTION 'INVALID_MATCH_TACTICAL_DECISION';
+ END IF;
+ PERFORM pg_advisory_xact_lock(hashtextextended(p_idempotency_key,0));
+ SELECT * INTO match_row FROM public."FootballMatch" WHERE "id"=p_match_id;
+ IF NOT FOUND THEN RAISE EXCEPTION 'MATCH_NOT_FOUND'; END IF;
+ SELECT c."id" INTO club_id FROM public."Club" c
+ WHERE c."ownerId"=p_user_id AND c."id" IN (match_row."homeClubId",match_row."awayClubId") LIMIT 1;
+ IF club_id IS NULL THEN RAISE EXCEPTION 'NOT_MATCH_PARTICIPANT'; END IF;
+ SELECT * INTO checkpoint_row FROM public."MatchTacticalCheckpoint"
+ WHERE "matchId"=p_match_id AND "checkpointKey"=p_checkpoint_key FOR UPDATE;
+ IF NOT FOUND THEN RAISE EXCEPTION 'MATCH_CHECKPOINT_NOT_FOUND'; END IF;
+ SELECT * INTO decision_row FROM public."MatchTacticalDecision"
+ WHERE "idempotencyKey"=p_idempotency_key;
+ IF FOUND THEN
+  IF decision_row."checkpointId"<>checkpoint_row."id" OR decision_row."clubId"<>club_id
+   OR decision_row."submittedByUserId"<>p_user_id THEN
+   RAISE EXCEPTION 'IDEMPOTENCY_CONFLICT';
+  END IF;
+  RETURN jsonb_build_object('decision',jsonb_build_object(
+   'id',decision_row."id",'checkpointId',decision_row."checkpointId",'clubId',decision_row."clubId",
+   'submittedByUserId',decision_row."submittedByUserId",'idempotencyKey',decision_row."idempotencyKey",
+   'instruction',decision_row."instruction",'submittedAt',decision_row."submittedAt"
+  ),'replayed',true);
+ END IF;
+ IF checkpoint_row."status"::text<>'OPEN'
+  OR p_submitted_at<checkpoint_row."openedAt"
+  OR p_submitted_at>=LEAST(checkpoint_row."decisionDeadlineAt",checkpoint_row."nextSegmentAt") THEN
+  RAISE EXCEPTION 'MATCH_CHECKPOINT_CLOSED';
+ END IF;
+ INSERT INTO public."MatchTacticalDecision"(
+  "id","idempotencyKey","checkpointId","clubId","submittedByUserId","instruction","submittedAt"
+ ) VALUES(gen_random_uuid()::text,p_idempotency_key,checkpoint_row."id",club_id,p_user_id,p_instruction,p_submitted_at)
+ RETURNING * INTO decision_row;
+ RETURN jsonb_build_object('decision',jsonb_build_object(
+  'id',decision_row."id",'checkpointId',decision_row."checkpointId",'clubId',decision_row."clubId",
+  'submittedByUserId',decision_row."submittedByUserId",'idempotencyKey',decision_row."idempotencyKey",
+  'instruction',decision_row."instruction",'submittedAt',decision_row."submittedAt"
+ ),'replayed',false);
+END;
+$function$;
+REVOKE ALL ON FUNCTION public.submit_match_runtime_tactical_decision(text,text,text,text,jsonb,timestamp without time zone) FROM PUBLIC,anon,authenticated;
+DO $grant$ BEGIN IF EXISTS(SELECT 1 FROM pg_roles WHERE rolname='service_role') THEN
+ GRANT EXECUTE ON FUNCTION public.submit_match_runtime_tactical_decision(text,text,text,text,jsonb,timestamp without time zone) TO service_role;
+END IF; END $grant$;

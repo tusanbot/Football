@@ -86,3 +86,35 @@ test("open checkpoint snapshot is loaded through one Supabase RPC", async () => 
     name: "get_match_runtime_open_checkpoint", args: { p_match_id: "match-1" },
   });
 });
+
+
+test("tactical decision submission uses the atomic idempotent RPC", async () => {
+  let call: { name: string; args: Record<string, unknown> } | undefined;
+  const expected = {
+    decision: {
+      id: "decision-2", checkpointId: "checkpoint-60", clubId: "club-away",
+      submittedByUserId: "user-2", idempotencyKey: "decision-key-1234",
+      instruction: { mentality: "DEFENSIVE" }, submittedAt: "2026-11-18T20:01:03.000Z",
+    },
+    replayed: false,
+  };
+  const repository = new SupabaseMatchRuntimeCheckpointRepository({
+    rpc: async (name: string, args: Record<string, unknown>) => {
+      call = { name, args };
+      return expected;
+    },
+  } as never);
+  assert.deepEqual(await repository.submitDecision({
+    userId: "user-2", matchId: "match-1", checkpointKey: "minute-60",
+    idempotencyKey: "decision-key-1234", instruction: { mentality: "DEFENSIVE" },
+    submittedAt: "2026-11-18T20:01:03.000Z",
+  }), expected);
+  assert.deepEqual(call, {
+    name: "submit_match_runtime_tactical_decision",
+    args: {
+      p_user_id: "user-2", p_match_id: "match-1", p_checkpoint_key: "minute-60",
+      p_idempotency_key: "decision-key-1234", p_instruction: { mentality: "DEFENSIVE" },
+      p_submitted_at: "2026-11-18T20:01:03.000Z",
+    },
+  });
+});

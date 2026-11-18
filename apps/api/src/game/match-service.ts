@@ -628,6 +628,25 @@ export async function submitMatchCheckpointDecision(userId: string, matchId: str
   idempotencyKey: string, instruction: MatchTacticalInstruction, now = new Date()) {
   keyValid(idempotencyKey);
   if (!checkpointKey.trim() || checkpointKey.length > 100) throw new MatchServiceError("INVALID_MATCH_CHECKPOINT");
+  const checkpointPort = getMatchRuntimeCheckpointPort();
+  if (checkpointPort) {
+    try {
+      const result = await checkpointPort.submitDecision({
+        userId, matchId, checkpointKey, idempotencyKey,
+        instruction: jsonSafe(instruction), submittedAt: now.toISOString(),
+      });
+      return {
+        decision: { ...result.decision, submittedAt: new Date(result.decision.submittedAt) },
+        replayed: result.replayed,
+      };
+    } catch (error) {
+      const known = ["MATCH_NOT_FOUND", "NOT_MATCH_PARTICIPANT", "MATCH_CHECKPOINT_NOT_FOUND",
+        "IDEMPOTENCY_CONFLICT", "MATCH_CHECKPOINT_CLOSED", "INVALID_MATCH_TACTICAL_DECISION"];
+      const code = known.find((candidate) => error instanceof Error && error.message.includes(candidate));
+      if (code) throw new MatchServiceError(code);
+      throw error;
+    }
+  }
   return prisma.$transaction(async (tx) => {
     const match = await tx.footballMatch.findUnique({ where: { id: matchId },
       include: { homeClub: { select: { id: true, ownerId: true } }, awayClub: { select: { id: true, ownerId: true } } } });

@@ -131,9 +131,12 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
       const specialAcquisition = supabaseClient ? new SupabaseSpecialAcquisitionRepository(supabaseClient) : undefined;
       const marketListing = supabaseClient ? new SupabaseMarketListingRepository(supabaseClient) : undefined;
       const specialPlayers = supabaseClient ? new SupabaseSpecialPlayerCatalogRepository(supabaseClient) : undefined;
+      const matchRuntimeCheckpoint = supabaseClient ? new SupabaseMatchRuntimeCheckpointRepository(supabaseClient) : undefined;
       const router = createWorkersApiRouter({ publicPlayerRecords, seasonAwards, specialPlayers });
       const handle = () => router.fetch(request);
-      const withWallet = walletEntry ? () => withWalletEntryPort(walletEntry, handle) : handle;
+      const withCheckpoint = matchRuntimeCheckpoint
+        ? () => withMatchRuntimeCheckpointPort(matchRuntimeCheckpoint, handle) : handle;
+      const withWallet = walletEntry ? () => withWalletEntryPort(walletEntry, withCheckpoint) : withCheckpoint;
       const withStorePurchase = storePurchase ? () => withStorePurchasePort(storePurchase, withWallet) : withWallet;
       const withMarketPurchase = marketPurchase ? () => withMarketPurchasePort(marketPurchase, withStorePurchase) : withStorePurchase;
       const withGiftCodeRedemption = giftCodeRedemption ? () => withGiftCodeRedemptionPort(giftCodeRedemption, withMarketPurchase) : withMarketPurchase;

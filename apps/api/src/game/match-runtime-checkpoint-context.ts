@@ -36,9 +36,19 @@ export interface MatchRuntimeCheckpointSnapshot {
   };
   decisions: Array<{ id: string; clubId: string; submittedAt: string; instruction: unknown }>;
 }
+export interface MatchRuntimeCheckpointDecisionCommand {
+  userId: string; matchId: string; checkpointKey: string; idempotencyKey: string;
+  instruction: unknown; submittedAt: string;
+}
+export interface MatchRuntimeCheckpointDecisionResult {
+  decision: { id: string; checkpointId: string; clubId: string; submittedByUserId: string;
+    idempotencyKey: string; instruction: unknown; submittedAt: string };
+  replayed: boolean;
+}
 export interface MatchRuntimeCheckpointPort {
   resolveCheckpoint(input: MatchRuntimeCheckpointCommand): Promise<boolean>;
   getOpenCheckpoint(matchId: string): Promise<MatchRuntimeCheckpointSnapshot | null>;
+  submitDecision(input: MatchRuntimeCheckpointDecisionCommand): Promise<MatchRuntimeCheckpointDecisionResult>;
 }
 const scope = new AsyncLocalStorage<MatchRuntimeCheckpointPort>();
 export function withMatchRuntimeCheckpointPort<T>(port: MatchRuntimeCheckpointPort, operation: () => Promise<T>): Promise<T> {
