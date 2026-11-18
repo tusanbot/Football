@@ -60,3 +60,29 @@ test("checkpoint resolution rejects stale lease and malformed RPC responses", as
     },
   }), /SUPABASE_MATCH_RUNTIME_CHECKPOINT_REJECTED/);
 });
+
+
+test("open checkpoint snapshot is loaded through one Supabase RPC", async () => {
+  let call: { name: string; args: Record<string, unknown> } | undefined;
+  const snapshot = {
+    checkpoint: {
+      id: "checkpoint-60", checkpointKey: "minute-60", kind: "MINUTE_60",
+      minute: 60, status: "OPEN", openedAt: "2026-11-18T20:01:00.000Z",
+      decisionDeadlineAt: "2026-11-18T20:01:05.000Z", nextSegmentAt: "2026-11-18T20:01:05.000Z",
+    },
+    decisions: [{
+      id: "decision-1", clubId: "club-home", submittedAt: "2026-11-18T20:01:02.000Z",
+      instruction: { mentality: "ATTACKING" },
+    }],
+  };
+  const repository = new SupabaseMatchRuntimeCheckpointRepository({
+    rpc: async (name: string, args: Record<string, unknown>) => {
+      call = { name, args };
+      return snapshot;
+    },
+  } as never);
+  assert.deepEqual(await repository.getOpenCheckpoint("match-1"), snapshot);
+  assert.deepEqual(call, {
+    name: "get_match_runtime_open_checkpoint", args: { p_match_id: "match-1" },
+  });
+});

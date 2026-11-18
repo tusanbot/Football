@@ -1350,15 +1350,35 @@ async function processClaimedMatchRuntime(
     return "SETTLED";
   }
 
-  const checkpoint = await prisma.matchTacticalCheckpoint.findFirst({
-    where: { matchId: runtime.matchId, status: "OPEN" },
-    orderBy: { minute: "asc" },
-  });
+  const checkpointPort = getMatchRuntimeCheckpointPort();
+  const checkpointSnapshot = checkpointPort
+    ? await checkpointPort.getOpenCheckpoint(runtime.matchId)
+    : null;
+  const checkpoint = checkpointPort
+    ? checkpointSnapshot ? {
+        id: checkpointSnapshot.checkpoint.id,
+        checkpointKey: checkpointSnapshot.checkpoint.checkpointKey,
+        kind: checkpointSnapshot.checkpoint.kind,
+        minute: checkpointSnapshot.checkpoint.minute,
+        status: checkpointSnapshot.checkpoint.status,
+        openedAt: new Date(checkpointSnapshot.checkpoint.openedAt),
+        decisionDeadlineAt: new Date(checkpointSnapshot.checkpoint.decisionDeadlineAt),
+        nextSegmentAt: new Date(checkpointSnapshot.checkpoint.nextSegmentAt),
+      } : null
+    : await prisma.matchTacticalCheckpoint.findFirst({
+        where: { matchId: runtime.matchId, status: "OPEN" },
+        orderBy: { minute: "asc" },
+      });
   if (!checkpoint) throw new MatchServiceError("MATCH_OPEN_CHECKPOINT_MISSING");
-  const decisions = await prisma.matchTacticalDecision.findMany({
-    where: { checkpointId: checkpoint.id },
-    orderBy: [{ submittedAt: "desc" }, { id: "asc" }],
-  });
+  const decisions = checkpointPort
+    ? (checkpointSnapshot?.decisions ?? []).map((decision) => ({
+        id: decision.id, clubId: decision.clubId, submittedAt: new Date(decision.submittedAt),
+        instruction: decision.instruction,
+      }))
+    : await prisma.matchTacticalDecision.findMany({
+        where: { checkpointId: checkpoint.id },
+        orderBy: [{ submittedAt: "desc" }, { id: "asc" }],
+      });
   const bothResponded = [runtime.match.homeClubId, runtime.match.awayClubId]
     .every((clubId) => decisions.some((decision) => decision.clubId === clubId
       && decision.submittedAt >= checkpoint.openedAt

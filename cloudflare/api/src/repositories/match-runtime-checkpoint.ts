@@ -1,8 +1,14 @@
-import type { MatchRuntimeCheckpointCommand, MatchRuntimeCheckpointPort } from "../../../../apps/api/src/game/match-runtime-checkpoint-context.js";
+import type { MatchRuntimeCheckpointCommand, MatchRuntimeCheckpointPort, MatchRuntimeCheckpointSnapshot } from "../../../../apps/api/src/game/match-runtime-checkpoint-context.js";
 import { SupabaseHttpClient } from "../supabase-http.js";
 
 export class SupabaseMatchRuntimeCheckpointRepository implements MatchRuntimeCheckpointPort {
   constructor(private readonly client: SupabaseHttpClient) {}
+  async getOpenCheckpoint(matchId: string): Promise<MatchRuntimeCheckpointSnapshot | null> {
+    const result = await this.client.rpc<MatchRuntimeCheckpointSnapshot | null>("get_match_runtime_open_checkpoint", {
+      p_match_id: matchId,
+    });
+    return result;
+  }
   async resolveCheckpoint(input: MatchRuntimeCheckpointCommand): Promise<boolean> {
     const result = await this.client.rpc<unknown>("resolve_match_runtime_checkpoint", {
       p_runtime_id: input.runtimeId,

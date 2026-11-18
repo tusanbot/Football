@@ -28,8 +28,17 @@ export interface MatchRuntimeCheckpointCommand {
     nextSegmentAt: string;
   };
 }
+export interface MatchRuntimeCheckpointSnapshot {
+  checkpoint: {
+    id: string; checkpointKey: string; kind: "HALF_TIME" | "MINUTE_60" | "MINUTE_75";
+    minute: number; status: "OPEN" | "RESOLVED" | "EXPIRED";
+    openedAt: string; decisionDeadlineAt: string; nextSegmentAt: string;
+  };
+  decisions: Array<{ id: string; clubId: string; submittedAt: string; instruction: unknown }>;
+}
 export interface MatchRuntimeCheckpointPort {
   resolveCheckpoint(input: MatchRuntimeCheckpointCommand): Promise<boolean>;
+  getOpenCheckpoint(matchId: string): Promise<MatchRuntimeCheckpointSnapshot | null>;
 }
 const scope = new AsyncLocalStorage<MatchRuntimeCheckpointPort>();
 export function withMatchRuntimeCheckpointPort<T>(port: MatchRuntimeCheckpointPort, operation: () => Promise<T>): Promise<T> {

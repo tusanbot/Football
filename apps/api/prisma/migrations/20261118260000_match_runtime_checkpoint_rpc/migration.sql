@@ -94,3 +94,34 @@ REVOKE ALL ON FUNCTION public.resolve_match_runtime_checkpoint(text,text,integer
 DO $grant$ BEGIN IF EXISTS(SELECT 1 FROM pg_roles WHERE rolname='service_role') THEN
  GRANT EXECUTE ON FUNCTION public.resolve_match_runtime_checkpoint(text,text,integer,text,jsonb,integer,jsonb,timestamp without time zone,jsonb,jsonb) TO service_role;
 END IF; END $grant$;
+
+
+CREATE OR REPLACE FUNCTION public.get_match_runtime_open_checkpoint(p_match_id text)
+RETURNS jsonb
+LANGUAGE sql STABLE SECURITY INVOKER SET search_path=public,pg_temp AS $function$
+ SELECT CASE WHEN checkpoint_row."id" IS NULL THEN NULL ELSE jsonb_build_object(
+  'checkpoint',jsonb_build_object(
+   'id',checkpoint_row."id",'checkpointKey',checkpoint_row."checkpointKey",
+   'kind',checkpoint_row."kind"::text,'minute',checkpoint_row."minute",
+   'status',checkpoint_row."status"::text,'openedAt',checkpoint_row."openedAt",
+   'decisionDeadlineAt',checkpoint_row."decisionDeadlineAt",'nextSegmentAt',checkpoint_row."nextSegmentAt"
+  ),
+  'decisions',COALESCE((
+   SELECT jsonb_agg(jsonb_build_object(
+    'id',decision."id",'clubId',decision."clubId",'submittedAt',decision."submittedAt",
+    'instruction',decision."instruction"
+   ) ORDER BY decision."submittedAt" DESC,decision."id" ASC)
+   FROM public."MatchTacticalDecision" decision
+   WHERE decision."checkpointId"=checkpoint_row."id"
+  ),'[]'::jsonb)
+ ) END
+ FROM LATERAL (
+  SELECT cp.* FROM public."MatchTacticalCheckpoint" cp
+  WHERE cp."matchId"=p_match_id AND cp."status"='OPEN'
+  ORDER BY cp."minute" ASC LIMIT 1
+ ) checkpoint_row;
+$function$;
+REVOKE ALL ON FUNCTION public.get_match_runtime_open_checkpoint(text) FROM PUBLIC,anon,authenticated;
+DO $grant$ BEGIN IF EXISTS(SELECT 1 FROM pg_roles WHERE rolname='service_role') THEN
+ GRANT EXECUTE ON FUNCTION public.get_match_runtime_open_checkpoint(text) TO service_role;
+END IF; END $grant$;
