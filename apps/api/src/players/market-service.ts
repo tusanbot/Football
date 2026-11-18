@@ -2,6 +2,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "../db.js";
 import { settleClubDailyState } from "./player-development-service.js";
 import { getMarketPurchasePort } from "./market-purchase-context.js";
+import { getMarketListingPort } from "./market-listing-context.js";
 
 export class MarketError extends Error {
   constructor(public readonly code: string) { super(code); this.name = "MarketError"; }
@@ -9,6 +10,16 @@ export class MarketError extends Error {
 
 export async function createMarketListing(userId: string, playerId: string, askingPrice: bigint, expiresInHours: number) {
   await settleClubDailyState(userId);
+  const listingPort = getMarketListingPort();
+  if (listingPort) {
+    try {
+      return await listingPort.create({ userId, playerId, askingPrice: askingPrice.toString(), expiresInHours });
+    } catch (error) {
+      const code = error && typeof error === "object" && "code" in error ? String(error.code) : "";
+      if (code) throw new MarketError(code);
+      throw error;
+    }
+  }
   const club = await prisma.club.findUnique({ where: { ownerId: userId }, select: { id: true } });
   if (!club) throw new MarketError("CLUB_NOT_FOUND");
   return prisma.$transaction(async (tx) => {
