@@ -12,6 +12,7 @@ import { processDuePromotionOffers } from "../../../apps/api/src/game/league-pyr
 import { isValidTelegramBotToken, parseAdminTelegramIds, parseCorsOrigins } from "../../../apps/api/src/runtime-config.js";
 import { createWorkersApiRouter } from "./workers-router.js";
 import { SupabaseHttpClient } from "./supabase-http.js";
+import { SupabasePilotAnalyticsRepository } from "./repositories/pilot-analytics.js";
 import { SupabasePublicPlayerRecordRepository } from "./repositories/public-player-records.js";
 import { SupabaseSeasonAwardRepository } from "./repositories/season-awards.js";
 import { SupabaseWalletEntryRepository } from "./repositories/wallet-entry.js";
@@ -333,17 +334,23 @@ export default {
         || (event.actionKey !== undefined && (typeof event.actionKey !== "string" || event.actionKey.length > 64 || !/^[a-z0-9_-]*$/i.test(event.actionKey)))
         || (event.chatType !== undefined && !["private", "group", "supergroup", "channel", "unknown"].includes(String(event.chatType)))
         || !["bot", "miniapp"].includes(String(event.source))) return json({ error: "INVALID_EVENT" }, 400);
-      const client = createPrismaClient(dbUrl(env) ?? undefined, 1);
+      if (!env.SUPABASE_URL || !env.SUPABASE_SERVICE_ROLE_KEY) {
+        return json({ error: "ANALYTICS_UNAVAILABLE" }, 503);
+      }
       try {
-        await withPrismaClient(client, () => prisma.$executeRaw`
-          INSERT INTO "PilotAnalyticsEvent" ("eventName", "userKey", "actionKey", "chatType", "source")
-          VALUES (${event.eventName}, ${event.userKey}, ${typeof event.actionKey === "string" ? event.actionKey : ""}, ${typeof event.chatType === "string" ? event.chatType : "unknown"}, ${String(event.source)})
-        `);
-        ctx.waitUntil(client.$disconnect().catch((error: unknown) => console.error("Pilot analytics cleanup failed", error)));
+        const analytics = new SupabasePilotAnalyticsRepository(
+          new SupabaseHttpClient({ url: env.SUPABASE_URL, serviceRoleKey: env.SUPABASE_SERVICE_ROLE_KEY }),
+        );
+        await analytics.record({
+          eventName: event.eventName,
+          userKey: event.userKey,
+          actionKey: typeof event.actionKey === "string" ? event.actionKey : "",
+          chatType: typeof event.chatType === "string" ? event.chatType : "unknown",
+          source: String(event.source),
+        });
         return json({ accepted: true }, 202);
       } catch (error) {
-        await client.$disconnect().catch(() => undefined);
-        console.error("Pilot analytics persistence failed", error);
+        console.error("Pilot analytics persistence failed", describeRuntimeError(error));
         return json({ error: "ANALYTICS_UNAVAILABLE" }, 503);
       }
     }
