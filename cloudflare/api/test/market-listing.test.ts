@@ -53,3 +53,13 @@ test("market listing repository rejects malformed RPC responses", async () => {
     /SUPABASE_MARKET_LISTING_INVALID_RESPONSE/,
   );
 });
+
+
+test("market listing repository reads open listings through the expiry-aware RPC", async () => {
+  let call: { name: string; args: Record<string, unknown> } | undefined;
+  const rows = [{ id: "listing-3", status: "OPEN", player: { id: "player-3" }, sellerClub: { id: "club-1" } }];
+  const client = { rpc: async (name: string, args: Record<string, unknown>) => { call = { name, args }; return rows; } } as never;
+  const result = await new SupabaseMarketListingRepository(client).listOpen();
+  assert.equal(call?.name, "get_open_market_listings");
+  assert.deepEqual(result, rows);
+});

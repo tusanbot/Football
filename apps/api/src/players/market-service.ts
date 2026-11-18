@@ -175,6 +175,8 @@ export async function cancelMarketListing(userId: string, listingId: string) {
 }
 
 export async function getOpenMarketListings() {
+  const listingPort = getMarketListingPort();
+  if (listingPort) return listingPort.listOpen();
   const now = new Date();
   await prisma.$transaction(async (tx) => {
     const expired = await tx.playerMarketListing.findMany({ where: { status: "OPEN", expiresAt: { lte: now } }, select: { id: true, playerId: true, sellerClubId: true, player: { select: { contractDays: true } } } });
