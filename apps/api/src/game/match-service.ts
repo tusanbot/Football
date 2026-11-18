@@ -14,6 +14,23 @@ import { getMatchRuntimeEnqueuePort } from "./match-runtime-enqueue-context.js";
 const DAY_MS = 86_400_000;
 const MATCH_MINUTE_MS = 1_000;
 const MATCH_CHECKPOINT_WINDOW_MS = 5_000;
+/** Round a competition kickoff up to the next whole Tehran-local hour. */
+export function roundCompetitionKickoffToTehranHour(value: Date): Date {
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Asia/Tehran", year: "numeric", month: "2-digit", day: "2-digit",
+    hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23",
+  }).formatToParts(value);
+  const fields = Object.fromEntries(parts.map((part) => [part.type, Number(part.value)]));
+  const localHour = fields.hour ?? 0;
+  const hasRemainder = (fields.minute ?? 0) > 0 || (fields.second ?? 0) > 0 || value.getUTCMilliseconds() > 0;
+  const currentLocalAsUtc = Date.UTC(fields.year!, fields.month! - 1, fields.day!, localHour, fields.minute, fields.second);
+  const offsetMs = currentLocalAsUtc - value.getTime();
+  const roundedLocalAsUtc = Date.UTC(fields.year!, fields.month! - 1, fields.day!, localHour + (hasRemainder ? 1 : 0), 0, 0, 0);
+  return new Date(roundedLocalAsUtc - offsetMs);
+}
+function competitionKickoffAfterDays(now: Date, days: number): Date {
+  return roundCompetitionKickoffToTehranHour(new Date(now.getTime() + days * DAY_MS));
+}
 export class MatchServiceError extends Error {
   constructor(public readonly code: string, public readonly details?: Record<string, string>) {
     super(code); this.name = "MatchServiceError";
@@ -274,7 +291,7 @@ export async function joinLeague(userId: string, competitionId: string, now = ne
     }
     if (slots.length % 2) slots.push("");
     const rounds = slots.length - 1;
-    const kickoffAt = new Date(now.getTime() + DAY_MS);
+    const kickoffAt = competitionKickoffAfterDays(now, 1);
     const fixtures: Array<{ homeClubId: string; awayClubId: string; round: number; scheduledAt: Date; seed: string; idempotencyKey: string; type: "LEAGUE"; competitionId: string; rulesSnapshot: Prisma.InputJsonValue }> = [];
     for (let round = 0; round < rounds; round++) {
       for (let index = 0; index < slots.length / 2; index++) {
@@ -357,7 +374,7 @@ export async function startLeague(userId: string, competitionId: string, now = n
           return {
             homeClubId: legHome, awayClubId: legAway, round: 1, type: "CUP" as const,
             competitionId, rulesSnapshot: validateMatchRules(competition.rules ?? defaultMatchRules("CUP")),
-            tieId: competition.cupLegs === 2 ? tieId : null, leg, scheduledAt: new Date(now.getTime() + leg * 3 * DAY_MS),
+            tieId: competition.cupLegs === 2 ? tieId : null, leg, scheduledAt: competitionKickoffAfterDays(now, leg * 3),
             seed: idempotencyKey, idempotencyKey,
           };
         });
@@ -614,7 +631,7 @@ async function advanceCupRound(competitionId: string, round: number, now: Date) 
         idempotencyKey, type: "CUP" as const, competitionId, round: nextRound,
         homeClubId: legHome, awayClubId: legAway, tieId: competition.cupLegs === 2 ? tieId : null, leg,
         rulesSnapshot,
-        scheduledAt: new Date(now.getTime() + leg * 3 * DAY_MS), seed: idempotencyKey,
+        scheduledAt: competitionKickoffAfterDays(now, leg * 3), seed: idempotencyKey,
       });
     }
   }
@@ -1031,7 +1048,7 @@ export async function simulateScheduledMatch(userId: string, matchId: string, no
             nextFixtures.push({
               idempotencyKey, type: "CUP" as const, competitionId: match.competitionId,
               round: nextRound, homeClubId, awayClubId,
-              scheduledAt: new Date(now.getTime() + 3 * DAY_MS), seed: idempotencyKey,
+              scheduledAt: competitionKickoffAfterDays(now, 3), seed: idempotencyKey,
             });
           }
           await tx.footballMatch.createMany({ data: nextFixtures, skipDuplicates: true });
