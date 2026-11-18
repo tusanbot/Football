@@ -15,6 +15,7 @@ import { prisma } from "../db.js";
 import { settleClubDailyState } from "../players/player-development-service.js";
 import { getClubTicketPricePort } from "./club-ticket-price-context.js";
 import { getClubEconomySettlementPort } from "./club-economy-settlement-context.js";
+import { getClubManagementPort } from "./club-management-context.js";
 
 const DAY_MS = 86_400_000;
 const POSITIONS = ["GK", "RB", "LB", "CB", "CDM", "CM", "CAM", "RW", "LW", "ST"] as const;
@@ -270,6 +271,9 @@ export async function getClubOperations(userId: string, now = new Date()) {
 export async function upgradeClubFacility(
   userId: string, facility: FacilityType, idempotencyKey: string, now = new Date(),
 ) {
+  const httpPort = getClubManagementPort();
+  if (httpPort) return httpPort.execute("UPGRADE_FACILITY", userId, idempotencyKey, { facility }, now);
+
   assertKey(idempotencyKey);
   await settleClubDailyState(userId, now);
   await settleClubEconomy(userId, now);
@@ -295,6 +299,19 @@ export async function upgradeClubFacility(
 }
 
 export async function scoutAcademy(userId: string, idempotencyKey: string, now = new Date()) {
+  const httpPort = getClubManagementPort();
+  if (httpPort) {
+    const prospects = Array.from({ length: 3 }, () => {
+      const age = randomInt(16, 19);
+      const overall = randomInt(34, 53) + 8;
+      const potential = Math.min(92, overall + randomInt(12, 31) + 10);
+      const position = randomItem(POSITIONS);
+      return { id: randomUUID(), firstName: randomItem(FIRST_NAMES), lastName: randomItem(LAST_NAMES),
+        nationality: randomItem(NATIONALITIES), age, position, overall, potential, attributes: prospectAttributes(position, overall) };
+    });
+    return httpPort.execute("SCOUT_ACADEMY", userId, idempotencyKey, { prospects }, now);
+  }
+
   assertKey(idempotencyKey);
   await settleClubDailyState(userId, now);
   await settleClubEconomy(userId, now);
@@ -345,6 +362,9 @@ export async function scoutAcademy(userId: string, idempotencyKey: string, now =
 }
 
 export async function recruitAcademyProspect(userId: string, prospectId: string, idempotencyKey: string, now = new Date()) {
+  const httpPort = getClubManagementPort();
+  if (httpPort) return httpPort.execute("RECRUIT_PROSPECT", userId, idempotencyKey, { prospectId }, now);
+
   assertKey(idempotencyKey);
   await settleClubDailyState(userId, now);
   await settleClubEconomy(userId, now);
@@ -380,6 +400,9 @@ export async function recruitAcademyProspect(userId: string, prospectId: string,
 }
 
 export async function upgradeClubCoach(userId: string, idempotencyKey: string, now = new Date()) {
+  const httpPort = getClubManagementPort();
+  if (httpPort) return httpPort.execute("UPGRADE_COACH", userId, idempotencyKey, {}, now);
+
   assertKey(idempotencyKey);
   await settleClubDailyState(userId, now);
   await settleClubEconomy(userId, now);
@@ -408,6 +431,17 @@ export async function upgradeClubCoach(userId: string, idempotencyKey: string, n
 }
 
 export async function hireClubCoach(userId: string, candidateId: string, idempotencyKey: string, now = new Date()) {
+  const httpPort = getClubManagementPort();
+  if (httpPort) {
+    const candidate = COACH_CANDIDATES.find((item) => item.id === candidateId);
+    if (!candidate) throw new ClubOperationsError("COACH_CANDIDATE_NOT_FOUND");
+    return httpPort.execute("HIRE_COACH", userId, idempotencyKey, {
+      candidateId, name: candidate.name, signingFee: candidate.signingFee.toString(),
+      weeklySalary: candidate.weeklySalary.toString(), trainingSkill: candidate.trainingSkill,
+      recoverySkill: candidate.recoverySkill, medicalSkill: candidate.medicalSkill,
+    }, now);
+  }
+
   assertKey(idempotencyKey);
   await settleClubDailyState(userId, now);
   await settleClubEconomy(userId, now);
@@ -430,6 +464,18 @@ export async function hireClubCoach(userId: string, candidateId: string, idempot
 }
 
 export async function signClubSponsor(userId: string, offerId: string, idempotencyKey: string, now = new Date()) {
+  const httpPort = getClubManagementPort();
+  if (httpPort) {
+    const offer = getSponsorOffers(10_000, 10_000).find((item) => item.id === offerId);
+    if (!offer) throw new ClubOperationsError("SPONSOR_OFFER_LOCKED");
+    return httpPort.execute("SIGN_SPONSOR", userId, idempotencyKey, {
+      offerId, partnerName: offer.partnerName, tier: offer.tier,
+      minimumLevel: offer.minimumLevel, minimumReputation: offer.minimumReputation,
+      dailyIncome: offer.dailyIncome.toString(), signingBonus: offer.signingBonus.toString(),
+      durationDays: offer.durationDays,
+    }, now);
+  }
+
   assertKey(idempotencyKey);
   await settleClubDailyState(userId, now);
   await settleClubEconomy(userId, now);

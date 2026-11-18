@@ -43,6 +43,8 @@ import { withTelegramAccountProvisioningPort } from "../../../apps/api/src/auth/
 import { SupabaseTelegramAccountProvisioningRepository } from "./repositories/telegram-account-provisioning.js";
 import { withClubTicketPricePort } from "../../../apps/api/src/game/club-ticket-price-context.js";
 import { withClubEconomySettlementPort } from "../../../apps/api/src/game/club-economy-settlement-context.js";
+import { withClubManagementPort } from "../../../apps/api/src/game/club-management-context.js";
+import { SupabaseClubManagementRepository } from "./repositories/club-management.js";
 import { SupabaseClubEconomySettlementRepository } from "./repositories/club-economy-settlement.js";
 import { SupabaseClubTicketPriceRepository } from "./repositories/club-ticket-price.js";
 
@@ -139,6 +141,7 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
       const telegramAccountProvisioning = supabaseClient ? new SupabaseTelegramAccountProvisioningRepository(supabaseClient) : undefined;
       const clubTicketPrice = supabaseClient ? new SupabaseClubTicketPriceRepository(supabaseClient) : undefined;
       const clubEconomySettlement = supabaseClient ? new SupabaseClubEconomySettlementRepository(supabaseClient) : undefined;
+      const clubManagement = supabaseClient ? new SupabaseClubManagementRepository(supabaseClient) : undefined;
       const seasonAwards = supabaseClient ? new SupabaseSeasonAwardRepository(supabaseClient) : undefined;
       const walletEntry = supabaseClient ? new SupabaseWalletEntryRepository(supabaseClient) : undefined;
       const storePurchase = supabaseClient ? new SupabaseStorePurchaseRepository(supabaseClient) : undefined;
@@ -158,8 +161,9 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
         ? () => withTelegramAccountProvisioningPort(telegramAccountProvisioning, withTelegramUserLookup) : withTelegramUserLookup;
       const withClubTicketPrice = clubTicketPrice ? () => withClubTicketPricePort(clubTicketPrice, withTelegramAccountProvisioning) : withTelegramAccountProvisioning;
       const withClubEconomy = clubEconomySettlement ? () => withClubEconomySettlementPort(clubEconomySettlement, withClubTicketPrice) : withClubTicketPrice;
+      const withClubOperations = clubManagement ? () => withClubManagementPort(clubManagement, withClubEconomy) : withClubEconomy;
       const withCheckpoint = matchRuntimeCheckpoint
-        ? () => withMatchRuntimeCheckpointPort(matchRuntimeCheckpoint, withClubEconomy) : withClubEconomy;
+        ? () => withMatchRuntimeCheckpointPort(matchRuntimeCheckpoint, withClubOperations) : withClubOperations;
       const withSettlement = matchRuntimeSettlement
         ? () => withMatchRuntimeSettlementPort(matchRuntimeSettlement, withCheckpoint) : withCheckpoint;
       const withWallet = walletEntry ? () => withWalletEntryPort(walletEntry, withSettlement) : withSettlement;
