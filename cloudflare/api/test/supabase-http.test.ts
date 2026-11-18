@@ -66,6 +66,9 @@ test("client rejects non-HTTPS, non-Supabase and credential-bearing URLs", () =>
     "http://example-project.supabase.co",
     "https://supabase.co",
     "https://example-project.supabase.co.attacker.invalid",
+    "https://nested.example-project.supabase.co",
+    "https://example-project.supabase.co:8443",
+    "https://example-project.supabase.co/proxy",
     "https://user:pass@example-project.supabase.co",
   ]) assert.throws(() => new SupabaseHttpClient({ ...config, url }));
 });
