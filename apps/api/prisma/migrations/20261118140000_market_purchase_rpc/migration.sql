@@ -151,11 +151,7 @@ BEGIN
       listing_row."askingPrice", 'PLAYER_MARKET_PURCHASE', 'PLAYER_MARKET_LISTING', listing_row.id),
     (gen_random_uuid()::text, 'market:' || listing_row.id || ':seller', seller_user_id, 'CASH', 'CREDIT',
       listing_row."askingPrice", 'PLAYER_MARKET_SALE', 'PLAYER_MARKET_LISTING', listing_row.id)
-  ON CONFLICT ("idempotencyKey") DO NOTHING;
-  GET DIAGNOSTICS affected = ROW_COUNT;
-  IF affected <> 2 THEN
-    RAISE EXCEPTION USING MESSAGE = 'IDEMPOTENCY_CONFLICT', ERRCODE = 'P0001';
-  END IF;
+
 
   INSERT INTO public."ClubFinanceEntry" (
     id, "idempotencyKey", "clubId", category, direction, amount, description
@@ -166,11 +162,7 @@ BEGIN
     (gen_random_uuid()::text, 'club-finance-market:' || listing_row.id || ':seller', listing_row."sellerClubId",
       'PLAYER_MARKET_SALE', 'CREDIT', listing_row."askingPrice",
       'Transfer sale: ' || player_row."firstName" || ' ' || player_row."lastName')
-  ON CONFLICT ("idempotencyKey") DO NOTHING;
-  GET DIAGNOSTICS affected = ROW_COUNT;
-  IF affected <> 2 THEN
-    RAISE EXCEPTION USING MESSAGE = 'IDEMPOTENCY_CONFLICT', ERRCODE = 'P0001';
-  END IF;
+
 
   RETURN QUERY SELECT listing_row.id, player_row.id, price_text, FALSE, NULL::text;
 END;

@@ -34,7 +34,9 @@ export class SupabaseMarketPurchaseRepository implements MarketPurchasePort {
       });
     } catch (error) {
       const message = error instanceof SupabaseHttpError ? error.message : error instanceof Error ? error.message : "";
-      const code = [...MARKET_ERROR_CODES].find((candidate) => message.includes(candidate));
+      const code = message.toLowerCase().includes("duplicate key") || message.toLowerCase().includes("unique constraint")
+        ? "IDEMPOTENCY_CONFLICT"
+        : [...MARKET_ERROR_CODES].find((candidate) => message.includes(candidate));
       if (code) throw Object.assign(new Error(message), { code });
       throw error;
     }
