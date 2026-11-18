@@ -1,4 +1,5 @@
 import { createPrismaClient, prisma, withPrismaClient } from "../../../apps/api/src/db.js";
+import { withWalletEntryPort } from "../../../apps/api/src/economy/wallet-entry-context.js";
 import { processDueMatchRuntimes } from "../../../apps/api/src/game/match-service.js";
 import { processDueEventTournamentFinalizations } from "../../../apps/api/src/event-tournament-service.js";
 import { processDuePromotionOffers } from "../../../apps/api/src/game/league-pyramid-service.js";
@@ -7,6 +8,7 @@ import { createWorkersApiRouter } from "./workers-router.js";
 import { SupabaseHttpClient } from "./supabase-http.js";
 import { SupabasePublicPlayerRecordRepository } from "./repositories/public-player-records.js";
 import { SupabaseSeasonAwardRepository } from "./repositories/season-awards.js";
+import { SupabaseWalletEntryRepository } from "./repositories/wallet-entry.js";
 
 interface MatchCoordinatorNamespace { idFromName(name: string): unknown; get(id: unknown): { fetch(input: string, init?: RequestInit): Promise<Response> }; }
 interface MatchCoordinatorState { storage: { setAlarm(scheduledTime: number): Promise<void>; deleteAlarm(): Promise<void>; }; }
@@ -97,7 +99,9 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
         : undefined;
       const publicPlayerRecords = supabaseClient ? new SupabasePublicPlayerRecordRepository(supabaseClient) : undefined;
       const seasonAwards = supabaseClient ? new SupabaseSeasonAwardRepository(supabaseClient) : undefined;
-      return createWorkersApiRouter({ publicPlayerRecords, seasonAwards }).fetch(request);
+      const walletEntry = supabaseClient ? new SupabaseWalletEntryRepository(supabaseClient) : undefined;
+      const router = createWorkersApiRouter({ publicPlayerRecords, seasonAwards });
+      return walletEntry ? withWalletEntryPort(walletEntry, () => router.fetch(request)) : router.fetch(request);
     });
     cleanupScheduled = true;
     ctx.waitUntil(client.$disconnect().catch((error: unknown) => console.error("Prisma request client cleanup failed", error)));
