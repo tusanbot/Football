@@ -23,6 +23,8 @@ import { SupabaseSpecialAcquisitionRepository } from "./repositories/special-acq
 import { SupabaseMarketListingRepository } from "./repositories/market-listing.js";
 import { SupabaseSpecialPlayerCatalogRepository } from "./repositories/special-player-catalog.js";
 import { withMatchRuntimeLeasePort } from "../../../apps/api/src/game/match-runtime-lease-context.js";
+import { withMatchRuntimeEnqueuePort } from "../../../apps/api/src/game/match-runtime-enqueue-context.js";
+import { SupabaseMatchRuntimeEnqueueRepository } from "./repositories/match-runtime-enqueue.js";
 import { SupabaseMatchRuntimeLeaseRepository } from "./repositories/match-runtime-lease.js";
 import { SupabaseMatchNotificationRepository, type MatchNotificationRow, type MatchNotificationPerformance } from "./repositories/match-notifications.js";
 
@@ -168,19 +170,19 @@ export class MatchCoordinator {
           ? new SupabaseHttpClient({ url: this.env.SUPABASE_URL, serviceRoleKey: this.env.SUPABASE_SERVICE_ROLE_KEY })
           : undefined;
         const matchRuntimeLease = supabase ? new SupabaseMatchRuntimeLeaseRepository(supabase) : undefined;
+        const matchRuntimeEnqueue = supabase ? new SupabaseMatchRuntimeEnqueueRepository(supabase) : undefined;
         const matchNotifications = supabase ? new SupabaseMatchNotificationRepository(supabase) : undefined;
         const now = new Date();
         // One indexed scheduler statement replaces six independent findFirst queries.
         // Its flags also let us skip queue scans and workers that have no due work.
-        if (!matchRuntimeLease) throw new Error("SUPABASE_MATCH_RUNTIME_REPOSITORY_UNAVAILABLE");
+        if (!matchRuntimeLease || !matchRuntimeEnqueue) throw new Error("SUPABASE_MATCH_RUNTIME_REPOSITORY_UNAVAILABLE");
         const schedule = await matchRuntimeLease.getSchedule();
-        const runMatchWork = () => processDueMatchRuntimes("cloudflare-match-coordinator", now, 10, {
-          enqueue: schedule.hasDueFixture,
-          claim: schedule.hasDueRuntime || schedule.hasDueFixture,
-        });
-        const matchWork = matchRuntimeLease
-          ? await withMatchRuntimeLeasePort(matchRuntimeLease, runMatchWork)
-          : await runMatchWork();
+        const runMatchWork = () => withMatchRuntimeEnqueuePort(matchRuntimeEnqueue, () =>
+          processDueMatchRuntimes("cloudflare-match-coordinator", now, 10, {
+            enqueue: schedule.hasDueFixture,
+            claim: schedule.hasDueRuntime || schedule.hasDueFixture,
+          }));
+        const matchWork = await withMatchRuntimeLeasePort(matchRuntimeLease, runMatchWork);
         const tournamentFinalizations = schedule.hasPendingTournamentFinalization
           ? await processDueEventTournamentFinalizations(now, 1)
           : { candidates: 0, finalized: 0, failed: 0 };

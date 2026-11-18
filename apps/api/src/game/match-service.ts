@@ -9,6 +9,7 @@ import {
 } from "@football/domain";
 import { prisma } from "../db.js";
 import { getMatchRuntimeLeasePort } from "./match-runtime-lease-context.js";
+import { getMatchRuntimeEnqueuePort } from "./match-runtime-enqueue-context.js";
 
 const DAY_MS = 86_400_000;
 const MATCH_MINUTE_MS = 1_000;
@@ -1180,6 +1181,12 @@ function applyRuntimeInstruction(
 
 /** Create durable kickoff snapshots for due fixtures that predate runtime creation. */
 export async function enqueueDueMatchRuntimes(now = new Date(), limit = 50) {
+  const enqueuePort = getMatchRuntimeEnqueuePort();
+  if (enqueuePort) {
+    const result = await enqueuePort.enqueue(now.toISOString(), limit);
+    for (const fixture of result.invalidFixtures) await simulateScheduledMatch(fixture.ownerId, fixture.id, now);
+    return result.enqueued;
+  }
   const fixtures = await prisma.footballMatch.findMany({
     where: { status: "SCHEDULED", scheduledAt: { lte: now }, runtime: { is: null } },
     include: { homeClub: { include: matchClubInclude }, awayClub: { include: matchClubInclude } },
