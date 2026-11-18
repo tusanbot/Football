@@ -16,8 +16,19 @@ export interface MarketListingCreated {
   createdAt: string;
 }
 
+export interface MarketListingCancelCommand {
+  userId: string;
+  listingId: string;
+}
+
+export interface MarketListingCancelled {
+  listingId: string;
+  status: "CANCELLED";
+}
+
 export interface MarketListingPort {
   create(input: MarketListingCreateCommand): Promise<MarketListingCreated>;
+  cancel(input: MarketListingCancelCommand): Promise<MarketListingCancelled>;
 }
 
 const marketListingScope = new AsyncLocalStorage<MarketListingPort>();
