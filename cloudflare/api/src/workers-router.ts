@@ -26,7 +26,7 @@ import { registerTelegramAuthRoutes } from "../../../apps/api/src/auth/routes.js
 import { registerBotAuthRoutes } from "../../../apps/api/src/auth/bot-routes.js";
 import { registerGameRoutes } from "../../../apps/api/src/game/routes.js";
 import { registerClubOperationsRoutes } from "../../../apps/api/src/game/club-operations-routes.js";
-import { registerPlayerMarketRoutes } from "../../../apps/api/src/players/market-routes.js";
+import { registerPlayerMarketRoutes, type SpecialPlayerCatalogRepository } from "../../../apps/api/src/players/market-routes.js";
 import { registerPlayerDevelopmentRoutes } from "../../../apps/api/src/players/player-development-routes.js";
 import { registerMatchRoutes } from "../../../apps/api/src/game/match-routes.js";
 import { registerMatchNotificationRoutes } from "../../../apps/api/src/game/match-notification-routes.js";
@@ -81,14 +81,14 @@ function queryObject(url: URL): Record<string, string | string[]> {
   return query;
 }
 
-export function createWorkersApiRouter(dependencies: { publicPlayerRecords?: PublicPlayerRecordRepository; seasonAwards?: SeasonAwardRepository } = {}) {
+export function createWorkersApiRouter(dependencies: { publicPlayerRecords?: PublicPlayerRecordRepository; seasonAwards?: SeasonAwardRepository; specialPlayers?: SpecialPlayerCatalogRepository } = {}) {
   const registry = new RouteRegistry();
   const registrar = registry as unknown as Parameters<typeof registerTelegramAuthRoutes>[0];
   registerTelegramAuthRoutes(registrar);
   registerBotAuthRoutes(registrar);
   registerGameRoutes(registrar);
   registerClubOperationsRoutes(registrar);
-  registerPlayerMarketRoutes(registrar);
+  registerPlayerMarketRoutes(registrar, dependencies.specialPlayers);
   registerPlayerDevelopmentRoutes(registrar);
   registerMatchRoutes(registrar);
   registerMatchNotificationRoutes(registrar);

@@ -21,6 +21,7 @@ import { SupabaseMarketPurchaseRepository } from "./repositories/market-purchase
 import { SupabaseGiftCodeRedemptionRepository } from "./repositories/gift-code-redemption.js";
 import { SupabaseSpecialAcquisitionRepository } from "./repositories/special-acquisition.js";
 import { SupabaseMarketListingRepository } from "./repositories/market-listing.js";
+import { SupabaseSpecialPlayerCatalogRepository } from "./repositories/special-player-catalog.js";
 
 interface MatchCoordinatorNamespace { idFromName(name: string): unknown; get(id: unknown): { fetch(input: string, init?: RequestInit): Promise<Response> }; }
 interface MatchCoordinatorState { storage: { setAlarm(scheduledTime: number): Promise<void>; deleteAlarm(): Promise<void>; }; }
@@ -118,7 +119,8 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
       const giftCodeRedemption = supabaseClient ? new SupabaseGiftCodeRedemptionRepository(supabaseClient) : undefined;
       const specialAcquisition = supabaseClient ? new SupabaseSpecialAcquisitionRepository(supabaseClient) : undefined;
       const marketListing = supabaseClient ? new SupabaseMarketListingRepository(supabaseClient) : undefined;
-      const router = createWorkersApiRouter({ publicPlayerRecords, seasonAwards });
+      const specialPlayers = supabaseClient ? new SupabaseSpecialPlayerCatalogRepository(supabaseClient) : undefined;
+      const router = createWorkersApiRouter({ publicPlayerRecords, seasonAwards, specialPlayers });
       const handle = () => router.fetch(request);
       const withWallet = walletEntry ? () => withWalletEntryPort(walletEntry, handle) : handle;
       const withStorePurchase = storePurchase ? () => withStorePurchasePort(storePurchase, withWallet) : withWallet;
