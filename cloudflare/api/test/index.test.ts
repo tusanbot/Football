@@ -69,15 +69,30 @@ test("pilot analytics endpoint validates event payloads before database access",
   assert.equal(response.status, 400);
 });
 
-test("pilot analytics endpoint persists an authenticated pseudonymous event", async () => {
-  const response = await worker.fetch(new Request("https://api.example.test/internal/pilot/events", {
-    method: "POST",
-    headers: { "content-type": "application/json", "x-football-bot-secret": configuredEnv.BOT_API_SECRET },
-    body: JSON.stringify({ eventName: "bot_start", userKey: "a".repeat(32), actionKey: "start", chatType: "private", source: "bot" }),
-  }), configuredEnv, context);
-  assert.equal(response.status, 202);
-  assert.deepEqual(await response.json(), { accepted: true });
-  await Promise.all(pending.splice(0));
+test("pilot analytics endpoint persists an authenticated pseudonymous event through Supabase HTTPS", async () => {
+  const originalFetch = globalThis.fetch;
+  let requestUrl: URL | undefined;
+  globalThis.fetch = async (input) => {
+    requestUrl = new URL(String(input));
+    return new Response("[]", { status: 200, headers: { "content-type": "application/json" } });
+  };
+  try {
+    const response = await worker.fetch(new Request("https://api.example.test/internal/pilot/events", {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-football-bot-secret": configuredEnv.BOT_API_SECRET },
+      body: JSON.stringify({ eventName: "bot_start", userKey: "a".repeat(32), actionKey: "start", chatType: "private", source: "bot" }),
+    }), {
+      ...configuredEnv,
+      SUPABASE_URL: "https://example-project.supabase.co",
+      SUPABASE_SERVICE_ROLE_KEY: "service-role-key-that-is-long-enough-for-tests",
+    }, context);
+    assert.equal(response.status, 202);
+    assert.deepEqual(await response.json(), { accepted: true });
+    assert.equal(requestUrl?.pathname, "/rest/v1/PilotAnalyticsEvent");
+  } finally {
+    globalThis.fetch = originalFetch;
+    await Promise.all(pending.splice(0));
+  }
 });
 
 test("the Worker dispatches Fetch requests through the shared API route handlers", async () => {
