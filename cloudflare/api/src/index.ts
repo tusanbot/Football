@@ -24,6 +24,7 @@ import { SupabaseMarketListingRepository } from "./repositories/market-listing.j
 import { SupabaseSpecialPlayerCatalogRepository } from "./repositories/special-player-catalog.js";
 import { withMatchRuntimeLeasePort } from "../../../apps/api/src/game/match-runtime-lease-context.js";
 import { SupabaseMatchRuntimeLeaseRepository } from "./repositories/match-runtime-lease.js";
+import { SupabaseMatchNotificationRepository, type MatchNotificationRow, type MatchNotificationPerformance } from "./repositories/match-notifications.js";
 
 interface MatchCoordinatorNamespace { idFromName(name: string): unknown; get(id: unknown): { fetch(input: string, init?: RequestInit): Promise<Response> }; }
 interface MatchCoordinatorState { storage: { setAlarm(scheduledTime: number): Promise<void>; deleteAlarm(): Promise<void>; }; }
@@ -167,6 +168,7 @@ export class MatchCoordinator {
           ? new SupabaseHttpClient({ url: this.env.SUPABASE_URL, serviceRoleKey: this.env.SUPABASE_SERVICE_ROLE_KEY })
           : undefined;
         const matchRuntimeLease = supabase ? new SupabaseMatchRuntimeLeaseRepository(supabase) : undefined;
+        const matchNotifications = supabase ? new SupabaseMatchNotificationRepository(supabase) : undefined;
         const now = new Date();
         // One indexed scheduler statement replaces six independent findFirst queries.
         // Its flags also let us skip queue scans and workers that have no due work.
@@ -182,7 +184,10 @@ export class MatchCoordinator {
         const tournamentFinalizations = schedule.hasPendingTournamentFinalization
           ? await processDueEventTournamentFinalizations(now, 1)
           : { candidates: 0, finalized: 0, failed: 0 };
-        if (schedule.hasDueNotifications) await deliverDueMatchLifecycle(this.env);
+        if (schedule.hasDueNotifications) {
+          if (!matchNotifications) throw new Error("SUPABASE_MATCH_NOTIFICATION_REPOSITORY_UNAVAILABLE");
+          await deliverDueMatchLifecycle(this.env, matchNotifications);
+        }
         if (schedule.hasPendingPromotionWork) {
           const promotions = await processDuePromotionOffers(now, 50);
           if (promotions.completedLeagues || promotions.accepted) console.info("Pyramid promotion work completed", promotions);
@@ -228,77 +233,53 @@ function describeRuntimeError(error: unknown): Record<string, unknown> {
 }
 
 function escapeTelegramHtml(value: unknown): string { return String(value ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
-async function deliverDueMatchLifecycle(env: Env): Promise<void> {
+async function deliverDueMatchLifecycle(env: Env, repository: SupabaseMatchNotificationRepository): Promise<void> {
   const token = env.TELEGRAM_BOT_TOKEN ?? "";
   if (!token) return;
-  const now = new Date();
-  const claimToken = crypto.randomUUID();
-  const candidates = await prisma.matchLifecycleNotification.findMany({
-    where: { status: "PENDING", availableAt: { lte: now }, OR: [{ lockedUntil: null }, { lockedUntil: { lt: new Date(now.getTime() - 30_000) } }] },
-    select: { id: true }, orderBy: { availableAt: "asc" }, take: 50,
-  });
-  if (candidates.length) await prisma.matchLifecycleNotification.updateMany({
-    where: { id: { in: candidates.map((row) => row.id) }, status: "PENDING", availableAt: { lte: now },
-      OR: [{ lockedUntil: null }, { lockedUntil: { lt: new Date(now.getTime() - 30_000) } }] },
-    data: { claimToken, lockedUntil: new Date(now.getTime() + 30_000), attempts: { increment: 1 } },
-  });
-  const rows = candidates.length ? await prisma.matchLifecycleNotification.findMany({
-    where: { claimToken }, include: { match: { select: { homeClub: { select: { name: true } }, awayClub: { select: { name: true } } } } },
-    orderBy: { availableAt: "asc" },
-  }) : [];
+  const rows = await repository.claimDue(50, 30);
   for (const row of rows) {
-    const home = escapeTelegramHtml(row.match.homeClub.name);
-    const away = escapeTelegramHtml(row.match.awayClub.name);
-    const score = "\n<b>" + home + "</b> " + row.homeScore + " : " + row.awayScore + " <b>" + away + "</b>";
-    const payload = row.payload && typeof row.payload === "object" ? row.payload as Record<string, unknown> : {};
-    const message = row.kind === "KICKOFF" ? "⚽ <b>سوت آغاز مسابقه</b>" + score
-      : row.kind === "HALF_TIME" ? "⏸ <b>پایان نیمه اول</b> · دقیقه ۴۵" + score
-      : "⚽ <b>گل!</b> · دقیقه " + row.minute + "\n" + escapeTelegramHtml(payload.teamName ?? "تیم") + " · " + escapeTelegramHtml(payload.scorerName ?? "بازیکن") + score;
+    let delivered = false;
+    let errorCode = "TELEGRAM_SEND_FAILED";
     try {
-      const response = await fetch("https://api.telegram.org/bot" + token + "/sendMessage", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ chat_id: row.telegramChatId, text: message, parse_mode: "HTML" }) });
-      const body = await response.json() as { ok?: boolean };
-      const delivered = response.ok && body.ok === true;
-      await prisma.matchLifecycleNotification.updateMany({ where: { id: row.id, status: "PENDING", claimToken }, data: delivered ? { status: "DELIVERED", deliveredAt: new Date(), claimToken: null, lockedUntil: null } : { availableAt: new Date(Date.now() + 15_000), claimToken: null, lockedUntil: null, lastError: "TELEGRAM_SEND_FAILED" } });
+      const message = row.type === "LIFECYCLE" ? formatLifecycleNotification(row) : formatResultNotification(row);
+      const response = await fetch("https://api.telegram.org/bot" + token + "/sendMessage", {
+        method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ chat_id: row.telegramChatId, text: message, parse_mode: "HTML" }),
+      });
+      const body = await response.json() as { ok?: boolean; description?: string };
+      delivered = response.ok && body.ok === true;
+      if (!delivered && body.description) errorCode = body.description.slice(0, 500);
     } catch (error) {
-      await prisma.matchLifecycleNotification.updateMany({ where: { id: row.id, status: "PENDING", claimToken }, data: { availableAt: new Date(Date.now() + 15_000), claimToken: null, lockedUntil: null, lastError: error instanceof Error ? error.message.slice(0, 500) : "TELEGRAM_SEND_FAILED" } });
+      errorCode = error instanceof Error ? error.message.slice(0, 500) : errorCode;
     }
-  }
-  const resultClaimToken = crypto.randomUUID();
-  const resultCandidates = await prisma.matchResultNotification.findMany({
-    where: { status: "PENDING", availableAt: { lte: now }, OR: [{ lockedUntil: null }, { lockedUntil: { lt: new Date(now.getTime() - 30_000) } }], match: { status: "COMPLETED" } },
-    select: { id: true }, orderBy: { createdAt: "asc" }, take: 50,
-  });
-  if (resultCandidates.length) await prisma.matchResultNotification.updateMany({
-    where: { id: { in: resultCandidates.map((row) => row.id) }, status: "PENDING", availableAt: { lte: now },
-      OR: [{ lockedUntil: null }, { lockedUntil: { lt: new Date(now.getTime() - 30_000) } }] },
-    data: { claimToken: resultClaimToken, lockedUntil: new Date(now.getTime() + 30_000), attempts: { increment: 1 } },
-  });
-  const results = resultCandidates.length ? await prisma.matchResultNotification.findMany({
-    where: { claimToken: resultClaimToken }, include: { match: { include: { homeClub: { select: { id: true, name: true } }, awayClub: { select: { id: true, name: true } }, performances: { include: { player: { select: { firstName: true, lastName: true } } } } } } },
-    orderBy: { createdAt: "asc" },
-  }) : [];
-  for (const row of results) {
-    const match = row.match;
-    const homeStats = match.performances.filter((line) => line.clubId === match.homeClub.id);
-    const awayStats = match.performances.filter((line) => line.clubId === match.awayClub.id);
-    const sum = (items: typeof match.performances, key: "shots" | "passes" | "tackles") => items.reduce((total, item) => total + item[key], 0);
-    const scorers = match.performances.filter((line) => line.goals > 0).sort((a, b) => b.goals - a.goals).map((line) => escapeTelegramHtml(line.player.firstName + " " + line.player.lastName) + " · " + line.goals + " گل").join("\n");
-    const message = "🏁 <b>پایان مسابقه</b>\n<b>" + escapeTelegramHtml(match.homeClub.name) + "</b> " + match.homeScore + " : " + match.awayScore + " <b>" + escapeTelegramHtml(match.awayClub.name) + "</b>"
-      + "\n\n📊 <b>آمار مسابقه</b>"
-      + "\nشوت‌ها: " + sum(homeStats, "shots") + " - " + sum(awayStats, "shots")
-      + "\nپاس‌ها: " + sum(homeStats, "passes") + " - " + sum(awayStats, "passes")
-      + "\nتکل‌ها: " + sum(homeStats, "tackles") + " - " + sum(awayStats, "tackles")
-      + (scorers ? "\n\n⚽ <b>گلزنان</b>\n" + scorers : "\n\n⚽ بدون گل");
-    try {
-      const response = await fetch("https://api.telegram.org/bot" + token + "/sendMessage", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ chat_id: row.telegramChatId, text: message, parse_mode: "HTML" }) });
-      const body = await response.json() as { ok?: boolean };
-      const delivered = response.ok && body.ok === true;
-      await prisma.matchResultNotification.updateMany({ where: { id: row.id, status: "PENDING", claimToken }, data: delivered ? { status: "DELIVERED", deliveredAt: new Date(), claimToken: null, lockedUntil: null } : { availableAt: new Date(Date.now() + 15_000), claimToken: null, lockedUntil: null, lastError: "TELEGRAM_SEND_FAILED" } });
-    } catch (error) {
-      await prisma.matchResultNotification.updateMany({ where: { id: row.id, status: "PENDING", claimToken }, data: { availableAt: new Date(Date.now() + 15_000), claimToken: null, lockedUntil: null, lastError: error instanceof Error ? error.message.slice(0, 500) : "TELEGRAM_SEND_FAILED" } });
-    }
+    await repository.complete(row.type, row.id, row.claimToken, delivered, delivered ? null : errorCode, 15);
   }
 }
+function formatLifecycleNotification(row: MatchNotificationRow): string {
+  const home = escapeTelegramHtml(row.homeClubName ?? "میزبان");
+  const away = escapeTelegramHtml(row.awayClubName ?? "میهمان");
+  const score = "\n<b>" + home + "</b> " + (row.homeScore ?? 0) + " : " + (row.awayScore ?? 0) + " <b>" + away + "</b>";
+  const payload = row.payload && typeof row.payload === "object" ? row.payload : {};
+  return row.kind === "KICKOFF" ? "⚽ <b>سوت آغاز مسابقه</b>" + score
+    : row.kind === "HALF_TIME" ? "⏸ <b>پایان نیمه اول</b> · دقیقه ۴۵" + score
+    : "⚽ <b>گل!</b> · دقیقه " + row.minute + "\n" + escapeTelegramHtml(payload.teamName ?? "تیم") + " · " + escapeTelegramHtml(payload.scorerName ?? "بازیکن") + score;
+}
+function formatResultNotification(row: MatchNotificationRow): string {
+  const performances = row.performances ?? [];
+  const home = performances.filter((line) => line.clubId === row.homeClubId);
+  const away = performances.filter((line) => line.clubId === row.awayClubId);
+  const sum = (items: MatchNotificationPerformance[], key: "shots" | "passes" | "tackles") => items.reduce((total, item) => total + item[key], 0);
+  const scorers = performances.filter((line) => line.goals > 0).sort((a, b) => b.goals - a.goals)
+    .map((line) => escapeTelegramHtml(line.playerName) + " · " + line.goals + " گل").join("\n");
+  return "🏁 <b>پایان مسابقه</b>\n<b>" + escapeTelegramHtml(row.homeClubName ?? "میزبان") + "</b> " + (row.homeScore ?? 0)
+    + " : " + (row.awayScore ?? 0) + " <b>" + escapeTelegramHtml(row.awayClubName ?? "میهمان") + "</b>"
+    + "\n\n📊 <b>آمار مسابقه</b>"
+    + "\nشوت‌ها: " + sum(home, "shots") + " - " + sum(away, "shots")
+    + "\nپاس‌ها: " + sum(home, "passes") + " - " + sum(away, "passes")
+    + "\nتکل‌ها: " + sum(home, "tackles") + " - " + sum(away, "tackles")
+    + (scorers ? "\n\n⚽ <b>گلزنان</b>\n" + scorers : "\n\n⚽ بدون گل");
+}
+
 async function scheduledJobs(env: Env): Promise<void> {
   if (env.MATCH_COORDINATOR) {
     console.info("Scheduled fallback skipped; MatchCoordinator owns match and tournament processing.");
@@ -311,11 +292,15 @@ async function scheduledJobs(env: Env): Promise<void> {
   try {
     await withPrismaClient(client, async () => {
       const now = new Date();
+      const supabase = env.SUPABASE_URL && env.SUPABASE_SERVICE_ROLE_KEY
+        ? new SupabaseHttpClient({ url: env.SUPABASE_URL, serviceRoleKey: env.SUPABASE_SERVICE_ROLE_KEY }) : undefined;
+      const matchNotifications = supabase ? new SupabaseMatchNotificationRepository(supabase) : undefined;
       const matches = env.MATCH_COORDINATOR
         ? null
         : await processDueMatchRuntimes("cloudflare-api-scheduled-fallback", now, 10);
       const tournamentFinalizations = await processDueEventTournamentFinalizations(now, 1);
-      await deliverDueMatchLifecycle(env);
+      if (!matchNotifications) throw new Error("SUPABASE_MATCH_NOTIFICATION_REPOSITORY_UNAVAILABLE");
+      await deliverDueMatchLifecycle(env, matchNotifications);
       const promotions = await processDuePromotionOffers(now, 50);
       if ((matches && (matches.advanced || matches.settled || matches.failed))
         || tournamentFinalizations.finalized || tournamentFinalizations.failed
