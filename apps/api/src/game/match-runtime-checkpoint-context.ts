@@ -49,6 +49,7 @@ export interface MatchRuntimeCheckpointPort {
   resolveCheckpoint(input: MatchRuntimeCheckpointCommand): Promise<boolean>;
   getOpenCheckpoint(matchId: string): Promise<MatchRuntimeCheckpointSnapshot | null>;
   submitDecision(input: MatchRuntimeCheckpointDecisionCommand): Promise<MatchRuntimeCheckpointDecisionResult>;
+  enqueueLifecycleEvents(matchId: string, events: MatchRuntimeCheckpointEvent[]): Promise<number>;
 }
 const scope = new AsyncLocalStorage<MatchRuntimeCheckpointPort>();
 export function withMatchRuntimeCheckpointPort<T>(port: MatchRuntimeCheckpointPort, operation: () => Promise<T>): Promise<T> {

@@ -292,3 +292,61 @@ DO $grant$ BEGIN
   GRANT EXECUTE ON FUNCTION public.settle_match_runtime_result(text,text,text,timestamp without time zone,jsonb,integer,integer,integer,integer,bigint,bigint) TO service_role;
  END IF;
 END $grant$;
+
+CREATE OR REPLACE FUNCTION public.enqueue_match_lifecycle_events(
+ p_match_id text,p_events jsonb
+) RETURNS integer
+LANGUAGE plpgsql VOLATILE SECURITY INVOKER
+SET search_path=public,pg_temp
+AS $function$
+DECLARE
+ match_row public."FootballMatch"%ROWTYPE;
+ home_telegram_id text;
+ away_telegram_id text;
+ group_telegram_id text;
+ event_row jsonb;
+ inserted_total integer := 0;
+ inserted_count integer;
+BEGIN
+ IF p_match_id IS NULL OR jsonb_typeof(p_events)<>'array' THEN
+  RAISE EXCEPTION 'INVALID_MATCH_LIFECYCLE_EVENTS';
+ END IF;
+ SELECT * INTO match_row FROM public."FootballMatch" WHERE "id"=p_match_id;
+ IF NOT FOUND THEN RAISE EXCEPTION 'MATCH_NOT_FOUND'; END IF;
+ SELECT u."telegramId" INTO home_telegram_id FROM public."User" u
+ JOIN public."Club" c ON c."ownerId"=u."id" WHERE c."id"=match_row."homeClubId";
+ SELECT u."telegramId" INTO away_telegram_id FROM public."User" u
+ JOIN public."Club" c ON c."ownerId"=u."id" WHERE c."id"=match_row."awayClubId";
+ SELECT tg."telegramId" INTO group_telegram_id FROM public."FriendlyChallenge" fc
+ JOIN public."TelegramGroup" tg ON tg."id"=fc."groupId" WHERE fc."matchId"=p_match_id;
+ FOR event_row IN SELECT value FROM jsonb_array_elements(p_events) LOOP
+  IF COALESCE(event_row->>'event_key','')='' OR COALESCE(event_row->>'kind','')=''
+   OR (event_row->>'minute') IS NULL OR (event_row->>'home_score') IS NULL
+   OR (event_row->>'away_score') IS NULL OR (event_row->>'available_at') IS NULL THEN
+   RAISE EXCEPTION 'INVALID_MATCH_LIFECYCLE_EVENT';
+  END IF;
+  INSERT INTO public."MatchLifecycleNotification"(
+   "id","matchId","channel","eventKey","kind","minute","homeScore","awayScore",
+   "telegramChatId","payload","status","availableAt","createdAt","updatedAt"
+  )
+  SELECT gen_random_uuid()::text,p_match_id,recipient.channel,event_row->>'event_key',
+   event_row->>'kind',(event_row->>'minute')::integer,(event_row->>'home_score')::integer,
+   (event_row->>'away_score')::integer,recipient.telegram_id,event_row->'payload',
+   'PENDING',(event_row->>'available_at')::timestamp without time zone,
+   (event_row->>'available_at')::timestamp without time zone,(event_row->>'available_at')::timestamp without time zone
+  FROM (VALUES ('HOME',home_telegram_id),('AWAY',away_telegram_id),('GROUP',group_telegram_id))
+   AS recipient(channel,telegram_id)
+  WHERE recipient.telegram_id IS NOT NULL
+  ON CONFLICT ("matchId","channel","eventKey") DO NOTHING;
+  GET DIAGNOSTICS inserted_count=ROW_COUNT;
+  inserted_total := inserted_total+inserted_count;
+ END LOOP;
+ RETURN inserted_total;
+END;
+$function$;
+REVOKE ALL ON FUNCTION public.enqueue_match_lifecycle_events(text,jsonb) FROM PUBLIC,anon,authenticated;
+DO $grant$ BEGIN
+ IF EXISTS(SELECT 1 FROM pg_roles WHERE rolname='service_role') THEN
+  GRANT EXECUTE ON FUNCTION public.enqueue_match_lifecycle_events(text,jsonb) TO service_role;
+ END IF;
+END $grant$;

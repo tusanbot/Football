@@ -3,6 +3,18 @@ import { SupabaseHttpClient } from "../supabase-http.js";
 
 export class SupabaseMatchRuntimeCheckpointRepository implements MatchRuntimeCheckpointPort {
   constructor(private readonly client: SupabaseHttpClient) {}
+  async enqueueLifecycleEvents(matchId: string, events: import("../../../../apps/api/src/game/match-runtime-checkpoint-context.js").MatchRuntimeCheckpointEvent[]): Promise<number> {
+    const result = await this.client.rpc<number>("enqueue_match_lifecycle_events", {
+      p_match_id: matchId,
+      p_events: events.map((event) => ({
+        event_key: event.eventKey, kind: event.kind, minute: event.minute,
+        home_score: event.homeScore, away_score: event.awayScore,
+        payload: event.payload, available_at: event.availableAt,
+      })),
+    });
+    if (!Number.isInteger(result) || result < 0) throw new Error("SUPABASE_MATCH_LIFECYCLE_ENQUEUE_REJECTED");
+    return result;
+  }
   async submitDecision(input: MatchRuntimeCheckpointDecisionCommand): Promise<MatchRuntimeCheckpointDecisionResult> {
     const result = await this.client.rpc<MatchRuntimeCheckpointDecisionResult>("submit_match_runtime_tactical_decision", {
       p_user_id: input.userId, p_match_id: input.matchId, p_checkpoint_key: input.checkpointKey,
