@@ -1,4 +1,4 @@
-import type { WalletEntryCommand, WalletEntryPort, WalletEntryResult } from "../../../apps/api/src/economy/wallet-entry-context.js";
+import type { WalletEntryCommand, WalletEntryPort, WalletEntryResult } from "../../../../apps/api/src/economy/wallet-entry-context.js";
 import { SupabaseHttpClient, SupabaseHttpError } from "../supabase-http.js";
 
 interface WalletEntryRpcRow {
