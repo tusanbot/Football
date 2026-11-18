@@ -4,9 +4,10 @@ CREATE OR REPLACE FUNCTION public.advance_match_runtime_first_half(
  p_decision_deadline_at timestamp without time zone,p_events jsonb
 ) RETURNS boolean
 LANGUAGE plpgsql VOLATILE SECURITY INVOKER SET search_path=public,pg_temp AS $function$
-DECLARE runtime_row public."MatchRuntime"%ROWTYPE;
-DECLARE match_row public."FootballMatch"%ROWTYPE;
-DECLARE event_row record;
+DECLARE
+ runtime_row public."MatchRuntime"%ROWTYPE;
+ match_row public."FootballMatch"%ROWTYPE;
+ event_row record;
 BEGIN
  IF p_runtime_id IS NULL OR p_expected_state_version IS NULL OR p_lease_token IS NULL OR p_lease_token=''
   OR p_simulation_state IS NULL OR jsonb_typeof(p_simulation_state)<>'object'
