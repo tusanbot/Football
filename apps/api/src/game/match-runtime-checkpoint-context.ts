@@ -6,7 +6,7 @@ export interface MatchRuntimeCheckpointEvent {
   minute: number;
   homeScore: number;
   awayScore: number;
-  payload: Record<string, unknown> | null;
+  payload: unknown;
   availableAt: string;
 }
 export interface MatchRuntimeCheckpointCommand {

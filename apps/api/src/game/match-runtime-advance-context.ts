@@ -10,7 +10,7 @@ export interface MatchRuntimeFirstHalfCommand {
   decisionDeadlineAt: string;
   events: Array<{
     eventKey: string; kind: string; minute: number; homeScore: number; awayScore: number;
-    payload: Record<string, unknown> | null; availableAt: string;
+    payload: unknown; availableAt: string;
   }>;
 }
 export interface MatchRuntimeAdvancePort {

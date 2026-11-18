@@ -44,7 +44,7 @@ BEGIN
 
  IF p_next_checkpoint IS NOT NULL THEN
   IF (p_next_checkpoint->>'minute')::integer<>p_next_minute
-   OR p_next_checkpoint->>'checkpoint_key'<>'minute-'||p_next_minute::text
+   OR p_next_checkpoint->>'checkpoint_key'<>('minute-'||p_next_minute::text)
    OR p_next_checkpoint->>'kind'<>CASE p_next_minute WHEN 60 THEN 'MINUTE_60' ELSE 'MINUTE_75' END
    OR (p_next_checkpoint->>'opened_at') IS NULL
    OR (p_next_checkpoint->>'decision_deadline_at') IS NULL
