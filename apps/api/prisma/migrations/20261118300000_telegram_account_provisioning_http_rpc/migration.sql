@@ -57,52 +57,65 @@ BEGIN
 
   INSERT INTO public."User" (id, "telegramId", username, "displayName", "createdAt", "updatedAt", "lastActiveAt")
   VALUES (gen_random_uuid()::text, p_telegram_id, p_username, p_display_name, now(), now(), now())
-  ON CONFLICT ("telegramId") DO UPDATE
-    SET username = EXCLUDED.username, "displayName" = EXCLUDED."displayName", "updatedAt" = now()
+  ON CONFLICT ("telegramId") DO NOTHING
   RETURNING * INTO user_row;
+  IF FOUND THEN
+    created_user := true;
+  ELSE
+    UPDATE public."User"
+    SET username = p_username, "displayName" = p_display_name, "updatedAt" = now()
+    WHERE "telegramId" = p_telegram_id
+    RETURNING * INTO user_row;
+  END IF;
 
   IF user_row."isSuspended" THEN
     RAISE EXCEPTION USING MESSAGE = 'ACCOUNT_SUSPENDED', ERRCODE = '42501';
   END IF;
 
   SELECT * INTO club_row FROM public."Club" WHERE "ownerId" = user_row.id FOR UPDATE;
-  IF NOT FOUND THEN
-    -- Existing legacy identities without a club are repaired idempotently as well.
+  IF created_user THEN
     INSERT INTO public."Club" (id, "ownerId", name, slug, "createdAt", "updatedAt")
     VALUES (gen_random_uuid()::text, user_row.id, left(btrim(p_first_name), 120) || ' FC',
       'club-' || p_telegram_id, now(), now())
-    ON CONFLICT ("ownerId") DO UPDATE SET "updatedAt" = now()
     RETURNING * INTO club_row;
+
+    INSERT INTO public."Wallet" (id, "userId", asset, balance, version, "createdAt", "updatedAt")
+    VALUES
+      (gen_random_uuid()::text, user_row.id, 'CASH', cash_amount, 0, now(), now()),
+      (gen_random_uuid()::text, user_row.id, 'GOLD', gold_amount, 0, now(), now()),
+      (gen_random_uuid()::text, user_row.id, 'HONOR', 0, 0, now(), now())
+    ON CONFLICT ("userId", asset) DO NOTHING;
+
+    IF cash_amount > 0 THEN
+      INSERT INTO public."LedgerTransaction"
+        (id, "idempotencyKey", "userId", asset, direction, amount, reason, "referenceType", "referenceId")
+      VALUES (gen_random_uuid()::text, 'starter:' || p_telegram_id || ':CASH', user_row.id,
+        'CASH', 'CREDIT', cash_amount, 'STARTER_GRANT', 'STARTER_GRANT', user_row.id)
+      ON CONFLICT ("idempotencyKey") DO NOTHING;
+    END IF;
+    IF gold_amount > 0 THEN
+      INSERT INTO public."LedgerTransaction"
+        (id, "idempotencyKey", "userId", asset, direction, amount, reason, "referenceType", "referenceId")
+      VALUES (gen_random_uuid()::text, 'starter:' || p_telegram_id || ':GOLD', user_row.id,
+        'GOLD', 'CREDIT', gold_amount, 'STARTER_GRANT', 'STARTER_GRANT', user_row.id)
+      ON CONFLICT ("idempotencyKey") DO NOTHING;
+    END IF;
+  ELSE
+    INSERT INTO public."Wallet" (id, "userId", asset, balance, version, "createdAt", "updatedAt")
+    VALUES (gen_random_uuid()::text, user_row.id, 'HONOR', 0, 0, now(), now())
+    ON CONFLICT ("userId", asset) DO NOTHING;
   END IF;
 
-  INSERT INTO public."Wallet" (id, "userId", asset, balance, version, "createdAt", "updatedAt")
-  VALUES
-    (gen_random_uuid()::text, user_row.id, 'CASH', cash_amount, 0, now(), now()),
-    (gen_random_uuid()::text, user_row.id, 'GOLD', gold_amount, 0, now(), now()),
-    (gen_random_uuid()::text, user_row.id, 'HONOR', 0, 0, now(), now())
-  ON CONFLICT ("userId", asset) DO NOTHING;
+  IF club_row.id IS NOT NULL THEN
+    INSERT INTO public."Coach" (id, "clubId", name, level, "trainingSkill", "recoverySkill", "medicalSkill", "weeklySalary", "createdAt", "updatedAt")
+    VALUES (gen_random_uuid()::text, club_row.id, 'Academy Coach', 1, 35, 30, 25, 100, now(), now())
+    ON CONFLICT ("clubId") DO NOTHING;
 
-  IF cash_amount > 0 THEN
-    INSERT INTO public."LedgerTransaction"
-      (id, "idempotencyKey", "userId", asset, direction, amount, reason, "referenceType", "referenceId")
-    VALUES (gen_random_uuid()::text, 'starter:' || p_telegram_id || ':CASH', user_row.id,
-      'CASH', 'CREDIT', cash_amount, 'STARTER_GRANT', 'STARTER_GRANT', user_row.id)
-    ON CONFLICT ("idempotencyKey") DO NOTHING;
+    SELECT count(*) INTO player_count FROM public."Player" WHERE "clubId" = club_row.id;
+  ELSE
+    player_count := 1;
   END IF;
-  IF gold_amount > 0 THEN
-    INSERT INTO public."LedgerTransaction"
-      (id, "idempotencyKey", "userId", asset, direction, amount, reason, "referenceType", "referenceId")
-    VALUES (gen_random_uuid()::text, 'starter:' || p_telegram_id || ':GOLD', user_row.id,
-      'GOLD', 'CREDIT', gold_amount, 'STARTER_GRANT', 'STARTER_GRANT', user_row.id)
-    ON CONFLICT ("idempotencyKey") DO NOTHING;
-  END IF;
-
-  INSERT INTO public."Coach" (id, "clubId", name, level, "trainingSkill", "recoverySkill", "medicalSkill", "weeklySalary", "createdAt", "updatedAt")
-  VALUES (gen_random_uuid()::text, club_row.id, 'Academy Coach', 1, 35, 30, 25, 100, now(), now())
-  ON CONFLICT ("clubId") DO NOTHING;
-
-  SELECT count(*) INTO player_count FROM public."Player" WHERE "clubId" = club_row.id;
-  IF player_count = 0 THEN
+  IF club_row.id IS NOT NULL AND player_count = 0 THEN
     FOR player_row IN SELECT value FROM jsonb_array_elements(p_starter_players)
     LOOP
       IF player_row->>'position' NOT IN ('GK','RB','LB','CB','CDM','CM','CAM','RW','LW','ST')
@@ -129,9 +142,13 @@ BEGIN
     END LOOP;
   END IF;
 
-  SELECT count(*) INTO assigned_count FROM public."Player"
-  WHERE "clubId" = club_row.id AND "lineupSlot" IS NOT NULL;
-  IF assigned_count = 0 THEN
+  IF club_row.id IS NOT NULL THEN
+    SELECT count(*) INTO assigned_count FROM public."Player"
+    WHERE "clubId" = club_row.id AND "lineupSlot" IS NOT NULL;
+  ELSE
+    assigned_count := 1;
+  END IF;
+  IF club_row.id IS NOT NULL AND assigned_count = 0 THEN
     FOR slot_index IN 1..array_length(slot_positions, 1)
     LOOP
       SELECT id INTO chosen_player_id
@@ -164,8 +181,9 @@ BEGIN
     'id', user_row.id,
     'telegramId', user_row."telegramId",
     'displayName', user_row."displayName",
-    'club', jsonb_build_object('id', club_row.id, 'name', club_row.name,
-      'level', club_row.level, 'reputation', club_row.reputation),
+    'club', CASE WHEN club_row.id IS NULL THEN NULL ELSE jsonb_build_object(
+      'id', club_row.id, 'name', club_row.name, 'level', club_row.level,
+      'reputation', club_row.reputation) END,
     'wallets', wallet_rows
   );
 END;
