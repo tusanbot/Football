@@ -8,6 +8,7 @@ import {
   defaultMatchRules, validateMatchRules,
 } from "@football/domain";
 import { prisma } from "../db.js";
+import { getMatchRuntimeLeasePort } from "./match-runtime-lease-context.js";
 
 const DAY_MS = 86_400_000;
 const MATCH_MINUTE_MS = 1_000;
@@ -653,6 +654,8 @@ export async function submitMatchCheckpointDecision(userId: string, matchId: str
 export async function claimDueMatchRuntimes(workerId: string, now = new Date(), leaseMs = 60_000, limit = 10) {
   if (!workerId.trim() || workerId.length > 100 || !Number.isInteger(leaseMs) || leaseMs < 1_000
     || !Number.isInteger(limit) || limit < 1 || limit > 100) throw new MatchServiceError("INVALID_MATCH_WORKER_LEASE");
+  const leasePort = getMatchRuntimeLeasePort();
+  if (leasePort) return leasePort.claim({ workerId, now: now.toISOString(), leaseMs, limit });
   const leaseExpiresAt = new Date(now.getTime() + leaseMs);
   const rows = await prisma.$queryRaw<Array<{ id: string; leaseToken: string; leaseExpiresAt: Date }>>(Prisma.sql`
     WITH due AS (
@@ -677,6 +680,8 @@ export async function claimDueMatchRuntimes(workerId: string, now = new Date(), 
 }
 export async function releaseMatchRuntimeLease(runtimeId: string, leaseToken: string,
   nextActionAt: Date | null, lastError: string | null = null) {
+  const leasePort = getMatchRuntimeLeasePort();
+  if (leasePort) return leasePort.release({ runtimeId, leaseToken, nextActionAt: nextActionAt?.toISOString() ?? null, lastError });
   const result = await prisma.matchRuntime.updateMany({ where: { id: runtimeId, leaseToken },
     data: { leaseOwner: null, leaseToken: null, leaseExpiresAt: null, nextActionAt, lastError } });
   return result.count === 1;

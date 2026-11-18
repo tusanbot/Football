@@ -22,6 +22,8 @@ import { SupabaseGiftCodeRedemptionRepository } from "./repositories/gift-code-r
 import { SupabaseSpecialAcquisitionRepository } from "./repositories/special-acquisition.js";
 import { SupabaseMarketListingRepository } from "./repositories/market-listing.js";
 import { SupabaseSpecialPlayerCatalogRepository } from "./repositories/special-player-catalog.js";
+import { withMatchRuntimeLeasePort } from "../../../apps/api/src/game/match-runtime-lease-context.js";
+import { SupabaseMatchRuntimeLeaseRepository } from "./repositories/match-runtime-lease.js";
 
 interface MatchCoordinatorNamespace { idFromName(name: string): unknown; get(id: unknown): { fetch(input: string, init?: RequestInit): Promise<Response> }; }
 interface MatchCoordinatorState { storage: { setAlarm(scheduledTime: number): Promise<void>; deleteAlarm(): Promise<void>; }; }
@@ -161,6 +163,10 @@ export class MatchCoordinator {
     let nextAlarm: number | null = null;
     try {
       await withPrismaClient(client, async () => {
+        const supabase = this.env.SUPABASE_URL && this.env.SUPABASE_SERVICE_ROLE_KEY
+          ? new SupabaseHttpClient({ url: this.env.SUPABASE_URL, serviceRoleKey: this.env.SUPABASE_SERVICE_ROLE_KEY })
+          : undefined;
+        const matchRuntimeLease = supabase ? new SupabaseMatchRuntimeLeaseRepository(supabase) : undefined;
         const now = new Date();
         // One indexed scheduler statement replaces six independent findFirst queries.
         // Its flags also let us skip queue scans and workers that have no due work.
@@ -235,10 +241,13 @@ export class MatchCoordinator {
         `;
         const schedule = scheduleRows[0];
         if (!schedule) throw new Error("MATCH_COORDINATOR_SCHEDULE_UNAVAILABLE");
-        const matchWork = await processDueMatchRuntimes("cloudflare-match-coordinator", now, 10, {
+        const runMatchWork = () => processDueMatchRuntimes("cloudflare-match-coordinator", now, 10, {
           enqueue: schedule.hasDueFixture,
           claim: schedule.hasDueRuntime || schedule.hasDueFixture,
         });
+        const matchWork = matchRuntimeLease
+          ? await withMatchRuntimeLeasePort(matchRuntimeLease, runMatchWork)
+          : await runMatchWork();
         const tournamentFinalizations = schedule.hasPendingTournamentFinalization
           ? await processDueEventTournamentFinalizations(now, 1)
           : { candidates: 0, finalized: 0, failed: 0 };
