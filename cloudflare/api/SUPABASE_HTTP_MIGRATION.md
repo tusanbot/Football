@@ -104,3 +104,12 @@ The migration is `20261118130000_store_item_use_rpc`. Apply and rollback-test it
 `buy_market_listing` locks the listing and player, checks ownership/contract/expiry, locks buyer and seller cash wallets in stable user-id order, transfers funds, moves the player, and writes both ledger and club-finance entries in one PostgreSQL transaction. Expired listings retain their existing state-transition outcomes. Bigint prices are returned as decimal strings. The function is `SECURITY INVOKER` and restricted to `service_role`.
 
 The migration is `20261118140000_market_purchase_rpc`. Listing creation, cancellation, expiry sweeping, and market snapshot reads remain on Prisma; this RPC covers purchase settlement only.
+
+
+## Seventh migrated operation: gift-code redemption
+
+`redeemGiftCode` now supports a request-scoped `GiftCodeRedemptionPort`. Existing Telegram group membership verification remains outside the database transaction; after that preflight, Cloudflare executes the persisted redemption through `SupabaseGiftCodeRedemptionRepository`. Standard Fastify continues using the Prisma transaction.
+
+`redeem_gift_code` locks the gift code, rechecks idempotency, enforces total/per-user limits and time windows, validates persisted group membership for group rewards, increments redemption count, and credits wallet balances/ledger or group points/ledger atomically. Wallet credits and reward amounts remain exact decimal strings. The function is `SECURITY INVOKER`, uses a fixed search path, and is restricted to `service_role`.
+
+The migration is `20261118150000_gift_code_redemption_rpc`. The route's preliminary replay lookup and Telegram membership preflight still use Prisma; the redemption transaction itself is migrated.

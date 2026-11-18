@@ -54,6 +54,10 @@ export function registerGiftCodeRoutes(app: FastifyInstance) {
         if (!membership) throw new Error("GIFT_CODE_GROUP_MEMBERSHIP_REQUIRED");
         await verifyTelegramGroupActor({ telegramGroupId: group.telegramId, telegramUserId: user.telegramId });
       }
+      const redemptionPort = getGiftCodeRedemptionPort();
+      if (redemptionPort) {
+        return await redemptionPort.redeem({ userId: user.id, code, idempotencyKey: body.data.idempotencyKey, telegramGroupId: body.data.telegramGroupId ?? null });
+      }
       return await prisma.$transaction(async (tx) => {
         const gift = await tx.giftCode.findUnique({ where: { code } });
         if (!gift) throw new Error("GIFT_CODE_UNAVAILABLE");

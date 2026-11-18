@@ -3,6 +3,7 @@ import { withWalletEntryPort } from "../../../apps/api/src/economy/wallet-entry-
 import { withStorePurchasePort } from "../../../apps/api/src/store/store-purchase-context.js";
 import { withStoreItemUsePort } from "../../../apps/api/src/store/store-item-use-context.js";
 import { withMarketPurchasePort } from "../../../apps/api/src/players/market-purchase-context.js";
+import { withGiftCodeRedemptionPort } from "../../../apps/api/src/gift-code-redemption-context.js";
 import { processDueMatchRuntimes } from "../../../apps/api/src/game/match-service.js";
 import { processDueEventTournamentFinalizations } from "../../../apps/api/src/event-tournament-service.js";
 import { processDuePromotionOffers } from "../../../apps/api/src/game/league-pyramid-service.js";
@@ -15,6 +16,7 @@ import { SupabaseWalletEntryRepository } from "./repositories/wallet-entry.js";
 import { SupabaseStorePurchaseRepository } from "./repositories/store-purchase.js";
 import { SupabaseStoreItemUseRepository } from "./repositories/store-item-use.js";
 import { SupabaseMarketPurchaseRepository } from "./repositories/market-purchase.js";
+import { SupabaseGiftCodeRedemptionRepository } from "./repositories/gift-code-redemption.js";
 
 interface MatchCoordinatorNamespace { idFromName(name: string): unknown; get(id: unknown): { fetch(input: string, init?: RequestInit): Promise<Response> }; }
 interface MatchCoordinatorState { storage: { setAlarm(scheduledTime: number): Promise<void>; deleteAlarm(): Promise<void>; }; }
@@ -109,12 +111,14 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
       const storePurchase = supabaseClient ? new SupabaseStorePurchaseRepository(supabaseClient) : undefined;
       const storeItemUse = supabaseClient ? new SupabaseStoreItemUseRepository(supabaseClient) : undefined;
       const marketPurchase = supabaseClient ? new SupabaseMarketPurchaseRepository(supabaseClient) : undefined;
+      const giftCodeRedemption = supabaseClient ? new SupabaseGiftCodeRedemptionRepository(supabaseClient) : undefined;
       const router = createWorkersApiRouter({ publicPlayerRecords, seasonAwards });
       const handle = () => router.fetch(request);
       const withWallet = walletEntry ? () => withWalletEntryPort(walletEntry, handle) : handle;
       const withStorePurchase = storePurchase ? () => withStorePurchasePort(storePurchase, withWallet) : withWallet;
       const withMarketPurchase = marketPurchase ? () => withMarketPurchasePort(marketPurchase, withStorePurchase) : withStorePurchase;
-      return storeItemUse ? withStoreItemUsePort(storeItemUse, withMarketPurchase) : withMarketPurchase();
+      const withGiftCodeRedemption = giftCodeRedemption ? () => withGiftCodeRedemptionPort(giftCodeRedemption, withMarketPurchase) : withMarketPurchase;
+      return storeItemUse ? withStoreItemUsePort(storeItemUse, withGiftCodeRedemption) : withGiftCodeRedemption();
     });
     cleanupScheduled = true;
     ctx.waitUntil(client.$disconnect().catch((error: unknown) => console.error("Prisma request client cleanup failed", error)));
