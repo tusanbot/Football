@@ -1,6 +1,5 @@
 -- Read-only, server-side aggregate for the first Cloudflare -> Supabase HTTP route.
--- The RPC returns only public leaderboard fields and applies filtering, ordering and
--- pagination in PostgreSQL so the Worker does not need a multi-request join.
+-- Qualify every output field because PL/pgSQL RETURNS TABLE names are variables.
 CREATE OR REPLACE FUNCTION public.get_public_player_records(
   p_metric text DEFAULT 'goals',
   p_limit integer DEFAULT 20
@@ -56,21 +55,30 @@ BEGIN
     HAVING p_metric <> 'rating' OR count(*) >= 3
   ),
   valued AS (
-    SELECT aggregated.*,
+    SELECT a.*,
       CASE p_metric
-        WHEN 'goals' THEN goals::numeric
-        WHEN 'assists' THEN assists::numeric
-        WHEN 'appearances' THEN appearances::numeric
-        ELSE average_rating
+        WHEN 'goals' THEN a.goals::numeric
+        WHEN 'assists' THEN a.assists::numeric
+        WHEN 'appearances' THEN a.appearances::numeric
+        ELSE a.average_rating
       END AS metric_value
-    FROM aggregated
+    FROM aggregated a
   )
   SELECT
-    row_number() OVER (ORDER BY metric_value DESC, appearances DESC, average_rating DESC, player_name ASC)::integer,
-    player_id, player_name, player_position, player_overall, club_name,
-    appearances, goals, assists, minutes_played, average_rating, metric_value
-  FROM valued
-  ORDER BY metric_value DESC, appearances DESC, average_rating DESC, player_name ASC
+    row_number() OVER (ORDER BY v.metric_value DESC, v.appearances DESC, v.average_rating DESC, v.player_name ASC)::integer,
+    v.player_id,
+    v.player_name,
+    v.player_position,
+    v.player_overall,
+    v.club_name,
+    v.appearances,
+    v.goals,
+    v.assists,
+    v.minutes_played,
+    v.average_rating,
+    v.metric_value
+  FROM valued v
+  ORDER BY v.metric_value DESC, v.appearances DESC, v.average_rating DESC, v.player_name ASC
   LIMIT p_limit;
 END;
 $$;
