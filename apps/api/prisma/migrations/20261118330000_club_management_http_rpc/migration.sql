@@ -10,6 +10,7 @@ DECLARE
  prior public."LedgerTransaction"%ROWTYPE;
  amount bigint;
  reason text;
+ expected_reason text;
  category text;
  description text;
  current_level integer;
@@ -29,9 +30,18 @@ BEGIN
  END IF;
  SELECT * INTO c FROM public."Club" WHERE "ownerId"=p_user_id FOR UPDATE;
  IF NOT FOUND THEN RAISE EXCEPTION USING MESSAGE='CLUB_NOT_FOUND', ERRCODE='P0002'; END IF;
+ expected_reason := CASE p_action
+   WHEN 'UPGRADE_FACILITY' THEN 'CLUB_FACILITY_UPGRADE:'||(p_payload->>'facility')
+   WHEN 'UPGRADE_COACH' THEN 'COACH_UPGRADE'
+   WHEN 'HIRE_COACH' THEN 'COACH_HIRING:'||(p_payload->>'candidateId')
+   WHEN 'SIGN_SPONSOR' THEN 'SPONSOR_CONTRACT_SIGNING:'||(p_payload->>'offerId')
+   WHEN 'SCOUT_ACADEMY' THEN 'ACADEMY_SCOUTING'
+   WHEN 'RECRUIT_PROSPECT' THEN 'ACADEMY_PROSPECT_RECRUITMENT:'||(p_payload->>'prospectId')
+   ELSE NULL END;
+ IF expected_reason IS NULL THEN RAISE EXCEPTION USING MESSAGE='UNSUPPORTED_CLUB_ACTION', ERRCODE='22023'; END IF;
  SELECT * INTO prior FROM public."LedgerTransaction" WHERE "idempotencyKey"='club-op:'||p_idempotency_key;
  IF FOUND THEN
-   IF prior."userId"<>p_user_id THEN RAISE EXCEPTION USING MESSAGE='IDEMPOTENCY_CONFLICT', ERRCODE='23505'; END IF;
+   IF prior."userId"<>p_user_id OR prior.reason<>expected_reason THEN RAISE EXCEPTION USING MESSAGE='IDEMPOTENCY_CONFLICT', ERRCODE='23505'; END IF;
    CASE p_action
     WHEN 'SCOUT_ACADEMY' THEN
       SELECT jsonb_agg(jsonb_build_object('id',id,'firstName',"firstName",'lastName',"lastName",'age',age,'position',position::text,'overall',overall,'potential',potential,'recruitmentCost',"recruitmentCost"::text) ORDER BY id)
