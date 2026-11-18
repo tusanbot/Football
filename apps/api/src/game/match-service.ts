@@ -11,6 +11,7 @@ import { prisma } from "../db.js";
 import { getMatchRuntimeLeasePort } from "./match-runtime-lease-context.js";
 import { getMatchRuntimeEnqueuePort } from "./match-runtime-enqueue-context.js";
 import { getMatchRuntimeAdvancePort } from "./match-runtime-advance-context.js";
+import { getMatchRuntimeCheckpointPort } from "./match-runtime-checkpoint-context.js";
 import { competitionKickoffAfterDays } from "./match-schedule.js";
 
 const DAY_MS = 86_400_000;
@@ -1427,43 +1428,61 @@ async function processClaimedMatchRuntime(
   };
   const isFullTime = nextMinute === 90;
   const nextAt = new Date(now.getTime() + 15 * MATCH_MINUTE_MS);
-  await prisma.$transaction(async (tx) => {
-    const checkpointUpdated = await tx.matchTacticalCheckpoint.updateMany({
-      where: { id: checkpoint.id, status: "OPEN" },
-      data: { status: "RESOLVED", resolvedAt: now, resolution: jsonSafe(resolution) },
-    });
-    if (checkpointUpdated.count !== 1) throw new MatchServiceError("MATCH_CHECKPOINT_ALREADY_RESOLVED");
-    const runtimeUpdated = await tx.matchRuntime.updateMany({
-      where: { id: runtime.id, stateVersion: runtime.stateVersion, leaseToken: runtime.leaseToken },
-      data: {
-        status: "RUNNING", currentMinute: nextMinute, stateVersion: { increment: 1 },
-        simulationState: jsonSafe(nextState), nextActionAt: nextAt,
-        lastError: null,
+  const lifecycleEvents: MatchLifecycleEventInput[] = [];
+  if (checkpoint.minute === 45) lifecycleEvents.push({
+    eventKey: "halftime", kind: "HALF_TIME", minute: 45,
+    homeScore: state.segment.home.score, awayScore: state.segment.away.score, availableAt: now,
+  });
+  lifecycleEvents.push(...goalLifecycleEvents(advanced.events, homeApplied.side, awayApplied.side,
+    { home: state.segment.home.score, away: state.segment.away.score }, runtime.startedAt ?? now));
+  const nextKind = nextMinute === 60 ? "MINUTE_60" : "MINUTE_75";
+  const decisionDeadlineAt = new Date(nextAt.getTime() + MATCH_CHECKPOINT_WINDOW_MS);
+  const checkpointPort = getMatchRuntimeCheckpointPort();
+  if (checkpointPort) {
+    if (!runtime.leaseToken) throw new MatchServiceError("MATCH_RUNTIME_LEASE_MISSING");
+    await checkpointPort.resolveCheckpoint({
+      runtimeId: runtime.id, checkpointId: checkpoint.id, expectedStateVersion: runtime.stateVersion,
+      leaseToken: runtime.leaseToken, resolution: jsonSafe(resolution), nextMinute,
+      simulationState: jsonSafe(nextState), nextActionAt: nextAt.toISOString(),
+      events: lifecycleEvents.map((event) => ({
+        eventKey: event.eventKey, kind: event.kind, minute: event.minute,
+        homeScore: event.homeScore, awayScore: event.awayScore, payload: event.payload ?? null,
+        availableAt: event.availableAt.toISOString(),
+      })),
+      nextCheckpoint: isFullTime ? null : {
+        checkpointKey: "minute-" + nextMinute, kind: nextKind, minute: nextMinute as 60 | 75,
+        openedAt: nextAt.toISOString(), decisionDeadlineAt: decisionDeadlineAt.toISOString(),
+        nextSegmentAt: decisionDeadlineAt.toISOString(),
       },
     });
-    if (runtimeUpdated.count !== 1) throw new MatchServiceError("MATCH_RUNTIME_CONCURRENT_MODIFICATION");
-    const lifecycleEvents: MatchLifecycleEventInput[] = [];
-    if (checkpoint.minute === 45) lifecycleEvents.push({
-      eventKey: "halftime", kind: "HALF_TIME", minute: 45,
-      homeScore: state.segment.home.score, awayScore: state.segment.away.score, availableAt: now,
-    });
-    lifecycleEvents.push(...goalLifecycleEvents(advanced.events, homeApplied.side, awayApplied.side,
-      { home: state.segment.home.score, away: state.segment.away.score }, runtime.startedAt ?? now));
-    await enqueueMatchLifecycleNotifications(tx, runtime.match, lifecycleEvents);
-    if (!isFullTime) {
-      const nextKind = nextMinute === 60 ? "MINUTE_60" : "MINUTE_75";
-      const decisionDeadlineAt = new Date(nextAt.getTime() + MATCH_CHECKPOINT_WINDOW_MS);
-      const nextSegmentAt = decisionDeadlineAt;
-      await tx.matchTacticalCheckpoint.createMany({
-        data: [{
-          matchId: runtime.matchId, checkpointKey: "minute-" + nextMinute,
-          kind: nextKind, minute: nextMinute, openedAt: nextAt,
-          decisionDeadlineAt, nextSegmentAt,
-        }],
-        skipDuplicates: true,
+  } else {
+    await prisma.$transaction(async (tx) => {
+      const checkpointUpdated = await tx.matchTacticalCheckpoint.updateMany({
+        where: { id: checkpoint.id, status: "OPEN" },
+        data: { status: "RESOLVED", resolvedAt: now, resolution: jsonSafe(resolution) },
       });
-    }
-  });
+      if (checkpointUpdated.count !== 1) throw new MatchServiceError("MATCH_CHECKPOINT_ALREADY_RESOLVED");
+      const runtimeUpdated = await tx.matchRuntime.updateMany({
+        where: { id: runtime.id, stateVersion: runtime.stateVersion, leaseToken: runtime.leaseToken },
+        data: {
+          status: "RUNNING", currentMinute: nextMinute, stateVersion: { increment: 1 },
+          simulationState: jsonSafe(nextState), nextActionAt: nextAt, lastError: null,
+        },
+      });
+      if (runtimeUpdated.count !== 1) throw new MatchServiceError("MATCH_RUNTIME_CONCURRENT_MODIFICATION");
+      await enqueueMatchLifecycleNotifications(tx, runtime.match, lifecycleEvents);
+      if (!isFullTime) {
+        await tx.matchTacticalCheckpoint.createMany({
+          data: [{
+            matchId: runtime.matchId, checkpointKey: "minute-" + nextMinute,
+            kind: nextKind, minute: nextMinute, openedAt: nextAt,
+            decisionDeadlineAt, nextSegmentAt: decisionDeadlineAt,
+          }],
+          skipDuplicates: true,
+        });
+      }
+    });
+  }
   return "ADVANCED";
 }
 

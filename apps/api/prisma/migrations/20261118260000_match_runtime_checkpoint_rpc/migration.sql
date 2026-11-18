@@ -1,0 +1,96 @@
+CREATE OR REPLACE FUNCTION public.resolve_match_runtime_checkpoint(
+ p_runtime_id text,p_checkpoint_id text,p_expected_state_version integer,p_lease_token text,
+ p_resolution jsonb,p_next_minute integer,p_simulation_state jsonb,p_next_action_at timestamp without time zone,
+ p_events jsonb,p_next_checkpoint jsonb
+) RETURNS boolean
+LANGUAGE plpgsql VOLATILE SECURITY INVOKER SET search_path=public,pg_temp AS $function$
+DECLARE
+ runtime_row public."MatchRuntime"%ROWTYPE;
+ match_row public."FootballMatch"%ROWTYPE;
+ checkpoint_row public."MatchTacticalCheckpoint"%ROWTYPE;
+ event_row record;
+BEGIN
+ IF p_runtime_id IS NULL OR p_checkpoint_id IS NULL OR p_expected_state_version IS NULL
+  OR p_lease_token IS NULL OR p_lease_token='' OR p_resolution IS NULL
+  OR jsonb_typeof(p_resolution)<>'object' OR p_next_minute NOT IN (60,75,90)
+  OR p_simulation_state IS NULL OR jsonb_typeof(p_simulation_state)<>'object'
+  OR p_next_action_at IS NULL OR p_events IS NULL OR jsonb_typeof(p_events)<>'array'
+  OR (p_next_minute=90 AND p_next_checkpoint IS NOT NULL)
+  OR (p_next_minute<90 AND (p_next_checkpoint IS NULL OR jsonb_typeof(p_next_checkpoint)<>'object')) THEN
+  RAISE EXCEPTION 'INVALID_MATCH_RUNTIME_CHECKPOINT_COMMAND';
+ END IF;
+ SELECT * INTO runtime_row FROM public."MatchRuntime" WHERE "id"=p_runtime_id FOR UPDATE;
+ IF NOT FOUND OR runtime_row."stateVersion"<>p_expected_state_version
+  OR runtime_row."leaseToken" IS DISTINCT FROM p_lease_token
+  OR runtime_row."status"::text NOT IN ('AWAITING_CHECKPOINT','RUNNING') THEN RETURN false; END IF;
+ SELECT * INTO match_row FROM public."FootballMatch" WHERE "id"=runtime_row."matchId" FOR UPDATE;
+ IF NOT FOUND OR match_row."status"::text<>'IN_PROGRESS' THEN RETURN false; END IF;
+ SELECT * INTO checkpoint_row FROM public."MatchTacticalCheckpoint"
+  WHERE "id"=p_checkpoint_id AND "matchId"=runtime_row."matchId" FOR UPDATE;
+ IF NOT FOUND OR checkpoint_row."status"::text<>'OPEN' THEN RETURN false; END IF;
+ IF p_next_minute<>CASE checkpoint_row."minute" WHEN 45 THEN 60 WHEN 60 THEN 75 WHEN 75 THEN 90 ELSE -1 END THEN
+  RAISE EXCEPTION 'INVALID_MATCH_RUNTIME_CHECKPOINT_SEQUENCE';
+ END IF;
+
+ UPDATE public."MatchTacticalCheckpoint" SET "status"='RESOLVED',"resolvedAt"=NOW(),
+  "resolution"=p_resolution,"updatedAt"=NOW()
+ WHERE "id"=p_checkpoint_id AND "status"='OPEN';
+ IF NOT FOUND THEN RETURN false; END IF;
+ UPDATE public."MatchRuntime" SET "status"='RUNNING',"currentMinute"=p_next_minute,
+  "stateVersion"="stateVersion"+1,"simulationState"=p_simulation_state,
+  "nextActionAt"=p_next_action_at,"lastError"=NULL,"updatedAt"=NOW()
+ WHERE "id"=p_runtime_id AND "stateVersion"=p_expected_state_version AND "leaseToken"=p_lease_token;
+ IF NOT FOUND THEN RAISE EXCEPTION 'MATCH_RUNTIME_CONCURRENT_MODIFICATION'; END IF;
+
+ IF p_next_checkpoint IS NOT NULL THEN
+  IF (p_next_checkpoint->>'minute')::integer<>p_next_minute
+   OR p_next_checkpoint->>'checkpoint_key'<>'minute-'||p_next_minute::text
+   OR p_next_checkpoint->>'kind'<>CASE p_next_minute WHEN 60 THEN 'MINUTE_60' ELSE 'MINUTE_75' END
+   OR (p_next_checkpoint->>'opened_at') IS NULL
+   OR (p_next_checkpoint->>'decision_deadline_at') IS NULL
+   OR (p_next_checkpoint->>'next_segment_at') IS NULL THEN
+   RAISE EXCEPTION 'INVALID_NEXT_MATCH_CHECKPOINT';
+  END IF;
+  INSERT INTO public."MatchTacticalCheckpoint"(
+   "id","matchId","checkpointKey","kind","minute","status","openedAt","decisionDeadlineAt","nextSegmentAt","createdAt","updatedAt"
+  ) VALUES(gen_random_uuid()::text,runtime_row."matchId",p_next_checkpoint->>'checkpoint_key',
+   (p_next_checkpoint->>'kind')::public."MatchCheckpointKind",p_next_minute,'OPEN',
+   (p_next_checkpoint->>'opened_at')::timestamp,(p_next_checkpoint->>'decision_deadline_at')::timestamp,
+   (p_next_checkpoint->>'next_segment_at')::timestamp,NOW(),NOW())
+  ON CONFLICT("matchId","checkpointKey") DO NOTHING;
+ END IF;
+
+ FOR event_row IN SELECT * FROM jsonb_to_recordset(p_events) AS e(
+  event_key text,kind text,minute integer,home_score integer,away_score integer,payload jsonb,available_at timestamp without time zone
+ ) LOOP
+  IF event_row.event_key IS NULL OR event_row.kind IS NULL OR event_row.minute IS NULL
+   OR event_row.home_score IS NULL OR event_row.away_score IS NULL OR event_row.available_at IS NULL THEN
+   RAISE EXCEPTION 'INVALID_MATCH_LIFECYCLE_EVENT';
+  END IF;
+  INSERT INTO public."MatchLifecycleNotification"(
+   "id","matchId","channel","eventKey","kind","minute","homeScore","awayScore","telegramChatId",
+   "payload","status","attempts","availableAt","createdAt","updatedAt"
+  )
+  SELECT gen_random_uuid()::text,runtime_row."matchId",recipient.channel,event_row.event_key,event_row.kind,
+   event_row.minute,event_row.home_score,event_row.away_score,recipient.telegram_id,event_row.payload,
+   'PENDING',0,event_row.available_at,NOW(),NOW()
+  FROM (
+   SELECT 'HOME'::text AS channel,u."telegramId" AS telegram_id
+   FROM public."Club" c JOIN public."User" u ON u."id"=c."ownerId" WHERE c."id"=match_row."homeClubId"
+   UNION ALL
+   SELECT 'AWAY'::text,u."telegramId"
+   FROM public."Club" c JOIN public."User" u ON u."id"=c."ownerId" WHERE c."id"=match_row."awayClubId"
+   UNION ALL
+   SELECT 'GROUP'::text,g."telegramId"
+   FROM public."FriendlyChallenge" fc JOIN public."TelegramGroup" g ON g."id"=fc."groupId"
+   WHERE fc."matchId"=runtime_row."matchId" AND g."telegramId" IS NOT NULL
+  ) recipient
+  ON CONFLICT("matchId","channel","eventKey") DO NOTHING;
+ END LOOP;
+ RETURN true;
+END;
+$function$;
+REVOKE ALL ON FUNCTION public.resolve_match_runtime_checkpoint(text,text,integer,text,jsonb,integer,jsonb,timestamp without time zone,jsonb,jsonb) FROM PUBLIC,anon,authenticated;
+DO $grant$ BEGIN IF EXISTS(SELECT 1 FROM pg_roles WHERE rolname='service_role') THEN
+ GRANT EXECUTE ON FUNCTION public.resolve_match_runtime_checkpoint(text,text,integer,text,jsonb,integer,jsonb,timestamp without time zone,jsonb,jsonb) TO service_role;
+END IF; END $grant$;
