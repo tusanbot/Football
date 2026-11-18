@@ -74,6 +74,19 @@ test("client rejects non-HTTPS, non-Supabase and credential-bearing URLs", () =>
   ]) assert.throws(() => new SupabaseHttpClient({ ...config, url }));
 });
 
+test("client preserves quoted Prisma-style table names for PostgREST resources", async () => {
+  let requestedPath = "";
+  const client = new SupabaseHttpClient({
+    ...config,
+    fetchImpl: async (input) => {
+      requestedPath = new URL(String(input)).pathname;
+      return new Response("[]", { status: 200 });
+    },
+  });
+  await client.insert("PilotAnalyticsEvent", { eventName: "bot_start" });
+  assert.equal(requestedPath, "/rest/v1/PilotAnalyticsEvent");
+});
+
 test("client rejects unsafe identifiers and malformed configuration", async () => {
   const client = new SupabaseHttpClient({
     ...config, fetchImpl: async () => new Response("[]", { status: 200 }),

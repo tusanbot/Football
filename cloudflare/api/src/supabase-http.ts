@@ -24,7 +24,7 @@ export class SupabaseHttpError extends Error {
   }
 }
 
-const IDENTIFIER = /^[a-z][a-z0-9_]*$/;
+const IDENTIFIER = /^[A-Za-z][A-Za-z0-9_]*$/;
 
 function validateIdentifier(value: string, label: string): string {
   if (!IDENTIFIER.test(value)) throw new TypeError(label + " must be a lowercase SQL identifier");
