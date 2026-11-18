@@ -1,2 +1,0 @@
-CREATE TABLE "AllianceActionThrottle" ("key" TEXT NOT NULL,"windowStart" TIMESTAMP(3) NOT NULL,"count" INTEGER NOT NULL DEFAULT 0,"updatedAt" TIMESTAMP(3) NOT NULL,CONSTRAINT "AllianceActionThrottle_pkey" PRIMARY KEY ("key"));
-CREATE INDEX "AllianceActionThrottle_updatedAt_idx" ON "AllianceActionThrottle"("updatedAt");
