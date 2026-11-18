@@ -1,0 +1,138 @@
+name: CI
+
+on:
+  push:
+    branches: ["main", "feat/**"]
+  pull_request:
+    branches: ["main"]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: football_empire
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d football_empire"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          package_json_file: package.json
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install dependencies
+        run: pnpm install
+      - name: Generate Prisma Client
+        run: pnpm db:generate
+      - name: Validate Prisma schema
+        run: pnpm --filter @football/api exec prisma validate
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/football_empire
+          DIRECT_URL: postgresql://postgres:postgres@localhost:5432/football_empire
+      - name: Prepare Supabase API roles for security migration tests
+        run: |
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "DO \$\$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'anon') THEN CREATE ROLE anon NOLOGIN; END IF; IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'authenticated') THEN CREATE ROLE authenticated NOLOGIN; END IF; IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'service_role') THEN CREATE ROLE service_role NOLOGIN BYPASSRLS; END IF; END \$\$;"
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/football_empire
+      - name: Apply migrations to ephemeral PostgreSQL
+        run: pnpm db:migrate:deploy
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/football_empire
+          DIRECT_URL: postgresql://postgres:postgres@localhost:5432/football_empire
+      - name: Verify public schema security
+        run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f apps/api/prisma/security-check.sql
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/football_empire
+      - name: Seed special-player catalog in ephemeral PostgreSQL
+        run: pnpm --filter @football/api db:seed:special
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/football_empire
+      - name: Verify seeded special-player catalog
+        run: |
+          pnpm --filter @football/api exec tsx -e 'import { createPrismaClient } from "./src/db.ts"; void (async () => { const prisma = createPrismaClient(); try { const count = await prisma.specialPlayer.count(); console.log(`Seeded special players: ${count}`); if (count !== 16) process.exitCode = 1; } finally { await prisma.$disconnect(); } })();'
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/football_empire
+      - name: Build shared domain package
+        run: pnpm --filter @football/domain build
+      - name: Typecheck
+        run: pnpm typecheck
+      - name: Test Telegram Bot and webhook Worker
+        run: pnpm --filter @football/bot test
+      - name: Dry-run Cloudflare Bot webhook Worker bundle
+        run: pnpm --dir apps/web exec wrangler deploy --dry-run --config ../bot/wrangler.jsonc
+      - name: Test Cloudflare API Worker
+        run: pnpm --dir cloudflare/api test
+      - name: Typecheck Cloudflare API Worker
+        run: pnpm --dir cloudflare/api typecheck
+      - name: Bundle Cloudflare API Worker (dry run)
+        run: pnpm --dir cloudflare/api check:worker
+      - name: Validate production API Worker config (dry run)
+        run: pnpm --dir cloudflare/api check:worker:production
+      - name: Validate staging API Worker config (dry run)
+        run: pnpm --dir cloudflare/api check:worker:staging
+      - name: Build production-targeted Cloudflare Mini App Worker
+        run: pnpm --dir apps/web build:worker:production
+        env:
+          NEXT_PUBLIC_API_URL: https://football-empire-api.mshmahyar9.workers.dev
+      - name: Archive production Mini App Worker build
+        uses: actions/upload-artifact@v4
+        with:
+          name: football-empire-miniapp-worker-production
+          path: '**/.open-next/**'
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 7
+      - name: Build staging-targeted Cloudflare Mini App Worker
+        run: pnpm --dir apps/web build:worker:staging
+        env:
+          NEXT_PUBLIC_API_URL: https://football-empire-api-staging.mshmahyar9.workers.dev
+          NEXT_PUBLIC_BOT_WEBHOOK_URL: https://football-empire-bot-staging.mshmahyar9.workers.dev
+      - name: Archive staging Mini App Worker build
+        uses: actions/upload-artifact@v4
+        with:
+          name: football-empire-miniapp-worker-staging
+          path: '**/.open-next/**'
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 7
+      - name: Test Cloudflare API Worker runtime
+        run: pnpm exec tsx --test cloudflare/api/test/*.test.ts
+      # D1 is an explicitly separate, incomplete migration track. PostgreSQL is
+      # the authoritative runtime database, so D1 snapshot drift must not block
+      # the PostgreSQL + Cloudflare compatibility release pipeline.
+      - name: Test
+        run: pnpm test
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/football_empire
+      - name: Build Bot container image
+        run: docker build -f apps/bot/Dockerfile -t football-empire-bot:ci .
+      - name: Validate Bot compose configuration
+        run: |
+          cp .env.bot.example .env.bot
+          docker compose -f docker-compose.bot.yml config --quiet
+          rm .env.bot
+      - name: Build
+        run: pnpm build
+        env:
+          NEXT_PUBLIC_API_URL: https://api.example.invalid

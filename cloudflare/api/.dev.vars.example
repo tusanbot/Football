@@ -1,0 +1,7 @@
+# Copy to .dev.vars and replace placeholders locally. Never commit .dev.vars.
+DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:5432/football_empire
+TELEGRAM_BOT_TOKEN=replace-with-development-bot-token
+BOT_API_SECRET=replace-with-random-secret-at-least-32-characters
+CORS_ORIGIN=http://localhost:3000,http://localhost:8788
+GAME_ADMIN_TELEGRAM_IDS=123456789
+ENVIRONMENT=development

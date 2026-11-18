@@ -1,0 +1,28 @@
+{
+  "name": "@football/web",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "dev": "next dev --hostname 0.0.0.0",
+    "build": "next build",
+    "typecheck": "tsc --noEmit",
+    "start": "next start --hostname 0.0.0.0",
+    "build:worker": "opennextjs-cloudflare build",
+    "build:worker:production": "opennextjs-cloudflare build --config wrangler.production.jsonc",
+    "preview:worker": "opennextjs-cloudflare build && opennextjs-cloudflare preview",
+    "deploy:worker": "opennextjs-cloudflare build && opennextjs-cloudflare deploy",
+    "cf-typegen": "wrangler types --env-interface CloudflareEnv cloudflare-env.d.ts",
+    "build:worker:staging": "opennextjs-cloudflare build --config wrangler.staging.jsonc"
+  },
+  "dependencies": {
+    "next": "^15.2.3",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@opennextjs/cloudflare": "^1.20.17",
+    "@types/react": "^19.0.10",
+    "@types/react-dom": "^19.0.4",
+    "wrangler": "^4.68.0"
+  }
+}

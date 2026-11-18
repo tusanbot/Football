@@ -133,7 +133,7 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
       const specialPlayers = supabaseClient ? new SupabaseSpecialPlayerCatalogRepository(supabaseClient) : undefined;
       const matchRuntimeCheckpoint = supabaseClient ? new SupabaseMatchRuntimeCheckpointRepository(supabaseClient) : undefined;
       const router = createWorkersApiRouter({ publicPlayerRecords, seasonAwards, specialPlayers });
-      const handle = async (): Promise<Response> => await router.fetch(request);
+      const handle = () => router.fetch(request);
       const withCheckpoint = matchRuntimeCheckpoint
         ? () => withMatchRuntimeCheckpointPort(matchRuntimeCheckpoint, handle) : handle;
       const withWallet = walletEntry ? () => withWalletEntryPort(walletEntry, withCheckpoint) : withCheckpoint;
