@@ -30,6 +30,7 @@ export interface MarketListingPort {
   create(input: MarketListingCreateCommand): Promise<MarketListingCreated>;
   cancel(input: MarketListingCancelCommand): Promise<MarketListingCancelled>;
   listOpen(): Promise<unknown[]>;
+  listMine(userId: string): Promise<unknown[]>;
 }
 
 const marketListingScope = new AsyncLocalStorage<MarketListingPort>();

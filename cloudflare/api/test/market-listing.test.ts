@@ -63,3 +63,14 @@ test("market listing repository reads open listings through the expiry-aware RPC
   assert.equal(call?.name, "get_open_market_listings");
   assert.deepEqual(result, rows);
 });
+
+
+test("my market listings use the authenticated user's Supabase RPC", async () => {
+  let call: { name: string; args: Record<string, unknown> } | undefined;
+  const rows = [{ id: "listing-4", status: "SOLD", askingPrice: "500", player: { id: "player-4" } }];
+  const client = { rpc: async (name: string, args: Record<string, unknown>) => { call = { name, args }; return rows; } } as never;
+  const result = await new SupabaseMarketListingRepository(client).listMine("user-1");
+  assert.equal(call?.name, "get_my_market_listings");
+  assert.deepEqual(call?.args, { p_user_id: "user-1" });
+  assert.deepEqual(result, rows);
+});

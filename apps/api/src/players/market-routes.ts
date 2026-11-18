@@ -3,6 +3,7 @@ import { z } from "zod";
 import { requireTelegramUser } from "../auth/require-telegram-user.js";
 import { prisma } from "../db.js";
 import { buyMarketListing, cancelMarketListing, createMarketListing, getOpenMarketListings, MarketError } from "./market-service.js";
+import { getMarketListingPort } from "./market-listing-context.js";
 import {
   acquireSpecialPlayer, getSpecialPackOffers, SpecialAcquisitionError,
   listLegacyChallenges, claimLegacyChallenge, LegacyChallengeError,
@@ -74,6 +75,8 @@ export function registerPlayerMarketRoutes(app: FastifyInstance) {
   app.get("/v1/market/my-listings", async (request, reply) => {
     const user = await requireTelegramUser(request);
     if (!user) return reply.code(401).send({ error: "UNAUTHENTICATED" });
+    const listingPort = getMarketListingPort();
+    if (listingPort) return { listings: await listingPort.listMine(user.id) };
     const club = await prisma.club.findUnique({ where: { ownerId: user.id }, select: { id: true } });
     if (!club) return reply.code(404).send({ error: "CLUB_NOT_FOUND" });
     const listings = await prisma.playerMarketListing.findMany({

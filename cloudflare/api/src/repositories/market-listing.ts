@@ -71,6 +71,16 @@ export class SupabaseMarketListingRepository implements MarketListingPort {
     return rows;
   }
 
+  async listMine(userId: string): Promise<unknown[]> {
+    let rows: unknown;
+    try { rows = await this.client.rpc<unknown>("get_my_market_listings", { p_user_id: userId }); }
+    catch (error) { return mapMarketListingError(error); }
+    if (!Array.isArray(rows) || rows.some((row) => !row || typeof row !== "object" || Array.isArray(row))) {
+      throw new Error("SUPABASE_MY_MARKET_LISTINGS_INVALID_RESPONSE");
+    }
+    return rows;
+  }
+
   async cancel(input: { userId: string; listingId: string }): Promise<{ listingId: string; status: "CANCELLED" }> {
     let rows: Array<{ listing_id: string; status: string }>;
     try {
