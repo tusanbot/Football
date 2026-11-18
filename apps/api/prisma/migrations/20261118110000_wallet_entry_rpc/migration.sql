@@ -27,7 +27,7 @@ BEGIN
      OR p_idempotency_key !~ '^[A-Za-z0-9:_-]+$' THEN
     RAISE EXCEPTION USING MESSAGE = 'INVALID_AMOUNT', ERRCODE = 'P0001';
   END IF;
-  IF p_reason IS NULL OR length(p_reason) = 0 OR length(p_reason) > 128 THEN
+  IF p_reason IS NULL OR length(p_reason) = 0 THEN
     RAISE EXCEPTION USING MESSAGE = 'INVALID_AMOUNT', ERRCODE = 'P0001';
   END IF;
 
