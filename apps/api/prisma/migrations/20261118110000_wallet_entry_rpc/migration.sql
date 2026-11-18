@@ -1,4 +1,5 @@
 -- Atomic, idempotent wallet mutation for the Supabase HTTP runtime.
+DROP FUNCTION IF EXISTS public.apply_wallet_entry(text, public."WalletAsset", public."LedgerDirection", bigint, text, text, text, text);
 CREATE OR REPLACE FUNCTION public.apply_wallet_entry(
   p_user_id text,
   p_asset public."WalletAsset",
