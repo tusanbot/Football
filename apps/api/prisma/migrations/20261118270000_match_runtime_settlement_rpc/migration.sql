@@ -211,10 +211,10 @@ BEGIN
    ON CONFLICT ("idempotencyKey") DO NOTHING;
    GET DIAGNOSTICS inserted_count=ROW_COUNT;
    IF inserted_count=1 THEN
-    INSERT INTO public."Wallet"("id","userId","asset","balance","version","createdAt","updatedAt")
+    INSERT INTO public."Wallet" AS wallet("id","userId","asset","balance","version","createdAt","updatedAt")
     VALUES(gen_random_uuid()::text,credit.user_id,'HONOR',credit.amount,1,p_now,p_now)
-    ON CONFLICT ("userId","asset") DO UPDATE SET "balance"=public."Wallet"."balance"+EXCLUDED."balance",
-     "version"=public."Wallet"."version"+1,"updatedAt"=p_now;
+    ON CONFLICT ("userId","asset") DO UPDATE SET "balance"=wallet."balance"+EXCLUDED."balance",
+     "version"=wallet."version"+1,"updatedAt"=p_now;
    END IF;
   END LOOP;
  END IF;
@@ -238,10 +238,10 @@ BEGIN
   ON CONFLICT ("idempotencyKey") DO NOTHING;
   GET DIAGNOSTICS inserted_count=ROW_COUNT;
   IF inserted_count=1 THEN
-   INSERT INTO public."Wallet"("id","userId","asset","balance","version","createdAt","updatedAt")
+   INSERT INTO public."Wallet" AS wallet("id","userId","asset","balance","version","createdAt","updatedAt")
    VALUES(gen_random_uuid()::text,credit.user_id,'CASH',credit.amount,1,p_now,p_now)
-   ON CONFLICT ("userId","asset") DO UPDATE SET "balance"=public."Wallet"."balance"+EXCLUDED."balance",
-    "version"=public."Wallet"."version"+1,"updatedAt"=p_now;
+   ON CONFLICT ("userId","asset") DO UPDATE SET "balance"=wallet."balance"+EXCLUDED."balance",
+    "version"=wallet."version"+1,"updatedAt"=p_now;
    INSERT INTO public."ClubFinanceEntry"("id","idempotencyKey","clubId","category","direction","amount","description","occurredAt")
    VALUES(gen_random_uuid()::text,'club-finance:'||credit.ledger_key,credit.club_id,credit.category,
     'CREDIT',credit.amount,credit.description,p_now)
