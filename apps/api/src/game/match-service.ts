@@ -12,6 +12,7 @@ import { getMatchRuntimeLeasePort } from "./match-runtime-lease-context.js";
 import { getMatchRuntimeEnqueuePort } from "./match-runtime-enqueue-context.js";
 import { getMatchRuntimeAdvancePort } from "./match-runtime-advance-context.js";
 import { getMatchRuntimeCheckpointPort } from "./match-runtime-checkpoint-context.js";
+import { getMatchRuntimeSettlementPort } from "./match-runtime-settlement-context.js";
 import { competitionKickoffAfterDays } from "./match-schedule.js";
 
 const DAY_MS = 86_400_000;
@@ -859,6 +860,34 @@ export async function simulateScheduledMatch(userId: string, matchId: string, no
       : aggregateHomeScore > aggregateAwayScore ? home.id
         : aggregateAwayScore > aggregateHomeScore ? away.id
           : penalties ? (penalties.winner === "HOME" ? home.id : away.id) : null;
+    const settlementPort = getMatchRuntimeSettlementPort();
+    if (settlementPort && isRuntimeSettlement && runtime?.leaseToken) {
+      return settlementPort.settle({
+        matchId: match.id, runtimeId: runtime.id, leaseToken: runtime.leaseToken,
+        now: now.toISOString(), result: jsonSafe({
+          homeScore: result.homeScore, awayScore: result.awayScore,
+          homePenalties: penalties?.homePenalties ?? null, awayPenalties: penalties?.awayPenalties ?? null,
+          winnerClubId, attendance: result.attendance, ticketRevenue: result.ticketRevenue.toString(),
+          homeExpectedGoals: result.homeExpectedGoals, awayExpectedGoals: result.awayExpectedGoals,
+          events: result.events.map((event) => ({
+            sequence: event.sequence, minute: event.minute, type: event.type, teamId: event.teamId,
+            playerId: event.playerId, relatedPlayerId: event.relatedPlayerId ?? null, detail: event.detail,
+          })),
+          performances: result.performances,
+          injuredPlayerIds: result.events.filter((event) => event.type === "INJURY").map((event) => event.playerId),
+          yellowCardPlayerIds: result.events.filter((event) => event.type === "YELLOW_CARD").map((event) => event.playerId),
+          redCardPlayerIds: result.events.filter((event) => event.type === "RED_CARD").map((event) => event.playerId),
+          forfeit, competitionId: match.competitionId, competitionFormat: competition?.format ?? null,
+          round: match.round,
+        }),
+        injuryDurationDays: matchRules.injuryDurationDays,
+        redCardSuspensionMatches: matchRules.redCardSuspensionMatches,
+        yellowCardsToSuspend: matchRules.yellowCardsToSuspend,
+        yellowCardSuspensionMatches: matchRules.yellowCardSuspensionMatches,
+        homeReward: (winnerClubId ? (winnerClubId === home.id ? 250n : 100n) : 150n).toString(),
+        awayReward: (winnerClubId ? (winnerClubId === away.id ? 250n : 100n) : 150n).toString(),
+      });
+    }
     const claimed = await tx.footballMatch.updateMany({
       where: { id: match.id, status: isRuntimeSettlement ? "IN_PROGRESS" : "SCHEDULED" },
       data: {

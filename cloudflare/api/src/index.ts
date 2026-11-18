@@ -27,10 +27,12 @@ import { SupabaseSpecialPlayerCatalogRepository } from "./repositories/special-p
 import { withMatchRuntimeLeasePort } from "../../../apps/api/src/game/match-runtime-lease-context.js";
 import { withMatchRuntimeAdvancePort } from "../../../apps/api/src/game/match-runtime-advance-context.js";
 import { withMatchRuntimeCheckpointPort } from "../../../apps/api/src/game/match-runtime-checkpoint-context.js";
+import { withMatchRuntimeSettlementPort } from "../../../apps/api/src/game/match-runtime-settlement-context.js";
 import { withMatchRuntimeEnqueuePort } from "../../../apps/api/src/game/match-runtime-enqueue-context.js";
 import { SupabaseMatchRuntimeEnqueueRepository } from "./repositories/match-runtime-enqueue.js";
 import { SupabaseMatchRuntimeAdvanceRepository } from "./repositories/match-runtime-advance.js";
 import { SupabaseMatchRuntimeCheckpointRepository } from "./repositories/match-runtime-checkpoint.js";
+import { SupabaseMatchRuntimeSettlementRepository } from "./repositories/match-runtime-settlement.js";
 import { SupabaseMatchRuntimeLeaseRepository } from "./repositories/match-runtime-lease.js";
 import { SupabaseMatchNotificationRepository, type MatchNotificationRow, type MatchNotificationPerformance } from "./repositories/match-notifications.js";
 
@@ -132,11 +134,14 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
       const marketListing = supabaseClient ? new SupabaseMarketListingRepository(supabaseClient) : undefined;
       const specialPlayers = supabaseClient ? new SupabaseSpecialPlayerCatalogRepository(supabaseClient) : undefined;
       const matchRuntimeCheckpoint = supabaseClient ? new SupabaseMatchRuntimeCheckpointRepository(supabaseClient) : undefined;
+      const matchRuntimeSettlement = supabaseClient ? new SupabaseMatchRuntimeSettlementRepository(supabaseClient) : undefined;
       const router = createWorkersApiRouter({ publicPlayerRecords, seasonAwards, specialPlayers });
       const handle = async (): Promise<Response> => await router.fetch(request);
       const withCheckpoint = matchRuntimeCheckpoint
         ? () => withMatchRuntimeCheckpointPort(matchRuntimeCheckpoint, handle) : handle;
-      const withWallet = walletEntry ? () => withWalletEntryPort(walletEntry, withCheckpoint) : withCheckpoint;
+      const withSettlement = matchRuntimeSettlement
+        ? () => withMatchRuntimeSettlementPort(matchRuntimeSettlement, withCheckpoint) : withCheckpoint;
+      const withWallet = walletEntry ? () => withWalletEntryPort(walletEntry, withSettlement) : withSettlement;
       const withStorePurchase = storePurchase ? () => withStorePurchasePort(storePurchase, withWallet) : withWallet;
       const withMarketPurchase = marketPurchase ? () => withMarketPurchasePort(marketPurchase, withStorePurchase) : withStorePurchase;
       const withGiftCodeRedemption = giftCodeRedemption ? () => withGiftCodeRedemptionPort(giftCodeRedemption, withMarketPurchase) : withMarketPurchase;
@@ -182,19 +187,21 @@ export class MatchCoordinator {
         const matchRuntimeEnqueue = supabase ? new SupabaseMatchRuntimeEnqueueRepository(supabase) : undefined;
         const matchRuntimeAdvance = supabase ? new SupabaseMatchRuntimeAdvanceRepository(supabase) : undefined;
         const matchRuntimeCheckpoint = supabase ? new SupabaseMatchRuntimeCheckpointRepository(supabase) : undefined;
+        const matchRuntimeSettlement = supabase ? new SupabaseMatchRuntimeSettlementRepository(supabase) : undefined;
         const matchNotifications = supabase ? new SupabaseMatchNotificationRepository(supabase) : undefined;
         const now = new Date();
         // One indexed scheduler statement replaces six independent findFirst queries.
         // Its flags also let us skip queue scans and workers that have no due work.
-        if (!matchRuntimeLease || !matchRuntimeEnqueue || !matchRuntimeAdvance || !matchRuntimeCheckpoint) throw new Error("SUPABASE_MATCH_RUNTIME_REPOSITORY_UNAVAILABLE");
+        if (!matchRuntimeLease || !matchRuntimeEnqueue || !matchRuntimeAdvance || !matchRuntimeCheckpoint || !matchRuntimeSettlement) throw new Error("SUPABASE_MATCH_RUNTIME_REPOSITORY_UNAVAILABLE");
         const schedule = await matchRuntimeLease.getSchedule();
         const runMatchWork = () => withMatchRuntimeEnqueuePort(matchRuntimeEnqueue, () =>
           withMatchRuntimeAdvancePort(matchRuntimeAdvance, () =>
             withMatchRuntimeCheckpointPort(matchRuntimeCheckpoint, () =>
+              withMatchRuntimeSettlementPort(matchRuntimeSettlement, () =>
               processDueMatchRuntimes("cloudflare-match-coordinator", now, 10, {
                 enqueue: schedule.hasDueFixture,
                 claim: schedule.hasDueRuntime || schedule.hasDueFixture,
-              }))));
+              })))));
         const matchWork = await withMatchRuntimeLeasePort(matchRuntimeLease, runMatchWork);
         const tournamentFinalizations = schedule.hasPendingTournamentFinalization
           ? await processDueEventTournamentFinalizations(now, 1)
