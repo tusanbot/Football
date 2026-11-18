@@ -1,4 +1,5 @@
-import { calculateStadiumCapacity, type MatchSide, type MatchTactics } from "@football/domain";
+import { calculateStadiumCapacity } from "../../../../packages/domain/src/club-economy.js";
+import type { MatchSide, MatchTactics } from "../../../../packages/domain/src/match-engine.js";
 import type { MatchRuntimeEnqueuePort, MatchRuntimeEnqueueResult } from "../../../../apps/api/src/game/match-runtime-enqueue-context.js";
 import { SupabaseHttpClient } from "../supabase-http.js";
 interface ClubSnapshot {
