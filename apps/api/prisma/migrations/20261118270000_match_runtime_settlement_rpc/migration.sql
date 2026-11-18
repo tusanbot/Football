@@ -30,8 +30,7 @@ DECLARE
  lineup_changed text[] := ARRAY[]::text[];
  injured_ids text[] := ARRAY[]::text[];
  red_ids text[] := ARRAY[]::text[];
- yellow_ids text[] := ARRAY[]::text[];
- home_points integer;
+  home_points integer;
  away_points integer;
 BEGIN
  IF p_match_id IS NULL OR p_runtime_id IS NULL OR p_lease_token IS NULL OR p_lease_token=''
@@ -134,8 +133,8 @@ BEGIN
  IF p_red_card_suspension_matches>0 AND cardinality(red_ids)>0 THEN
   UPDATE public."Player" SET "suspensionMatchesRemaining"=p_red_card_suspension_matches,"updatedAt"=p_now
   WHERE "id"=ANY(red_ids) AND "status"='ACTIVE';
-  SELECT COALESCE(array_agg(DISTINCT "clubId"),ARRAY[]::text[]) INTO lineup_changed
-  FROM public."Player" WHERE "id"=ANY(red_ids);
+  lineup_changed := lineup_changed || COALESCE((SELECT array_agg(DISTINCT "clubId")
+   FROM public."Player" WHERE "id"=ANY(red_ids)),ARRAY[]::text[]);
  END IF;
  IF match_row."competitionId" IS NOT NULL AND p_yellow_cards_to_suspend>0 AND p_yellow_card_suspension_matches>0 THEN
   FOR item IN
@@ -153,12 +152,12 @@ BEGIN
       > floor(previous_yellows::numeric/p_yellow_cards_to_suspend) THEN
     UPDATE public."Player" SET "suspensionMatchesRemaining"="suspensionMatchesRemaining"+p_yellow_card_suspension_matches,
      "updatedAt"=p_now WHERE "id"=item->>'playerId' AND "status"='ACTIVE';
-    SELECT COALESCE(array_agg(DISTINCT "clubId"),ARRAY[]::text[]) INTO yellow_ids
-    FROM public."Player" WHERE "id"=item->>'playerId';
+    lineup_changed := lineup_changed || COALESCE((SELECT array_agg(DISTINCT "clubId")
+     FROM public."Player" WHERE "id"=item->>'playerId'),ARRAY[]::text[]);
    END IF;
   END LOOP;
  END IF;
- lineup_changed := ARRAY(SELECT DISTINCT unnest(lineup_changed || yellow_ids));
+ lineup_changed := ARRAY(SELECT DISTINCT unnest(lineup_changed));
  IF cardinality(lineup_changed)>0 THEN
   UPDATE public."Club" SET "lineupVersion"="lineupVersion"+1,"updatedAt"=p_now WHERE "id"=ANY(lineup_changed);
  END IF;
