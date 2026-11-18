@@ -18,6 +18,7 @@ DECLARE
   seller_user_id text;
   now_time timestamptz := NOW();
   affected integer;
+  price_text text;
 BEGIN
   IF p_user_id IS NULL OR length(p_user_id) = 0 OR p_listing_id IS NULL OR length(p_listing_id) = 0 THEN
     RAISE EXCEPTION USING MESSAGE = 'INVALID_AMOUNT', ERRCODE = 'P0001';
@@ -31,6 +32,8 @@ BEGIN
     RAISE EXCEPTION USING MESSAGE = 'LISTING_NOT_FOUND', ERRCODE = 'P0001';
   END IF;
 
+  price_text := listing_row."askingPrice"::text;
+
   SELECT id INTO buyer_club_id
   FROM public."Club"
   WHERE "ownerId" = p_user_id;
@@ -39,7 +42,7 @@ BEGIN
   END IF;
 
   IF listing_row.status::text = 'SOLD' AND listing_row."buyerClubId" = buyer_club_id THEN
-    RETURN QUERY SELECT listing_row.id, listing_row."playerId", listing_row."askingPrice"::text, TRUE, NULL::text;
+    RETURN QUERY SELECT listing_row.id, listing_row."playerId", price_text, TRUE, NULL::text;
     RETURN;
   END IF;
   IF listing_row.status::text <> 'OPEN' THEN
@@ -75,7 +78,7 @@ BEGIN
     UPDATE public."Player" AS target
     SET status = 'CONTRACT_EXPIRED', "updatedAt" = NOW()
     WHERE target.id = player_row.id AND target.status::text = 'LISTED';
-    RETURN QUERY SELECT listing_row.id, listing_row."playerId", listing_row."askingPrice"::text, FALSE, 'PLAYER_CONTRACT_EXPIRED'::text;
+    RETURN QUERY SELECT listing_row.id, listing_row."playerId", price_text, FALSE, 'PLAYER_CONTRACT_EXPIRED'::text;
     RETURN;
   END IF;
 
@@ -87,7 +90,7 @@ BEGIN
     SET status = CASE WHEN player_row."contractDays" > 0 THEN 'ACTIVE' ELSE 'CONTRACT_EXPIRED' END,
         "updatedAt" = NOW()
     WHERE target.id = player_row.id AND target.status::text = 'LISTED';
-    RETURN QUERY SELECT listing_row.id, listing_row."playerId", listing_row."askingPrice"::text, FALSE, 'LISTING_EXPIRED'::text;
+    RETURN QUERY SELECT listing_row.id, listing_row."playerId", price_text, FALSE, 'LISTING_EXPIRED'::text;
     RETURN;
   END IF;
 
@@ -169,7 +172,7 @@ BEGIN
     RAISE EXCEPTION USING MESSAGE = 'IDEMPOTENCY_CONFLICT', ERRCODE = 'P0001';
   END IF;
 
-  RETURN QUERY SELECT listing_row.id, player_row.id, listing_row."askingPrice"::text, FALSE, NULL::text;
+  RETURN QUERY SELECT listing_row.id, player_row.id, price_text, FALSE, NULL::text;
 END;
 $function$;
 
