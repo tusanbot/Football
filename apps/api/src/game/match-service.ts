@@ -10,7 +10,7 @@ import {
 import { prisma } from "../db.js";
 import { getMatchRuntimeLeasePort } from "./match-runtime-lease-context.js";
 import { getMatchRuntimeEnqueuePort } from "./match-runtime-enqueue-context.js";
-import { competitionKickoffAfterDays, roundCompetitionKickoffToTehranHour } from "./match-schedule.js";
+import { competitionKickoffAfterDays } from "./match-schedule.js";
 
 const DAY_MS = 86_400_000;
 const MATCH_MINUTE_MS = 1_000;
