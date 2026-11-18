@@ -59,7 +59,7 @@ BEGIN
  END IF;
 
  IF p_action='UPGRADE_FACILITY' THEN
-   IF p_payload->>'facility' NOT IN ('STADIUM','TRAINING_GROUND','ACADEMY') THEN RAISE EXCEPTION USING MESSAGE='INVALID_FACILITY', ERRCODE='22023'; END IF;
+   IF p_payload->>'facility' IS NULL OR p_payload->>'facility' NOT IN ('STADIUM','TRAINING_GROUND','ACADEMY') THEN RAISE EXCEPTION USING MESSAGE='INVALID_FACILITY', ERRCODE='22023'; END IF;
    current_level := CASE p_payload->>'facility' WHEN 'STADIUM' THEN c."stadiumLevel" WHEN 'TRAINING_GROUND' THEN c."trainingGroundLevel" ELSE c."academyLevel" END;
    IF current_level>=10 THEN RAISE EXCEPTION USING MESSAGE='FACILITY_MAX_LEVEL', ERRCODE='22023'; END IF;
    next_level:=current_level+1;

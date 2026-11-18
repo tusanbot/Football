@@ -304,10 +304,11 @@ export async function scoutAcademy(userId: string, idempotencyKey: string, now =
   await settleClubEconomy(userId, now);
   const httpPort = getClubManagementPort();
   if (httpPort) {
+    const academyLevel = await httpPort.getAcademyLevel(userId);
     const prospects = Array.from({ length: 3 }, () => {
       const age = randomInt(16, 19);
-      const overall = randomInt(34, 53) + 8;
-      const potential = Math.min(92, overall + randomInt(12, 31) + 10);
+      const overall = randomInt(34, 53) + Math.min(8, academyLevel);
+      const potential = Math.min(92, overall + randomInt(12, 31) + academyLevel);
       const position = randomItem(POSITIONS);
       return { id: randomUUID(), firstName: randomItem(FIRST_NAMES), lastName: randomItem(LAST_NAMES),
         nationality: randomItem(NATIONALITIES), age, position, overall, potential, attributes: prospectAttributes(position, overall) };
