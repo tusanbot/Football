@@ -139,11 +139,11 @@ BEGIN
  END IF;
  IF match_row."competitionId" IS NOT NULL AND p_yellow_cards_to_suspend>0 AND p_yellow_card_suspension_matches>0 THEN
   FOR item IN
-   SELECT jsonb_build_object('playerId',e->>'playerId','count',count(*)::integer) AS value
-   FROM jsonb_array_elements(p_result->'events') e
-   WHERE e->>'type'='YELLOW_CARD' GROUP BY e->>'playerId'
+   SELECT jsonb_build_object('playerId',e.value->>'playerId','count',count(*)::integer)
+   FROM jsonb_array_elements(p_result->'events') AS e(value)
+   WHERE e.value->>'type'='YELLOW_CARD' GROUP BY e.value->>'playerId'
   LOOP
-   IF item.value->>'playerId'=ANY(red_ids) THEN CONTINUE; END IF;
+   IF item->>'playerId'=ANY(red_ids) THEN CONTINUE; END IF;
    SELECT count(*) INTO previous_yellows FROM public."MatchEvent" me
    JOIN public."FootballMatch" fm ON fm."id"=me."matchId"
    WHERE me."playerId"=item.value->>'playerId' AND me."type"='YELLOW_CARD'
