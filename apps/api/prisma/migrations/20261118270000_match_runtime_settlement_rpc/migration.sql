@@ -146,15 +146,15 @@ BEGIN
    IF item->>'playerId'=ANY(red_ids) THEN CONTINUE; END IF;
    SELECT count(*) INTO previous_yellows FROM public."MatchEvent" me
    JOIN public."FootballMatch" fm ON fm."id"=me."matchId"
-   WHERE me."playerId"=item.value->>'playerId' AND me."type"='YELLOW_CARD'
+   WHERE me."playerId"=item->>'playerId' AND me."type"='YELLOW_CARD'
     AND me."matchId"<>p_match_id AND fm."competitionId"=match_row."competitionId";
-   current_yellows := (item.value->>'count')::integer;
+   current_yellows := (item->>'count')::integer;
    IF floor((previous_yellows+current_yellows)::numeric/p_yellow_cards_to_suspend)
       > floor(previous_yellows::numeric/p_yellow_cards_to_suspend) THEN
     UPDATE public."Player" SET "suspensionMatchesRemaining"="suspensionMatchesRemaining"+p_yellow_card_suspension_matches,
-     "updatedAt"=p_now WHERE "id"=item.value->>'playerId' AND "status"='ACTIVE';
+     "updatedAt"=p_now WHERE "id"=item->>'playerId' AND "status"='ACTIVE';
     SELECT COALESCE(array_agg(DISTINCT "clubId"),ARRAY[]::text[]) INTO yellow_ids
-    FROM public."Player" WHERE "id"=item.value->>'playerId';
+    FROM public."Player" WHERE "id"=item->>'playerId';
    END IF;
   END LOOP;
  END IF;
