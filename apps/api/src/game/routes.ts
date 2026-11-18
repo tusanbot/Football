@@ -56,7 +56,7 @@ export function registerGameRoutes(app: FastifyInstance) {
       ?? club?.pyramidLeagueEntries[0]?.league.competition
       ?? null;
     return {
-      user: { ...user, createdAt: user.createdAt.toISOString() },
+      user: { ...user, createdAt: new Date(user.createdAt).toISOString() },
       club: club ? {
         id: club.id, name: club.name, level: club.level, reputation: club.reputation,
         createdAt: club.createdAt.toISOString(), activeCompetition,
