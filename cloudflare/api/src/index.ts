@@ -4,11 +4,15 @@ import { processDueEventTournamentFinalizations } from "../../../apps/api/src/ev
 import { processDuePromotionOffers } from "../../../apps/api/src/game/league-pyramid-service.js";
 import { isValidTelegramBotToken, parseAdminTelegramIds, parseCorsOrigins } from "../../../apps/api/src/runtime-config.js";
 import { createWorkersApiRouter } from "./workers-router.js";
+import { SupabaseHttpClient } from "./supabase-http.js";
+import { SupabasePublicPlayerRecordRepository } from "./repositories/public-player-records.js";
+import { SupabaseSeasonAwardRepository } from "./repositories/season-awards.js";
 
 interface MatchCoordinatorNamespace { idFromName(name: string): unknown; get(id: unknown): { fetch(input: string, init?: RequestInit): Promise<Response> }; }
 interface MatchCoordinatorState { storage: { setAlarm(scheduledTime: number): Promise<void>; deleteAlarm(): Promise<void>; }; }
 interface Env {
   MATCH_COORDINATOR?: MatchCoordinatorNamespace; DATABASE_URL?: string;
+  SUPABASE_URL?: string; SUPABASE_SERVICE_ROLE_KEY?: string;
   TELEGRAM_BOT_TOKEN?: string; BOT_API_SECRET?: string; CORS_ORIGIN?: string; GAME_ADMIN_TELEGRAM_IDS?: string;
   ALLIANCE_REVIEWER_TELEGRAM_IDS?: string; GAME_ADMIN_ROLE_MAP?: string; ENVIRONMENT?: string;
 }
@@ -67,7 +71,6 @@ function shouldWakeMatchCoordinator(method: string, pathname: string): boolean {
     || /^\/v1\/pyramid-leagues\/promotions\/[^/]+\/respond$/.test(pathname)
     || /^\/v1\/event-tournaments\/[^/]+\/join$/.test(pathname);
 }
-const api = createWorkersApiRouter();
 
 const allowedPilotEvents = new Set(["bot_start", "bot_command", "bot_callback", "bot_update", "miniapp_session"]);
 function constantTimeSecretEqual(left: string, right: string): boolean {
@@ -88,7 +91,14 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
   catch { return json({ status: "not_ready", service: "football-empire-cloudflare-api", missing: ["DATABASE_CONFIGURATION"] }, 503); }
   let cleanupScheduled = false;
   try {
-    const response = await withPrismaClient(client, () => api.fetch(request));
+    const response = await withPrismaClient(client, () => {
+      const supabaseClient = env.SUPABASE_URL && env.SUPABASE_SERVICE_ROLE_KEY
+        ? new SupabaseHttpClient({ url: env.SUPABASE_URL, serviceRoleKey: env.SUPABASE_SERVICE_ROLE_KEY })
+        : undefined;
+      const publicPlayerRecords = supabaseClient ? new SupabasePublicPlayerRecordRepository(supabaseClient) : undefined;
+      const seasonAwards = supabaseClient ? new SupabaseSeasonAwardRepository(supabaseClient) : undefined;
+      return createWorkersApiRouter({ publicPlayerRecords, seasonAwards }).fetch(request);
+    });
     cleanupScheduled = true;
     ctx.waitUntil(client.$disconnect().catch((error: unknown) => console.error("Prisma request client cleanup failed", error)));
     return response;
@@ -380,7 +390,7 @@ export default {
       }
     }
     configureEnv(env);
-    if (request.method === "OPTIONS") return api.fetch(request);
+    if (request.method === "OPTIONS") return createWorkersApiRouter().fetch(request);
     if (request.method === "GET" && url.pathname === "/ready") {
       const missing = missingConfig(env);
       if (missing.length) return json({ status: "not_ready", service: "football-empire-cloudflare-api", missing }, 503);
