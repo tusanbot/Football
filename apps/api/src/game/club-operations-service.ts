@@ -14,6 +14,7 @@ import {
 import { prisma } from "../db.js";
 import { settleClubDailyState } from "../players/player-development-service.js";
 import { getClubTicketPricePort } from "./club-ticket-price-context.js";
+import { getClubEconomySettlementPort } from "./club-economy-settlement-context.js";
 
 const DAY_MS = 86_400_000;
 const POSITIONS = ["GK", "RB", "LB", "CB", "CDM", "CM", "CAM", "RW", "LW", "ST"] as const;
@@ -106,6 +107,16 @@ async function creditCash(
 }
 
 export async function settleClubEconomy(userId: string, now = new Date()) {
+  const httpPort = getClubEconomySettlementPort();
+  if (httpPort) {
+    try { return await httpPort.settle(userId, now); }
+    catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      const code = ["CLUB_NOT_FOUND", "WALLET_NOT_FOUND", "CONCURRENT_MODIFICATION"].find((candidate) => message.includes(candidate));
+      if (code) throw new ClubOperationsError(code);
+      throw error;
+    }
+  }
   const today = utcDay(now);
   try {
     return await prisma.$transaction(async (tx) => {
