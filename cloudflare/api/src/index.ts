@@ -37,6 +37,8 @@ import { SupabaseMatchRuntimeLeaseRepository } from "./repositories/match-runtim
 import { SupabaseMatchNotificationRepository, type MatchNotificationRow, type MatchNotificationPerformance } from "./repositories/match-notifications.js";
 import { withGameDashboardPort } from "../../../apps/api/src/game/game-dashboard-context.js";
 import { SupabaseGameDashboardRepository } from "./repositories/game-dashboard.js";
+import { withTelegramUserLookupPort } from "../../../apps/api/src/auth/telegram-user-lookup-context.js";
+import { SupabaseTelegramUserLookupRepository } from "./repositories/telegram-user-lookup.js";
 
 interface MatchCoordinatorNamespace { idFromName(name: string): unknown; get(id: unknown): { fetch(input: string, init?: RequestInit): Promise<Response> }; }
 interface MatchCoordinatorState { storage: { setAlarm(scheduledTime: number): Promise<void>; deleteAlarm(): Promise<void>; }; }
@@ -127,6 +129,7 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
         : undefined;
       const publicPlayerRecords = supabaseClient ? new SupabasePublicPlayerRecordRepository(supabaseClient) : undefined;
       const gameDashboard = supabaseClient ? new SupabaseGameDashboardRepository(supabaseClient) : undefined;
+      const telegramUserLookup = supabaseClient ? new SupabaseTelegramUserLookupRepository(supabaseClient) : undefined;
       const seasonAwards = supabaseClient ? new SupabaseSeasonAwardRepository(supabaseClient) : undefined;
       const walletEntry = supabaseClient ? new SupabaseWalletEntryRepository(supabaseClient) : undefined;
       const storePurchase = supabaseClient ? new SupabaseStorePurchaseRepository(supabaseClient) : undefined;
@@ -141,8 +144,9 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
       const router = createWorkersApiRouter({ publicPlayerRecords, seasonAwards, specialPlayers });
       const handle = async (): Promise<Response> => await router.fetch(request);
       const withDashboard = gameDashboard ? () => withGameDashboardPort(gameDashboard, handle) : handle;
+      const withTelegramUserLookup = telegramUserLookup ? () => withTelegramUserLookupPort(telegramUserLookup, withDashboard) : withDashboard;
       const withCheckpoint = matchRuntimeCheckpoint
-        ? () => withMatchRuntimeCheckpointPort(matchRuntimeCheckpoint, withDashboard) : withDashboard;
+        ? () => withMatchRuntimeCheckpointPort(matchRuntimeCheckpoint, withTelegramUserLookup) : withTelegramUserLookup;
       const withSettlement = matchRuntimeSettlement
         ? () => withMatchRuntimeSettlementPort(matchRuntimeSettlement, withCheckpoint) : withCheckpoint;
       const withWallet = walletEntry ? () => withWalletEntryPort(walletEntry, withSettlement) : withSettlement;

@@ -3,6 +3,7 @@ import type { FastifyRequest } from "fastify";
 import { prisma } from "../db.js";
 import { verifyTelegramInitData } from "./telegram-init-data.js";
 import { verifyTelegramSessionToken } from "./telegram-session.js";
+import { getTelegramUserLookupPort } from "./telegram-user-lookup-context.js";
 
 function safeSecretMatch(received: string, expected: string) {
   const a = Buffer.from(received);
@@ -11,6 +12,8 @@ function safeSecretMatch(received: string, expected: string) {
 }
 
 async function loadActiveUser(telegramId: string) {
+  const lookupPort = getTelegramUserLookupPort();
+  if (lookupPort) return lookupPort.loadActiveUser(telegramId);
   const account = await prisma.user.findUnique({
     where: { telegramId },
     select: { id: true, telegramId: true, username: true, displayName: true, createdAt: true, isSuspended: true },
