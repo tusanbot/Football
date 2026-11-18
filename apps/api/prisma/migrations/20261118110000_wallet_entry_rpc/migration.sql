@@ -95,18 +95,24 @@ BEGIN
     END IF;
     RETURN QUERY
       SELECT previous.id, current_wallet."balance", current_wallet."version", TRUE
-      FROM public."Wallet" current_wallet
+      FROM public."Wallet" AS current_wallet
       WHERE current_wallet."userId" = p_user_id AND current_wallet."asset" = p_asset;
     RETURN;
   END IF;
 
-  UPDATE public."Wallet"
-  SET "balance" = next_balance, "version" = "version" + 1, "updatedAt" = NOW()
-  WHERE id = wallet_row.id;
+  UPDATE public."Wallet" AS target
+  SET "balance" = next_balance, "version" = target."version" + 1, "updatedAt" = NOW()
+  WHERE target.id = wallet_row.id;
 
   RETURN QUERY SELECT inserted_id, next_balance, wallet_row."version" + 1, FALSE;
 END;
 $function$;
 
 REVOKE ALL ON FUNCTION public.apply_wallet_entry(text, public."WalletAsset", public."LedgerDirection", bigint, text, text, text, text) FROM PUBLIC, anon, authenticated;
-GRANT EXECUTE ON FUNCTION public.apply_wallet_entry(text, public."WalletAsset", public."LedgerDirection", bigint, text, text, text, text) TO service_role;
+DO $grant$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'service_role') THEN
+    EXECUTE 'GRANT EXECUTE ON FUNCTION public.apply_wallet_entry(text, public."WalletAsset", public."LedgerDirection", bigint, text, text, text, text) TO service_role';
+  END IF;
+END;
+$grant$;
