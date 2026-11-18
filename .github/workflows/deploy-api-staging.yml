@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - feat/supabase-transaction-pooler-runtime
+      - feat/supabase-http-full-runtime
 
 permissions:
   contents: read
