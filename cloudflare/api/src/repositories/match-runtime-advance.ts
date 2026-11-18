@@ -12,7 +12,11 @@ export class SupabaseMatchRuntimeAdvanceRepository implements MatchRuntimeAdvanc
       p_started_at: input.startedAt,
       p_checkpoint_at: input.checkpointAt,
       p_decision_deadline_at: input.decisionDeadlineAt,
-      p_events: input.events,
+      p_events: input.events.map((event) => ({
+        event_key: event.eventKey, kind: event.kind, minute: event.minute,
+        home_score: event.homeScore, away_score: event.awayScore, payload: event.payload,
+        available_at: event.availableAt,
+      })),
     });
     if (result !== true && !(Array.isArray(result) && result.length === 1 && result[0] === true)) {
       throw new Error("SUPABASE_MATCH_RUNTIME_FIRST_HALF_REJECTED");

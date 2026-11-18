@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { SupabaseMatchRuntimeAdvanceRepository } from "../src/repositories/match-runtime-advance.js";
 
-test("first-half transition delegates the complete state change to one atomic RPC", async () => {
+test("first-half transition maps event payloads to the SQL RPC contract", async () => {
   let call: { name: string; args: Record<string, unknown> } | undefined;
   const repository = new SupabaseMatchRuntimeAdvanceRepository({
     rpc: async (name: string, args: Record<string, unknown>) => {
@@ -31,7 +31,10 @@ test("first-half transition delegates the complete state change to one atomic RP
     p_started_at: command.startedAt,
     p_checkpoint_at: command.checkpointAt,
     p_decision_deadline_at: command.decisionDeadlineAt,
-    p_events: command.events,
+    p_events: [{
+      event_key: "kickoff", kind: "KICKOFF", minute: 0, home_score: 0, away_score: 0,
+      payload: null, available_at: "2026-11-18T20:00:00.000Z",
+    }],
   });
 });
 
