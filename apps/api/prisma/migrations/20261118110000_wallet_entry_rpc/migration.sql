@@ -9,7 +9,7 @@ CREATE OR REPLACE FUNCTION public.apply_wallet_entry(
   p_reference_type text DEFAULT NULL,
   p_reference_id text DEFAULT NULL
 )
-RETURNS TABLE(ledger_id text, balance bigint, version integer, replayed boolean)
+RETURNS TABLE(ledger_id text, balance text, version integer, replayed boolean)
 LANGUAGE plpgsql
 SECURITY INVOKER
 SET search_path = public, pg_temp
@@ -52,7 +52,7 @@ BEGIN
        OR previous."referenceId" IS DISTINCT FROM p_reference_id THEN
       RAISE EXCEPTION USING MESSAGE = 'IDEMPOTENCY_CONFLICT', ERRCODE = 'P0001';
     END IF;
-    RETURN QUERY SELECT previous.id, wallet_row."balance", wallet_row."version", TRUE;
+    RETURN QUERY SELECT previous.id, wallet_row."balance"::text, wallet_row."version", TRUE;
     RETURN;
   END IF;
 
@@ -94,7 +94,7 @@ BEGIN
       RAISE EXCEPTION USING MESSAGE = 'IDEMPOTENCY_CONFLICT', ERRCODE = 'P0001';
     END IF;
     RETURN QUERY
-      SELECT previous.id, current_wallet."balance", current_wallet."version", TRUE
+      SELECT previous.id, current_wallet."balance"::text, current_wallet."version", TRUE
       FROM public."Wallet" AS current_wallet
       WHERE current_wallet."userId" = p_user_id AND current_wallet."asset" = p_asset;
     RETURN;
@@ -104,7 +104,7 @@ BEGIN
   SET "balance" = next_balance, "version" = target."version" + 1, "updatedAt" = NOW()
   WHERE target.id = wallet_row.id;
 
-  RETURN QUERY SELECT inserted_id, next_balance, wallet_row."version" + 1, FALSE;
+  RETURN QUERY SELECT inserted_id, next_balance::text, wallet_row."version" + 1, FALSE;
 END;
 $function$;
 

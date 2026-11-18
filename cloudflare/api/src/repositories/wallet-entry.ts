@@ -3,7 +3,7 @@ import { SupabaseHttpClient, SupabaseHttpError } from "../supabase-http.js";
 
 interface WalletEntryRpcRow {
   ledger_id: string;
-  balance: string | number;
+  balance: string;
   version: number;
   replayed: boolean;
 }
@@ -40,12 +40,12 @@ export class SupabaseWalletEntryRepository implements WalletEntryPort {
     }
 
     const row = rows[0];
-    if (!row || typeof row.ledger_id !== "string" || !Number.isInteger(row.version)) {
+    if (!row || typeof row.ledger_id !== "string" || typeof row.balance !== "string" || !/^-?\\d+$/.test(row.balance) || !Number.isInteger(row.version)) {
       throw new Error("SUPABASE_WALLET_RPC_INVALID_RESPONSE");
     }
     return {
       ledgerId: row.ledger_id,
-      balance: String(row.balance),
+      balance: row.balance,
       version: row.version,
       replayed: row.replayed === true,
     };
