@@ -22,15 +22,13 @@ DECLARE
  challenge_row record;
  competition_row public."Competition"%ROWTYPE;
  item jsonb;
- effect jsonb;
  credit record;
  inserted_count integer;
  previous_yellows integer;
  current_yellows integer;
  lineup_changed text[] := ARRAY[]::text[];
- injured_ids text[] := ARRAY[]::text[];
  red_ids text[] := ARRAY[]::text[];
-  home_points integer;
+ home_points integer;
  away_points integer;
 BEGIN
  IF p_match_id IS NULL OR p_runtime_id IS NULL OR p_lease_token IS NULL OR p_lease_token=''
@@ -42,7 +40,17 @@ BEGIN
  END IF;
  SELECT * INTO match_row FROM public."FootballMatch" WHERE "id"=p_match_id FOR UPDATE;
  IF NOT FOUND THEN RAISE EXCEPTION 'MATCH_NOT_FOUND'; END IF;
+ SELECT * INTO runtime_row FROM public."MatchRuntime"
+ WHERE "id"=p_runtime_id AND "matchId"=p_match_id FOR UPDATE;
+ IF NOT FOUND THEN RAISE EXCEPTION 'MATCH_RUNTIME_NOT_FOUND'; END IF;
  IF match_row."status"::text='COMPLETED' THEN
+  IF runtime_row."status"::text='RUNNING' AND runtime_row."leaseToken"=p_lease_token THEN
+   UPDATE public."MatchRuntime" SET "status"='COMPLETED',"completedAt"=COALESCE("completedAt",p_now),
+    "nextActionAt"=NULL,"leaseOwner"=NULL,"leaseToken"=NULL,"leaseExpiresAt"=NULL,"updatedAt"=p_now
+   WHERE "id"=p_runtime_id;
+  ELSIF runtime_row."status"::text<>'COMPLETED' THEN
+   RAISE EXCEPTION 'MATCH_RUNTIME_CONCURRENT_MODIFICATION';
+  END IF;
   RETURN jsonb_build_object('replayed',true,'matchId',match_row."id",
    'competitionId',match_row."competitionId",'round',match_row."round",
    'homeScore',match_row."homeScore",'awayScore',match_row."awayScore",
@@ -50,14 +58,13 @@ BEGIN
    'winnerClubId',match_row."winnerClubId",'attendance',match_row."attendance",
    'ticketRevenue',match_row."ticketRevenue"::text);
  END IF;
- SELECT * INTO runtime_row FROM public."MatchRuntime"
- WHERE "id"=p_runtime_id AND "matchId"=p_match_id FOR UPDATE;
- IF NOT FOUND OR runtime_row."status"::text<>'RUNNING'
-  OR runtime_row."currentMinute"<>90 OR runtime_row."leaseToken" IS DISTINCT FROM p_lease_token THEN
+ IF runtime_row."status"::text<>'RUNNING' OR runtime_row."currentMinute"<>90
+  OR runtime_row."leaseToken" IS DISTINCT FROM p_lease_token THEN
   RAISE EXCEPTION 'MATCH_RUNTIME_CONCURRENT_MODIFICATION';
  END IF;
  IF match_row."status"::text<>'IN_PROGRESS' THEN RAISE EXCEPTION 'MATCH_NOT_IN_PROGRESS'; END IF;
  SELECT * INTO home_club FROM public."Club" WHERE "id"=match_row."homeClubId" FOR UPDATE;
+ IF NOT FOUND THEN RAISE EXCEPTION 'MATCH_CLUB_NOT_FOUND'; END IF;
  SELECT * INTO away_club FROM public."Club" WHERE "id"=match_row."awayClubId" FOR UPDATE;
  IF NOT FOUND THEN RAISE EXCEPTION 'MATCH_CLUB_NOT_FOUND'; END IF;
  IF (p_result->>'homeScore') IS NULL OR (p_result->>'awayScore') IS NULL
