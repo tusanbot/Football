@@ -7,8 +7,8 @@ import {
   createFriendlyMatch, createLeague, getLeague, joinLeague, listClubMatches, listMatchOpponents,
   simulateScheduledMatch, startLeague, submitMatchCheckpointDecision, claimDueMatchRuntimes,
   releaseMatchRuntimeLease, processDueMatchRuntimes, updateCompetitionRules,
-  roundCompetitionKickoffToTehranHour,
 } from "../src/game/match-service.js";
+import { roundCompetitionKickoffToTehranHour } from "../src/game/match-schedule.js";
 import { acceptFriendlyChallenge, createFriendlyChallenge } from "../src/game/league-pyramid-service.js";
 
 
