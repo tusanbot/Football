@@ -1,6 +1,6 @@
 import type { GroupActorStatus, GroupJoinInput, GroupMembershipPort, GroupRegistrationInput } from "../../../../apps/api/src/groups/group-membership-context.js";
 import { GroupMembershipPortError } from "../../../../apps/api/src/groups/group-membership-context.js";
-import { SupabaseHttpClient } from "../supabase-http.js";
+import { SupabaseHttpClient, SupabaseHttpError } from "../supabase-http.js";
 
 function ensureObject(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("SUPABASE_GROUP_MEMBERSHIP_INVALID_RESPONSE");
@@ -72,9 +72,16 @@ export class SupabaseGroupMembershipRepository implements GroupMembershipPort {
     return value;
   }
   private async groupRpc(name: string, args: Record<string, unknown>): Promise<unknown> {
-    const value = ensureObject(await this.client.rpc(name, args));
-    raiseBusinessError(value);
-    return value;
+    try {
+      const value = ensureObject(await this.client.rpc(name, args));
+      raiseBusinessError(value);
+      return value;
+    } catch (error) {
+      if (error instanceof SupabaseHttpError && /^[A-Z][A-Z0-9_]{2,80}$/.test(error.message)) {
+        throw new GroupMembershipPortError(error.message);
+      }
+      throw error;
+    }
   }
   async listShop(telegramUserId: string, telegramGroupId: string): Promise<unknown> {
     return this.groupRpc("list_group_shop_http", { p_telegram_user_id: telegramUserId, p_telegram_group_id: telegramGroupId });
