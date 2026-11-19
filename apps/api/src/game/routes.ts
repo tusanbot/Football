@@ -73,9 +73,13 @@ export function registerGameRoutes(app: FastifyInstance) {
     const parsed = clubUpdateSchema.safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ error: "INVALID_CLUB_NAME", details: parsed.error.flatten() });
     const lineupPort = getClubLineupPort();
-    if (lineupPort) {
+    const clubProfilePort = lineupPort as (typeof lineupPort & {
+      rename?: (userId: string, name: string) => Promise<{ kind: "UPDATED"; club: { id: string; name: string; level: number; reputation: number } } | { kind: "NOT_FOUND" } | { kind: "LOCKED"; activeCompetition: { id: string; name: string } }>;
+      listPlayers?: (userId: string) => Promise<{ players: Array<Record<string, unknown>>; count: number }>;
+    });
+    if (clubProfilePort?.rename) {
       try {
-        const result = await lineupPort.rename(user.id, parsed.data.name);
+        const result = await clubProfilePort.rename(user.id, parsed.data.name);
         if (result.kind === "NOT_FOUND") return reply.code(404).send({ error: "CLUB_NOT_FOUND" });
         if (result.kind === "LOCKED") return reply.code(409).send({ error: "CLUB_EDIT_LOCKED_ACTIVE_LEAGUE", activeCompetition: result.activeCompetition });
         return { club: result.club };
@@ -254,8 +258,9 @@ export function registerGameRoutes(app: FastifyInstance) {
     const user = await requireTelegramUser(request);
     if (!user) return reply.code(401).send({ error: "UNAUTHENTICATED" });
     const lineupPort = getClubLineupPort();
-    if (lineupPort) {
-      try { return await lineupPort.listPlayers(user.id); }
+    const clubProfilePort = lineupPort as (typeof lineupPort & { listPlayers?: (userId: string) => Promise<{ players: Array<Record<string, unknown>>; count: number }> });
+    if (clubProfilePort?.listPlayers) {
+      try { return await clubProfilePort.listPlayers(user.id); }
       catch (error) {
         if (error instanceof Error && error.message === "CLUB_NOT_FOUND") return reply.code(404).send({ error: "CLUB_NOT_FOUND" });
         request.log.error({ error }, "Supabase club player list failed");
