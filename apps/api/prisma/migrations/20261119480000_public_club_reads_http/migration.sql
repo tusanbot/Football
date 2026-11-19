@@ -9,8 +9,10 @@ AS $$
     jsonb_build_object(
       'finalPosition', ple."finalPosition",
       'league', jsonb_build_object(
+        'id', pl.id,
         'season', pl.season,
         'tier', pl.tier,
+        'groupNumber', pl."groupNumber",
         'competition', jsonb_build_object('status', co.status::text),
         'awards', COALESCE((
           SELECT jsonb_agg(jsonb_build_object(
