@@ -2,6 +2,7 @@ import { randomBytes } from "node:crypto";
 import { Prisma } from "@prisma/client";
 import { calculateLeaguePlayerValue, leagueTier, rankLeagueTeams } from "@football/domain";
 import { prisma } from "../db.js";
+import { getPyramidLeagueSettlementPort } from "./pyramid-league-settlement-context.js";
 import { competitionKickoffAfterDays } from "./match-schedule.js";
 
 const DAY_MS = 86_400_000;
@@ -291,6 +292,8 @@ async function adjustPlayerValues(tx: Prisma.TransactionClient, clubId: string, 
 }
 
 export async function respondToPromotion(userId: string, offerId: string, accept: boolean, now = new Date()) {
+  const settlementPort=getPyramidLeagueSettlementPort();
+  if(settlementPort)return settlementPort.respond(userId,offerId,accept,now.toISOString());
   const club = await ownedClub(userId);
   return withSerializableRetry(() => prisma.$transaction(async (tx) => {
     const offer = await tx.leaguePromotionOffer.findUnique({
@@ -355,6 +358,8 @@ export async function respondToPromotion(userId: string, offerId: string, accept
 }
 
 export async function processPyramidLeagueCompletion(competitionId: string, now = new Date()) {
+  const settlementPort=getPyramidLeagueSettlementPort();
+  if(settlementPort)return settlementPort.finalize(competitionId,now.toISOString());
   return withSerializableRetry(() => prisma.$transaction(async (tx) => {
     const league = await tx.pyramidLeague.findUnique({
       where: { competitionId },
@@ -635,6 +640,8 @@ export async function markLeagueNoticesRead(userId: string) {
 
 
 export async function processDuePromotionOffers(now = new Date(), limit = 50) {
+  const settlementPort=getPyramidLeagueSettlementPort();
+  if(settlementPort)return settlementPort.processDue(now.toISOString(),limit);
   const pendingLeagues = await prisma.pyramidLeague.findMany({
     where: { promotionProcessedAt: null, competition: { status: "COMPLETED" } },
     orderBy: { createdAt: "asc" }, take: limit, select: { competitionId: true },

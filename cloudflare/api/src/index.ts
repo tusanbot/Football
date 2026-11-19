@@ -37,6 +37,8 @@ import { SupabaseFriendlyMatchCreationRepository } from "./repositories/friendly
 import { SupabaseCompetitionCreationRepository } from "./repositories/competition-creation.js";
 import { SupabaseClubMatchReadRepository } from "./repositories/club-match-read.js";
 import { SupabaseCompetitionAdvancementRepository } from "./repositories/competition-advancement.js";
+import { withPyramidLeagueSettlementPort } from "../../../apps/api/src/game/pyramid-league-settlement-context.js";
+import { SupabasePyramidLeagueSettlementRepository } from "./repositories/pyramid-league-settlement.js";
 import { withMatchRuntimeAdvancePort } from "../../../apps/api/src/game/match-runtime-advance-context.js";
 import { withMatchRuntimeCheckpointPort } from "../../../apps/api/src/game/match-runtime-checkpoint-context.js";
 import { withMatchRuntimeSettlementPort } from "../../../apps/api/src/game/match-runtime-settlement-context.js";
@@ -182,7 +184,8 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
       const withCompetitionCreation = competitionCreation ? () => withCompetitionCreationPort(competitionCreation, handle) : handle;
       const withClubMatchRead = clubMatchRead ? () => withClubMatchReadPort(clubMatchRead, withCompetitionCreation) : withCompetitionCreation;
       const withCompetitionAdvancement = competitionAdvancement ? () => withCompetitionAdvancementPort(competitionAdvancement, withClubMatchRead) : withClubMatchRead;
-      const withFriendlyMatchCreation = friendlyMatchCreation ? () => withFriendlyMatchCreationPort(friendlyMatchCreation, withCompetitionAdvancement) : withCompetitionAdvancement;
+      const withPyramidSettlement = pyramidLeagueSettlement ? () => withPyramidLeagueSettlementPort(pyramidLeagueSettlement, withCompetitionAdvancement) : withCompetitionAdvancement;
+      const withFriendlyMatchCreation = friendlyMatchCreation ? () => withFriendlyMatchCreationPort(friendlyMatchCreation, withPyramidSettlement) : withPyramidSettlement;
       const withMatchOpponents = matchOpponents ? () => withMatchOpponentPort(matchOpponents, withFriendlyMatchCreation) : withFriendlyMatchCreation;
       const withDashboard = gameDashboard ? () => withGameDashboardPort(gameDashboard, withMatchOpponents) : withMatchOpponents;
       const withTelegramUserLookup = telegramUserLookup ? () => withTelegramUserLookupPort(telegramUserLookup, withDashboard) : withDashboard;
@@ -246,13 +249,14 @@ export class MatchCoordinator {
         const matchRuntimeCheckpoint = supabase ? new SupabaseMatchRuntimeCheckpointRepository(supabase) : undefined;
         const matchRuntimeSettlement = supabase ? new SupabaseMatchRuntimeSettlementRepository(supabase) : undefined;
         const competitionAdvancement = supabase ? new SupabaseCompetitionAdvancementRepository(supabase) : undefined;
+        const pyramidLeagueSettlement = supabase ? new SupabasePyramidLeagueSettlementRepository(supabase) : undefined;
         const matchNotifications = supabase ? new SupabaseMatchNotificationRepository(supabase) : undefined;
         const now = new Date();
         // One indexed scheduler statement replaces six independent findFirst queries.
         // Its flags also let us skip queue scans and workers that have no due work.
-        if (!matchRuntimeLease || !matchRuntimeEnqueue || !matchRuntimeAdvance || !matchRuntimeCheckpoint || !matchRuntimeSettlement || !competitionAdvancement) throw new Error("SUPABASE_MATCH_RUNTIME_REPOSITORY_UNAVAILABLE");
+        if (!matchRuntimeLease || !matchRuntimeEnqueue || !matchRuntimeAdvance || !matchRuntimeCheckpoint || !matchRuntimeSettlement || !competitionAdvancement || !pyramidLeagueSettlement) throw new Error("SUPABASE_MATCH_RUNTIME_REPOSITORY_UNAVAILABLE");
         const schedule = await matchRuntimeLease.getSchedule();
-        const runMatchWork = () => withCompetitionAdvancementPort(competitionAdvancement, () =>
+        const runMatchWork = () => withPyramidLeagueSettlementPort(pyramidLeagueSettlement, () => withCompetitionAdvancementPort(competitionAdvancement, () =>
           withMatchRuntimeEnqueuePort(matchRuntimeEnqueue, () =>
             withMatchRuntimeAdvancePort(matchRuntimeAdvance, () =>
               withMatchRuntimeCheckpointPort(matchRuntimeCheckpoint, () =>
@@ -270,7 +274,7 @@ export class MatchCoordinator {
           await deliverDueMatchLifecycle(this.env, matchNotifications);
         }
         if (schedule.hasPendingPromotionWork) {
-          const promotions = await processDuePromotionOffers(now, 50);
+          const promotions = await withPyramidLeagueSettlementPort(pyramidLeagueSettlement, () => processDuePromotionOffers(now, 50));
           if (promotions.completedLeagues || promotions.accepted) console.info("Pyramid promotion work completed", promotions);
         }
         if (matchWork.failed) console.warn("Match runtime work failed", matchWork);
