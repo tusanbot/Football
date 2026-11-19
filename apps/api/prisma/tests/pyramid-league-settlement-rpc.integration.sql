@@ -41,7 +41,7 @@ BEGIN
   RAISE EXCEPTION 'pyramid finalization mismatch: %',v_result; END IF;
  IF (SELECT count(*) FROM public."LeagueAward" WHERE "leagueId"=v_league)<>3
   OR (SELECT count(*) FROM public."LeaguePromotionOffer" WHERE "leagueId"=v_league AND status='PENDING')<>2
-  OR (SELECT count(*) FROM public."PyramidLeagueApplication" WHERE tier=1 AND season=2027 AND status='QUEUED')<>8
+  OR (SELECT count(*) FROM public."PyramidLeagueApplication" WHERE tier=1 AND season=2027 AND status='ASSIGNED')<>8
  THEN RAISE EXCEPTION 'pyramid awards, offers or relegation queue missing'; END IF;
  IF (SELECT "marketValue" FROM public."Player" WHERE id='ci-pyr-value-player')<>10000
   OR (SELECT "askingPrice" FROM public."PlayerMarketListing" WHERE id='ci-pyr-listing')<>20000
