@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { SupabaseHttpClient, SupabaseHttpError } from "../src/node-supabase-http.js";
+import { SupabaseGameDashboardRepository } from "../src/game/node-supabase-game-dashboard.js";
+import { NodeSupabaseWalletReadRepository } from "../src/economy/node-supabase-wallet-read.js";
 import { SupabaseClubManagementRepository as NodeSupabaseClubManagementRepository } from "../src/game/node-supabase-club-management.js";
 import { SupabaseSpecialAcquisitionRepository as NodeSupabaseSpecialAcquisitionRepository } from "../src/players/node-supabase-special-acquisition.js";
 import { SupabaseGiftCodeRedemptionRepository as NodeSupabaseGiftCodeRedemptionRepository } from "../src/node-supabase-gift-code-redemption.js";
@@ -91,4 +93,21 @@ test("club finance report uses bounded entry query and aggregate RPC",async()=>{
  assert.equal(report?.income,"1200");assert.equal(report?.expenses,"450");
  assert.equal(f.calls[2]!.url.pathname,"/rest/v1/rpc/get_club_finance_totals_http");
  const body=JSON.parse(String(f.calls[2]!.init.body));assert.equal(body.p_club_id,"club-1");assert.equal(body.p_since,since.toISOString());
+});
+
+test("game dashboard repository uses the established atomic dashboard RPC",async()=>{
+ const f=clientWith(()=>({user:{id:"u1",telegramId:"123",username:null,displayName:"Player",createdAt:"2026-01-01T00:00:00Z"},club:null,wallets:[]}));
+ const repo=new SupabaseGameDashboardRepository(f.client);
+ const result=await repo.getDashboard("u1");
+ assert.equal(result.user.id,"u1");assert.deepEqual(result.wallets,[]);
+ assert.equal(f.calls[0]!.url.pathname,"/rest/v1/rpc/get_game_dashboard");
+ assert.equal(JSON.parse(String(f.calls[0]!.init.body)).p_user_id,"u1");
+});
+test("wallet read repository returns validated balances ordered by asset",async()=>{
+ const f=clientWith(()=>[{asset:"CASH",balance:"1200",version:4,updatedAt:"2026-11-19T10:00:00Z"}]);
+ const repo=new NodeSupabaseWalletReadRepository(f.client);
+ const result=await repo.list("u1");
+ assert.deepEqual(result,[{asset:"CASH",balance:"1200",version:4,updatedAt:"2026-11-19T10:00:00.000Z"}]);
+ assert.equal(f.calls[0]!.url.pathname,"/rest/v1/Wallet");
+ assert.equal(f.calls[0]!.url.searchParams.get("userId"),"eq.u1");
 });
