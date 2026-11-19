@@ -208,6 +208,19 @@ Implementation details:
 This tranche does not remove Prisma from the Fastify runtime or from unrelated group operations. The migration has been added to the existing Prisma migration directory and will be exercised by CI's current migration pipeline; it has not been applied to any live database. The Node API group paths still use their Prisma fallback when no request-scoped port is installed.
 
 
+
+## Node Fastify admin alliance-season RPC tranche
+
+The Node Fastify admin actions for starting, closing, and reviewing alliance seasons now use dedicated Supabase PostgREST RPCs when the Node server has its Supabase service-role credentials configured:
+
+- `admin_start_alliance_season_http`
+- `admin_close_alliance_season_http`
+- `admin_review_alliance_season_http`
+
+The API route retains its existing `superadmin` authorization gate. The RPCs accept the actual authenticated admin Telegram ID (never the founder's ID), lock the target alliance/season rows, preserve season scoring and security-flag calculations, and write both `AllianceAuditLog` and `AdminAuditLog` in the same database transaction. Admin idempotency keys are checked against actor, action, target type, and target ID; duplicate matching requests return the original result, while key reuse for a different action/target is rejected. Season champion payouts remain atomic and ledger-idempotent.
+
+These RPCs are granted only to `service_role`; public, `anon`, and `authenticated` execution is revoked. The new ephemeral PostgreSQL integration test covers start/close/review, actor attribution, audit atomicity, payout, and idempotency. No live migration has been applied.
+
 ## Node Fastify group membership: HTTP runtime wiring
 
 The Node API now has a native Node-side `NodeSupabaseGroupMembershipRepository` that implements the complete `GroupMembershipPort` contract over HTTPS/PostgREST RPCs. It deliberately does not import Cloudflare Worker modules, and it validates the Supabase project origin, service-role key, timeout, redirect behavior, and typed business errors.
