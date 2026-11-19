@@ -96,6 +96,10 @@ BEGIN
  INSERT INTO public."GroupPointLedger"(id,"idempotencyKey","groupId","userId",amount,source,description,"createdAt")
  VALUES(gen_random_uuid()::text,'season-flag-'||v_a,(SELECT id FROM public."TelegramGroup" WHERE "telegramId"=v_ga),v_a,100,'DAILY_ACTIVITY','concentrated points',v_match_now+interval '30 seconds');
  r:=public.close_alliance_season_http(v_ta,v_ga);
+ IF r#>>'{standings,0,groupId}' IS DISTINCT FROM (SELECT id FROM public."TelegramGroup" WHERE "telegramId"=v_ga)
+  OR r#>>'{standings,0,points}' IS DISTINCT FROM '103' THEN
+  RAISE EXCEPTION 'alliance match reward was not included in season standings: %',r->'standings';
+ END IF;
  IF r->>'reviewStatus' IS DISTINCT FROM 'FLAGGED' OR jsonb_array_length(r->'securityFlags')=0 OR r->>'prize' IS DISTINCT FROM '0' THEN RAISE EXCEPTION 'security flag/payout block failed: %',r; END IF;
  r:=public.review_alliance_season_http(v_ta,v_ga,sid2,'APPROVE',true);
  IF r->>'reviewStatus'<>'APPROVED' OR r->>'prize'<>'100' THEN RAISE EXCEPTION 'season review payout failed: %',r; END IF;
