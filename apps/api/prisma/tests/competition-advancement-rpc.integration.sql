@@ -32,6 +32,9 @@ BEGIN
  IF (SELECT count(*) FROM public."FootballMatch" WHERE "competitionId"=cup AND round=2 AND "tieId" IS NOT NULL)<>2
  OR (SELECT count(*) FROM public."FootballMatch" WHERE "competitionId"=cup AND round=2 AND leg IN(1,2))<>2
  THEN RAISE EXCEPTION 'two-leg fixture generation mismatch'; END IF;
+ IF EXISTS(SELECT 1 FROM public."FootballMatch" WHERE "competitionId"=cup AND round=2
+   AND date_part('minute',"scheduledAt" AT TIME ZONE 'Asia/Tehran')<>0)
+ THEN RAISE EXCEPTION 'cup kickoff was not rounded in Tehran local time'; END IF;
  r:=public.advance_competition_after_match_http(cup,1,now());
  IF r->>'replayed'<>'true' OR (SELECT count(*) FROM public."FootballMatch" WHERE "competitionId"=cup AND round=2)<>2
  THEN RAISE EXCEPTION 'cup progression replay mismatch: %',r; END IF;

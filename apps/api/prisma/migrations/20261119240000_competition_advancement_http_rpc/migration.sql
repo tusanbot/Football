@@ -48,7 +48,7 @@ BEGIN
    RETURN jsonb_build_object('competitionId',v_comp.id,'format','CUP','completed',false,
     'roundComplete',false,'nextRound',NULL,'fixturesCreated',0,'noticesCreated',0,'replayed',false); END IF;
   IF cardinality(v_winners)=1 THEN
-   UPDATE public."Competition" SET status='COMPLETED',"completedAt"=COALESCE("completedAt",p_now),
+   UPDATE public."Competition" SET status='COMPLETED',"completedAt"=COALESCE("completedAt",(p_now AT TIME ZONE 'UTC')),
     "updatedAt"=(p_now AT TIME ZONE 'UTC') WHERE id=p_competition_id AND status='ACTIVE';
    v_comp_completed:=true;
   ELSE
@@ -63,11 +63,10 @@ BEGIN
     v_tie_id:='cup:'||p_competition_id||':r'||v_next||':t'||v_pair;
     FOR v_leg IN 1..v_comp."cupLegs" LOOP
      v_key:=v_tie_id||':leg'||v_leg;
-     v_schedule:=date_trunc('hour',(p_now+make_interval(days=>v_leg*3)) AT TIME ZONE 'Asia/Tehran')
+     v_schedule:=(date_trunc('hour',(p_now+make_interval(days=>v_leg*3)) AT TIME ZONE 'Asia/Tehran')
       +CASE WHEN date_part('minute',(p_now+make_interval(days=>v_leg*3)) AT TIME ZONE 'Asia/Tehran')>0
        OR date_part('second',(p_now+make_interval(days=>v_leg*3)) AT TIME ZONE 'Asia/Tehran')>0
-       THEN interval '1 hour' ELSE interval '0 hour' END;
-     v_schedule:=v_schedule AT TIME ZONE 'Asia/Tehran';
+       THEN interval '1 hour' ELSE interval '0 hour' END) AT TIME ZONE 'Asia/Tehran';
      INSERT INTO public."FootballMatch"(id,"idempotencyKey",type,status,"homeClubId","awayClubId","competitionId",
       "rulesSnapshot","tieId",leg,round,"scheduledAt",seed,"createdAt","updatedAt")
      VALUES('match_'||replace(gen_random_uuid()::text,'-',''),v_key,'CUP','SCHEDULED',
@@ -82,7 +81,7 @@ BEGIN
   SELECT count(*),count(*) FILTER(WHERE status::text='COMPLETED') INTO v_total,v_completed
   FROM public."FootballMatch" WHERE "competitionId"=p_competition_id;
   IF v_total>0 AND v_total=v_completed THEN
-   UPDATE public."Competition" SET status='COMPLETED',"completedAt"=COALESCE("completedAt",p_now),
+   UPDATE public."Competition" SET status='COMPLETED',"completedAt"=COALESCE("completedAt",(p_now AT TIME ZONE 'UTC')),
     "updatedAt"=(p_now AT TIME ZONE 'UTC') WHERE id=p_competition_id AND status='ACTIVE';
    v_comp_completed:=true;
   END IF;
