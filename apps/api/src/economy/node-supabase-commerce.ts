@@ -10,7 +10,7 @@ class NodeSupabaseRpc {
   private readonly origin: string;
   constructor(url: string, private readonly key: string, private readonly timeoutMs=10_000) {
     const u=new URL(url);
-    if(u.protocol!=="https:"||! /^[a-z0-9-]+\\.supabase\\.co$/i.test(u.hostname)||u.username||u.password||u.port||u.pathname!=="/"||u.search||u.hash) throw new TypeError("SUPABASE_URL must be a direct HTTPS Supabase project origin");
+    if(u.protocol!=="https:"||! /^[a-z0-9-]+\.supabase\.co$/i.test(u.hostname)||u.username||u.password||u.port||u.pathname!=="/"||u.search||u.hash) throw new TypeError("SUPABASE_URL must be a direct HTTPS Supabase project origin");
     if(key.trim().length<20) throw new TypeError("SUPABASE_SERVICE_ROLE_KEY is required");
     if(!Number.isInteger(timeoutMs)||timeoutMs<100||timeoutMs>30_000) throw new RangeError("Invalid Supabase HTTP timeout");
     this.origin=u.origin;
@@ -39,7 +39,7 @@ export class NodeSupabaseWalletEntryRepository implements WalletEntryPort{
  async applyWalletEntry(input:WalletEntryCommand):Promise<WalletEntryResult>{
   let data:unknown;try{data=await this.rpc.call("apply_wallet_entry",{p_user_id:input.userId,p_asset:input.asset,p_direction:input.direction,p_amount:input.amount.toString(),p_idempotency_key:input.idempotencyKey,p_reason:input.reason,p_reference_type:input.referenceType??null,p_reference_id:input.referenceId??null},WALLET_ERRORS);}catch(e){return mapRowsError(e,WALLET_ERRORS);}
   const r=rows(data,"SUPABASE_WALLET_RPC_INVALID_RESPONSE")[0];
-  if(!r||typeof r.ledger_id!=="string"||typeof r.balance!=="string"||! /^-?\\d+$/.test(r.balance)||!Number.isInteger(r.version)||typeof r.replayed!=="boolean")throw new Error("SUPABASE_WALLET_RPC_INVALID_RESPONSE");
+  if(!r||typeof r.ledger_id!=="string"||typeof r.balance!=="string"||! /^-?\d+$/.test(r.balance)||!Number.isInteger(r.version)||typeof r.replayed!=="boolean")throw new Error("SUPABASE_WALLET_RPC_INVALID_RESPONSE");
   return {ledgerId:r.ledger_id,balance:r.balance,version:r.version as number,replayed:r.replayed};
  }
 }
@@ -59,14 +59,14 @@ export class NodeSupabaseMarketRepository implements MarketListingPort,MarketPur
  async purchase(input:MarketPurchaseCommand):Promise<MarketPurchaseResult>{let d:unknown;try{d=await this.rpc.call("buy_market_listing",{p_user_id:input.userId,p_listing_id:input.listingId},MARKET_ERRORS);}catch(e){return mapRowsError(e,MARKET_ERRORS);}
   const r=rows(d,"SUPABASE_MARKET_PURCHASE_INVALID_RESPONSE")[0];if(!r||r.listing_id!==input.listingId||typeof r.replayed!=="boolean")throw new Error("SUPABASE_MARKET_PURCHASE_INVALID_RESPONSE");
   if(r.error_code==="PLAYER_CONTRACT_EXPIRED"||r.error_code==="LISTING_EXPIRED")return {error:r.error_code};
-  if(r.error_code!==null&&r.error_code!==undefined||typeof r.player_id!=="string"||typeof r.price!=="string"||! /^-?\\d+$/.test(r.price))throw new Error("SUPABASE_MARKET_PURCHASE_INVALID_RESPONSE");
+  if(r.error_code!==null&&r.error_code!==undefined||typeof r.player_id!=="string"||typeof r.price!=="string"||! /^-?\d+$/.test(r.price))throw new Error("SUPABASE_MARKET_PURCHASE_INVALID_RESPONSE");
   return {listingId:r.listing_id,playerId:r.player_id,price:r.price,replayed:r.replayed};
  }
 }
 export class NodeSupabaseStoreSnapshotRepository implements StoreSnapshotPort{
  private readonly rpc:NodeSupabaseRpc;constructor(url:string,key:string){this.rpc=new NodeSupabaseRpc(url,key);}
  async get(userId:string):Promise<StoreSnapshot>{const d=await this.rpc.call("get_store_snapshot",{p_user_id:userId});const r=rows(d,"SUPABASE_STORE_SNAPSHOT_INVALID_RESPONSE")[0];if(!r||!Array.isArray(r.wallets)||!Array.isArray(r.inventory)||!Array.isArray(r.specialPlayers))throw new Error("SUPABASE_STORE_SNAPSHOT_INVALID_RESPONSE");
-  const validWallets=r.wallets.every((x:any)=>x&&typeof x.asset==="string"&&typeof x.balance==="string"&& /^-?\\d+$/.test(x.balance));
+  const validWallets=r.wallets.every((x:any)=>x&&typeof x.asset==="string"&&typeof x.balance==="string"&& /^-?\d+$/.test(x.balance));
   const validInventory=r.inventory.every((x:any)=>x&&typeof x.itemKey==="string"&&Number.isInteger(x.quantity)&&typeof x.updatedAt==="string");
   const validPlayers=r.specialPlayers.every((x:any)=>x&&typeof x.id==="string"&&typeof x.fullName==="string"&&typeof x.nationality==="string"&&Array.isArray(x.positions)&&typeof x.rarity==="string"&&Number.isInteger(x.overall)&&Number.isInteger(x.potential));
   if(!validWallets||!validInventory||!validPlayers)throw new Error("SUPABASE_STORE_SNAPSHOT_INVALID_RESPONSE");
