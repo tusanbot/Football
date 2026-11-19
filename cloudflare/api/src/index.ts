@@ -39,6 +39,8 @@ import { SupabaseClubMatchReadRepository } from "./repositories/club-match-read.
 import { SupabaseCompetitionAdvancementRepository } from "./repositories/competition-advancement.js";
 import { withPyramidLeagueSettlementPort } from "../../../apps/api/src/game/pyramid-league-settlement-context.js";
 import { SupabasePyramidLeagueSettlementRepository } from "./repositories/pyramid-league-settlement.js";
+import { withEventTournamentSettlementPort } from "../../../apps/api/src/event-tournament-settlement-context.js";
+import { SupabaseEventTournamentSettlementRepository } from "./repositories/event-tournament-settlement.js";
 import { withMatchRuntimeAdvancePort } from "../../../apps/api/src/game/match-runtime-advance-context.js";
 import { withMatchRuntimeCheckpointPort } from "../../../apps/api/src/game/match-runtime-checkpoint-context.js";
 import { withMatchRuntimeSettlementPort } from "../../../apps/api/src/game/match-runtime-settlement-context.js";
@@ -178,6 +180,8 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
       const competitionCreation = supabaseClient ? new SupabaseCompetitionCreationRepository(supabaseClient) : undefined;
       const clubMatchRead = supabaseClient ? new SupabaseClubMatchReadRepository(supabaseClient) : undefined;
       const competitionAdvancement = supabaseClient ? new SupabaseCompetitionAdvancementRepository(supabaseClient) : undefined;
+      const pyramidLeagueSettlement = supabaseClient ? new SupabasePyramidLeagueSettlementRepository(supabaseClient) : undefined;
+      const eventTournamentSettlement = supabaseClient ? new SupabaseEventTournamentSettlementRepository(supabaseClient) : undefined;
       const matchRuntimeSettlement = supabaseClient ? new SupabaseMatchRuntimeSettlementRepository(supabaseClient) : undefined;
       const router = createWorkersApiRouter({ publicPlayerRecords, seasonAwards, specialPlayers });
       const handle = async (): Promise<Response> => await router.fetch(request);
@@ -185,7 +189,8 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
       const withClubMatchRead = clubMatchRead ? () => withClubMatchReadPort(clubMatchRead, withCompetitionCreation) : withCompetitionCreation;
       const withCompetitionAdvancement = competitionAdvancement ? () => withCompetitionAdvancementPort(competitionAdvancement, withClubMatchRead) : withClubMatchRead;
       const withPyramidSettlement = pyramidLeagueSettlement ? () => withPyramidLeagueSettlementPort(pyramidLeagueSettlement, withCompetitionAdvancement) : withCompetitionAdvancement;
-      const withFriendlyMatchCreation = friendlyMatchCreation ? () => withFriendlyMatchCreationPort(friendlyMatchCreation, withPyramidSettlement) : withPyramidSettlement;
+      const withEventTournamentSettlement = eventTournamentSettlement ? () => withEventTournamentSettlementPort(eventTournamentSettlement, withPyramidSettlement) : withPyramidSettlement;
+      const withFriendlyMatchCreation = friendlyMatchCreation ? () => withFriendlyMatchCreationPort(friendlyMatchCreation, withEventTournamentSettlement) : withEventTournamentSettlement;
       const withMatchOpponents = matchOpponents ? () => withMatchOpponentPort(matchOpponents, withFriendlyMatchCreation) : withFriendlyMatchCreation;
       const withDashboard = gameDashboard ? () => withGameDashboardPort(gameDashboard, withMatchOpponents) : withMatchOpponents;
       const withTelegramUserLookup = telegramUserLookup ? () => withTelegramUserLookupPort(telegramUserLookup, withDashboard) : withDashboard;
@@ -250,13 +255,16 @@ export class MatchCoordinator {
         const matchRuntimeSettlement = supabase ? new SupabaseMatchRuntimeSettlementRepository(supabase) : undefined;
         const competitionAdvancement = supabase ? new SupabaseCompetitionAdvancementRepository(supabase) : undefined;
         const pyramidLeagueSettlement = supabase ? new SupabasePyramidLeagueSettlementRepository(supabase) : undefined;
+        const eventTournamentSettlement = supabase ? new SupabaseEventTournamentSettlementRepository(supabase) : undefined;
         const matchNotifications = supabase ? new SupabaseMatchNotificationRepository(supabase) : undefined;
+      const pyramidLeagueSettlement = supabase ? new SupabasePyramidLeagueSettlementRepository(supabase) : undefined;
+      const eventTournamentSettlement = supabase ? new SupabaseEventTournamentSettlementRepository(supabase) : undefined;
         const now = new Date();
         // One indexed scheduler statement replaces six independent findFirst queries.
         // Its flags also let us skip queue scans and workers that have no due work.
-        if (!matchRuntimeLease || !matchRuntimeEnqueue || !matchRuntimeAdvance || !matchRuntimeCheckpoint || !matchRuntimeSettlement || !competitionAdvancement || !pyramidLeagueSettlement) throw new Error("SUPABASE_MATCH_RUNTIME_REPOSITORY_UNAVAILABLE");
+        if (!matchRuntimeLease || !matchRuntimeEnqueue || !matchRuntimeAdvance || !matchRuntimeCheckpoint || !matchRuntimeSettlement || !competitionAdvancement || !pyramidLeagueSettlement || !eventTournamentSettlement) throw new Error("SUPABASE_MATCH_RUNTIME_REPOSITORY_UNAVAILABLE");
         const schedule = await matchRuntimeLease.getSchedule();
-        const runMatchWork = () => withPyramidLeagueSettlementPort(pyramidLeagueSettlement, () => withCompetitionAdvancementPort(competitionAdvancement, () =>
+        const runMatchWork = () => withEventTournamentSettlementPort(eventTournamentSettlement, () => withPyramidLeagueSettlementPort(pyramidLeagueSettlement, () => withCompetitionAdvancementPort(competitionAdvancement, () =>
           withMatchRuntimeEnqueuePort(matchRuntimeEnqueue, () =>
             withMatchRuntimeAdvancePort(matchRuntimeAdvance, () =>
               withMatchRuntimeCheckpointPort(matchRuntimeCheckpoint, () =>
@@ -264,10 +272,10 @@ export class MatchCoordinator {
                 processDueMatchRuntimes("cloudflare-match-coordinator", now, 10, {
                   enqueue: schedule.hasDueFixture,
                   claim: schedule.hasDueRuntime || schedule.hasDueFixture,
-                }))))));
+                })))))));
         const matchWork = await withMatchRuntimeLeasePort(matchRuntimeLease, runMatchWork);
         const tournamentFinalizations = schedule.hasPendingTournamentFinalization
-          ? await processDueEventTournamentFinalizations(now, 1)
+          ? await withEventTournamentSettlementPort(eventTournamentSettlement, () => processDueEventTournamentFinalizations(now, 1))
           : { candidates: 0, finalized: 0, failed: 0 };
         if (schedule.hasDueNotifications) {
           if (!matchNotifications) throw new Error("SUPABASE_MATCH_NOTIFICATION_REPOSITORY_UNAVAILABLE");
@@ -383,10 +391,11 @@ async function scheduledJobs(env: Env): Promise<void> {
       const matches = env.MATCH_COORDINATOR
         ? null
         : await processDueMatchRuntimes("cloudflare-api-scheduled-fallback", now, 10);
-      const tournamentFinalizations = await processDueEventTournamentFinalizations(now, 1);
+      if (!pyramidLeagueSettlement || !eventTournamentSettlement) throw new Error("SUPABASE_TOURNAMENT_SETTLEMENT_REPOSITORY_UNAVAILABLE");
+      const tournamentFinalizations = await withEventTournamentSettlementPort(eventTournamentSettlement, () => processDueEventTournamentFinalizations(now, 1));
       if (!matchNotifications) throw new Error("SUPABASE_MATCH_NOTIFICATION_REPOSITORY_UNAVAILABLE");
       await deliverDueMatchLifecycle(env, matchNotifications);
-      const promotions = await processDuePromotionOffers(now, 50);
+      const promotions = await withPyramidLeagueSettlementPort(pyramidLeagueSettlement, () => processDuePromotionOffers(now, 50));
       if ((matches && (matches.advanced || matches.settled || matches.failed))
         || tournamentFinalizations.finalized || tournamentFinalizations.failed
         || promotions.accepted || promotions.completedLeagues) {

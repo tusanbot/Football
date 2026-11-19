@@ -19,6 +19,7 @@ import { getFriendlyMatchCreationPort } from "./friendly-match-creation-context.
 import { getCompetitionCreationPort } from "./competition-creation-context.js";
 import { getClubMatchReadPort } from "./club-match-read-context.js";
 import { getCompetitionAdvancementPort } from "./competition-advancement-context.js";
+import { getEventTournamentSettlementPort } from "../event-tournament-settlement-context.js";
 
 const DAY_MS = 86_400_000;
 const MATCH_MINUTE_MS = 1_000;
@@ -1192,8 +1193,12 @@ export async function simulateScheduledMatch(userId: string, matchId: string, no
         if(fixture?.round!==null&&fixture?.round!==undefined) await advanceCupRoundLegacy(settlement.competitionId,fixture.round,now);
       }
     }
-    const eventTournament=await prisma.eventTournament.findUnique({where:{competitionId:settlement.competitionId},select:{id:true}});
-    if(eventTournament){const tournamentService=await import("../event-tournament-service.js");await tournamentService.finalizeEventTournamentFromCompetition(settlement.competitionId,now);}
+    const eventTournamentPort=getEventTournamentSettlementPort();
+    if(eventTournamentPort) await eventTournamentPort.finalize(settlement.competitionId,now.toISOString());
+    else {
+      const eventTournament=await prisma.eventTournament.findUnique({where:{competitionId:settlement.competitionId},select:{id:true}});
+      if(eventTournament){const tournamentService=await import("../event-tournament-service.js");await tournamentService.finalizeEventTournamentFromCompetition(settlement.competitionId,now);}
+    }
   }
   return settlement;
 }
