@@ -14,21 +14,36 @@ GRANT EXECUTE ON FUNCTION public.ensure_club_coach_http(TEXT) TO service_role;
 
 CREATE OR REPLACE FUNCTION public.settle_player_daily_state_http(p_user_id TEXT,p_club_id TEXT,p_expected_last_tick TIMESTAMPTZ,p_game_date DATE,p_elapsed_days INTEGER,p_updates JSONB,p_payroll JSONB,p_lineup_changed BOOLEAN,p_now TIMESTAMPTZ)
 RETURNS JSONB LANGUAGE plpgsql SECURITY INVOKER SET search_path=public AS $$
-DECLARE c "Club"%ROWTYPE;u JSONB;w "Wallet"%ROWTYPE;paid BIGINT;pdate DATE;
+DECLARE c "Club"%ROWTYPE;u JSONB;w "Wallet"%ROWTYPE;p "Player"%ROWTYPE;paid BIGINT;pdate DATE;
 BEGIN
  SELECT * INTO c FROM public."Club" WHERE id=p_club_id AND "ownerId"=p_user_id FOR UPDATE;
  IF NOT FOUND THEN RETURN jsonb_build_object('error','CLUB_NOT_FOUND');END IF;
  IF c."lastDailyTickAt"<>p_expected_last_tick THEN RETURN jsonb_build_object('error','DAILY_SETTLEMENT_CONFLICT');END IF;
  IF p_elapsed_days<=0 OR jsonb_typeof(p_updates) IS DISTINCT FROM 'array' THEN RETURN jsonb_build_object('error','INVALID_DAILY_SETTLEMENT');END IF;
+ IF p_payroll IS NOT NULL AND p_payroll<>'null'::jsonb THEN
+  pdate=(p_payroll->>'payrollDate')::date;paid=(p_payroll->>'cashPaid')::bigint;
+  IF paid>0 THEN
+   SELECT * INTO w FROM public."Wallet" WHERE "userId"=p_user_id AND asset='CASH' FOR UPDATE;
+   IF NOT FOUND OR w.id<>(p_payroll->>'walletId') OR w.version<>(p_payroll->>'walletVersion')::int OR w.balance<>(p_payroll->>'walletBalance')::bigint OR w.balance<paid THEN
+    RETURN jsonb_build_object('error','DAILY_SETTLEMENT_CONFLICT');
+   END IF;
+  END IF;
+ END IF;
+ FOR u IN SELECT value FROM jsonb_array_elements(p_updates) LOOP
+  SELECT * INTO p FROM public."Player" WHERE id=u->>'id' AND "clubId"=p_club_id FOR UPDATE;
+  IF NOT FOUND OR p.age<>(u->>'expectedAge')::int OR p."ageDays"<>(u->>'expectedAgeDays')::int
+   OR p."contractDays"<>(u->>'expectedContractDays')::int OR p.fitness<>(u->>'expectedFitness')::int
+   OR p.morale<>(u->>'expectedMorale')::int OR p.status::text<>u->>'expectedStatus'
+   OR p."injuryUntil" IS DISTINCT FROM NULLIF(u->>'expectedInjuryUntil','')::timestamptz THEN
+   RETURN jsonb_build_object('error','DAILY_SETTLEMENT_CONFLICT');
+  END IF;
+ END LOOP;
  FOR u IN SELECT value FROM jsonb_array_elements(p_updates) LOOP
   UPDATE public."Player" SET age=(u->>'age')::int,"ageDays"=(u->>'ageDays')::int,attributes=COALESCE(u->'attributes',attributes),overall=COALESCE((u->>'overall')::int,overall),"contractDays"=(u->>'contractDays')::int,fitness=(u->>'fitness')::int,morale=(u->>'morale')::int,status=(u->>'status')::"PlayerStatus","injuryUntil"=NULLIF(u->>'injuryUntil','')::timestamptz,"lineupSlot"=CASE WHEN u ? 'lineupSlot' THEN NULL ELSE "lineupSlot" END WHERE id=u->>'id' AND "clubId"=p_club_id;
   IF COALESCE((u->>'expireListing')::boolean,false) THEN UPDATE public."PlayerMarketListing" SET status='EXPIRED' WHERE "playerId"=u->>'id' AND status='OPEN';END IF;
  END LOOP;
- IF p_payroll IS NOT NULL THEN
-  pdate=(p_payroll->>'payrollDate')::date;paid=(p_payroll->>'cashPaid')::bigint;
-  IF paid>0 THEN SELECT * INTO w FROM public."Wallet" WHERE "userId"=p_user_id AND asset='CASH' FOR UPDATE;
-   IF NOT FOUND OR w.id<>(p_payroll->>'walletId') OR w.version<>(p_payroll->>'walletVersion')::int OR w.balance<>(p_payroll->>'walletBalance')::bigint OR w.balance<paid THEN RETURN jsonb_build_object('error','DAILY_SETTLEMENT_CONFLICT');END IF;
-   UPDATE public."Wallet" SET balance=balance-paid,version=version+1 WHERE id=w.id;
+ IF p_payroll IS NOT NULL AND p_payroll<>'null'::jsonb THEN
+  IF paid>0 THEN UPDATE public."Wallet" SET balance=balance-paid,version=version+1 WHERE id=w.id;
    INSERT INTO public."LedgerTransaction"(id,"idempotencyKey","userId",asset,direction,amount,reason,"referenceType","referenceId","createdAt") VALUES(gen_random_uuid()::text,'weekly-payroll:'||p_club_id||':'||pdate,p_user_id,'CASH','DEBIT',paid,'WEEKLY_PLAYER_AND_COACH_PAYROLL','CLUB_PAYROLL',p_club_id,p_now);
   END IF;
   INSERT INTO public."ClubPayroll"(id,"clubId","payrollDate","weeksCovered","playerWages","coachWages","arrearsBefore","totalDue","cashPaid","arrearsAfter","playersCount","createdAt") VALUES(gen_random_uuid()::text,p_club_id,pdate,(p_payroll->>'weeksCovered')::int,(p_payroll->>'playerWages')::bigint,(p_payroll->>'coachWages')::bigint,(p_payroll->>'arrearsBefore')::bigint,(p_payroll->>'totalDue')::bigint,paid,(p_payroll->>'arrearsAfter')::bigint,(p_payroll->>'playersCount')::int,p_now);
