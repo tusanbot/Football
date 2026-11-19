@@ -2,6 +2,7 @@ import type { FastifyInstance, FastifyReply } from "fastify";
 import { z } from "zod";
 import { requireTelegramUser } from "../auth/require-telegram-user.js";
 import { prisma } from "../db.js";
+import { getClubManagementPort } from "./club-management-context.js";
 import {
   ClubOperationsError,
   getClubOperations,
@@ -48,8 +49,20 @@ export function registerClubOperationsRoutes(app: FastifyInstance) {
     if (!query.success) return reply.code(400).send({ error: "INVALID_FINANCE_QUERY" });
     try {
       const operations = await getClubOperations(user.id);
-      const clubId = operations.club.id;
       const since = new Date(Date.now() - query.data.days * 86_400_000);
+      const httpPort = getClubManagementPort();
+      if (httpPort) {
+        const report = await httpPort.getFinanceReport(user.id, since);
+        if (!report) return reply.code(404).send({ error: "CLUB_NOT_FOUND" });
+        const income = BigInt(report.income);
+        const expenses = BigInt(report.expenses);
+        return {
+          periodDays: query.data.days, income: income.toString(), expenses: expenses.toString(),
+          net: (income - expenses).toString(), operatingArrears: operations.club.operatingArrears,
+          entries: report.entries.map((entry) => ({ ...entry, amount: String(entry.amount), occurredAt: new Date(entry.occurredAt).toISOString() })),
+        };
+      }
+      const clubId = operations.club.id;
       const [entries, totals] = await Promise.all([
         prisma.clubFinanceEntry.findMany({
           where: { clubId, occurredAt: { gte: since } },
