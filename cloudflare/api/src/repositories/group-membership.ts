@@ -95,6 +95,37 @@ export class SupabaseGroupMembershipRepository implements GroupMembershipPort {
     return this.groupRpc("cancel_group_challenge_http", { p_telegram_user_id: input.telegramUserId, p_telegram_group_id: input.telegramGroupId, p_challenge_id: input.challengeId });
   }
 
+  async createLeague(input: { telegramUserId: string; telegramGroupId: string; name: string; maxTeams: number; idempotencyKey: string; now?: Date }): Promise<unknown> {
+    return this.groupRpc("create_group_league_http", {
+      p_telegram_user_id: input.telegramUserId, p_telegram_group_id: input.telegramGroupId,
+      p_name: input.name, p_max_teams: input.maxTeams, p_idempotency_key: input.idempotencyKey,
+      p_now: (input.now ?? new Date()).toISOString(),
+    });
+  }
+  async joinLeague(input: { telegramUserId: string; telegramGroupId: string; competitionId: string; now?: Date }): Promise<unknown> {
+    return this.groupRpc("join_group_league_http", {
+      p_telegram_user_id: input.telegramUserId, p_telegram_group_id: input.telegramGroupId,
+      p_competition_id: input.competitionId, p_now: (input.now ?? new Date()).toISOString(),
+    });
+  }
+  async startLeague(input: { telegramUserId: string; telegramGroupId: string; competitionId: string; now?: Date }): Promise<unknown> {
+    return this.groupRpc("start_group_league_http", {
+      p_telegram_user_id: input.telegramUserId, p_telegram_group_id: input.telegramGroupId,
+      p_competition_id: input.competitionId, p_now: (input.now ?? new Date()).toISOString(),
+    });
+  }
+  async getLeagueTable(input: { telegramUserId: string; telegramGroupId: string; competitionId: string }): Promise<unknown> {
+    return this.groupRpc("get_group_league_table_http", {
+      p_telegram_user_id: input.telegramUserId, p_telegram_group_id: input.telegramGroupId,
+      p_competition_id: input.competitionId,
+    });
+  }
+  async listLeagues(input: { telegramUserId: string; telegramGroupId: string }): Promise<unknown> {
+    return this.groupRpc("list_group_leagues_http", {
+      p_telegram_user_id: input.telegramUserId, p_telegram_group_id: input.telegramGroupId,
+    });
+  }
+
   async joinGroup(input: GroupJoinInput, now = new Date()): Promise<unknown> {
     const value = ensureObject(await this.client.rpc("join_telegram_group_http", {
       p_telegram_user_id: input.telegramUserId, p_telegram_group_id: input.telegramGroupId,
