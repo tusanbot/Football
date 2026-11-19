@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { NodeSupabaseAllianceRepository } from "../src/groups/node-supabase-alliance.js";
 import { AllianceServiceError } from "../src/groups/alliance-service.js";
+import { NodeSupabaseTelegramUserLookupRepository } from "../src/auth/node-supabase-telegram-user-lookup.js";
 
 test("Node alliance repository sends server-authenticated HTTPS RPC calls", async () => {
   const previous = globalThis.fetch;
@@ -57,5 +58,34 @@ test("Node alliance repository preserves the real admin actor for atomic admin s
     assert.deepEqual(calls[1]!.body,{p_actor_telegram_id:"987654321",p_season_id:"season-1",p_idempotency_key:"admin-close-idempotency",p_reason:null});
     assert.equal(calls[2]!.url.endsWith("/admin_review_alliance_season_http"),true);
     assert.deepEqual(calls[2]!.body,{p_actor_telegram_id:"987654321",p_season_id:"season-1",p_decision:"APPROVE",p_idempotency_key:"admin-review-idempotency",p_reason:null});
+  } finally { globalThis.fetch=previous; }
+});
+
+test("Node Telegram user lookup resolves active users through server-authenticated Supabase RPC", async () => {
+  const previous=globalThis.fetch;
+  let call:{url:string;headers:Headers;body:Record<string,unknown>}|null=null;
+  globalThis.fetch=(async(input,init)=>{
+    call={url:String(input),headers:new Headers(init?.headers),body:JSON.parse(String(init?.body)) as Record<string,unknown>};
+    return new Response(JSON.stringify({id:"user-1",telegramId:"123456",username:null,displayName:null,createdAt:"2026-11-19T00:00:00.000Z"}),{status:200});
+  }) as typeof fetch;
+  try {
+    const repo=new NodeSupabaseTelegramUserLookupRepository("https://example.supabase.co","node-user-lookup-service-role-test-key");
+    const now=new Date("2026-11-19T12:00:00.000Z");
+    const user=await repo.loadActiveUser("123456",now);
+    assert.deepEqual(user,{id:"user-1",telegramId:"123456",username:null,displayName:"",createdAt:"2026-11-19T00:00:00.000Z"});
+    assert.equal(call?.url,"https://example.supabase.co/rest/v1/rpc/resolve_telegram_user");
+    assert.equal(call?.headers.get("authorization"),"Bearer node-user-lookup-service-role-test-key");
+    assert.deepEqual(call?.body,{p_telegram_id:"123456",p_now:now.toISOString()});
+  } finally { globalThis.fetch=previous; }
+});
+
+test("Node Telegram user lookup returns null for missing accounts and rejects unsafe origins", async () => {
+  const previous=globalThis.fetch;
+  globalThis.fetch=(async()=>new Response("null",{status:200})) as typeof fetch;
+  try {
+    const repo=new NodeSupabaseTelegramUserLookupRepository("https://example.supabase.co","node-user-lookup-service-role-test-key");
+    assert.equal(await repo.loadActiveUser("123456"),null);
+    assert.throws(()=>new NodeSupabaseTelegramUserLookupRepository("http://example.supabase.co","node-user-lookup-service-role-test-key"));
+    assert.throws(()=>new NodeSupabaseTelegramUserLookupRepository("https://attacker.example","node-user-lookup-service-role-test-key"));
   } finally { globalThis.fetch=previous; }
 });
