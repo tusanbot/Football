@@ -38,7 +38,7 @@ export class GroupMembershipPortError extends Error {
 }
 import { AsyncLocalStorage } from "node:async_hooks";
 const scope = new AsyncLocalStorage<GroupMembershipPort>();
-export function withGroupMembershipPort<T>(port: GroupMembershipPort, operation: () => Promise<T>): Promise<T> {
+export function withGroupMembershipPort<T>(port: GroupMembershipPort, operation: () => T): T {
   return scope.run(port, operation);
 }
 export function getGroupMembershipPort(): GroupMembershipPort | undefined { return scope.getStore(); }
