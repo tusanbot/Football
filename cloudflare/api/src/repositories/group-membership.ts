@@ -64,6 +64,13 @@ export class SupabaseGroupMembershipRepository implements GroupMembershipPort {
     raiseBusinessError(value);
     return value;
   }
+  async getWorkspace(telegramUserId: string, telegramGroupId: string): Promise<unknown> {
+    const value = ensureObject(await this.client.rpc("get_telegram_group_workspace_http", {
+      p_telegram_user_id: telegramUserId, p_telegram_group_id: telegramGroupId,
+    }));
+    raiseBusinessError(value);
+    return value;
+  }
   async joinGroup(input: GroupJoinInput, now = new Date()): Promise<unknown> {
     const value = ensureObject(await this.client.rpc("join_telegram_group_http", {
       p_telegram_user_id: input.telegramUserId, p_telegram_group_id: input.telegramGroupId,

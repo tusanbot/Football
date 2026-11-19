@@ -20,6 +20,7 @@ export interface GroupMembershipPort {
   awardActivity(input: { telegramUserId: string; telegramGroupId: string; activityType: string; referenceId?: string }): Promise<unknown>;
   listMyGroups(telegramUserId: string): Promise<unknown>;
   getGroupSummary(telegramUserId: string, telegramGroupId: string): Promise<unknown>;
+  getWorkspace(telegramUserId: string, telegramGroupId: string): Promise<unknown>;
 }
 export class GroupMembershipPortError extends Error {
   constructor(readonly code: string) { super(code); this.name = "GroupMembershipPortError"; }

@@ -27,6 +27,10 @@ BEGIN
  IF r->>'awarded'<>'true' OR r->>'award'<>'2' THEN RAISE EXCEPTION 'game activity award mismatch: %',r; END IF;
  r:=public.list_my_telegram_groups_http('991000000002');
  IF jsonb_array_length(r->'groups')<>1 THEN RAISE EXCEPTION 'my groups listing mismatch: %',r; END IF;
+ r:=public.get_telegram_group_workspace_http('991000000002',v_group_id);
+ IF r#>>'{group,role}'<>'MEMBER' OR r#>>'{personal,points}'<>'0'
+ OR jsonb_array_length(r->'shop')<>3 OR jsonb_array_length(r->'challenges')<>0
+ OR jsonb_array_length(r->'leagues')<>0 THEN RAISE EXCEPTION 'group workspace mismatch: %',r; END IF;
  r:=public.get_telegram_group_summary_http('991000000002',v_group_id);
  IF r->>'role'<>'MEMBER' OR r#>>'{group,telegramId}'<>v_group_id THEN RAISE EXCEPTION 'group summary mismatch: %',r; END IF;
  r:=public.join_telegram_group_http('991000000002',v_group_id,25,v_now+interval '2 seconds');

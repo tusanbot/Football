@@ -187,6 +187,8 @@ export async function listMyTelegramGroups(userId:string, telegramUserId?: strin
  return {groups:rows.map(r=>({telegramGroupId:r.group.telegramId,title:r.group.title,role:r.role,memberCount:r.group.memberCount,isActive:r.group.isActive,points:r.group.points.toString(),lastMemberCountCheckAt:r.group.lastMemberCountCheckAt?.toISOString()??null}))};
 }
 export async function getGroupWorkspace(telegramUserId:string,telegramGroupId:string) {
+ const port = getGroupMembershipPort();
+ if (port) { try { return await port.getWorkspace(telegramUserId, telegramGroupId); } catch (error) { if (error instanceof GroupMembershipPortError) throw new GroupServiceError(error.code); throw error; } }
  const {user,group,membership}=await prisma.$transaction(async tx=>groupMember(tx,telegramUserId,telegramGroupId,false,false));
  for(const item of SHOP_ITEMS) await prisma.groupRewardItem.upsert({where:{slug:item.slug},create:{...item},update:{}});
  const [balance,grants,ledger,challenges,competitions,items,sharedRewards,treasuryHistory]=await Promise.all([
