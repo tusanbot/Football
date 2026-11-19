@@ -12,6 +12,8 @@ import { registerGroupRoutes } from "./groups/group-routes.js";
 import type { GroupMembershipPort } from "./groups/group-membership-context.js";
 import { withGroupMembershipPort } from "./groups/group-membership-context.js";
 import { registerAllianceRoutes } from "./groups/alliance-routes.js";
+import type { AlliancePort } from "./groups/alliance-context.js";
+import { withAlliancePort } from "./groups/alliance-context.js";
 import { prisma } from "./db.js";
 import { parseAdminTelegramIds, parseCorsOrigins } from "./runtime-config.js";
 import { registerAdminRoutes } from "./admin-routes.js";
@@ -33,7 +35,7 @@ const healthResponse = z.object({
   version: z.string(),
 });
 
-export function buildApp(options: { logger?: boolean; pluginTimeout?: number; groupMembershipPort?: GroupMembershipPort } = {}) {
+export function buildApp(options: { logger?: boolean; pluginTimeout?: number; groupMembershipPort?: GroupMembershipPort; alliancePort?: AlliancePort } = {}) {
   const app = Fastify({
     logger: options.logger ?? process.env.NODE_ENV !== "test",
     pluginTimeout: options.pluginTimeout ?? 10_000,
@@ -58,6 +60,12 @@ export function buildApp(options: { logger?: boolean; pluginTimeout?: number; gr
   if (options.groupMembershipPort) {
     app.addHook("onRequest", (_request, _reply, done) => {
       withGroupMembershipPort(options.groupMembershipPort!, () => done());
+    });
+  }
+
+  if (options.alliancePort) {
+    app.addHook("onRequest", (_request, _reply, done) => {
+      void withAlliancePort(options.alliancePort!, async () => done());
     });
   }
 
@@ -137,7 +145,7 @@ export function buildApp(options: { logger?: boolean; pluginTimeout?: number; gr
   registerMatchRoutes(app);
   registerMatchNotificationRoutes(app);
   registerGroupRoutes(app, { requireMembershipPort: Boolean(options.groupMembershipPort) });
-  registerAllianceRoutes(app);
+  registerAllianceRoutes(app, { requirePort: Boolean(options.alliancePort), port: options.alliancePort });
   registerAdminRoutes(app);
   registerAdminLeagueRoutes(app);
   registerGiftCodeRoutes(app);
