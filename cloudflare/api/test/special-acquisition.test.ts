@@ -29,3 +29,20 @@ test("special acquisition repository rejects malformed RPC responses", async () 
     userId: "user-1", method: "epic_pack", idempotencyKey: "special-test-0002",
   }), /SUPABASE_SPECIAL_ACQUISITION_INVALID_RESPONSE/);
 });
+
+
+test("legacy challenge listing is served by Supabase RPC", async () => {
+  let call = "";
+  const client = { rpc: async (name: string) => { call = name; return [{ challenges: [{ slug: "pele-king-of-football", claimed: false }] }]; } } as never;
+  const result = await new SupabaseSpecialAcquisitionRepository(client).listLegacyChallenges("user-1");
+  assert.equal(call, "list_legacy_special_challenges");
+  assert.equal(result.challenges[0]?.slug, "pele-king-of-football");
+});
+
+test("legacy challenge claim is served by Supabase RPC", async () => {
+  let call = "";
+  const client = { rpc: async (name: string) => { call = name; return [{ result: { acquisitionId: "a1", playerId: "p1", specialPlayer: { id: "s1", fullName: "Legend", rarity: "ICON", overall: 99 }, replayed: false } }]; } } as never;
+  const result = await new SupabaseSpecialAcquisitionRepository(client).claimLegacyChallenge("user-1", "pele-king-of-football");
+  assert.equal(call, "claim_legacy_special_challenge");
+  assert.equal(result.replayed, false);
+});

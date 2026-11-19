@@ -274,7 +274,10 @@ function legacyAcquisitionKey(userId: string, slug: string) {
 
 export async function listLegacyChallenges(userId: string) {
   const acquisitionPort = getSpecialAcquisitionPort();
-  if (acquisitionPort) return acquisitionPort.listLegacyChallenges(userId);
+  if (acquisitionPort) {
+    try { return await acquisitionPort.listLegacyChallenges(userId); }
+    catch (error) { throw new LegacyChallengeError(error instanceof Error ? error.message : "LEGACY_CHALLENGES_UNAVAILABLE"); }
+  }
   const club = await prisma.club.findUnique({ where: { ownerId: userId }, select: { id: true } });
   if (!club) throw new LegacyChallengeError("CLUB_NOT_FOUND");
   const challenges = await Promise.all(LEGACY_CHALLENGES.map(async (challenge) => {
@@ -300,7 +303,10 @@ export async function listLegacyChallenges(userId: string) {
 
 export async function claimLegacyChallenge(userId: string, slug: string) {
   const acquisitionPort = getSpecialAcquisitionPort();
-  if (acquisitionPort) return acquisitionPort.claimLegacyChallenge(userId, slug);
+  if (acquisitionPort) {
+    try { return await acquisitionPort.claimLegacyChallenge(userId, slug); }
+    catch (error) { throw new LegacyChallengeError(error instanceof Error ? error.message : "LEGACY_CHALLENGE_CLAIM_FAILED"); }
+  }
   const challenge = LEGACY_CHALLENGES.find((item) => item.slug === slug);
   if (!challenge) throw new LegacyChallengeError("LEGACY_CHALLENGE_NOT_FOUND");
   const idempotencyKey = legacyAcquisitionKey(userId, slug);

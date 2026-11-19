@@ -23,8 +23,8 @@ BEGIN
     'slug',p.slug,'title',p.title,'description',p.description,'rewardName',p.reward_name,
     'progress',jsonb_build_object('matches',p.matches,'wins',p.wins,'goals',p.goals,'requiredMatches',p.req_matches,'requiredWins',p.req_wins,'requiredGoals',p.req_goals,
       'completed',p.matches>=p.req_matches AND p.wins>=p.req_wins AND p.goals>=p.req_goals),
-    'claimed',a.id IS NOT NULL,'available',sp.active AND (SELECT count(*) FROM public."SpecialPlayerAcquisition" x WHERE x."specialPlayerId"=sp.id)<1,
-    'canClaim',p.matches>=p.req_matches AND p.wins>=p.req_wins AND p.goals>=p.req_goals AND a.id IS NULL AND sp.active
+    'claimed',a.id IS NOT NULL,'available',COALESCE(sp.active,FALSE) AND (SELECT count(*) FROM public."SpecialPlayerAcquisition" x WHERE x."specialPlayerId"=sp.id)<1,
+    'canClaim',p.matches>=p.req_matches AND p.wins>=p.req_wins AND p.goals>=p.req_goals AND a.id IS NULL AND COALESCE(sp.active,FALSE)
       AND (SELECT count(*) FROM public."SpecialPlayerAcquisition" x WHERE x."specialPlayerId"=sp.id)<1
   ) ORDER BY p.slug) INTO v_challenges
   FROM progress p
