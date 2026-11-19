@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { SupabaseHttpClient, SupabaseHttpError } from "../src/node-supabase-http.js";
 import { SupabaseGameDashboardRepository } from "../src/game/node-supabase-game-dashboard.js";
+import { NodeSupabasePublicPlayerRecordRepository } from "../src/players/node-supabase-public-records.js";
 import { SupabaseClubLineupRepository } from "../src/game/node-supabase-club-lineup.js";
 import { NodeSupabaseWalletReadRepository } from "../src/economy/node-supabase-wallet-read.js";
 import { SupabaseClubManagementRepository as NodeSupabaseClubManagementRepository } from "../src/game/node-supabase-club-management.js";
@@ -146,4 +147,19 @@ test("club squad list uses direct Supabase reads and serializes money fields", a
  assert.equal(result.players[0]!.wage,"1200");
  assert.equal(f.calls.length,2);
  assert.equal(f.calls[1]!.url.searchParams.get("status"),"in.(ACTIVE,INJURED,CONTRACT_EXPIRED)");
+});
+
+test("public player records are aggregated by the Supabase HTTP RPC", async () => {
+ const f=clientWith((url)=>url.pathname.endsWith("/rpc/get_public_player_records_http") ? [{
+  playerId:"player-1",playerName:"Test Player",position:"ST",overall:88,clubName:"Test Club",
+  appearances:4,goals:3,assists:1,minutesPlayed:360,averageRating:"7.625",value:3,
+ }] : []);
+ const repo=new NodeSupabasePublicPlayerRecordRepository(f.client);
+ const records=await repo.list("goals",10);
+ assert.equal(records.length,1);
+ assert.equal(records[0]!.playerId,"player-1");
+ assert.equal(records[0]!.averageRating,7.625);
+ assert.equal(f.calls[0]!.url.pathname,"/rest/v1/rpc/get_public_player_records_http");
+ const body=JSON.parse(String(f.calls[0]!.init.body));
+ assert.deepEqual(body,{p_metric:"goals",p_limit:10});
 });
