@@ -28,7 +28,7 @@ BEGIN
   INSERT INTO public."MatchRuntime" (id, "matchId", status, "currentMinute", "nextActionAt", "simulationState", "kickoffSnapshot", "updatedAt")
   VALUES ('ci-club-match-runtime', v_match, 'RUNNING', 45, '2026-11-19T12:45:00Z',
     '{"segment":{"home":{"side":{"formation":"4-3-3","tactics":{},"players":[]}}},"substitutions":{"home":{"substitutionsUsed":2}}}'::jsonb,
-    '{"home":{"formation":"4-3-3","tactics":{},"players":[]}}'::jsonb) ON CONFLICT ("matchId") DO NOTHING;
+    '{"home":{"formation":"4-3-3","tactics":{},"players":[]}}'::jsonb, now() AT TIME ZONE 'UTC') ON CONFLICT ("matchId") DO NOTHING;
   INSERT INTO public."MatchTacticalCheckpoint" (id, "matchId", "checkpointKey", kind, minute, status, "openedAt", "decisionDeadlineAt", "nextSegmentAt", "updatedAt")
   VALUES ('ci-club-match-checkpoint', v_match, 'half-time', 'HALF_TIME', 45, 'OPEN',
     '2026-11-19T12:45:00Z', '2026-11-19T12:45:05Z', '2026-11-19T12:45:05Z', now() AT TIME ZONE 'UTC') ON CONFLICT (id) DO NOTHING;
