@@ -194,7 +194,8 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
        const groupMembership = supabaseClient ? new SupabaseGroupMembershipRepository(supabaseClient) : undefined;
        const router = createWorkersApiRouter({ publicPlayerRecords, seasonAwards, specialPlayers, botRuntimeLease, groupMembership });
       const handle = async (): Promise<Response> => await router.fetch(request);
-      const withCompetitionCreation = competitionCreation ? () => withCompetitionCreationPort(competitionCreation, handle) : handle;
+      const withGroupMembership = groupMembership ? () => withGroupMembershipPort(groupMembership, handle) : handle;
+      const withCompetitionCreation = competitionCreation ? () => withCompetitionCreationPort(competitionCreation, withGroupMembership) : withGroupMembership;
       const withClubMatchRead = clubMatchRead ? () => withClubMatchReadPort(clubMatchRead, withCompetitionCreation) : withCompetitionCreation;
       const withCompetitionAdvancement = competitionAdvancement ? () => withCompetitionAdvancementPort(competitionAdvancement, withClubMatchRead) : withClubMatchRead;
       const withPyramidSettlement = pyramidLeagueSettlement ? () => withPyramidLeagueSettlementPort(pyramidLeagueSettlement, withCompetitionAdvancement) : withCompetitionAdvancement;
