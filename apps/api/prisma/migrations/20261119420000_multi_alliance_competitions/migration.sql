@@ -175,6 +175,7 @@ DECLARE u public."User"%ROWTYPE; g public."TelegramGroup"%ROWTYPE; ag public."Al
 BEGIN
  SELECT * INTO u FROM public."User" WHERE "telegramId"=p_telegram_user_id;
  IF u.id IS NULL THEN RETURN jsonb_build_object('error','ACCOUNT_NOT_FOUND'); END IF;
+ IF u."isSuspended" THEN RETURN jsonb_build_object('error','ACCOUNT_SUSPENDED'); END IF;
  SELECT id INTO club_id FROM public."Club" WHERE "ownerId"=u.id;
  IF club_id IS NULL THEN RETURN jsonb_build_object('error','CLUB_NOT_FOUND'); END IF;
  SELECT * INTO g FROM public."TelegramGroup" WHERE "telegramId"=p_telegram_group_id FOR UPDATE;
@@ -201,7 +202,7 @@ BEGIN
  result:=public._start_competition_locked(c.id,coalesce(p_now,now()),false);
  UPDATE public."AllianceCompetition" SET "startedAt"=coalesce(p_now,now())::timestamp(3) WHERE id=ac.id;
  INSERT INTO public."AllianceAuditLog"(id,"allianceId","actorTelegramId","groupTelegramId",action,metadata,"createdAt")
- VALUES(gen_random_uuid()::text,ag."allianceId",p_telegram_user_id,p_telegram_group_id,'CROSS_ALLIANCE_COMPETITION_STARTED',jsonb_build_object('competitionId',c.id,'alliances',n),now());
+ VALUES(gen_random_uuid()::text,ag."allianceId",p_telegram_user_id,p_telegram_group_id,'CROSS_ALLIANCE_COMPETITION_STARTED',jsonb_build_object('competitionId',c.id,'alliances',v_alliance_count),now());
  RETURN result||jsonb_build_object('competitionId',c.id,'allianceCount',v_alliance_count);
 END $$;
 
