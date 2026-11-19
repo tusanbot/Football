@@ -224,12 +224,13 @@ export async function createLeague(userId: string, name: string, maxTeams: numbe
   if (format === "CUP" && !rules.penaltiesOnDraw) throw new MatchServiceError("CUP_REQUIRES_PENALTIES");
   const creationPort = getCompetitionCreationPort();
   if (creationPort) {
+    const now = new Date();
     try {
       return await creationPort.create({
         userId, name, maxTeams, idempotencyKey, format, cupLegs,
-        season: new Date().getUTCFullYear(),
+        season: now.getUTCFullYear(),
         rules: rules as unknown as Record<string, boolean | number>,
-        now: new Date(),
+        now,
       });
     } catch (error) {
       const code = error instanceof Error ? error.message : "";
