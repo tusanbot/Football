@@ -14,12 +14,12 @@ DECLARE
   active_competition jsonb;
 BEGIN
   IF p_user_id IS NULL OR length(p_user_id) NOT BETWEEN 1 AND 128
-     OR p_action NOT IN ('upload', 'delete') THEN
+     OR p_action IS NULL OR p_action NOT IN ('upload', 'delete') THEN
     RAISE EXCEPTION 'INVALID_CLUB_LOGO_COMMAND' USING ERRCODE = '22023';
   END IF;
   IF p_action = 'upload' AND (
     p_logo_data IS NULL OR length(p_logo_data) < 16 OR length(p_logo_data) > 700000
-    OR p_logo_mime NOT IN ('image/png', 'image/jpeg', 'image/webp')
+    OR p_logo_mime IS NULL OR p_logo_mime NOT IN ('image/png', 'image/jpeg', 'image/webp')
   ) THEN
     RAISE EXCEPTION 'INVALID_CLUB_LOGO' USING ERRCODE = '22023';
   END IF;
