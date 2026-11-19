@@ -145,7 +145,7 @@ export function buildApp(options: { logger?: boolean; pluginTimeout?: number; gr
   registerMatchRoutes(app);
   registerMatchNotificationRoutes(app);
   registerGroupRoutes(app, { requireMembershipPort: Boolean(options.groupMembershipPort) });
-  registerAllianceRoutes(app, { requirePort: Boolean(options.alliancePort), port: options.alliancePort });
+  registerAllianceRoutes(app, { requirePort: Boolean(options.alliancePort), ...(options.alliancePort ? { port: options.alliancePort } : {}) });
   registerAdminRoutes(app);
   registerAdminLeagueRoutes(app);
   registerGiftCodeRoutes(app);
