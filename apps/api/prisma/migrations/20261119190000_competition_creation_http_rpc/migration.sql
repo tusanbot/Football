@@ -30,7 +30,10 @@ BEGIN
   IF p_idempotency_key IS NULL OR p_idempotency_key !~ '^[A-Za-z0-9:_-]{12,128}$' THEN
     RAISE EXCEPTION USING MESSAGE = 'INVALID_IDEMPOTENCY_KEY', ERRCODE = 'P0001';
   END IF;
-  IF p_format NOT IN ('LEAGUE', 'CUP') OR p_season < 2000 OR p_season > 3000 OR p_now IS NULL THEN
+  IF p_format IS NULL OR p_format NOT IN ('LEAGUE', 'CUP') OR p_season IS NULL OR p_season < 2000 OR p_season > 3000 OR p_now IS NULL THEN
+    RAISE EXCEPTION USING MESSAGE = 'INVALID_COMPETITION', ERRCODE = 'P0001';
+  END IF;
+  IF p_max_teams IS NULL OR p_cup_legs IS NULL THEN
     RAISE EXCEPTION USING MESSAGE = 'INVALID_COMPETITION', ERRCODE = 'P0001';
   END IF;
   IF p_format = 'LEAGUE' AND (p_max_teams < 4 OR p_max_teams > 10 OR p_cup_legs <> 1) THEN
@@ -39,15 +42,15 @@ BEGIN
   IF p_format = 'CUP' AND (p_max_teams NOT IN (4, 8) OR p_cup_legs NOT IN (1, 2)) THEN
     RAISE EXCEPTION USING MESSAGE = 'CUP_SIZE_MUST_BE_FOUR_OR_EIGHT', ERRCODE = 'P0001';
   END IF;
-  IF jsonb_typeof(p_rules) <> 'object'
-    OR jsonb_typeof(p_rules->'maxSubstitutions') <> 'number'
-    OR jsonb_typeof(p_rules->'maxInPlayWindows') <> 'number'
-    OR jsonb_typeof(p_rules->'injuriesEnabled') <> 'boolean'
-    OR jsonb_typeof(p_rules->'injuryDurationDays') <> 'number'
-    OR jsonb_typeof(p_rules->'redCardSuspensionMatches') <> 'number'
-    OR jsonb_typeof(p_rules->'yellowCardsToSuspend') <> 'number'
-    OR jsonb_typeof(p_rules->'yellowCardSuspensionMatches') <> 'number'
-    OR jsonb_typeof(p_rules->'penaltiesOnDraw') <> 'boolean'
+  IF p_rules IS NULL OR jsonb_typeof(p_rules) IS DISTINCT FROM 'object'
+    OR jsonb_typeof(p_rules->'maxSubstitutions') IS DISTINCT FROM 'number'
+    OR jsonb_typeof(p_rules->'maxInPlayWindows') IS DISTINCT FROM 'number'
+    OR jsonb_typeof(p_rules->'injuriesEnabled') IS DISTINCT FROM 'boolean'
+    OR jsonb_typeof(p_rules->'injuryDurationDays') IS DISTINCT FROM 'number'
+    OR jsonb_typeof(p_rules->'redCardSuspensionMatches') IS DISTINCT FROM 'number'
+    OR jsonb_typeof(p_rules->'yellowCardsToSuspend') IS DISTINCT FROM 'number'
+    OR jsonb_typeof(p_rules->'yellowCardSuspensionMatches') IS DISTINCT FROM 'number'
+    OR jsonb_typeof(p_rules->'penaltiesOnDraw') IS DISTINCT FROM 'boolean'
     OR (p_rules->>'maxSubstitutions')::integer NOT BETWEEN 0 AND 5
     OR (p_rules->>'maxInPlayWindows')::integer NOT BETWEEN 0 AND 3
     OR (p_rules->>'injuryDurationDays')::integer NOT BETWEEN 1 AND 14
