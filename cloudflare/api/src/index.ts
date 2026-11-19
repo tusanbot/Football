@@ -468,8 +468,10 @@ export default {
     configureEnv(env);
     if (request.method === "OPTIONS") return createWorkersApiRouter().fetch(request);
     if (request.method === "GET" && url.pathname === "/ready") {
-      const missing = missingConfig(env).filter((item) =>
-        !["DATABASE_URL", "DATABASE_URL_INVALID", "DATABASE_URL_MUST_USE_SUPABASE_TRANSACTION_POOLER"].includes(item));
+      // The Worker still has Prisma-backed route fallbacks. Until those routes are
+      // migrated, readiness must require the legacy pooler URL as well as the
+      // Supabase HTTPS transport; otherwise the Bot can start against a partial API.
+      const missing = missingConfig(env);
       if (!env.SUPABASE_URL) missing.push("SUPABASE_URL");
       if (!env.SUPABASE_SERVICE_ROLE_KEY || env.SUPABASE_SERVICE_ROLE_KEY.length < 32) missing.push("SUPABASE_SERVICE_ROLE_KEY");
       if (missing.length) return json({ status: "not_ready", service: "football-empire-cloudflare-api", missing }, 503);
