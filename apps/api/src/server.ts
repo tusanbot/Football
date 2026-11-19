@@ -28,7 +28,7 @@ const groupMembershipPort = hasSupabaseUrl
 const alliancePort = hasSupabaseUrl
   ? new NodeSupabaseAllianceRepository(process.env.SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
   : undefined;
-const app = buildApp({ ...(groupMembershipPort ? { groupMembershipPort } : {}), ...(alliancePort ? { alliancePort } : {}) });
+const app = buildApp({ ...(groupMembershipPort ? { groupMembershipPort } : {}), ...(alliancePort ? { alliancePort, adminAlliancePort: alliancePort } : {}) });
 let matchWorker: NodeJS.Timeout | undefined;
 let workerTask: Promise<void> | null = null;
 let shuttingDown = false;
