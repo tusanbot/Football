@@ -10,13 +10,13 @@ DECLARE
   v_balance bigint;
   v_ledger_count bigint;
 BEGIN
-  INSERT INTO public."User" (id, "telegramId")
-  VALUES (v_user_id, 'ci-wallet-rpc-telegram')
+  INSERT INTO public."User" (id, "telegramId", "updatedAt")
+  VALUES (v_user_id, 'ci-wallet-rpc-telegram', NOW())
   ON CONFLICT (id) DO NOTHING;
 
-  INSERT INTO public."Wallet" (id, "userId", asset, balance, version)
-  VALUES ('ci-wallet-rpc-wallet', v_user_id, 'CASH', 100, 0)
-  ON CONFLICT ("userId", asset) DO UPDATE SET balance = 100, version = 0;
+  INSERT INTO public."Wallet" (id, "userId", asset, balance, version, "updatedAt")
+  VALUES ('ci-wallet-rpc-wallet', v_user_id, 'CASH', 100, 0, NOW())
+  ON CONFLICT ("userId", asset) DO UPDATE SET balance = 100, version = 0, "updatedAt" = NOW();
 
   SELECT * INTO v_row
   FROM public.apply_wallet_entry(
