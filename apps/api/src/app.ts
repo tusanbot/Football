@@ -16,6 +16,10 @@ import { withGroupMembershipPort } from "./groups/group-membership-context.js";
 import { registerAllianceRoutes } from "./groups/alliance-routes.js";
 import type { AlliancePort } from "./groups/alliance-context.js";
 import { withAlliancePort } from "./groups/alliance-context.js";
+import type { StorePurchasePort } from "./store/store-purchase-context.js";
+import { withStorePurchasePort } from "./store/store-purchase-context.js";
+import type { StoreItemUsePort } from "./store/store-item-use-context.js";
+import { withStoreItemUsePort } from "./store/store-item-use-context.js";
 import { prisma } from "./db.js";
 import { parseAdminTelegramIds, parseCorsOrigins } from "./runtime-config.js";
 import { registerAdminRoutes } from "./admin-routes.js";
@@ -38,7 +42,7 @@ const healthResponse = z.object({
   version: z.string(),
 });
 
-export function buildApp(options: { logger?: boolean; pluginTimeout?: number; groupMembershipPort?: GroupMembershipPort; alliancePort?: AlliancePort; adminAlliancePort?: AdminAlliancePort; telegramUserLookupPort?: TelegramUserLookupPort } = {}) {
+export function buildApp(options: { logger?: boolean; pluginTimeout?: number; groupMembershipPort?: GroupMembershipPort; alliancePort?: AlliancePort; adminAlliancePort?: AdminAlliancePort; telegramUserLookupPort?: TelegramUserLookupPort; storePurchasePort?: StorePurchasePort; storeItemUsePort?: StoreItemUsePort } = {}) {
   const app = Fastify({
     logger: options.logger ?? process.env.NODE_ENV !== "test",
     pluginTimeout: options.pluginTimeout ?? 10_000,
@@ -75,6 +79,17 @@ export function buildApp(options: { logger?: boolean; pluginTimeout?: number; gr
   if (options.alliancePort) {
     app.addHook("onRequest", (_request, _reply, done) => {
       void withAlliancePort(options.alliancePort!, async () => done());
+    });
+  }
+
+  if (options.storePurchasePort) {
+    app.addHook("onRequest", (_request, _reply, done) => {
+      withStorePurchasePort(options.storePurchasePort!, () => done());
+    });
+  }
+  if (options.storeItemUsePort) {
+    app.addHook("onRequest", (_request, _reply, done) => {
+      withStoreItemUsePort(options.storeItemUsePort!, () => done());
     });
   }
 
