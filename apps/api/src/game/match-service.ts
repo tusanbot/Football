@@ -1823,6 +1823,13 @@ export async function processDueMatchRuntimes(
   limit = 10,
   options: { enqueue?: boolean; claim?: boolean } = {},
 ): Promise<{ enqueued: number; claimed: number; advanced: number; waiting: number; settled: number; failed: number }> {
+  if (getMatchRuntimeSnapshotPort()) {
+    const requiredPorts = [
+      getMatchRuntimeLeasePort(), getMatchRuntimeEnqueuePort(), getMatchRuntimeForfeitPort(),
+      getMatchRuntimeAdvancePort(), getMatchRuntimeCheckpointPort(), getMatchRuntimeSettlementPort(),
+    ];
+    if (requiredPorts.some((port) => !port)) throw new MatchServiceError("WORKER_MATCH_RUNTIME_REPOSITORY_SET_INCOMPLETE");
+  }
   const enqueued = options.enqueue === false ? 0 : await enqueueDueMatchRuntimes(now, Math.max(limit, 10));
   // The coordinator skips queue scans entirely when its scheduler snapshot says no work is due.
   const claimed = options.claim === false ? [] : await claimDueMatchRuntimes(workerId, now, 60_000, limit);

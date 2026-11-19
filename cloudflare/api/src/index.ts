@@ -379,10 +379,13 @@ function formatResultNotification(row: MatchNotificationRow): string {
 }
 
 async function scheduledJobs(env: Env): Promise<void> {
-  if (env.MATCH_COORDINATOR) {
-    console.info("Scheduled fallback skipped; MatchCoordinator owns match and tournament processing.");
+  if (!env.MATCH_COORDINATOR) {
+    console.error("Scheduled game jobs paused; MATCH_COORDINATOR binding is required.");
     return;
   }
+  console.info("Scheduled fallback skipped; MatchCoordinator owns match and tournament processing.");
+  return;
+  /* Legacy scheduled Prisma path intentionally unreachable; match work must use MatchCoordinator/Supabase. */
   const missing = missingConfig(env);
   if (missing.length) { console.error("Scheduled game jobs skipped; missing configuration:", missing); return; }
   configureEnv(env);

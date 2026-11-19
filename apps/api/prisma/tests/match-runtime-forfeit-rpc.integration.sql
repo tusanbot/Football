@@ -17,13 +17,13 @@ BEGIN
  INSERT INTO public."FootballMatch"(id,"idempotencyKey","homeClubId","awayClubId","scheduledAt",seed,"updatedAt")
  VALUES('ci-forfeit-match','ci-forfeit-key','ci-forfeit-home-club','ci-forfeit-away-club',now()-interval '1 hour','ci-forfeit-seed',now())
  ON CONFLICT(id) DO NOTHING;
- r:=public.settle_invalid_match_fixture_http('ci-forfeit-match',now());
+ r:=public.settle_invalid_match_fixture_http('ci-forfeit-match',now()::timestamp without time zone);
  IF r->>'settled'<>'true' OR r->>'replayed'<>'false' THEN RAISE EXCEPTION 'first forfeit settlement failed: %',r; END IF;
  IF NOT EXISTS(SELECT 1 FROM public."FootballMatch" WHERE id='ci-forfeit-match' AND status='COMPLETED'
   AND "homeScore"=3 AND "awayScore"=0 AND "winnerClubId"='ci-forfeit-home-club') THEN RAISE EXCEPTION 'forfeit result mismatch'; END IF;
  IF EXISTS(SELECT 1 FROM public."MatchRuntime" WHERE "matchId"='ci-forfeit-match') THEN RAISE EXCEPTION 'runtime unexpectedly created'; END IF;
  IF (SELECT count(*) FROM public."MatchResultNotification" WHERE "matchId"='ci-forfeit-match')<>2 THEN RAISE EXCEPTION 'result notifications missing'; END IF;
- replay:=public.settle_invalid_match_fixture_http('ci-forfeit-match',now());
+ replay:=public.settle_invalid_match_fixture_http('ci-forfeit-match',now()::timestamp without time zone);
  IF replay->>'replayed'<>'true' THEN RAISE EXCEPTION 'forfeit replay not idempotent'; END IF;
  IF (SELECT count(*) FROM public."LedgerTransaction" WHERE "referenceType"='FOOTBALL_MATCH' AND "referenceId"='ci-forfeit-match')<>2 THEN RAISE EXCEPTION 'reward credits duplicated or missing'; END IF;
 END;$test$;
