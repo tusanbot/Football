@@ -93,7 +93,14 @@ function gameApiFetch(env: Env, url: URL, init?: RequestInit): Promise<Response>
 async function ensureApiReady(env: Env) {
   if (Date.now() < apiReadyUntil) return;
   const response = await gameApiFetch(env, new URL("/ready", env.FOOTBALL_API_URL), { signal: AbortSignal.timeout(10_000) });
-  if (!response.ok) throw new Error("Game API is not ready (HTTP " + response.status + ").");
+  if (!response.ok) {
+    const readiness = await response.clone().json().catch(() => null) as { missing?: unknown } | null;
+    const missing = Array.isArray(readiness?.missing)
+      ? readiness.missing.filter((item): item is string => typeof item === "string").join(", ")
+      : "";
+    throw new Error("Game API is not ready (HTTP " + response.status
+      + (missing ? "; missing: " + missing : "") + ").");
+  }
   apiReadyUntil = Date.now() + 10_000;
 }
 
