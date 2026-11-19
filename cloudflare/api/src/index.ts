@@ -73,6 +73,8 @@ import { SupabaseClubEconomySettlementRepository } from "./repositories/club-eco
 import { SupabaseClubTicketPriceRepository } from "./repositories/club-ticket-price.js";
 import { SupabaseBotRuntimeLeaseRepository } from "./repositories/bot-runtime-lease.js";
 import { withGroupMembershipPort } from "../../../apps/api/src/groups/group-membership-context.js";
+import { withAlliancePort } from "../../../apps/api/src/groups/alliance-context.js";
+import { SupabaseAllianceRepository } from "./repositories/alliance.js";
 import { SupabaseGroupMembershipRepository } from "./repositories/group-membership.js";
 
 interface MatchCoordinatorNamespace { idFromName(name: string): unknown; get(id: unknown): { fetch(input: string, init?: RequestInit): Promise<Response> }; }
@@ -192,10 +194,12 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
       const matchRuntimeSettlement = supabaseClient ? new SupabaseMatchRuntimeSettlementRepository(supabaseClient) : undefined;
       const botRuntimeLease = supabaseClient ? new SupabaseBotRuntimeLeaseRepository(supabaseClient) : undefined;
        const groupMembership = supabaseClient ? new SupabaseGroupMembershipRepository(supabaseClient) : undefined;
+        const alliance = supabaseClient ? new SupabaseAllianceRepository(supabaseClient) : undefined;
        const router = createWorkersApiRouter({ publicPlayerRecords, seasonAwards, specialPlayers, botRuntimeLease, groupMembership });
       const handle = async (): Promise<Response> => await router.fetch(request);
       const withGroupMembership = groupMembership ? () => withGroupMembershipPort(groupMembership, handle) : handle;
-      const withCompetitionCreation = competitionCreation ? () => withCompetitionCreationPort(competitionCreation, withGroupMembership) : withGroupMembership;
+       const withAlliance = alliance ? () => withAlliancePort(alliance, withGroupMembership) : withGroupMembership;
+      const withCompetitionCreation = competitionCreation ? () => withCompetitionCreationPort(competitionCreation, withAlliance) : withAlliance;
       const withClubMatchRead = clubMatchRead ? () => withClubMatchReadPort(clubMatchRead, withCompetitionCreation) : withCompetitionCreation;
       const withCompetitionAdvancement = competitionAdvancement ? () => withCompetitionAdvancementPort(competitionAdvancement, withClubMatchRead) : withClubMatchRead;
       const withPyramidSettlement = pyramidLeagueSettlement ? () => withPyramidLeagueSettlementPort(pyramidLeagueSettlement, withCompetitionAdvancement) : withCompetitionAdvancement;

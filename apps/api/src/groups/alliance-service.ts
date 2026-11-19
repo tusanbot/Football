@@ -2,6 +2,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "../db.js";
 import { MatchServiceError, startLeague } from "../game/match-service.js";
 import { buildAllianceSeasonStandings, type AllianceSeasonLedgerEntry, type AllianceSeasonGroupInput } from "./alliance-security.js";
+import { getAlliancePort } from "./alliance-context.js";
 
 const ALLIANCE_DEFAULT_SEASON_DAYS = 30;
 async function getAllianceSeasonDuration(tx: Prisma.TransactionClient) {
@@ -49,6 +50,7 @@ async function payAllianceSeasonPrize(tx: Prisma.TransactionClient, allianceId: 
 }
 
 export async function createAlliance(i: { telegramUserId: string; telegramGroupId: string; name: string; description?: string; idempotencyKey: string }) {
+  const port=getAlliancePort(); if(port) return port.createAlliance(i);
   return prisma.$transaction(async tx => {
     const { group } = await manager(tx, i.telegramUserId, i.telegramGroupId);
     const old = await tx.alliance.findUnique({ where: { slug: i.idempotencyKey } });
@@ -68,6 +70,7 @@ export async function createAlliance(i: { telegramUserId: string; telegramGroupI
 }
 
 export async function inviteAllianceGroup(i: { telegramUserId: string; telegramGroupId: string; targetTelegramGroupId: string }) {
+  const port=getAlliancePort(); if(port) return port.inviteAllianceGroup(i);
   return prisma.$transaction(async tx => {
     const { group } = await manager(tx, i.telegramUserId, i.telegramGroupId);
     const membership = await tx.allianceGroup.findUnique({ where: { groupId: group.id }, include: { alliance: true } });
@@ -89,6 +92,7 @@ export async function inviteAllianceGroup(i: { telegramUserId: string; telegramG
 
 
 export async function contributeAllianceTreasury(i: { telegramUserId: string; telegramGroupId: string; amount: bigint; idempotencyKey: string }) {
+  const port=getAlliancePort(); if(port) return port.contributeAllianceTreasury({...i,amount:i.amount.toString()});
   if (i.amount <= 0n || i.amount > 1000000000n) throw new AllianceServiceError("INVALID_CONTRIBUTION_AMOUNT");
   return prisma.$transaction(async tx => {
     const { user, group } = await manager(tx, i.telegramUserId, i.telegramGroupId);
@@ -114,6 +118,7 @@ export async function contributeAllianceTreasury(i: { telegramUserId: string; te
 }
 
 export async function respondAllianceInvitation(i: { telegramUserId: string; telegramGroupId: string; invitationId: string; accept: boolean }) {
+  const port=getAlliancePort(); if(port) return port.respondAllianceInvitation(i);
   return prisma.$transaction(async tx => {
     const { group } = await manager(tx, i.telegramUserId, i.telegramGroupId);
     const invitation = await tx.allianceInvitation.findFirst({ where: { id: i.invitationId, groupId: group.id }, include: { alliance: true } });
