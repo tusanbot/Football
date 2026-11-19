@@ -41,3 +41,12 @@ test("gift-code rate limit rejects exhausted windows", async () => {
   const client = { rpc: async () => [false] } as never;
   assert.equal(await new SupabaseGiftCodeRedemptionRepository(client).consumeRateLimit({ telegramUserId: "123456789", limit: 5 }), false);
 });
+
+
+test("gift-code preflight reads reward type through Supabase RPC", async () => {
+  let called = "";
+  const client = { rpc: async (name: string) => { called = name; return ["GROUP_POINTS"]; } } as never;
+  const result = await new SupabaseGiftCodeRedemptionRepository(client).getRewardType("GROUP123");
+  assert.equal(called, "get_gift_code_reward_type");
+  assert.equal(result, "GROUP_POINTS");
+});

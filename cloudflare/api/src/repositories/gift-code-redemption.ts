@@ -29,6 +29,11 @@ export class SupabaseGiftCodeRedemptionRepository implements GiftCodeRedemptionP
     return Array.isArray(rows) && rows[0] === true;
   }
 
+  async getRewardType(code: string): Promise<string | null> {
+    const rows = await this.client.rpc<string[]>("get_gift_code_reward_type", { p_code: code });
+    return Array.isArray(rows) && typeof rows[0] === "string" ? rows[0] : null;
+  }
+
   async redeem(input: GiftCodeRedemptionCommand): Promise<GiftCodeRedemptionResult> {
     let rows: GiftCodeRpcRow[];
     try {

@@ -25,6 +25,17 @@ export function registerGiftCodeRoutes(app: FastifyInstance) {
     if (!rateLimitAllowed) return reply.code(429).send({ error: "GIFT_CODE_RATE_LIMITED", retryAfterSeconds: 60 });
     const code = body.data.code.toUpperCase();
     try {
+      if (redemptionPort) {
+        const rewardType = await redemptionPort.getRewardType(code);
+        if (rewardType === "GROUP_POINTS") {
+          if (!body.data.telegramGroupId) throw new Error("GIFT_CODE_GROUP_REQUIRED");
+          await verifyTelegramGroupActor({ telegramGroupId: body.data.telegramGroupId, telegramUserId: user.telegramId });
+        }
+        return await redemptionPort.redeem({
+          userId: user.id, code, idempotencyKey: body.data.idempotencyKey,
+          telegramGroupId: body.data.telegramGroupId ?? null,
+        });
+      }
       const priorRedemption = await prisma.giftCodeRedemption.findUnique({
         where: { idempotencyKey: body.data.idempotencyKey },
         include: { giftCode: { select: { code: true } }, group: { select: { telegramId: true } } },
@@ -40,8 +51,6 @@ export function registerGiftCodeRoutes(app: FastifyInstance) {
           replayed: true,
         };
       }
-      // Do network membership verification before opening the financial transaction.
-      // The transaction re-checks persisted group membership and group state.
       const preflightGift = await prisma.giftCode.findUnique({ where: { code }, select: { rewardType: true } });
       if (preflightGift?.rewardType === "GROUP_POINTS") {
         if (!body.data.telegramGroupId) throw new Error("GIFT_CODE_GROUP_REQUIRED");
@@ -56,9 +65,6 @@ export function registerGiftCodeRoutes(app: FastifyInstance) {
         });
         if (!membership) throw new Error("GIFT_CODE_GROUP_MEMBERSHIP_REQUIRED");
         await verifyTelegramGroupActor({ telegramGroupId: group.telegramId, telegramUserId: user.telegramId });
-      }
-      if (redemptionPort) {
-        return await redemptionPort.redeem({ userId: user.id, code, idempotencyKey: body.data.idempotencyKey, telegramGroupId: body.data.telegramGroupId ?? null });
       }
       return await prisma.$transaction(async (tx) => {
         const gift = await tx.giftCode.findUnique({ where: { code } });
