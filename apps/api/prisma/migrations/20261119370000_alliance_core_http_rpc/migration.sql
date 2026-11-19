@@ -78,7 +78,7 @@ END $$;
 
 CREATE OR REPLACE FUNCTION public.contribute_alliance_treasury_http(p_telegram_user_id text,p_telegram_group_id text,p_amount bigint,p_idempotency_key text)
 RETURNS jsonb LANGUAGE plpgsql SECURITY INVOKER SET search_path=public,pg_temp AS $$
-DECLARE u public."User"%ROWTYPE; g public."TelegramGroup"%ROWTYPE; m public."AllianceGroup"%ROWTYPE; a public."Alliance"%ROWTYPE; old public."AllianceLedger"%ROWTYPE; points bigint;
+DECLARE u public."User"%ROWTYPE; g public."TelegramGroup"%ROWTYPE; m public."AllianceGroup"%ROWTYPE; a public."Alliance"%ROWTYPE; old public."AllianceLedger"%ROWTYPE; v_group_points bigint;
 BEGIN
  IF p_amount IS NULL OR p_amount<=0 OR p_amount>1000000000 OR p_idempotency_key !~ '^[A-Za-z0-9_-]{12,64}$' THEN RAISE EXCEPTION USING MESSAGE='INVALID_CONTRIBUTION_AMOUNT',ERRCODE='22023'; END IF;
  SELECT * INTO u FROM public."User" WHERE "telegramId"=p_telegram_user_id FOR UPDATE;
@@ -97,13 +97,13 @@ BEGIN
   RETURN jsonb_build_object('contributed',true,'replayed',true,'treasuryPoints',a."treasuryPoints"::text);
  END IF;
  IF NOT EXISTS(SELECT 1 FROM public."AllianceSeason" WHERE "allianceId"=a.id AND status='ACTIVE') THEN RETURN jsonb_build_object('error','SEASON_REVIEW_REQUIRED'); END IF;
- UPDATE public."TelegramGroup" SET points=points-p_amount WHERE id=g.id AND points>=p_amount RETURNING points INTO points;
+ UPDATE public."TelegramGroup" SET points=points-p_amount WHERE id=g.id AND points>=p_amount RETURNING "TelegramGroup".points INTO v_group_points;
  IF NOT FOUND THEN RETURN jsonb_build_object('error','INSUFFICIENT_GROUP_POINTS'); END IF;
  UPDATE public."Alliance" SET "treasuryPoints"="treasuryPoints"+p_amount,"updatedAt"=now() WHERE id=a.id RETURNING * INTO a;
  INSERT INTO public."AllianceLedger"(id,"allianceId","idempotencyKey",amount,source,description,"createdAt") VALUES(gen_random_uuid()::text,a.id,p_idempotency_key,p_amount,'GROUP_CONTRIBUTION','Contribution from Telegram group '||g.title,now());
  INSERT INTO public."GroupPointLedger"(id,"idempotencyKey","groupId","userId",amount,source,description,"createdAt") VALUES(gen_random_uuid()::text,'alliance-contribution:'||p_idempotency_key,g.id,u.id,-p_amount,'ADMIN_ADJUSTMENT','Contribution to alliance treasury',now());
  INSERT INTO public."AllianceAuditLog"(id,"allianceId","actorTelegramId","groupTelegramId",action,metadata,"createdAt") VALUES(gen_random_uuid()::text,a.id,p_telegram_user_id,p_telegram_group_id,'TREASURY_CONTRIBUTION',jsonb_build_object('amount',p_amount::text,'idempotencyKey',p_idempotency_key),now());
- RETURN jsonb_build_object('contributed',true,'replayed',false,'treasuryPoints',a."treasuryPoints"::text,'groupPoints',points::text);
+ RETURN jsonb_build_object('contributed',true,'replayed',false,'treasuryPoints',a."treasuryPoints"::text,'groupPoints',v_group_points::text);
 END $$;
 
 -- Keep these privileged RPC entry points unavailable to browser-facing roles.
