@@ -159,18 +159,28 @@ export async function completeGroupChallenge(i:{telegramUserId:string;telegramGr
 }
 
 export async function checkTelegramGroupMembers(groupTelegramId:string,memberCount:number,botPresent=true){const port=getGroupMembershipPort();if(port){try{return await port.checkMemberCount({telegramGroupId:groupTelegramId,memberCount,botPresent});}catch(error){if(error instanceof GroupMembershipPortError)throw new GroupServiceError(error.code);throw error;}}const [group,minimumMembers]=await Promise.all([prisma.telegramGroup.findUnique({where:{telegramId:groupTelegramId},select:{id:true,isSuspended:true}}),prisma.gameSetting.findUnique({where:{key:"groups.minimumMembers"},select:{value:true}})]);const required=settingInteger(minimumMembers?.value,MIN_TELEGRAM_MEMBERS,5,1000);if(!group)return {found:false,isActive:false,memberCount,minimumMembers:required};const active=memberCount>=required&&botPresent&&!group.isSuspended;await prisma.telegramGroup.update({where:{id:group.id},data:{memberCount,isActive:active,lastMemberCountCheckAt:new Date()}});return {found:true,isActive:active,memberCount,minimumMembers:required};}
-export async function createGroupLeague(i:{telegramUserId:string;telegramGroupId:string;name:string;maxTeams:number;idempotencyKey:string}){if(!/^[A-Za-z0-9:_-]{12,128}$/.test(i.idempotencyKey))throw new GroupServiceError("INVALID_IDEMPOTENCY_KEY");return prisma.$transaction(async tx=>{const {user,group}=await groupMember(tx,i.telegramUserId,i.telegramGroupId,true),club=await tx.club.findUnique({where:{ownerId:user.id},select:{id:true}});if(!club)throw new GroupServiceError("CLUB_NOT_FOUND");const old=await tx.competition.findUnique({where:{idempotencyKey:i.idempotencyKey}});if(old){if(old.groupId!==group.id||old.createdByClubId!==club.id||old.name!==i.name||old.maxTeams!==i.maxTeams)throw new GroupServiceError("IDEMPOTENCY_CONFLICT");return {competition:old,replayed:true};}const competition=await tx.competition.create({data:{idempotencyKey:i.idempotencyKey,name:i.name,season:new Date().getUTCFullYear(),format:"LEAGUE",maxTeams:i.maxTeams,createdByClubId:club.id,groupId:group.id,entries:{create:{clubId:club.id}}}});return {competition,replayed:false};},{isolationLevel:Prisma.TransactionIsolationLevel.Serializable});}
-export async function joinGroupLeague(i:{telegramUserId:string;telegramGroupId:string;competitionId:string}){
-  const access = await prisma.$transaction(async tx => {
-    const { user, group } = await groupMember(tx, i.telegramUserId, i.telegramGroupId);
-    const competition = await tx.competition.findFirst({ where: { id: i.competitionId, groupId: group.id }, select: { id: true } });
-    if (!competition) throw new GroupServiceError("COMPETITION_NOT_FOUND");
-    return { userId: user.id, competitionId: competition.id };
-  });
+export async function createGroupLeague(i:{telegramUserId:string;telegramGroupId:string;name:string;maxTeams:number;idempotencyKey:string}) {
+  if (!/^[A-Za-z0-9:_-]{12,128}$/.test(i.idempotencyKey)) throw new GroupServiceError("INVALID_IDEMPOTENCY_KEY");
+  const port = getGroupMembershipPort();
+  if (port) { try { return await port.createLeague(i); } catch (error) { if (error instanceof GroupMembershipPortError) throw new GroupServiceError(error.code); throw error; } }
+  return prisma.$transaction(async tx => { const {user,group}=await groupMember(tx,i.telegramUserId,i.telegramGroupId,true),club=await tx.club.findUnique({where:{ownerId:user.id},select:{id:true}});if(!club)throw new GroupServiceError("CLUB_NOT_FOUND");const old=await tx.competition.findUnique({where:{idempotencyKey:i.idempotencyKey}});if(old){if(old.groupId!==group.id||old.createdByClubId!==club.id||old.name!==i.name||old.maxTeams!==i.maxTeams)throw new GroupServiceError("IDEMPOTENCY_CONFLICT");return {competition:old,replayed:true};}const competition=await tx.competition.create({data:{idempotencyKey:i.idempotencyKey,name:i.name,season:new Date().getUTCFullYear(),format:"LEAGUE",maxTeams:i.maxTeams,createdByClubId:club.id,groupId:group.id,entries:{create:{clubId:club.id}}}});return {competition,replayed:false};},{isolationLevel:Prisma.TransactionIsolationLevel.Serializable});
+}
+export async function joinGroupLeague(i:{telegramUserId:string;telegramGroupId:string;competitionId:string}) {
+  const port = getGroupMembershipPort();
+  if (port) { try { return await port.joinLeague(i); } catch (error) { if (error instanceof GroupMembershipPortError) throw new GroupServiceError(error.code); throw error; } }
+  const access = await prisma.$transaction(async tx => { const { user, group } = await groupMember(tx, i.telegramUserId, i.telegramGroupId); const competition = await tx.competition.findFirst({ where: { id: i.competitionId, groupId: group.id }, select: { id: true } }); if (!competition) throw new GroupServiceError("COMPETITION_NOT_FOUND"); return { userId: user.id, competitionId: competition.id }; });
   return joinLeague(access.userId, access.competitionId);
 }
-export async function startGroupLeague(i:{telegramUserId:string;telegramGroupId:string;competitionId:string}){const u=await prisma.user.findUnique({where:{telegramId:i.telegramUserId},select:{id:true,club:{select:{id:true}}}});if(!u?.club)throw new GroupServiceError("CLUB_NOT_FOUND");const g=await prisma.telegramGroup.findUnique({where:{telegramId:i.telegramGroupId},select:{id:true,isActive:true,memberships:{where:{userId:u.id},select:{role:true}}}});if(!g)throw new GroupServiceError("GROUP_NOT_REGISTERED");if(!g.isActive)throw new GroupServiceError("GROUP_INACTIVE");if(!g.memberships.length||g.memberships[0]!.role==="MEMBER")throw new GroupServiceError("GROUP_MANAGER_REQUIRED");const c=await prisma.competition.findFirst({where:{id:i.competitionId,groupId:g.id},select:{id:true,createdByClubId:true}});if(!c)throw new GroupServiceError("COMPETITION_NOT_FOUND");if(c.createdByClubId!==u.club.id)throw new GroupServiceError("ONLY_CREATOR_CAN_START");return startLeague(u.id,c.id);}
-export async function getGroupLeagueTable(telegramId:string,groupTelegramId:string,competitionId:string){const g=await prisma.$transaction(async tx=>(await groupMember(tx,telegramId,groupTelegramId)).group),c=await prisma.competition.findFirst({where:{id:competitionId,groupId:g.id},include:{entries:{include:{club:{select:{name:true}}},orderBy:[{points:"desc"},{goalsFor:"desc"},{goalsAgainst:"asc"}]}}});if(!c)throw new GroupServiceError("COMPETITION_NOT_FOUND");return {competition:{id:c.id,name:c.name,status:c.status,teams:c.entries.map((e,n)=>({rank:n+1,club:e.club.name,played:e.played,won:e.won,drawn:e.drawn,lost:e.lost,goalsFor:e.goalsFor,goalsAgainst:e.goalsAgainst,points:e.points}))}};}
+export async function startGroupLeague(i:{telegramUserId:string;telegramGroupId:string;competitionId:string}) {
+  const port = getGroupMembershipPort();
+  if (port) { try { return await port.startLeague(i); } catch (error) { if (error instanceof GroupMembershipPortError) throw new GroupServiceError(error.code); throw error; } }
+  const u=await prisma.user.findUnique({where:{telegramId:i.telegramUserId},select:{id:true,club:{select:{id:true}}}});if(!u?.club)throw new GroupServiceError("CLUB_NOT_FOUND");const g=await prisma.telegramGroup.findUnique({where:{telegramId:i.telegramGroupId},select:{id:true,isActive:true,memberships:{where:{userId:u.id},select:{role:true}}}});if(!g)throw new GroupServiceError("GROUP_NOT_REGISTERED");if(!g.isActive)throw new GroupServiceError("GROUP_INACTIVE");if(!g.memberships.length||g.memberships[0]!.role==="MEMBER")throw new GroupServiceError("GROUP_MANAGER_REQUIRED");const c=await prisma.competition.findFirst({where:{id:i.competitionId,groupId:g.id},select:{id:true,createdByClubId:true}});if(!c)throw new GroupServiceError("COMPETITION_NOT_FOUND");if(c.createdByClubId!==u.club.id)throw new GroupServiceError("ONLY_CREATOR_CAN_START");return startLeague(u.id,c.id);
+}
+export async function getGroupLeagueTable(telegramId:string,groupTelegramId:string,competitionId:string) {
+  const port = getGroupMembershipPort();
+  if (port) { try { return await port.getLeagueTable({ telegramUserId: telegramId, telegramGroupId: groupTelegramId, competitionId }); } catch (error) { if (error instanceof GroupMembershipPortError) throw new GroupServiceError(error.code); throw error; } }
+  const g=await prisma.$transaction(async tx=>(await groupMember(tx,telegramId,groupTelegramId)).group),c=await prisma.competition.findFirst({where:{id:competitionId,groupId:g.id},include:{entries:{include:{club:{select:{name:true}}},orderBy:[{points:"desc"},{goalsFor:"desc"},{goalsAgainst:"asc"}]}}});if(!c)throw new GroupServiceError("COMPETITION_NOT_FOUND");return {competition:{id:c.id,name:c.name,status:c.status,teams:c.entries.map((e,n)=>({rank:n+1,club:e.club.name,played:e.played,won:e.won,drawn:e.drawn,lost:e.lost,goalsFor:e.goalsFor,goalsAgainst:e.goalsAgainst,points:e.points}))}};
+}
 
 
 const GROUP_DAILY_POINT_CAP = 3;
@@ -231,6 +241,8 @@ export async function cancelGroupChallenge(i:{telegramUserId:string;telegramGrou
 }
 
 export async function listGroupLeagues(telegramUserId:string,telegramGroupId:string) {
+ const port = getGroupMembershipPort();
+ if (port) { try { return await port.listLeagues({ telegramUserId, telegramGroupId }); } catch (error) { if (error instanceof GroupMembershipPortError) throw new GroupServiceError(error.code); throw error; } }
  const {user,group}=await prisma.$transaction(async tx=>groupMember(tx,telegramUserId,telegramGroupId));
  const clubId=user.club?.id;
  if(!clubId)throw new GroupServiceError("CLUB_NOT_FOUND");
