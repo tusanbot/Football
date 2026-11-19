@@ -20,6 +20,14 @@ import type { StorePurchasePort } from "./store/store-purchase-context.js";
 import { withStorePurchasePort } from "./store/store-purchase-context.js";
 import type { StoreItemUsePort } from "./store/store-item-use-context.js";
 import { withStoreItemUsePort } from "./store/store-item-use-context.js";
+import type { WalletEntryPort } from "./economy/wallet-entry-context.js";
+import { withWalletEntryPort } from "./economy/wallet-entry-context.js";
+import type { MarketListingPort } from "./players/market-listing-context.js";
+import { withMarketListingPort } from "./players/market-listing-context.js";
+import type { MarketPurchasePort } from "./players/market-purchase-context.js";
+import { withMarketPurchasePort } from "./players/market-purchase-context.js";
+import type { StoreSnapshotPort } from "./store/store-snapshot-context.js";
+import { withStoreSnapshotPort } from "./store/store-snapshot-context.js";
 import { prisma } from "./db.js";
 import { parseAdminTelegramIds, parseCorsOrigins } from "./runtime-config.js";
 import { registerAdminRoutes } from "./admin-routes.js";
@@ -42,7 +50,7 @@ const healthResponse = z.object({
   version: z.string(),
 });
 
-export function buildApp(options: { logger?: boolean; pluginTimeout?: number; groupMembershipPort?: GroupMembershipPort; alliancePort?: AlliancePort; adminAlliancePort?: AdminAlliancePort; telegramUserLookupPort?: TelegramUserLookupPort; storePurchasePort?: StorePurchasePort; storeItemUsePort?: StoreItemUsePort } = {}) {
+export function buildApp(options: { logger?: boolean; pluginTimeout?: number; groupMembershipPort?: GroupMembershipPort; alliancePort?: AlliancePort; adminAlliancePort?: AdminAlliancePort; telegramUserLookupPort?: TelegramUserLookupPort; storePurchasePort?: StorePurchasePort; storeItemUsePort?: StoreItemUsePort; walletEntryPort?: WalletEntryPort; marketListingPort?: MarketListingPort; marketPurchasePort?: MarketPurchasePort; storeSnapshotPort?: StoreSnapshotPort } = {}) {
   const app = Fastify({
     logger: options.logger ?? process.env.NODE_ENV !== "test",
     pluginTimeout: options.pluginTimeout ?? 10_000,
@@ -92,6 +100,11 @@ export function buildApp(options: { logger?: boolean; pluginTimeout?: number; gr
       withStoreItemUsePort(options.storeItemUsePort!, () => done());
     });
   }
+
+  if (options.walletEntryPort) app.addHook("onRequest", (_request, _reply, done) => withWalletEntryPort(options.walletEntryPort!, () => done()));
+  if (options.marketListingPort) app.addHook("onRequest", (_request, _reply, done) => withMarketListingPort(options.marketListingPort!, () => done()));
+  if (options.marketPurchasePort) app.addHook("onRequest", (_request, _reply, done) => withMarketPurchasePort(options.marketPurchasePort!, () => done()));
+  if (options.storeSnapshotPort) app.addHook("onRequest", (_request, _reply, done) => withStoreSnapshotPort(options.storeSnapshotPort!, () => done()));
 
   // Implement CORS with native Fastify hooks instead of @fastify/cors.
   // The plugin lifecycle can stall in the Cloudflare Workers runtime, preventing
