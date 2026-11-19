@@ -1,7 +1,7 @@
 import type { AlliancePort } from "./alliance-context.js";
 import { AllianceServiceError } from "./alliance-service.js";
 
-export interface AdminAlliancePort {
+export interface AdminAlliancePort extends Pick<AlliancePort, "consumeRateLimit"> {
   adminStartAllianceSeason(input: { actorTelegramId: string; allianceId: string; durationDays?: number; idempotencyKey: string }): Promise<unknown>;
   adminCloseAllianceSeason(input: { actorTelegramId: string; seasonId: string; idempotencyKey: string }): Promise<unknown>;
   adminReviewAllianceSeason(input: { actorTelegramId: string; seasonId: string; decision: "APPROVE" | "REJECT"; idempotencyKey: string }): Promise<unknown>;
