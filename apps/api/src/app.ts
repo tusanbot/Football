@@ -59,7 +59,7 @@ export function buildApp(options: { logger?: boolean; pluginTimeout?: number; gr
 
   if (options.telegramUserLookupPort) {
     app.addHook("onRequest", (_request, _reply, done) => {
-      withTelegramUserLookupPort(options.telegramUserLookupPort!, () => done());
+      void withTelegramUserLookupPort(options.telegramUserLookupPort!, async () => done());
     });
   }
 
