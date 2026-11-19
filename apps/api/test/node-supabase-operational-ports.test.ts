@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { SupabaseHttpClient, SupabaseHttpError } from "../src/node-supabase-http.js";
 import { SupabaseGameDashboardRepository } from "../src/game/node-supabase-game-dashboard.js";
+import { SupabaseClubLineupRepository } from "../src/game/node-supabase-club-lineup.js";
 import { NodeSupabaseWalletReadRepository } from "../src/economy/node-supabase-wallet-read.js";
 import { SupabaseClubManagementRepository as NodeSupabaseClubManagementRepository } from "../src/game/node-supabase-club-management.js";
 import { SupabaseSpecialAcquisitionRepository as NodeSupabaseSpecialAcquisitionRepository } from "../src/players/node-supabase-special-acquisition.js";
@@ -110,4 +111,28 @@ test("wallet read repository returns validated balances ordered by asset",async(
  assert.deepEqual(result,[{asset:"CASH",balance:"1200",version:4,updatedAt:"2026-11-19T10:00:00.000Z"}]);
  assert.equal(f.calls[0]!.url.pathname,"/rest/v1/Wallet");
  assert.equal(f.calls[0]!.url.searchParams.get("userId"),"eq.u1");
+});
+
+test("club rename uses atomic Supabase RPC and preserves active competition guard", async () => {
+ const f=clientWith((url)=>url.pathname.endsWith("/rpc/rename_club_http")
+  ? {kind:"LOCKED",activeCompetition:{id:"competition-1",name:"Premier League"}}
+  : []);
+ const repo=new SupabaseClubLineupRepository(f.client);
+ const result=await repo.rename("user-1","Tosan FC");
+ assert.deepEqual(result,{kind:"LOCKED",activeCompetition:{id:"competition-1",name:"Premier League"}});
+ assert.equal(f.calls[0]!.url.pathname,"/rest/v1/rpc/rename_club_http");
+ assert.deepEqual(JSON.parse(String(f.calls[0]!.init.body)),{p_user_id:"user-1",p_name:"Tosan FC"});
+});
+
+test("club squad list uses direct Supabase reads and serializes money fields", async () => {
+ const f=clientWith((url)=>url.pathname.endsWith("/Club")?[{id:"club-1"}]:[
+  {id:"p1",firstName:"A",lastName:"B",nationality:"IR",age:22,position:"ST",overall:80,potential:90,marketValue:"120000",attributes:{pace:80},wage:"1200",contractDays:200,morale:80,fitness:90,origin:"GENERATED",status:"ACTIVE",lineupSlot:9,suspensionMatchesRemaining:0},
+ ]);
+ const repo=new SupabaseClubLineupRepository(f.client);
+ const result=await repo.listPlayers("user-1");
+ assert.equal(result.count,1);
+ assert.equal(result.players[0]!.marketValue,"120000");
+ assert.equal(result.players[0]!.wage,"1200");
+ assert.equal(f.calls.length,2);
+ assert.equal(f.calls[1]!.url.searchParams.get("status"),"in.(ACTIVE,INJURED,CONTRACT_EXPIRED)");
 });
