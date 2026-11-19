@@ -115,7 +115,7 @@ BEGIN
 
   BEGIN
     PERFORM public.create_friendly_match_http(
-      v_home_user, v_bad_club, 'ci-friendly-match-key-0003', v_scheduled_at + interval '1 day'
+      v_home_user, v_bad_club, 'ci-friendly-match-key-0003', v_scheduled_at + interval '1 day 3 hours'
     );
     RAISE EXCEPTION 'expected BOTH_CLUBS_NEED_VALID_LINEUPS';
   EXCEPTION WHEN SQLSTATE 'P0001' THEN
