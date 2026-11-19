@@ -61,6 +61,7 @@ BEGIN
  SELECT * INTO founder FROM public."AllianceGroup" WHERE "allianceId"=a.id AND role='FOUNDER';
  IF founder.id IS NULL THEN RETURN jsonb_build_object('error','ALLIANCE_FOUNDER_REQUIRED'); END IF;
  SELECT "telegramId" INTO founder_telegram_id FROM public."TelegramGroup" WHERE id=founder."groupId";
+ SELECT NULL::text AS group_id,NULL::text AS group_name,NULL::bigint AS points INTO winner;
  IF s.status='COMPLETED' THEN
   result:=jsonb_build_object('season',to_jsonb(s),'standings',s.standings,'replayed',true,'reviewStatus',s."reviewStatus",'securityFlags',coalesce(s."securityFlags",'[]'::jsonb),'alertGroupTelegramId',founder_telegram_id);
  ELSE
@@ -154,6 +155,7 @@ BEGIN
  SELECT * INTO founder FROM public."AllianceGroup" WHERE "allianceId"=a.id AND role='FOUNDER';
  IF founder.id IS NULL THEN RETURN jsonb_build_object('error','ALLIANCE_FOUNDER_REQUIRED'); END IF;
  SELECT "telegramId" INTO founder_telegram_id FROM public."TelegramGroup" WHERE id=founder."groupId";
+ SELECT NULL::text AS group_id,NULL::text AS group_name,NULL::bigint AS points INTO winner;
  IF s."reviewStatus" IN ('APPROVED','REJECTED') THEN
   result:=jsonb_build_object('season',to_jsonb(s),'reviewStatus',s."reviewStatus",'replayed',true,'prize','0');
  ELSE
