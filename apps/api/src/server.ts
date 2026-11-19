@@ -8,6 +8,9 @@ import { NodeSupabaseAllianceRepository } from "./groups/node-supabase-alliance.
 import { NodeSupabaseTelegramUserLookupRepository } from "./auth/node-supabase-telegram-user-lookup.js";
 import { NodeSupabaseStorePurchaseRepository, NodeSupabaseStoreItemUseRepository } from "./store/node-supabase-store.js";
 import { NodeSupabaseWalletEntryRepository, NodeSupabaseMarketRepository, NodeSupabaseStoreSnapshotRepository } from "./economy/node-supabase-commerce.js";
+import { SupabaseHttpClient } from "./node-supabase-http.js";
+import { SupabasePlayerDevelopmentRepository } from "./players/node-supabase-player-development.js";
+import { NodeSupabaseClubEconomyRepository } from "./game/node-supabase-club-economy.js";
 import { isValidTelegramBotToken, parseAdminTelegramIds, parseCorsOrigins } from "./runtime-config.js";
 const required = ["DATABASE_URL", "TELEGRAM_BOT_TOKEN", "BOT_API_SECRET", "CORS_ORIGIN", "GAME_ADMIN_TELEGRAM_IDS"] as const;
 const missing = required.filter((key) => !process.env[key]?.trim());
@@ -43,6 +46,9 @@ const storeItemUsePort = hasSupabaseUrl
 const walletEntryPort = hasSupabaseUrl ? new NodeSupabaseWalletEntryRepository(process.env.SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!) : undefined;
 const marketRepository = hasSupabaseUrl ? new NodeSupabaseMarketRepository(process.env.SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!) : undefined;
 const storeSnapshotPort = hasSupabaseUrl ? new NodeSupabaseStoreSnapshotRepository(process.env.SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!) : undefined;
+const supabaseHttp = hasSupabaseUrl ? new SupabaseHttpClient({ url: process.env.SUPABASE_URL!, serviceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY! }) : undefined;
+const playerDevelopmentPort = supabaseHttp ? new SupabasePlayerDevelopmentRepository(supabaseHttp) : undefined;
+const clubEconomySettlementPort = supabaseHttp ? new NodeSupabaseClubEconomyRepository(supabaseHttp) : undefined;
 const app = buildApp({
   ...(groupMembershipPort ? { groupMembershipPort } : {}),
   ...(alliancePort ? { alliancePort, adminAlliancePort: alliancePort } : {}),
@@ -52,6 +58,8 @@ const app = buildApp({
   ...(walletEntryPort ? { walletEntryPort } : {}),
   ...(marketRepository ? { marketListingPort: marketRepository, marketPurchasePort: marketRepository } : {}),
   ...(storeSnapshotPort ? { storeSnapshotPort } : {}),
+  ...(playerDevelopmentPort ? { playerDevelopmentPort } : {}),
+  ...(clubEconomySettlementPort ? { clubEconomySettlementPort } : {}),
 });
 let matchWorker: NodeJS.Timeout | undefined;
 let workerTask: Promise<void> | null = null;
