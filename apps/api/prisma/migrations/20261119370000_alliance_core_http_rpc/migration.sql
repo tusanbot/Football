@@ -105,3 +105,13 @@ BEGIN
  INSERT INTO public."AllianceAuditLog"(id,"allianceId","actorTelegramId","groupTelegramId",action,metadata,"createdAt") VALUES(gen_random_uuid()::text,a.id,p_telegram_user_id,p_telegram_group_id,'TREASURY_CONTRIBUTION',jsonb_build_object('amount',p_amount::text,'idempotencyKey',p_idempotency_key),now());
  RETURN jsonb_build_object('contributed',true,'replayed',false,'treasuryPoints',a."treasuryPoints"::text,'groupPoints',points::text);
 END $$;
+
+-- Keep these privileged RPC entry points unavailable to browser-facing roles.
+REVOKE ALL ON FUNCTION public.create_alliance_http(text,text,text,text,text) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.invite_alliance_group_http(text,text,text) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.respond_alliance_invitation_http(text,text,text,boolean) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.contribute_alliance_treasury_http(text,text,bigint,text) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.create_alliance_http(text,text,text,text,text) TO service_role;
+GRANT EXECUTE ON FUNCTION public.invite_alliance_group_http(text,text,text) TO service_role;
+GRANT EXECUTE ON FUNCTION public.respond_alliance_invitation_http(text,text,text,boolean) TO service_role;
+GRANT EXECUTE ON FUNCTION public.contribute_alliance_treasury_http(text,text,bigint,text) TO service_role;
