@@ -45,6 +45,7 @@ import { registerLeagueNoticeRoutes } from "./league-notice-routes.js";
 import { registerAdminGroupBroadcastRoutes } from "./admin-group-broadcast-routes.js";
 import { registerBotRuntimeRoutes } from "./bot-runtime-routes.js";
 import { registerPublicClubRoutes } from "./public-club-routes.js";
+import type { PublicClubLogoRepository } from "./node-supabase-public-club-logo.js";
 import { registerPublicPlayerRecordRoutes, type PublicPlayerRecordRepository } from "./players/public-record-routes.js";
 import { registerSeasonAwardRoutes } from "./game/season-award-routes.js";
 import { registerStoreRoutes } from "./store/store-routes.js";
@@ -69,7 +70,7 @@ const healthResponse = z.object({
   version: z.string(),
 });
 
-export function buildApp(options: { logger?: boolean; pluginTimeout?: number; groupMembershipPort?: GroupMembershipPort; alliancePort?: AlliancePort; adminAlliancePort?: AdminAlliancePort; telegramUserLookupPort?: TelegramUserLookupPort; storePurchasePort?: StorePurchasePort; storeItemUsePort?: StoreItemUsePort; walletEntryPort?: WalletEntryPort; marketListingPort?: MarketListingPort; marketPurchasePort?: MarketPurchasePort; storeSnapshotPort?: StoreSnapshotPort; playerDevelopmentPort?: PlayerDevelopmentPort; clubEconomySettlementPort?: ClubEconomySettlementPort; clubManagementPort?: ClubManagementPort; specialAcquisitionPort?: SpecialAcquisitionPort; giftCodeRedemptionPort?: GiftCodeRedemptionPort; botRuntimeLeasePort?: BotRuntimeLeasePort; matchPorts?: NodeSupabaseMatchPorts; gameDashboardPort?: GameDashboardPort; walletReadPort?: WalletReadPort; clubLineupPort?: ClubLineupPort; publicPlayerRecordRepository?: PublicPlayerRecordRepository } = {}) {
+export function buildApp(options: { logger?: boolean; pluginTimeout?: number; groupMembershipPort?: GroupMembershipPort; alliancePort?: AlliancePort; adminAlliancePort?: AdminAlliancePort; telegramUserLookupPort?: TelegramUserLookupPort; storePurchasePort?: StorePurchasePort; storeItemUsePort?: StoreItemUsePort; walletEntryPort?: WalletEntryPort; marketListingPort?: MarketListingPort; marketPurchasePort?: MarketPurchasePort; storeSnapshotPort?: StoreSnapshotPort; playerDevelopmentPort?: PlayerDevelopmentPort; clubEconomySettlementPort?: ClubEconomySettlementPort; clubManagementPort?: ClubManagementPort; specialAcquisitionPort?: SpecialAcquisitionPort; giftCodeRedemptionPort?: GiftCodeRedemptionPort; botRuntimeLeasePort?: BotRuntimeLeasePort; matchPorts?: NodeSupabaseMatchPorts; gameDashboardPort?: GameDashboardPort; walletReadPort?: WalletReadPort; clubLineupPort?: ClubLineupPort; publicPlayerRecordRepository?: PublicPlayerRecordRepository; publicClubLogoRepository?: PublicClubLogoRepository } = {}) {
   const app = Fastify({
     logger: options.logger ?? process.env.NODE_ENV !== "test",
     pluginTimeout: options.pluginTimeout ?? 10_000,
@@ -219,7 +220,7 @@ export function buildApp(options: { logger?: boolean; pluginTimeout?: number; gr
   registerLeagueNoticeRoutes(app);
   registerAdminGroupBroadcastRoutes(app);
   registerBotRuntimeRoutes(app, { ...(options.botRuntimeLeasePort ? { leasePort: options.botRuntimeLeasePort } : {}), requireLeasePort: Boolean(options.botRuntimeLeasePort) });
-  registerPublicClubRoutes(app);
+  registerPublicClubRoutes(app, options.publicClubLogoRepository);
   registerPublicPlayerRecordRoutes(app, options.publicPlayerRecordRepository);
   registerSeasonAwardRoutes(app);
   registerStoreRoutes(app);
