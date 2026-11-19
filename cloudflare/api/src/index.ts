@@ -45,6 +45,8 @@ import { withClubTicketPricePort } from "../../../apps/api/src/game/club-ticket-
 import { withClubEconomySettlementPort } from "../../../apps/api/src/game/club-economy-settlement-context.js";
 import { withClubManagementPort } from "../../../apps/api/src/game/club-management-context.js";
 import { SupabaseClubManagementRepository } from "./repositories/club-management.js";
+import { withClubLineupPort } from "../../../apps/api/src/game/club-lineup-context.js";
+import { SupabaseClubLineupRepository } from "./repositories/club-lineup.js";
 import { SupabaseClubEconomySettlementRepository } from "./repositories/club-economy-settlement.js";
 import { SupabaseClubTicketPriceRepository } from "./repositories/club-ticket-price.js";
 
@@ -142,6 +144,7 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
       const clubTicketPrice = supabaseClient ? new SupabaseClubTicketPriceRepository(supabaseClient) : undefined;
       const clubEconomySettlement = supabaseClient ? new SupabaseClubEconomySettlementRepository(supabaseClient) : undefined;
       const clubManagement = supabaseClient ? new SupabaseClubManagementRepository(supabaseClient) : undefined;
+      const clubLineup = supabaseClient ? new SupabaseClubLineupRepository(supabaseClient) : undefined;
       const seasonAwards = supabaseClient ? new SupabaseSeasonAwardRepository(supabaseClient) : undefined;
       const walletEntry = supabaseClient ? new SupabaseWalletEntryRepository(supabaseClient) : undefined;
       const storePurchase = supabaseClient ? new SupabaseStorePurchaseRepository(supabaseClient) : undefined;
@@ -162,8 +165,9 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
       const withClubTicketPrice = clubTicketPrice ? () => withClubTicketPricePort(clubTicketPrice, withTelegramAccountProvisioning) : withTelegramAccountProvisioning;
       const withClubEconomy = clubEconomySettlement ? () => withClubEconomySettlementPort(clubEconomySettlement, withClubTicketPrice) : withClubTicketPrice;
       const withClubOperations = clubManagement ? () => withClubManagementPort(clubManagement, withClubEconomy) : withClubEconomy;
+      const withLineup = clubLineup ? () => withClubLineupPort(clubLineup, withClubOperations) : withClubOperations;
       const withCheckpoint = matchRuntimeCheckpoint
-        ? () => withMatchRuntimeCheckpointPort(matchRuntimeCheckpoint, withClubOperations) : withClubOperations;
+        ? () => withMatchRuntimeCheckpointPort(matchRuntimeCheckpoint, withLineup) : withLineup;
       const withSettlement = matchRuntimeSettlement
         ? () => withMatchRuntimeSettlementPort(matchRuntimeSettlement, withCheckpoint) : withCheckpoint;
       const withWallet = walletEntry ? () => withWalletEntryPort(walletEntry, withSettlement) : withSettlement;

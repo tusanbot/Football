@@ -4,6 +4,7 @@ import { validateLineup, type Formation, type LineupCandidate } from "@football/
 import { prisma } from "../db.js";
 import { requireTelegramUser } from "../auth/require-telegram-user.js";
 import { getGameDashboardPort } from "./game-dashboard-context.js";
+import { getClubLineupPort } from "./club-lineup-context.js";
 
 const clubUpdateSchema = z.object({
   name: z.string().trim().min(2).max(32).regex(/^[\p{L}\p{N} .'-]+$/u),
@@ -120,6 +121,15 @@ export function registerGameRoutes(app: FastifyInstance) {
   app.get("/v1/club/lineup", async (request, reply) => {
     const user = await requireTelegramUser(request);
     if (!user) return reply.code(401).send({ error: "UNAUTHENTICATED" });
+    const lineupPort = getClubLineupPort();
+    if (lineupPort) {
+      try { return await lineupPort.get(user.id); }
+      catch (error) {
+        if (error instanceof Error && error.message === "CLUB_NOT_FOUND") return reply.code(404).send({ error: "CLUB_NOT_FOUND" });
+        request.log.error({ error }, "Supabase lineup read failed");
+        return reply.code(503).send({ error: "LINEUP_UNAVAILABLE" });
+      }
+    }
     const club = await prisma.club.findUnique({
       where: { ownerId: user.id },
       select: {
@@ -146,6 +156,20 @@ export function registerGameRoutes(app: FastifyInstance) {
     const parsed = lineupUpdateSchema.safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ error: "INVALID_LINEUP_REQUEST", details: parsed.error.flatten() });
 
+    const lineupPort = getClubLineupPort();
+    if (lineupPort) {
+      try {
+        const saved = await lineupPort.update(user.id, parsed.data);
+        if (!saved.ok) {
+          const status = saved.error === "CLUB_NOT_FOUND" ? 404 : saved.error === "LINEUP_VERSION_CONFLICT" ? 409 : 400;
+          return reply.code(status).send({ error: saved.error, ...(saved.currentVersion !== undefined ? { currentVersion: saved.currentVersion } : {}) });
+        }
+        return { ok: true, lineupVersion: saved.lineupVersion };
+      } catch (error) {
+        request.log.error({ error }, "Supabase lineup update failed");
+        return reply.code(503).send({ error: "LINEUP_UPDATE_UNAVAILABLE" });
+      }
+    }
     const club = await prisma.club.findUnique({
       where: { ownerId: user.id },
       select: { id: true, formation: true, mentality: true, pressing: true, tempo: true, passingStyle: true, lineupVersion: true },
