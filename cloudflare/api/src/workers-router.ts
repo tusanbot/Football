@@ -94,7 +94,7 @@ export function createWorkersApiRouter(dependencies: { publicPlayerRecords?: Pub
   registerPlayerDevelopmentRoutes(registrar);
   registerMatchRoutes(registrar);
   registerMatchNotificationRoutes(registrar);
-  registerGroupRoutes(registrar);
+  registerGroupRoutes(registrar, { requireMembershipPort: true });
   registerAllianceRoutes(registrar);
   registerAdminRoutes(registrar);
   registerAdminLeagueRoutes(registrar);

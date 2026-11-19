@@ -7,7 +7,7 @@ import { prisma } from "../db.js";
 import { TelegramGroupAuthorizationError, verifyTelegramGroupActor } from "./telegram-group-authorization.js";
 import { getGroupMembershipPort } from "./group-membership-context.js";
 
-async function authenticateBot(request: FastifyRequest, reply: FastifyReply): Promise<string | null> {
+async function authenticateBot(request: FastifyRequest, reply: FastifyReply, requireMembershipPort = false): Promise<string | null> {
   const expected = process.env.BOT_API_SECRET;
   const received = request.headers["x-football-bot-secret"];
   const telegramId = request.headers["x-telegram-user-id"];
@@ -18,6 +18,7 @@ async function authenticateBot(request: FastifyRequest, reply: FastifyReply): Pr
     reply.code(401).send({ error: "UNAUTHENTICATED_BOT_REQUEST" }); return null;
   }
   const groupPort = getGroupMembershipPort();
+  if (requireMembershipPort && !groupPort) { reply.code(503).send({ error: "SUPABASE_GROUP_MEMBERSHIP_UNAVAILABLE" }); return null; }
   const actorStatus = groupPort ? await groupPort.getActorStatus(telegramId, (request.params as { telegramGroupId?: string }).telegramGroupId ?? (request.body as { telegramGroupId?: string } | null)?.telegramGroupId) : null;
   const account = actorStatus ? { isSuspended: actorStatus.userSuspended } : await prisma.user.findUnique({ where: { telegramId }, select: { isSuspended: true } });
   if (account?.isSuspended) { reply.code(403).send({ error: "PLAYER_ACCOUNT_SUSPENDED" }); return null; }
@@ -44,7 +45,7 @@ export function requiresGroupManagerVerification(method: string, routeUrl: strin
   return method === "POST" && MANAGER_GROUP_ROUTES.has(routeUrl ?? "");
 }
 
-async function authenticateGroupActor(request: FastifyRequest, reply: FastifyReply): Promise<string | null> {
+async function authenticateGroupActor(request: FastifyRequest, reply: FastifyReply, requireMembershipPort = false): Promise<string | null> {
   const expected = process.env.BOT_API_SECRET;
   const received = request.headers["x-football-bot-secret"];
   const telegramId = request.headers["x-telegram-user-id"];
@@ -52,6 +53,7 @@ async function authenticateGroupActor(request: FastifyRequest, reply: FastifyRep
     const a = Buffer.from(received), b = Buffer.from(expected);
     if (a.length === b.length && timingSafeEqual(a, b) && /^\d{1,20}$/.test(telegramId)) {
       const groupPort = getGroupMembershipPort();
+      if (requireMembershipPort && !groupPort) { reply.code(503).send({ error: "SUPABASE_GROUP_MEMBERSHIP_UNAVAILABLE" }); return null; }
       const statusGroupId = (request.params as { telegramGroupId?: string }).telegramGroupId ?? (request.body as { telegramGroupId?: string } | null)?.telegramGroupId;
       const actorStatus = groupPort ? await groupPort.getActorStatus(telegramId, statusGroupId) : null;
       const user = actorStatus ? { isSuspended: actorStatus.userSuspended } : await prisma.user.findUnique({ where: { telegramId }, select: { isSuspended: true } });
@@ -99,6 +101,7 @@ async function authenticateGroupActor(request: FastifyRequest, reply: FastifyRep
       throw error;
     }
     const groupPort = getGroupMembershipPort();
+    if (requireMembershipPort && !groupPort) { reply.code(503).send({ error: "SUPABASE_GROUP_MEMBERSHIP_UNAVAILABLE" }); return null; }
     const actorStatus = groupPort ? await groupPort.getActorStatus(user.telegramId, groupId) : null;
     const group = actorStatus ? { isSuspended: actorStatus.groupSuspended } : await prisma.telegramGroup.findUnique({ where: { telegramId: groupId }, select: { isSuspended: true } });
     if (group?.isSuspended) { reply.code(403).send({ error: "TELEGRAM_GROUP_SUSPENDED" }); return null; }
@@ -119,13 +122,14 @@ function sendGroupError(reply: FastifyReply, error: unknown) {
   return reply.code(status).send({ error: error.code, ...(error.code === "GROUP_MINIMUM_MEMBERS_REQUIRED" ? { minimumMembers: 10 } : {}) });
 }
 const groupId = z.string().regex(/^-?\d{1,20}$/);
-export function registerGroupRoutes(app: FastifyInstance) {
+export function registerGroupRoutes(app: FastifyInstance, dependencies: { requireMembershipPort?: boolean } = {}) {
+  const requireMembershipPort = dependencies.requireMembershipPort ?? false;
 
   app.get("/v1/groups/mine",async(request,reply)=>{const user=await requireTelegramUser(request);if(!user)return reply.code(401).send({error:"UNAUTHENTICATED"});return listMyTelegramGroups(user.id);});
-  app.get("/v1/groups/:telegramGroupId/workspace",async(request,reply)=>{const id=await authenticateGroupActor(request,reply);if(!id)return;const p=z.object({telegramGroupId:groupId}).safeParse(request.params);if(!p.success)return reply.code(400).send({error:"INVALID_GROUP_ID"});try{return await getGroupWorkspace(id,p.data.telegramGroupId);}catch(e){return sendGroupError(reply,e);}});
+  app.get("/v1/groups/:telegramGroupId/workspace",async(request,reply)=>{const id=await authenticateGroupActor(request,reply,requireMembershipPort);if(!id)return;const p=z.object({telegramGroupId:groupId}).safeParse(request.params);if(!p.success)return reply.code(400).send({error:"INVALID_GROUP_ID"});try{return await getGroupWorkspace(id,p.data.telegramGroupId);}catch(e){return sendGroupError(reply,e);}});
   app.post("/v1/groups/:telegramGroupId/challenges/:challengeId/cancel",async(request,reply)=>{const id=await authenticateGroupActor(request,reply);if(!id)return;const p=z.object({telegramGroupId:groupId,challengeId:z.string().min(1).max(64)}).safeParse(request.params);if(!p.success)return reply.code(400).send({error:"INVALID_CHALLENGE_ID"});try{return await cancelGroupChallenge({telegramUserId:id,...p.data});}catch(e){return sendGroupError(reply,e);}});
   app.get("/v1/groups/:telegramGroupId/leagues",async(request,reply)=>{const id=await authenticateGroupActor(request,reply);if(!id)return;const p=z.object({telegramGroupId:groupId}).safeParse(request.params);if(!p.success)return reply.code(400).send({error:"INVALID_GROUP_ID"});try{return await listGroupLeagues(id,p.data.telegramGroupId);}catch(e){return sendGroupError(reply,e);}});
-  app.post("/v1/groups/:telegramGroupId/activity/award",async(request,reply)=>{const id=await authenticateBot(request,reply);if(!id)return;const p=z.object({telegramGroupId:groupId}).safeParse(request.params),b=z.object({activityType:z.enum(["CHALLENGE_JOIN","CHALLENGE_CREATE","LEAGUE_JOIN","LEAGUE_CREATE","MATCH_PLAYED"]),referenceId:z.string().min(1).max(80).regex(/^[A-Za-z0-9:_-]+$/)}).safeParse(request.body);if(!p.success||!b.success)return reply.code(400).send({error:"INVALID_GROUP_ACTIVITY"});try{return await recordGroupGameActivity({telegramUserId:id,...p.data,...b.data});}catch(e){return sendGroupError(reply,e);}});
+  app.post("/v1/groups/:telegramGroupId/activity/award",async(request,reply)=>{const id=await authenticateBot(request,reply,requireMembershipPort);if(!id)return;const p=z.object({telegramGroupId:groupId}).safeParse(request.params),b=z.object({activityType:z.enum(["CHALLENGE_JOIN","CHALLENGE_CREATE","LEAGUE_JOIN","LEAGUE_CREATE","MATCH_PLAYED"]),referenceId:z.string().min(1).max(80).regex(/^[A-Za-z0-9:_-]+$/)}).safeParse(request.body);if(!p.success||!b.success)return reply.code(400).send({error:"INVALID_GROUP_ACTIVITY"});try{return await recordGroupGameActivity({telegramUserId:id,...p.data,...b.data});}catch(e){return sendGroupError(reply,e);}});
   app.post("/v1/groups/system/member-update",async(request,reply)=>{
  if(!authenticateSystemBot(request,reply))return;
  const b=z.object({telegramGroupId:groupId,telegramUserId:z.string().regex(/^\d{1,20}$/),isMember:z.boolean(),role:z.enum(["OWNER","ADMIN","MEMBER"]).optional()}).safeParse(request.body);
@@ -145,7 +149,7 @@ export function registerGroupRoutes(app: FastifyInstance) {
  app.post("/v1/groups/system/member-count",async(request,reply)=>{if(!authenticateSystemBot(request,reply))return;const b=z.object({telegramGroupId:groupId,memberCount:z.number().int().min(0).max(1000000),botPresent:z.boolean().optional()}).safeParse(request.body);if(!b.success)return reply.code(400).send({error:"INVALID_GROUP_CHECK"});return checkTelegramGroupMembers(b.data.telegramGroupId,b.data.memberCount,b.data.botPresent??true);});
 
   app.post("/v1/groups/register", async (request, reply) => {
-    const telegramUserId = await authenticateGroupActor(request, reply); if (!telegramUserId) return;
+    const telegramUserId = await authenticateGroupActor(request, reply, requireMembershipPort); if (!telegramUserId) return;
     const parsed = z.object({ telegramGroupId: groupId, title: z.string().trim().min(1).max(255), role: z.enum(["OWNER", "ADMIN"]).optional(), memberCount: z.number().int().min(0).max(1_000_000) }).safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ error: "INVALID_GROUP_REGISTRATION" });
     try {
@@ -162,7 +166,7 @@ export function registerGroupRoutes(app: FastifyInstance) {
     }
   });
   app.post("/v1/groups/join", async (request, reply) => {
-    const telegramUserId = await authenticateBot(request, reply); if (!telegramUserId) return;
+    const telegramUserId = await authenticateBot(request, reply, requireMembershipPort); if (!telegramUserId) return;
     const parsed = z.object({ telegramGroupId: groupId, memberCount: z.number().int().min(0).max(1_000_000) }).safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ error: "INVALID_GROUP_JOIN" });
     try { return { membership: await joinTelegramGroup({ telegramUserId, ...parsed.data }) }; } catch (error) { return sendGroupError(reply, error); }
