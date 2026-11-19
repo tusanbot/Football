@@ -2,6 +2,7 @@ import type { ClubLineupPort, ClubLineupUpdate } from "./club-lineup-context.js"
 import { SupabaseHttpClient } from "../node-supabase-http.js";
 type ClubRow = { id: string; name: string; formation: string; mentality: string; pressing: string; tempo: string; passingStyle: string; lineupVersion: number };
 type PlayerRow = { id: string; firstName: string; lastName: string; position: string; overall: number; morale: number; fitness: number; lineupSlot: number | null; suspensionMatchesRemaining: number };
+type SquadPlayerRow = { id: string; firstName: string; lastName: string; nationality: string; age: number; position: string; overall: number; potential: number; marketValue: string | number; attributes: unknown; wage: string | number; contractDays: number; morale: number; fitness: number; origin: string; status: string; lineupSlot: number | null; suspensionMatchesRemaining: number };
 export class SupabaseClubLineupRepository implements ClubLineupPort {
   constructor(private readonly client: SupabaseHttpClient) {}
   async get(userId: string): Promise<unknown> {
