@@ -43,7 +43,7 @@ CREATE OR REPLACE FUNCTION public.admin_close_alliance_season_http(
 ) RETURNS jsonb LANGUAGE plpgsql SECURITY INVOKER SET search_path=public,pg_temp AS $$
 DECLARE actor public."User"%ROWTYPE; s public."AllianceSeason"%ROWTYPE; a public."Alliance"%ROWTYPE;
  founder public."AllianceGroup"%ROWTYPE; founder_telegram_id text; prior public."AdminAuditLog"%ROWTYPE;
- standings jsonb; flags jsonb:='[]'::jsonb; review text; winner record; prize bigint:=0; payout_key text; changed integer; result jsonb;
+ v_standings jsonb; v_flags jsonb:='[]'::jsonb; review text; winner record; prize bigint:=0; payout_key text; changed integer; result jsonb;
 BEGIN
  SELECT * INTO prior FROM public."AdminAuditLog" WHERE "idempotencyKey"=p_idempotency_key FOR UPDATE;
  IF prior.id IS NOT NULL THEN
@@ -70,7 +70,7 @@ BEGIN
    WHERE ag."allianceId"=a.id GROUP BY ag."groupId",tg.title,ag."joinedAt"
   ), ranked AS (
    SELECT row_number() OVER(ORDER BY points DESC,title ASC)::int rank,"groupId",title,points FROM base
-  ) SELECT coalesce(jsonb_agg(jsonb_build_object('rank',rank,'groupId',"groupId",'group',title,'points',points::text) ORDER BY rank),'[]'::jsonb) INTO standings FROM ranked;
+  ) SELECT coalesce(jsonb_agg(jsonb_build_object('rank',rank,'groupId',"groupId",'group',title,'points',points::text) ORDER BY rank),'[]'::jsonb) INTO v_standings FROM ranked;
 
   WITH group_totals AS (
    SELECT l."groupId",l."userId",sum(l.amount)::bigint points
@@ -88,7 +88,7 @@ BEGIN
    GROUP BY gs."groupId",gs.title,gs.total
   )
   SELECT coalesce(jsonb_agg(jsonb_build_object('code','SINGLE_MEMBER_CONCENTRATION','groupId',"groupId",'group',title,'memberPoints',top_points::text,'totalPoints',total::text,'sharePercent',floor(top_points*10000.0/NULLIF(total,0))/100) ORDER BY title),'[]'::jsonb)
-  INTO flags FROM top_members WHERE total>=30 AND top_points>=30 AND top_points*100>=total*80;
+  INTO v_flags FROM top_members WHERE total>=30 AND top_points>=30 AND top_points*100>=total*80;
 
   WITH user_groups AS (
    SELECT l."userId",l."groupId",tg.title,sum(l.amount)::bigint points
@@ -99,15 +99,15 @@ BEGIN
    SELECT "userId",sum(points)::bigint total,count(*)::int n,jsonb_agg(jsonb_build_object('groupId',"groupId",'group',title,'points',points::text) ORDER BY title) groups
    FROM user_groups GROUP BY "userId" HAVING count(*)>=2 AND sum(points)>=100
   )
-  SELECT flags||coalesce(jsonb_agg(jsonb_build_object('code','CROSS_GROUP_MEMBER_OVERLAP','memberPoints',total::text,'groupCount',n,'groups',groups)),'[]'::jsonb) INTO flags FROM overlap_rows;
-  review:=CASE WHEN jsonb_array_length(flags)>0 THEN 'FLAGGED' ELSE 'APPROVED' END;
-  UPDATE public."AllianceSeason" SET status='COMPLETED',"closedAt"=now(),standings=standings,"securityFlags"=flags,"reviewStatus"=review::"AllianceSeasonReviewStatus" WHERE id=s.id AND status='ACTIVE';
+  SELECT v_flags||coalesce(jsonb_agg(jsonb_build_object('code','CROSS_GROUP_MEMBER_OVERLAP','memberPoints',total::text,'groupCount',n,'groups',groups)),'[]'::jsonb) INTO v_flags FROM overlap_rows;
+  review:=CASE WHEN jsonb_array_length(v_flags)>0 THEN 'FLAGGED' ELSE 'APPROVED' END;
+  UPDATE public."AllianceSeason" SET status='COMPLETED',"closedAt"=now(),standings=v_standings,"securityFlags"=v_flags,"reviewStatus"=review::"AllianceSeasonReviewStatus" WHERE id=p_season_id AND status='ACTIVE' RETURNING * INTO s;
   GET DIAGNOSTICS changed=ROW_COUNT;
   IF changed=0 THEN RETURN jsonb_build_object('error','SEASON_ALREADY_SETTLED'); END IF;
   INSERT INTO public."AllianceAuditLog"(id,"allianceId","actorTelegramId","groupTelegramId",action,metadata,"createdAt")
-  VALUES(gen_random_uuid()::text,a.id,p_actor_telegram_id,founder_telegram_id,'ADMIN_SEASON_CLOSED',jsonb_build_object('seasonId',s.id,'reviewStatus',review,'securityFlags',jsonb_array_length(flags)),now());
+  VALUES(gen_random_uuid()::text,a.id,p_actor_telegram_id,founder_telegram_id,'ADMIN_SEASON_CLOSED',jsonb_build_object('seasonId',s.id,'reviewStatus',review,'securityFlags',jsonb_array_length(v_flags)),now());
   IF review='APPROVED' THEN
-   SELECT (x->>'groupId') group_id,(x->>'group') group_name,(x->>'points')::bigint points INTO winner FROM jsonb_array_elements(standings) x ORDER BY (x->>'rank')::int LIMIT 1;
+   SELECT (x->>'groupId') group_id,(x->>'group') group_name,(x->>'points')::bigint points INTO winner FROM jsonb_array_elements(v_standings) x ORDER BY (x->>'rank')::int LIMIT 1;
    IF winner.group_id IS NOT NULL AND winner.points>0 AND a."treasuryPoints">0 THEN
     payout_key:='alliance-season-payout:'||s.id;
     SELECT -amount INTO prize FROM public."AllianceLedger" WHERE "idempotencyKey"=payout_key;
@@ -121,8 +121,7 @@ BEGIN
     INSERT INTO public."AllianceAuditLog"(id,"allianceId","actorTelegramId","groupTelegramId",action,metadata,"createdAt") VALUES(gen_random_uuid()::text,a.id,p_actor_telegram_id,founder_telegram_id,'SEASON_PRIZE_PAID',jsonb_build_object('seasonId',s.id,'winner',winner.group_name,'prize',prize::text),now());
    END IF;
   END IF;
-  SELECT * INTO s FROM public."AllianceSeason" WHERE id=s.id;
-  result:=jsonb_build_object('season',to_jsonb(s),'standings',standings,'replayed',false,'reviewStatus',review,'securityFlags',flags,'winner',CASE WHEN review='APPROVED' THEN winner.group_name ELSE NULL END,'prize',prize::text,'alertGroupTelegramId',founder_telegram_id);
+  result:=jsonb_build_object('season',to_jsonb(s),'standings',v_standings,'replayed',false,'reviewStatus',review,'securityFlags',v_flags,'winner',CASE WHEN review='APPROVED' THEN winner.group_name ELSE NULL END,'prize',prize::text,'alertGroupTelegramId',founder_telegram_id);
  END IF;
  INSERT INTO public."AdminAuditLog"(id,"actorTelegramId",action,"targetType","targetId","idempotencyKey",metadata,"createdAt")
  VALUES(gen_random_uuid()::text,p_actor_telegram_id,'close-alliance-season','alliance-season',p_season_id,p_idempotency_key,jsonb_build_object('result',result),now());
