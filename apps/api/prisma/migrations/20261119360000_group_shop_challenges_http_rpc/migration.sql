@@ -11,6 +11,7 @@ BEGIN
  SELECT * INTO v_group FROM public."TelegramGroup" WHERE "telegramId"=p_telegram_group_id;
  IF v_group.id IS NULL THEN RETURN jsonb_build_object('error','GROUP_NOT_REGISTERED'); END IF;
  IF v_group."isSuspended" THEN RETURN jsonb_build_object('error','GROUP_SUSPENDED'); END IF;
+ IF NOT v_group."isActive" THEN RETURN jsonb_build_object('error','GROUP_INACTIVE'); END IF;
  IF NOT EXISTS(SELECT 1 FROM public."GroupMembership" WHERE "groupId"=v_group.id AND "userId"=v_user.id) THEN RETURN jsonb_build_object('error','NOT_GROUP_MEMBER'); END IF;
  INSERT INTO public."GroupRewardItem"(id,slug,name,description,cost,scope,active,"createdAt") VALUES
  (gen_random_uuid()::text,'group-banner','Group Banner','Shared group identity reward',100,'GROUP',true,now()),
@@ -54,7 +55,7 @@ BEGIN
  SELECT * INTO v_old FROM public."GroupRewardGrant" WHERE "idempotencyKey"=p_idempotency_key;
  IF v_old.id IS NOT NULL THEN
   IF v_old."groupId"<>v_group.id OR v_old."itemId"<>v_item.id OR v_old."grantedByUserId"<>v_user.id
-   OR v_old."recipientUserId" IS DISTINCT FROM CASE WHEN v_recipient.id IS NULL THEN NULL ELSE v_recipient.id END
+   OR v_old."recipientUserId" IS DISTINCT FROM (CASE WHEN v_recipient.id IS NULL THEN NULL ELSE v_recipient.id END)
   THEN RETURN jsonb_build_object('error','IDEMPOTENCY_CONFLICT'); END IF;
   SELECT points INTO v_points FROM public."TelegramGroup" WHERE id=v_group.id;
   RETURN jsonb_build_object('purchased',true,'replayed',true,'item',v_item.name,'grantId',v_old.id,'points',v_points::text);
@@ -115,6 +116,7 @@ BEGIN
  SELECT * INTO v_group FROM public."TelegramGroup" WHERE "telegramId"=p_telegram_group_id;
  IF v_group.id IS NULL THEN RETURN jsonb_build_object('error','GROUP_NOT_REGISTERED'); END IF;
  IF v_group."isSuspended" THEN RETURN jsonb_build_object('error','GROUP_SUSPENDED'); END IF;
+ IF NOT v_group."isActive" THEN RETURN jsonb_build_object('error','GROUP_INACTIVE'); END IF;
  IF NOT EXISTS(SELECT 1 FROM public."GroupMembership" WHERE "groupId"=v_group.id AND "userId"=v_user.id) THEN RETURN jsonb_build_object('error','NOT_GROUP_MEMBER'); END IF;
  SELECT * INTO v_challenge FROM public."GroupChallenge" WHERE id=p_challenge_id AND "groupId"=v_group.id FOR UPDATE;
  IF v_challenge.id IS NULL THEN RETURN jsonb_build_object('error','CHALLENGE_NOT_FOUND'); END IF;
