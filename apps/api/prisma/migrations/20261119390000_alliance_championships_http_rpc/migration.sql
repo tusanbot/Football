@@ -52,7 +52,7 @@ BEGIN
  IF EXISTS(SELECT 1 FROM public."CompetitionEntry" WHERE "competitionId"=c.id AND "clubId"=v_club_id) THEN RETURN jsonb_build_object('joined',true,'replayed',true,'teams',n); END IF;
  IF c.status::text<>'REGISTRATION' THEN RETURN jsonb_build_object('error','COMPETITION_NOT_OPEN'); END IF;
  IF n>=c."maxTeams" THEN RETURN jsonb_build_object('error','COMPETITION_FULL'); END IF;
- INSERT INTO public."CompetitionEntry"(id,"competitionId","clubId","joinedAt") VALUES('competition_entry_'||replace(gen_random_uuid()::text,'-',''),c.id,v_club_id,now());
+ INSERT INTO public."CompetitionEntry"(id,"competitionId","clubId","allianceGroupId","joinedAt") VALUES('competition_entry_'||replace(gen_random_uuid()::text,'-',''),c.id,v_club_id,m.id,now());
  n:=n+1;
  INSERT INTO public."AllianceAuditLog"(id,"allianceId","actorTelegramId","groupTelegramId",action,metadata,"createdAt") VALUES(gen_random_uuid()::text,m."allianceId",p_telegram_user_id,p_telegram_group_id,'CHAMPIONSHIP_JOINED',jsonb_build_object('competitionId',c.id,'clubId',v_club_id),now());
  RETURN jsonb_build_object('joined',true,'replayed',false,'teams',n);
