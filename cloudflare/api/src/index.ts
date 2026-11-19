@@ -28,7 +28,9 @@ import { SupabaseMarketListingRepository } from "./repositories/market-listing.j
 import { SupabaseSpecialPlayerCatalogRepository } from "./repositories/special-player-catalog.js";
 import { withMatchRuntimeLeasePort } from "../../../apps/api/src/game/match-runtime-lease-context.js";
 import { withMatchOpponentPort } from "../../../apps/api/src/game/match-opponents-context.js";
+import { withFriendlyMatchCreationPort } from "../../../apps/api/src/game/friendly-match-creation-context.js";
 import { SupabaseMatchOpponentRepository } from "./repositories/match-opponents.js";
+import { SupabaseFriendlyMatchCreationRepository } from "./repositories/friendly-match-creation.js";
 import { withMatchRuntimeAdvancePort } from "../../../apps/api/src/game/match-runtime-advance-context.js";
 import { withMatchRuntimeCheckpointPort } from "../../../apps/api/src/game/match-runtime-checkpoint-context.js";
 import { withMatchRuntimeSettlementPort } from "../../../apps/api/src/game/match-runtime-settlement-context.js";
@@ -164,10 +166,12 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
       const specialPlayers = supabaseClient ? new SupabaseSpecialPlayerCatalogRepository(supabaseClient) : undefined;
       const matchRuntimeCheckpoint = supabaseClient ? new SupabaseMatchRuntimeCheckpointRepository(supabaseClient) : undefined;
       const matchOpponents = supabaseClient ? new SupabaseMatchOpponentRepository(supabaseClient) : undefined;
+      const friendlyMatchCreation = supabaseClient ? new SupabaseFriendlyMatchCreationRepository(supabaseClient) : undefined;
       const matchRuntimeSettlement = supabaseClient ? new SupabaseMatchRuntimeSettlementRepository(supabaseClient) : undefined;
       const router = createWorkersApiRouter({ publicPlayerRecords, seasonAwards, specialPlayers });
       const handle = async (): Promise<Response> => await router.fetch(request);
-      const withMatchOpponents = matchOpponents ? () => withMatchOpponentPort(matchOpponents, handle) : handle;
+      const withFriendlyMatchCreation = friendlyMatchCreation ? () => withFriendlyMatchCreationPort(friendlyMatchCreation, handle) : handle;
+      const withMatchOpponents = matchOpponents ? () => withMatchOpponentPort(matchOpponents, withFriendlyMatchCreation) : withFriendlyMatchCreation;
       const withDashboard = gameDashboard ? () => withGameDashboardPort(gameDashboard, withMatchOpponents) : withMatchOpponents;
       const withTelegramUserLookup = telegramUserLookup ? () => withTelegramUserLookupPort(telegramUserLookup, withDashboard) : withDashboard;
       const withTelegramAccountProvisioning = telegramAccountProvisioning

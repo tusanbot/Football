@@ -15,6 +15,7 @@ import { getMatchRuntimeCheckpointPort } from "./match-runtime-checkpoint-contex
 import { getMatchRuntimeSettlementPort } from "./match-runtime-settlement-context.js";
 import { competitionKickoffAfterDays } from "./match-schedule.js";
 import { getMatchOpponentPort } from "./match-opponents-context.js";
+import { getFriendlyMatchCreationPort } from "./friendly-match-creation-context.js";
 
 const DAY_MS = 86_400_000;
 const MATCH_MINUTE_MS = 1_000;
@@ -166,6 +167,8 @@ export async function createFriendlyMatch(userId: string, opponentClubId: string
   if (scheduledAt.getTime() < Date.now() - 60_000 || scheduledAt.getTime() > Date.now() + 30 * DAY_MS) {
     throw new MatchServiceError("INVALID_MATCH_SCHEDULE");
   }
+  const port = getFriendlyMatchCreationPort();
+  if (port) return port.create(userId, opponentClubId, idempotencyKey, scheduledAt);
   return prisma.$transaction(async (tx) => {
     const own = await tx.club.findUnique({ where: { ownerId: userId }, select: { id: true } });
     if (!own) throw new MatchServiceError("CLUB_NOT_FOUND");
