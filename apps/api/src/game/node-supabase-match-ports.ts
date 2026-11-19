@@ -55,5 +55,23 @@ export function createNodeSupabaseMatchPorts(client: SupabaseHttpClient) {
 export type NodeSupabaseMatchPorts = ReturnType<typeof createNodeSupabaseMatchPorts>;
 
 export function withNodeSupabaseMatchPorts<T>(ports:NodeSupabaseMatchPorts,operation:()=>Promise<T>):Promise<T>{
- return withMatchRuntimeAdvancePort(ports.advance,()=>withMatchRuntimeCheckpointPort(ports.checkpoint,()=>withMatchRuntimeEnqueuePort(ports.enqueue,()=>withMatchRuntimeForfeitPort(ports.forfeit,()=>withMatchRuntimeLeasePort(ports.lease,()=>withMatchRuntimeSettlementPort(ports.settlement,()=>withMatchRuntimeSnapshotPort(ports.snapshot,()=>withCompetitionCreationPort(ports.competitionCreation,()=>withCompetitionAdvancementPort(ports.competitionAdvancement,()=>withFriendlyMatchCreationPort(ports.friendlyMatch,()=>withClubLineupPort(ports.clubLineup,()=>withClubTicketPricePort(ports.clubTicketPrice,()=>withClubMatchReadPort(ports.clubMatchRead,()=>withMatchOpponentPort(ports.matchOpponents,()=>withEventTournamentSettlementPort(ports.eventTournament,()=>withPyramidLeagueSettlementPort(ports.pyramidLeague,operation)))))))))))))));
+ let run:()=>Promise<T>=operation;
+ const wrap=(next:()=>Promise<T>,scope:(operation:()=>Promise<T>)=>Promise<T>)=>()=>scope(next);
+ run=wrap(run,next=>withPyramidLeagueSettlementPort(ports.pyramidLeague,next));
+ run=wrap(run,next=>withEventTournamentSettlementPort(ports.eventTournament,next));
+ run=wrap(run,next=>withMatchOpponentPort(ports.matchOpponents,next));
+ run=wrap(run,next=>withClubMatchReadPort(ports.clubMatchRead,next));
+ run=wrap(run,next=>withClubTicketPricePort(ports.clubTicketPrice,next));
+ run=wrap(run,next=>withClubLineupPort(ports.clubLineup,next));
+ run=wrap(run,next=>withFriendlyMatchCreationPort(ports.friendlyMatch,next));
+ run=wrap(run,next=>withCompetitionAdvancementPort(ports.competitionAdvancement,next));
+ run=wrap(run,next=>withCompetitionCreationPort(ports.competitionCreation,next));
+ run=wrap(run,next=>withMatchRuntimeSnapshotPort(ports.snapshot,next));
+ run=wrap(run,next=>withMatchRuntimeSettlementPort(ports.settlement,next));
+ run=wrap(run,next=>withMatchRuntimeLeasePort(ports.lease,next));
+ run=wrap(run,next=>withMatchRuntimeForfeitPort(ports.forfeit,next));
+ run=wrap(run,next=>withMatchRuntimeEnqueuePort(ports.enqueue,next));
+ run=wrap(run,next=>withMatchRuntimeCheckpointPort(ports.checkpoint,next));
+ run=wrap(run,next=>withMatchRuntimeAdvancePort(ports.advance,next));
+ return run();
 }
