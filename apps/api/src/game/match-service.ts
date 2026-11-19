@@ -18,6 +18,7 @@ import { getMatchOpponentPort } from "./match-opponents-context.js";
 import { getFriendlyMatchCreationPort } from "./friendly-match-creation-context.js";
 import { getCompetitionCreationPort } from "./competition-creation-context.js";
 import { getClubMatchReadPort } from "./club-match-read-context.js";
+import { getCompetitionAdvancementPort } from "./competition-advancement-context.js";
 
 const DAY_MS = 86_400_000;
 const MATCH_MINUTE_MS = 1_000;
@@ -656,7 +657,7 @@ export async function listClubMatches(userId: string) {
     competitions,
   };
 }
-async function advanceCupRound(competitionId: string, round: number, now: Date) {
+async function advanceCupRoundLegacy(competitionId: string, round: number, now: Date) {
   const competition = await prisma.competition.findUnique({
     where: { id: competitionId },
     select: { status: true, format: true, cupLegs: true, rules: true },
@@ -1155,36 +1156,6 @@ export async function simulateScheduledMatch(userId: string, matchId: string, no
         data: { played: { increment: 1 }, won: { increment: awayPoints === 3 ? 1 : 0 }, drawn: { increment: awayPoints === 1 ? 1 : 0 }, lost: { increment: awayPoints === 0 ? 1 : 0 }, goalsFor: { increment: result.awayScore }, goalsAgainst: { increment: result.homeScore }, points: { increment: awayPoints } },
       });
     }
-    if (match.competitionId && competition?.format === "CUP") {
-      const currentRound = await tx.footballMatch.findMany({
-        where: { competitionId: match.competitionId, round: match.round },
-        select: { id: true, winnerClubId: true, status: true },
-        orderBy: { id: "asc" },
-      });
-      if (currentRound.length > 0 && currentRound.every((fixture) => fixture.status === "COMPLETED" && fixture.winnerClubId)) {
-        const winners = currentRound.map((fixture) => fixture.winnerClubId!).filter(Boolean);
-        if (winners.length === 1) {
-          await tx.competition.updateMany({
-            where: { id: match.competitionId, status: "ACTIVE" },
-            data: { status: "COMPLETED", completedAt: now },
-          });
-        } else {
-          const nextRound = (match.round ?? 1) + 1;
-          const nextFixtures = [];
-          for (let index = 0; index < winners.length; index += 2) {
-            const homeClubId = winners[index]!;
-            const awayClubId = winners[index + 1]!;
-            const idempotencyKey = "cup:" + match.competitionId + ":r" + nextRound + ":" + homeClubId + ":" + awayClubId;
-            nextFixtures.push({
-              idempotencyKey, type: "CUP" as const, competitionId: match.competitionId,
-              round: nextRound, homeClubId, awayClubId,
-              scheduledAt: competitionKickoffAfterDays(now, 3), seed: idempotencyKey,
-            });
-          }
-          await tx.footballMatch.createMany({ data: nextFixtures, skipDuplicates: true });
-        }
-      }
-    }
     const final = await tx.footballMatch.findUniqueOrThrow({ where: { id: match.id }, include: {
       homeClub: { select: { name: true } }, awayClub: { select: { name: true } },
       events: { orderBy: { sequence: "asc" } },
@@ -1204,40 +1175,25 @@ export async function simulateScheduledMatch(userId: string, matchId: string, no
       })),
     };
   }, { timeout: 30_000, maxWait: 10_000 });
-  if (settlement.competitionId) {
-    const competition = await prisma.competition.findUnique({
-      where: { id: settlement.competitionId }, select: { format: true },
-    });
-    if (competition?.format === "LEAGUE") {
-      const remaining = await prisma.footballMatch.count({
-        where: { competitionId: settlement.competitionId, status: { not: "COMPLETED" } },
-      });
-      if (remaining === 0) {
-        await prisma.competition.updateMany({
-          where: { id: settlement.competitionId, status: "ACTIVE" },
-          data: { status: "COMPLETED", completedAt: now },
-        });
-        const pyramid = await import("./league-pyramid-service.js");
-        await pyramid.processPyramidLeagueCompletion(settlement.competitionId, now);
-      }
-    } else if (competition?.format === "CUP") {
-      const fixture = await prisma.footballMatch.findUnique({
-        where: { id: settlement.matchId }, select: { round: true },
-      });
-      if (fixture?.round !== null && fixture?.round !== undefined) {
-        await advanceCupRound(settlement.competitionId, fixture.round, now);
+  if (settlement.competitionId && settlement.round !== null && settlement.round !== undefined) {
+    const advancementPort=getCompetitionAdvancementPort();
+    if(advancementPort) await advancementPort.advance({competitionId:settlement.competitionId,round:settlement.round,now:now.toISOString()});
+    else {
+      const competition=await prisma.competition.findUnique({where:{id:settlement.competitionId},select:{format:true}});
+      if(competition?.format==="LEAGUE"){
+        const remaining=await prisma.footballMatch.count({where:{competitionId:settlement.competitionId,status:{not:"COMPLETED"}}});
+        if(remaining===0){
+          await prisma.competition.updateMany({where:{id:settlement.competitionId,status:"ACTIVE"},data:{status:"COMPLETED",completedAt:now}});
+          const pyramid=await import("./league-pyramid-service.js"); await pyramid.processPyramidLeagueCompletion(settlement.competitionId,now);
+        }
+        await publishLeagueRoundSummary(settlement.competitionId,settlement.round,now);
+      } else if(competition?.format==="CUP"){
+        const fixture=await prisma.footballMatch.findUnique({where:{id:settlement.matchId},select:{round:true}});
+        if(fixture?.round!==null&&fixture?.round!==undefined) await advanceCupRoundLegacy(settlement.competitionId,fixture.round,now);
       }
     }
-  }
-  if (settlement.competitionId) {
-    const eventTournament = await prisma.eventTournament.findUnique({ where: { competitionId: settlement.competitionId }, select: { id: true } });
-    if (eventTournament) {
-      const tournamentService = await import("../event-tournament-service.js");
-      await tournamentService.finalizeEventTournamentFromCompetition(settlement.competitionId, now);
-    } else if (settlement.round !== null && settlement.round !== undefined) {
-      const competition = await prisma.competition.findUnique({ where: { id: settlement.competitionId }, select: { format: true } });
-      if (competition?.format === "LEAGUE") await publishLeagueRoundSummary(settlement.competitionId, settlement.round, now);
-    }
+    const eventTournament=await prisma.eventTournament.findUnique({where:{competitionId:settlement.competitionId},select:{id:true}});
+    if(eventTournament){const tournamentService=await import("../event-tournament-service.js");await tournamentService.finalizeEventTournamentFromCompetition(settlement.competitionId,now);}
   }
   return settlement;
 }
