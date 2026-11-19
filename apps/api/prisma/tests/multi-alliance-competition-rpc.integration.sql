@@ -77,7 +77,7 @@ BEGIN
  IF (SELECT "seasonId" FROM public."AllianceCompetitionParticipant" WHERE "allianceCompetitionId"=ac AND "allianceId"=home_alliance) IS DISTINCT FROM home_season THEN
   RAISE EXCEPTION 'participant season snapshot changed unexpectedly';
  END IF;
- IF (SELECT "allianceId" FROM public."AllianceCompetition" WHERE id=ac)<>a1 THEN RAISE EXCEPTION 'host alliance ownership mismatch'; END IF;
+ IF (SELECT "hostAllianceId" FROM public."AllianceCompetition" WHERE id=ac)<>a1 THEN RAISE EXCEPTION 'host alliance ownership mismatch'; END IF;
  IF has_function_privilege('anon','public.start_cross_alliance_competition_http(text,text,text,timestamptz)','EXECUTE')
   OR has_function_privilege('authenticated','public.start_cross_alliance_competition_http(text,text,text,timestamptz)','EXECUTE') THEN
   RAISE EXCEPTION 'cross-alliance start RPC exposed to public roles';
