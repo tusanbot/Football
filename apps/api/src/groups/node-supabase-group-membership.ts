@@ -33,8 +33,9 @@ export class NodeSupabaseGroupMembershipRepository implements GroupMembershipPor
       if (/^[A-Z][A-Z0-9_]{2,80}$/.test(message)) throw new GroupMembershipPortError(message);
       throw new Error("Supabase group RPC was rejected (" + response.status + ")");
     }
-    if (payload && typeof payload === "object" && !Array.isArray(payload) && typeof (payload as Record<string, unknown>).error === "string") {
-      throw new GroupMembershipPortError((payload as Record<string, string>).error);
+    if (payload && typeof payload === "object" && !Array.isArray(payload)) {
+      const businessError = (payload as Record<string, unknown>).error;
+      if (typeof businessError === "string") throw new GroupMembershipPortError(businessError);
     }
     return payload;
   }
