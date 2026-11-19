@@ -39,6 +39,7 @@ import { registerTelegramMessageDeletionRoutes } from "../../../apps/api/src/tel
 import { registerLeagueNoticeRoutes } from "../../../apps/api/src/league-notice-routes.js";
 import { registerAdminGroupBroadcastRoutes } from "../../../apps/api/src/admin-group-broadcast-routes.js";
 import { registerBotRuntimeRoutes } from "../../../apps/api/src/bot-runtime-routes.js";
+import type { BotRuntimeLeasePort } from "../../../apps/api/src/bot-runtime-lease-context.js";
 import { registerPublicClubRoutes } from "../../../apps/api/src/public-club-routes.js";
 import { registerPublicPlayerRecordRoutes, type PublicPlayerRecordRepository } from "../../../apps/api/src/players/public-record-routes.js";
 import { registerSeasonAwardRoutes, type SeasonAwardRepository } from "../../../apps/api/src/game/season-award-routes.js";
@@ -81,7 +82,7 @@ function queryObject(url: URL): Record<string, string | string[]> {
   return query;
 }
 
-export function createWorkersApiRouter(dependencies: { publicPlayerRecords?: PublicPlayerRecordRepository; seasonAwards?: SeasonAwardRepository; specialPlayers?: SpecialPlayerCatalogRepository } = {}) {
+export function createWorkersApiRouter(dependencies: { publicPlayerRecords?: PublicPlayerRecordRepository; seasonAwards?: SeasonAwardRepository; specialPlayers?: SpecialPlayerCatalogRepository; botRuntimeLease?: BotRuntimeLeasePort } = {}) {
   const registry = new RouteRegistry();
   const registrar = registry as unknown as Parameters<typeof registerTelegramAuthRoutes>[0];
   registerTelegramAuthRoutes(registrar);
@@ -100,7 +101,7 @@ export function createWorkersApiRouter(dependencies: { publicPlayerRecords?: Pub
   registerTelegramMessageDeletionRoutes(registrar);
   registerLeagueNoticeRoutes(registrar);
   registerAdminGroupBroadcastRoutes(registrar);
-  registerBotRuntimeRoutes(registrar);
+  registerBotRuntimeRoutes(registrar, { leasePort: dependencies.botRuntimeLease, requireLeasePort: true });
   registerPublicClubRoutes(registrar);
   registerPublicPlayerRecordRoutes(registrar, dependencies.publicPlayerRecords);
   registerSeasonAwardRoutes(registrar, dependencies.seasonAwards);

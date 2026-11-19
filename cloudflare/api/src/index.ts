@@ -71,6 +71,7 @@ import { withPlayerDevelopmentPort } from "../../../apps/api/src/players/player-
 import { SupabasePlayerDevelopmentRepository } from "./repositories/player-development.js";
 import { SupabaseClubEconomySettlementRepository } from "./repositories/club-economy-settlement.js";
 import { SupabaseClubTicketPriceRepository } from "./repositories/club-ticket-price.js";
+import { SupabaseBotRuntimeLeaseRepository } from "./repositories/bot-runtime-lease.js";
 
 interface MatchCoordinatorNamespace { idFromName(name: string): unknown; get(id: unknown): { fetch(input: string, init?: RequestInit): Promise<Response> }; }
 interface MatchCoordinatorState { storage: { setAlarm(scheduledTime: number): Promise<void>; deleteAlarm(): Promise<void>; }; }
@@ -187,7 +188,8 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
       const pyramidLeagueSettlement = supabaseClient ? new SupabasePyramidLeagueSettlementRepository(supabaseClient) : undefined;
       const eventTournamentSettlement = supabaseClient ? new SupabaseEventTournamentSettlementRepository(supabaseClient) : undefined;
       const matchRuntimeSettlement = supabaseClient ? new SupabaseMatchRuntimeSettlementRepository(supabaseClient) : undefined;
-      const router = createWorkersApiRouter({ publicPlayerRecords, seasonAwards, specialPlayers });
+      const botRuntimeLease = supabaseClient ? new SupabaseBotRuntimeLeaseRepository(supabaseClient) : undefined;
+       const router = createWorkersApiRouter({ publicPlayerRecords, seasonAwards, specialPlayers, botRuntimeLease });
       const handle = async (): Promise<Response> => await router.fetch(request);
       const withCompetitionCreation = competitionCreation ? () => withCompetitionCreationPort(competitionCreation, handle) : handle;
       const withClubMatchRead = clubMatchRead ? () => withClubMatchReadPort(clubMatchRead, withCompetitionCreation) : withCompetitionCreation;

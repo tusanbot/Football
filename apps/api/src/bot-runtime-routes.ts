@@ -2,6 +2,7 @@ import { timingSafeEqual } from "node:crypto";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
 import { prisma } from "./db.js";
+import type { BotRuntimeLeasePort } from "./bot-runtime-lease-context.js";
 
 function authenticate(request: FastifyRequest, reply: FastifyReply): boolean {
   const expected = process.env.BOT_API_SECRET;
@@ -13,7 +14,7 @@ function authenticate(request: FastifyRequest, reply: FastifyReply): boolean {
   return true;
 }
 
-export function registerBotRuntimeRoutes(app: FastifyInstance) {
+export function registerBotRuntimeRoutes(app: FastifyInstance, dependencies: { leasePort?: BotRuntimeLeasePort; requireLeasePort?: boolean } = {}) {
   app.post("/v1/bot/runtime/lease", async (request, reply) => {
     if (!authenticate(request, reply)) return;
     const parsed = z.object({
@@ -23,20 +24,31 @@ export function registerBotRuntimeRoutes(app: FastifyInstance) {
     if (!parsed.success) return reply.code(400).send({ error: "INVALID_BOT_RUNTIME_LEASE" });
 
     const { instanceId, action } = parsed.data;
+    const now = new Date().toISOString();
+    if (dependencies.leasePort) {
+      const result = await dependencies.leasePort.execute(instanceId, action, now);
+      return action === "release"
+        ? { released: result.released }
+        : { acquired: result.acquired, leaseExpiresAt: result.leaseExpiresAt };
+    }
+    if (dependencies.requireLeasePort) {
+      return reply.code(503).send({ error: "SUPABASE_BOT_RUNTIME_LEASE_UNAVAILABLE" });
+    }
+
     const leaseId = "telegram-bot-polling";
-    const now = new Date();
+    const nowDate = new Date(now);
     if (action === "release") {
       const released = await prisma.botRuntimeLease.updateMany({
         where: { id: leaseId, instanceId },
-        data: { instanceId: "", lockedUntil: now },
+        data: { instanceId: "", lockedUntil: nowDate },
       });
       return { released: released.count === 1 };
     }
 
-    const expiresAt = new Date(now.getTime() + 60_000);
+    const expiresAt = new Date(nowDate.getTime() + 60_000);
     if (action === "heartbeat") {
       const renewed = await prisma.botRuntimeLease.updateMany({
-        where: { id: leaseId, instanceId, lockedUntil: { gt: now } },
+        where: { id: leaseId, instanceId, lockedUntil: { gt: nowDate } },
         data: { lockedUntil: expiresAt },
       });
       return { acquired: renewed.count === 1, leaseExpiresAt: expiresAt.toISOString() };
@@ -52,7 +64,7 @@ export function registerBotRuntimeRoutes(app: FastifyInstance) {
     const claimed = await prisma.botRuntimeLease.updateMany({
       where: {
         id: leaseId,
-        OR: [{ instanceId }, { lockedUntil: { lte: now } }],
+        OR: [{ instanceId }, { lockedUntil: { lte: nowDate } }],
       },
       data: { instanceId, lockedUntil: expiresAt },
     });
