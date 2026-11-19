@@ -54,6 +54,8 @@ import { withSpecialAcquisitionPort } from "./players/special-acquisition-contex
 import type { GiftCodeRedemptionPort } from "./gift-code-redemption-context.js";
 import { withGiftCodeRedemptionPort } from "./gift-code-redemption-context.js";
 import type { BotRuntimeLeasePort } from "./bot-runtime-lease-context.js";
+import type { NodeSupabaseMatchPorts } from "./game/node-supabase-match-ports.js";
+import { withNodeSupabaseMatchPorts } from "./game/node-supabase-match-ports.js";
 
 const healthResponse = z.object({
   status: z.literal("ok"),
@@ -61,7 +63,7 @@ const healthResponse = z.object({
   version: z.string(),
 });
 
-export function buildApp(options: { logger?: boolean; pluginTimeout?: number; groupMembershipPort?: GroupMembershipPort; alliancePort?: AlliancePort; adminAlliancePort?: AdminAlliancePort; telegramUserLookupPort?: TelegramUserLookupPort; storePurchasePort?: StorePurchasePort; storeItemUsePort?: StoreItemUsePort; walletEntryPort?: WalletEntryPort; marketListingPort?: MarketListingPort; marketPurchasePort?: MarketPurchasePort; storeSnapshotPort?: StoreSnapshotPort; playerDevelopmentPort?: PlayerDevelopmentPort; clubEconomySettlementPort?: ClubEconomySettlementPort; clubManagementPort?: ClubManagementPort; specialAcquisitionPort?: SpecialAcquisitionPort; giftCodeRedemptionPort?: GiftCodeRedemptionPort; botRuntimeLeasePort?: BotRuntimeLeasePort } = {}) {
+export function buildApp(options: { logger?: boolean; pluginTimeout?: number; groupMembershipPort?: GroupMembershipPort; alliancePort?: AlliancePort; adminAlliancePort?: AdminAlliancePort; telegramUserLookupPort?: TelegramUserLookupPort; storePurchasePort?: StorePurchasePort; storeItemUsePort?: StoreItemUsePort; walletEntryPort?: WalletEntryPort; marketListingPort?: MarketListingPort; marketPurchasePort?: MarketPurchasePort; storeSnapshotPort?: StoreSnapshotPort; playerDevelopmentPort?: PlayerDevelopmentPort; clubEconomySettlementPort?: ClubEconomySettlementPort; clubManagementPort?: ClubManagementPort; specialAcquisitionPort?: SpecialAcquisitionPort; giftCodeRedemptionPort?: GiftCodeRedemptionPort; botRuntimeLeasePort?: BotRuntimeLeasePort; matchPorts?: NodeSupabaseMatchPorts } = {}) {
   const app = Fastify({
     logger: options.logger ?? process.env.NODE_ENV !== "test",
     pluginTimeout: options.pluginTimeout ?? 10_000,
@@ -120,6 +122,7 @@ export function buildApp(options: { logger?: boolean; pluginTimeout?: number; gr
   if (options.clubManagementPort) app.addHook("onRequest", (_request, _reply, done) => { void withClubManagementPort(options.clubManagementPort!, async () => done()); });
   if (options.specialAcquisitionPort) app.addHook("onRequest", (_request, _reply, done) => { void withSpecialAcquisitionPort(options.specialAcquisitionPort!, async () => done()); });
   if (options.giftCodeRedemptionPort) app.addHook("onRequest", (_request, _reply, done) => { void withGiftCodeRedemptionPort(options.giftCodeRedemptionPort!, async () => done()); });
+  if (options.matchPorts) app.addHook("onRequest", (_request, _reply, done) => { void withNodeSupabaseMatchPorts(options.matchPorts!, async () => done()); });
 
   if (options.clubEconomySettlementPort) app.addHook("onRequest", (_request, _reply, done) => { void withClubEconomySettlementPort(options.clubEconomySettlementPort!, async () => { done(); }); });
 
