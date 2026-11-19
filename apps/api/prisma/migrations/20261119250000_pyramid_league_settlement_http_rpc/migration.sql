@@ -65,7 +65,7 @@ BEGIN
  SELECT 'pyramid_entry_'||replace(gen_random_uuid()::text,'-',''),v_league_id,c,(p_now AT TIME ZONE 'UTC') FROM unnest(v_club_ids) c;
  UPDATE public."PyramidLeagueApplication" SET status='ASSIGNED',"assignedLeagueId"=v_league_id
  WHERE id=ANY(v_app_ids) AND status::text='QUEUED';
- v_slots:=ARRAY(SELECT c FROM unnest(v_club_ids) c ORDER BY random());
+ v_slots:=ARRAY(SELECT x FROM unnest(v_club_ids) AS u(x) ORDER BY random());
  FOR v_round IN 1..7 LOOP
   FOR v_i IN 1..4 LOOP
    IF ((v_round-1)+(v_i-1))%2=1 THEN v_home:=v_slots[9-v_i];v_away:=v_slots[v_i];
@@ -80,7 +80,6 @@ BEGIN
   END LOOP;
   v_slots:=ARRAY[v_slots[1],v_slots[8],v_slots[2],v_slots[3],v_slots[4],v_slots[5],v_slots[6],v_slots[7]];
  END LOOP;
- GET DIAGNOSTICS v_entries=ROW_COUNT;
  RETURN jsonb_build_object('created',true,'leagueId',v_league_id,'competitionId',v_comp_id,'tier',p_tier,
   'season',p_season,'groupNumber',v_group,'teams',8,'fixturesCreated',v_fixtures);
 END;
@@ -95,10 +94,11 @@ DECLARE v_league public."PyramidLeague"%ROWTYPE; v_comp_status text; v_count int
 BEGIN
  IF COALESCE(btrim(p_competition_id),'')='' OR p_now IS NULL THEN RAISE EXCEPTION USING MESSAGE='INVALID_COMPETITION',ERRCODE='P0001'; END IF;
  PERFORM pg_advisory_xact_lock(hashtextextended('pyramid-finalize:'||p_competition_id,0));
- SELECT pl.*,c.status::text AS competition_status INTO v_league
- FROM public."PyramidLeague" pl JOIN public."Competition" c ON c.id=pl."competitionId"
- WHERE pl."competitionId"=p_competition_id FOR UPDATE OF pl,c;
- IF NOT FOUND OR v_league."promotionProcessedAt" IS NOT NULL OR v_league.competition_status<>'COMPLETED' THEN
+ SELECT pl.* INTO v_league FROM public."PyramidLeague" pl
+ WHERE pl."competitionId"=p_competition_id FOR UPDATE;
+ IF NOT FOUND THEN RETURN jsonb_build_object('processed',false,'replayed',true); END IF;
+ SELECT status::text INTO v_comp_status FROM public."Competition" WHERE id=p_competition_id FOR UPDATE;
+ IF v_league."promotionProcessedAt" IS NOT NULL OR v_comp_status<>'COMPLETED' THEN
   RETURN jsonb_build_object('processed',false,'replayed',true); END IF;
  SELECT count(*) INTO v_count FROM public."PyramidLeagueEntry" WHERE "leagueId"=v_league.id;
  IF v_count<>8 THEN RAISE EXCEPTION USING MESSAGE='PYRAMID_LEAGUE_REQUIRES_EIGHT_TEAMS',ERRCODE='P0001'; END IF;
