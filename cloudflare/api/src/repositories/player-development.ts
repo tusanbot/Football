@@ -1,5 +1,6 @@
 import {randomInt} from "node:crypto";
-import {advancePlayerDailyState,applyAnnualAgeing,calculateContractDemand,calculateInjuryChanceBasisPoints,calculatePayrollSettlement,calculateTrainingResult,isTrainingFocusCompatible,type PlayerAttributes,type PlayerPosition,type TrainingFocus,type TrainingIntensity} from "@football/domain";
+import {advancePlayerDailyState,applyAnnualAgeing,calculateContractDemand,calculateInjuryChanceBasisPoints,calculatePayrollSettlement,calculateTrainingResult,isTrainingFocusCompatible,type TrainingFocus,type TrainingIntensity} from "../../../../packages/domain/src/player-development.js";
+import type {PlayerAttributes,PlayerPosition} from "../../../../packages/domain/src/players.js";
 import type {PlayerDevelopmentPort} from "../../../../apps/api/src/players/player-development-context.js";
 import {SupabaseHttpClient} from "../supabase-http.js";
 const DAY=86400000, day=(d:Date)=>new Date(Date.UTC(d.getUTCFullYear(),d.getUTCMonth(),d.getUTCDate()));
