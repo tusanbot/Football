@@ -1,7 +1,6 @@
 import { timingSafeEqual } from "node:crypto";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
-import { prisma } from "./db.js";
 import type { BotRuntimeLeasePort } from "./bot-runtime-lease-context.js";
 
 function authenticate(request: FastifyRequest, reply: FastifyReply): boolean {
@@ -31,44 +30,7 @@ export function registerBotRuntimeRoutes(app: FastifyInstance, dependencies: { l
         ? { released: result.released }
         : { acquired: result.acquired, leaseExpiresAt: result.leaseExpiresAt };
     }
-    if (dependencies.requireLeasePort) {
-      return reply.code(503).send({ error: "SUPABASE_BOT_RUNTIME_LEASE_UNAVAILABLE" });
-    }
-
-    const leaseId = "telegram-bot-polling";
-    const nowDate = new Date(now);
-    if (action === "release") {
-      const released = await prisma.botRuntimeLease.updateMany({
-        where: { id: leaseId, instanceId },
-        data: { instanceId: "", lockedUntil: nowDate },
-      });
-      return { released: released.count === 1 };
-    }
-
-    const expiresAt = new Date(nowDate.getTime() + 60_000);
-    if (action === "heartbeat") {
-      const renewed = await prisma.botRuntimeLease.updateMany({
-        where: { id: leaseId, instanceId, lockedUntil: { gt: nowDate } },
-        data: { lockedUntil: expiresAt },
-      });
-      return { acquired: renewed.count === 1, leaseExpiresAt: expiresAt.toISOString() };
-    }
-
-    try {
-      await prisma.botRuntimeLease.create({ data: { id: leaseId, instanceId, lockedUntil: expiresAt } });
-      return { acquired: true, leaseExpiresAt: expiresAt.toISOString() };
-    } catch (error) {
-      if (!(typeof error === "object" && error !== null && "code" in error && error.code === "P2002")) throw error;
-    }
-
-    const claimed = await prisma.botRuntimeLease.updateMany({
-      where: {
-        id: leaseId,
-        OR: [{ instanceId }, { lockedUntil: { lte: nowDate } }],
-      },
-      data: { instanceId, lockedUntil: expiresAt },
-    });
-    return { acquired: claimed.count === 1, leaseExpiresAt: expiresAt.toISOString() };
+    return reply.code(503).send({ error: "SUPABASE_BOT_RUNTIME_LEASE_UNAVAILABLE" });
   });
 
   app.post("/v1/bot/verify-identity", async (request, reply) => {
