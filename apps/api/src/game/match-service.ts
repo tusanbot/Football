@@ -1624,7 +1624,7 @@ async function processClaimedMatchRuntime(
   }
 
   if (state.segment.currentMinute === 90) {
-    await settleClaimedMatchRuntime(runtime, now);
+    await settleClaimedMatchRuntime(runtime as LoadedMatchRuntime, now);
     return "SETTLED";
   }
 
