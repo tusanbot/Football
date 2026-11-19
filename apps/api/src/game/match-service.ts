@@ -9,6 +9,7 @@ import {
 } from "@football/domain";
 import { prisma } from "../db.js";
 import { getMatchRuntimeLeasePort } from "./match-runtime-lease-context.js";
+import { getMatchRuntimeSnapshotPort } from "./match-runtime-snapshot-context.js";
 import { getMatchRuntimeEnqueuePort } from "./match-runtime-enqueue-context.js";
 import { getMatchRuntimeAdvancePort } from "./match-runtime-advance-context.js";
 import { getMatchRuntimeCheckpointPort } from "./match-runtime-checkpoint-context.js";
@@ -1391,21 +1392,35 @@ function goalLifecycleEvents(events: MatchSegmentState["events"], home: MatchSid
       availableAt: new Date(startedAt.getTime() + event.minute * MATCH_MINUTE_MS) };
   });
 }
+type LoadedMatchRuntime = Prisma.MatchRuntimeGetPayload<{
+  include: { match: { include: {
+    homeClub: { include: typeof matchClubInclude };
+    awayClub: { include: typeof matchClubInclude };
+  } } };
+}>;
+
 async function processClaimedMatchRuntime(
   runtimeId: string,
   now: Date,
 ): Promise<"WAITING" | "ADVANCED" | "SETTLED"> {
-  const runtime = await prisma.matchRuntime.findUnique({
-    where: { id: runtimeId },
-    include: {
-      match: {
+  const snapshotPort = getMatchRuntimeSnapshotPort();
+  const workerSettlementPort = getMatchRuntimeSettlementPort();
+  if (workerSettlementPort && !snapshotPort) {
+    throw new MatchServiceError("WORKER_MATCH_RUNTIME_SNAPSHOT_REPOSITORY_REQUIRED");
+  }
+  const runtime = (snapshotPort
+    ? await snapshotPort.get(runtimeId) as LoadedMatchRuntime | null
+    : await prisma.matchRuntime.findUnique({
+        where: { id: runtimeId },
         include: {
-          homeClub: { include: matchClubInclude },
-          awayClub: { include: matchClubInclude },
+          match: {
+            include: {
+              homeClub: { include: matchClubInclude },
+              awayClub: { include: matchClubInclude },
+            },
+          },
         },
-      },
-    },
-  });
+      }));
   if (!runtime || runtime.match.status === "COMPLETED" || runtime.status === "COMPLETED") return "SETTLED";
 
   let state = restoreRuntimeState(runtime.simulationState);
