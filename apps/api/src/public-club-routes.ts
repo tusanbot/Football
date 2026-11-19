@@ -3,6 +3,7 @@ import { z } from "zod";
 import { requireTelegramUser } from "./auth/require-telegram-user.js";
 import { prisma } from "./db.js";
 import { consumeAllianceActionRateLimit } from "./groups/alliance-rate-limit.js";
+import type { PublicClubLogoRepository } from "./node-supabase-public-club-logo.js";
 
 const MAX_LOGO_BYTES = 512 * 1024;
 const logoBody = z.object({
@@ -62,7 +63,7 @@ const completedEntries = {
   orderBy: { joinedAt: "desc" as const },
 };
 
-export function registerPublicClubRoutes(app: FastifyInstance) {
+export function registerPublicClubRoutes(app: FastifyInstance, logoRepository?: PublicClubLogoRepository) {
   app.get("/v1/clubs/public", async (request, reply) => {
     const query = z.object({ q: z.string().trim().max(40).optional(), limit: z.coerce.number().int().min(1).max(100).default(50) }).safeParse(request.query);
     if (!query.success) return reply.code(400).send({ error: "INVALID_CLUB_QUERY" });
@@ -174,7 +175,9 @@ export function registerPublicClubRoutes(app: FastifyInstance) {
   app.get("/v1/clubs/:clubId/logo", async (request, reply) => {
     const params = z.object({ clubId: z.string().min(1).max(64) }).safeParse(request.params);
     if (!params.success) return reply.code(400).send({ error: "INVALID_CLUB_ID" });
-    const club = await prisma.club.findUnique({ where: { id: params.data.clubId }, select: { logoData: true, logoMime: true } });
+    const club = logoRepository
+      ? await logoRepository.getLogo(params.data.clubId)
+      : await prisma.club.findUnique({ where: { id: params.data.clubId }, select: { logoData: true, logoMime: true } });
     if (!club?.logoData || !club.logoMime) return reply.code(404).send({ error: "CLUB_LOGO_NOT_FOUND" });
     return reply.header("content-type", club.logoMime).header("cache-control", "public, max-age=300").send(Buffer.from(club.logoData, "base64"));
   });
@@ -188,7 +191,9 @@ export function registerPublicClubRoutes(app: FastifyInstance) {
     const bytes = Buffer.from(body.data.base64, "base64");
     if (bytes.length > MAX_LOGO_BYTES || bytes.toString("base64").replace(/=+$/, "") !== body.data.base64.replace(/=+$/, "")
       || !isValidImage(bytes, body.data.mimeType)) return reply.code(400).send({ error: "INVALID_CLUB_LOGO" });
-    const result = await prisma.$transaction(async (tx) => {
+    const result = logoRepository
+      ? await logoRepository.manageLogo(user.id, "upload", body.data.base64, body.data.mimeType)
+      : await prisma.$transaction(async (tx) => {
       const current = await tx.club.findUnique({
         where: { ownerId: user.id },
         select: {
@@ -217,6 +222,7 @@ export function registerPublicClubRoutes(app: FastifyInstance) {
     }, { isolationLevel: "Serializable" });
     if (result.kind === "NOT_FOUND") return reply.code(404).send({ error: "CLUB_NOT_FOUND" });
     if (result.kind === "LOCKED") return reply.code(409).send({ error: "CLUB_EDIT_LOCKED_ACTIVE_LEAGUE", activeCompetition: result.activeCompetition });
+    if (!result.club) return reply.code(500).send({ error: "CLUB_LOGO_UPDATE_FAILED" });
     return { updated: true, club: result.club, logoUrl: "/v1/clubs/" + result.club.id + "/logo" };
   });
 
@@ -224,7 +230,9 @@ export function registerPublicClubRoutes(app: FastifyInstance) {
     const user = await requireTelegramUser(request);
     if (!user) return reply.code(401).send({ error: "UNAUTHENTICATED" });
     if (!await consumeAllianceActionRateLimit({ telegramUserId: user.telegramId, telegramGroupId: "global", action: "club-logo-delete", limit: 5 })) return reply.code(429).send({ error: "CLUB_LOGO_RATE_LIMITED", retryAfterSeconds: 60 });
-    const result = await prisma.$transaction(async (tx) => {
+    const result = logoRepository
+      ? await logoRepository.manageLogo(user.id, "delete")
+      : await prisma.$transaction(async (tx) => {
       const current = await tx.club.findUnique({
         where: { ownerId: user.id },
         select: {
