@@ -224,3 +224,12 @@ Coverage added:
 - Fastify route test injects a port and verifies group actor authorization and league listing both use that injected port without requiring Prisma group reads.
 
 This completes the Node runtime wiring for the existing GroupMembershipPort contract, but it does not mean all group-related behavior is Prisma-free: alliance routes/services, group-related background jobs, and any unported group code remain in the broader migration audit. No production environment variables were set and no database migration was applied.
+
+## Node Fastify alliance tranche
+
+The standard Node Fastify runtime now accepts an `AlliancePort` alongside the group-membership port. When both server-only Supabase credentials are configured, `server.ts` constructs `NodeSupabaseAllianceRepository`; a per-request `AsyncLocalStorage` scope makes it available to alliance service calls. The Node repository uses direct HTTPS PostgREST RPC calls, rejects non-Supabase origins and redirects, applies request timeouts, and maps database business errors to `AllianceServiceError`.
+
+The HTTP-backed route/service surface includes alliance creation, group invitations and responses, treasury contributions, workspace reads, season lifecycle/review, alliance championships, cross-alliance competitions, and database-backed action throttling. The SQL RPCs are already represented by migrations and integration SQL in this repository. The runtime change does not apply migrations to any live database.
+
+Remaining alliance work: admin-only transaction helpers (`adminCloseAllianceSeasonInTransaction`, `adminReviewAllianceSeasonInTransaction`, and `adminStartAllianceSeasonInTransaction`) still execute through Prisma and require a dedicated admin RPC/port path. Also, until Supabase credentials are configured, the existing Node service fallback remains available for compatibility. This tranche therefore migrates the public/group alliance route surface, not every alliance/admin execution path or all Prisma dependencies.
+
