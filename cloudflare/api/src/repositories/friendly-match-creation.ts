@@ -1,5 +1,4 @@
-import type { FootballMatch } from "@prisma/client";
-import type { FriendlyMatchCreationPort } from "../../../../apps/api/src/game/friendly-match-creation-context.js";
+import type { FriendlyMatchRecord, FriendlyMatchCreationPort } from "../../../../apps/api/src/game/friendly-match-creation-context.js";
 import { SupabaseHttpClient, SupabaseHttpError } from "../supabase-http.js";
 
 interface CreateFriendlyMatchResult { match: Record<string, unknown>; replayed: boolean; }
@@ -38,6 +37,6 @@ export class SupabaseFriendlyMatchCreationRepository implements FriendlyMatchCre
       || typeof row.seed !== "string" || typeof row.createdAt !== "string" || typeof row.updatedAt !== "string") {
       throw new Error("SUPABASE_FRIENDLY_MATCH_INVALID_RESPONSE");
     }
-    return { match: row as unknown as FootballMatch, replayed: result.replayed };
+    return { match: row as unknown as FriendlyMatchRecord, replayed: result.replayed };
   }
 }
