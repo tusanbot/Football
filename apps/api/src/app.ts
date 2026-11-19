@@ -220,7 +220,7 @@ export function buildApp(options: { logger?: boolean; pluginTimeout?: number; gr
   registerAdminGroupBroadcastRoutes(app);
   registerBotRuntimeRoutes(app, { ...(options.botRuntimeLeasePort ? { leasePort: options.botRuntimeLeasePort } : {}), requireLeasePort: Boolean(options.botRuntimeLeasePort) });
   registerPublicClubRoutes(app);
-  if (options.publicPlayerRecordRepository) registerPublicPlayerRecordRoutes(app, options.publicPlayerRecordRepository);
+  registerPublicPlayerRecordRoutes(app, options.publicPlayerRecordRepository);
   registerSeasonAwardRoutes(app);
   registerStoreRoutes(app);
   registerEventTournamentRoutes(app);
