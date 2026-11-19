@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { SupabaseHttpClient, SupabaseHttpError } from "../src/node-supabase-http.js";
-import { NodeSupabaseClubManagementRepository } from "../src/game/node-supabase-club-management.js";
-import { NodeSupabaseSpecialAcquisitionRepository } from "../src/players/node-supabase-special-acquisition.js";
-import { NodeSupabaseGiftCodeRedemptionRepository } from "../src/node-supabase-gift-code-redemption.js";
-import { NodeSupabaseBotRuntimeLeaseRepository } from "../src/node-supabase-bot-runtime-lease.js";
+import { SupabaseClubManagementRepository as NodeSupabaseClubManagementRepository } from "../src/game/node-supabase-club-management.js";
+import { SupabaseSpecialAcquisitionRepository as NodeSupabaseSpecialAcquisitionRepository } from "../src/players/node-supabase-special-acquisition.js";
+import { SupabaseGiftCodeRedemptionRepository as NodeSupabaseGiftCodeRedemptionRepository } from "../src/node-supabase-gift-code-redemption.js";
+import { SupabaseBotRuntimeLeaseRepository as NodeSupabaseBotRuntimeLeaseRepository } from "../src/node-supabase-bot-runtime-lease.js";
 
 function clientWith(handler:(url:URL,init:RequestInit)=>unknown) {
  const calls:Array<{url:URL;init:RequestInit}>=[];
