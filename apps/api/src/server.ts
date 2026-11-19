@@ -5,6 +5,7 @@ import { processDuePromotionOffers } from "./game/league-pyramid-service.js";
 import { prisma } from "./db.js";
 import { NodeSupabaseGroupMembershipRepository } from "./groups/node-supabase-group-membership.js";
 import { NodeSupabaseAllianceRepository } from "./groups/node-supabase-alliance.js";
+import { NodeSupabaseTelegramUserLookupRepository } from "./auth/node-supabase-telegram-user-lookup.js";
 import { isValidTelegramBotToken, parseAdminTelegramIds, parseCorsOrigins } from "./runtime-config.js";
 const required = ["DATABASE_URL", "TELEGRAM_BOT_TOKEN", "BOT_API_SECRET", "CORS_ORIGIN", "GAME_ADMIN_TELEGRAM_IDS"] as const;
 const missing = required.filter((key) => !process.env[key]?.trim());
@@ -28,7 +29,10 @@ const groupMembershipPort = hasSupabaseUrl
 const alliancePort = hasSupabaseUrl
   ? new NodeSupabaseAllianceRepository(process.env.SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
   : undefined;
-const app = buildApp({ ...(groupMembershipPort ? { groupMembershipPort } : {}), ...(alliancePort ? { alliancePort, adminAlliancePort: alliancePort } : {}) });
+const telegramUserLookupPort = hasSupabaseUrl
+  ? new NodeSupabaseTelegramUserLookupRepository(process.env.SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
+  : undefined;
+const app = buildApp({ ...(groupMembershipPort ? { groupMembershipPort } : {}), ...(alliancePort ? { alliancePort, adminAlliancePort: alliancePort } : {}), ...(telegramUserLookupPort ? { telegramUserLookupPort } : {}) });
 let matchWorker: NodeJS.Timeout | undefined;
 let workerTask: Promise<void> | null = null;
 let shuttingDown = false;
