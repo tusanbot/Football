@@ -2,7 +2,7 @@
 -- The API performs the superadmin authorization; these functions preserve the
 -- authenticated admin Telegram identity and atomically write both audit trails.
 CREATE OR REPLACE FUNCTION public.admin_start_alliance_season_http(
- p_actor_telegram_id text,p_alliance_id text,p_duration_days integer,p_idempotency_key text
+ p_actor_telegram_id text,p_alliance_id text,p_duration_days integer,p_idempotency_key text,p_reason text
 ) RETURNS jsonb LANGUAGE plpgsql SECURITY INVOKER SET search_path=public,pg_temp AS $$
 DECLARE actor public."User"%ROWTYPE; a public."Alliance"%ROWTYPE; founder public."AllianceGroup"%ROWTYPE;
  prev public."AllianceSeason"%ROWTYPE; s public."AllianceSeason"%ROWTYPE; days integer; prior public."AdminAuditLog"%ROWTYPE; result jsonb;
@@ -34,13 +34,13 @@ BEGIN
  INSERT INTO public."AllianceAuditLog"(id,"allianceId","actorTelegramId","groupTelegramId",action,metadata,"createdAt")
  VALUES(gen_random_uuid()::text,a.id,p_actor_telegram_id,(SELECT "telegramId" FROM public."TelegramGroup" WHERE id=founder."groupId"),'ADMIN_SEASON_STARTED',jsonb_build_object('seasonId',s.id,'number',s.number,'durationDays',days),now());
  result:=jsonb_build_object('season',to_jsonb(s),'replayed',false);
- INSERT INTO public."AdminAuditLog"(id,"actorTelegramId",action,"targetType","targetId","idempotencyKey",metadata,"createdAt")
- VALUES(gen_random_uuid()::text,p_actor_telegram_id,'start-alliance-season','alliance-season',s.id,p_idempotency_key,jsonb_build_object('allianceId',a.id,'requestedDurationDays',p_duration_days,'result',result),now());
+ INSERT INTO public."AdminAuditLog"(id,"actorTelegramId",action,"targetType","targetId","idempotencyKey",reason,metadata,"createdAt")
+ VALUES(gen_random_uuid()::text,p_actor_telegram_id,'start-alliance-season','alliance-season',s.id,p_idempotency_key,p_reason,jsonb_build_object('allianceId',a.id,'requestedDurationDays',p_duration_days,'result',result),now());
  RETURN result;
 END $$;
 
 CREATE OR REPLACE FUNCTION public.admin_close_alliance_season_http(
- p_actor_telegram_id text,p_season_id text,p_idempotency_key text
+ p_actor_telegram_id text,p_season_id text,p_idempotency_key text,p_reason text
 ) RETURNS jsonb LANGUAGE plpgsql SECURITY INVOKER SET search_path=public,pg_temp AS $$
 DECLARE actor public."User"%ROWTYPE; s public."AllianceSeason"%ROWTYPE; a public."Alliance"%ROWTYPE;
  founder public."AllianceGroup"%ROWTYPE; founder_telegram_id text; prior public."AdminAuditLog"%ROWTYPE;
@@ -126,13 +126,13 @@ BEGIN
   END IF;
   result:=jsonb_build_object('season',to_jsonb(s),'standings',v_standings,'replayed',false,'reviewStatus',review,'securityFlags',v_flags,'winner',CASE WHEN review='APPROVED' THEN winner.group_name ELSE NULL END,'prize',prize::text,'alertGroupTelegramId',founder_telegram_id);
  END IF;
- INSERT INTO public."AdminAuditLog"(id,"actorTelegramId",action,"targetType","targetId","idempotencyKey",metadata,"createdAt")
- VALUES(gen_random_uuid()::text,p_actor_telegram_id,'close-alliance-season','alliance-season',p_season_id,p_idempotency_key,jsonb_build_object('result',result),now());
+ INSERT INTO public."AdminAuditLog"(id,"actorTelegramId",action,"targetType","targetId","idempotencyKey",reason,metadata,"createdAt")
+ VALUES(gen_random_uuid()::text,p_actor_telegram_id,'close-alliance-season','alliance-season',p_season_id,p_idempotency_key,p_reason,jsonb_build_object('result',result),now());
  RETURN result;
 END $$;
 
 CREATE OR REPLACE FUNCTION public.admin_review_alliance_season_http(
- p_actor_telegram_id text,p_season_id text,p_decision text,p_idempotency_key text
+ p_actor_telegram_id text,p_season_id text,p_decision text,p_idempotency_key text,p_reason text
 ) RETURNS jsonb LANGUAGE plpgsql SECURITY INVOKER SET search_path=public,pg_temp AS $$
 DECLARE actor public."User"%ROWTYPE; s public."AllianceSeason"%ROWTYPE; a public."Alliance"%ROWTYPE;
  founder public."AllianceGroup"%ROWTYPE; founder_telegram_id text; prior public."AdminAuditLog"%ROWTYPE;
@@ -178,14 +178,14 @@ BEGIN
   VALUES(gen_random_uuid()::text,a.id,p_actor_telegram_id,founder_telegram_id,'ADMIN_SEASON_REVIEWED',jsonb_build_object('seasonId',s.id,'decision',p_decision,'prize',prize::text),now());
   result:=jsonb_build_object('season',to_jsonb(s),'reviewStatus',s."reviewStatus",'replayed',false,'winner',CASE WHEN p_decision='APPROVE' THEN winner.group_name ELSE NULL END,'prize',prize::text);
  END IF;
- INSERT INTO public."AdminAuditLog"(id,"actorTelegramId",action,"targetType","targetId","idempotencyKey",metadata,"createdAt")
- VALUES(gen_random_uuid()::text,p_actor_telegram_id,'review-alliance-season','alliance-season',p_season_id,p_idempotency_key,jsonb_build_object('decision',p_decision,'result',result),now());
+ INSERT INTO public."AdminAuditLog"(id,"actorTelegramId",action,"targetType","targetId","idempotencyKey",reason,metadata,"createdAt")
+ VALUES(gen_random_uuid()::text,p_actor_telegram_id,'review-alliance-season','alliance-season',p_season_id,p_idempotency_key,p_reason,jsonb_build_object('decision',p_decision,'result',result),now());
  RETURN result;
 END $$;
 
-REVOKE ALL ON FUNCTION public.admin_start_alliance_season_http(text,text,integer,text) FROM PUBLIC,anon,authenticated;
-REVOKE ALL ON FUNCTION public.admin_close_alliance_season_http(text,text,text) FROM PUBLIC,anon,authenticated;
-REVOKE ALL ON FUNCTION public.admin_review_alliance_season_http(text,text,text,text) FROM PUBLIC,anon,authenticated;
+REVOKE ALL ON FUNCTION public.admin_start_alliance_season_http(text,text,integer,text,text) FROM PUBLIC,anon,authenticated;
+REVOKE ALL ON FUNCTION public.admin_close_alliance_season_http(text,text,text,text) FROM PUBLIC,anon,authenticated;
+REVOKE ALL ON FUNCTION public.admin_review_alliance_season_http(text,text,text,text,text) FROM PUBLIC,anon,authenticated;
 GRANT EXECUTE ON FUNCTION public.admin_start_alliance_season_http(text,text,integer,text) TO service_role;
 GRANT EXECUTE ON FUNCTION public.admin_close_alliance_season_http(text,text,text) TO service_role;
 GRANT EXECUTE ON FUNCTION public.admin_review_alliance_season_http(text,text,text,text) TO service_role;
