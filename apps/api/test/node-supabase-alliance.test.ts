@@ -52,10 +52,10 @@ test("Node alliance repository preserves the real admin actor for atomic admin s
     await repo.adminCloseAllianceSeason({actorTelegramId:"987654321",seasonId:"season-1",idempotencyKey:"admin-close-idempotency"});
     await repo.adminReviewAllianceSeason({actorTelegramId:"987654321",seasonId:"season-1",decision:"APPROVE",idempotencyKey:"admin-review-idempotency"});
     assert.equal(calls[0]!.url.endsWith("/admin_start_alliance_season_http"),true);
-    assert.deepEqual(calls[0]!.body,{p_actor_telegram_id:"987654321",p_alliance_id:"alliance-1",p_duration_days:7,p_idempotency_key:"admin-start-idempotency"});
+    assert.deepEqual(calls[0]!.body,{p_actor_telegram_id:"987654321",p_alliance_id:"alliance-1",p_duration_days:7,p_idempotency_key:"admin-start-idempotency",p_reason:null});
     assert.equal(calls[1]!.url.endsWith("/admin_close_alliance_season_http"),true);
-    assert.deepEqual(calls[1]!.body,{p_actor_telegram_id:"987654321",p_season_id:"season-1",p_idempotency_key:"admin-close-idempotency"});
+    assert.deepEqual(calls[1]!.body,{p_actor_telegram_id:"987654321",p_season_id:"season-1",p_idempotency_key:"admin-close-idempotency",p_reason:null});
     assert.equal(calls[2]!.url.endsWith("/admin_review_alliance_season_http"),true);
-    assert.deepEqual(calls[2]!.body,{p_actor_telegram_id:"987654321",p_season_id:"season-1",p_decision:"APPROVE",p_idempotency_key:"admin-review-idempotency"});
+    assert.deepEqual(calls[2]!.body,{p_actor_telegram_id:"987654321",p_season_id:"season-1",p_decision:"APPROVE",p_idempotency_key:"admin-review-idempotency",p_reason:null});
   } finally { globalThis.fetch=previous; }
 });
