@@ -15,6 +15,7 @@ import { NodeSupabaseClubManagementRepository } from "./game/node-supabase-club-
 import { NodeSupabaseSpecialAcquisitionRepository } from "./players/node-supabase-special-acquisition.js";
 import { NodeSupabaseGiftCodeRedemptionRepository } from "./node-supabase-gift-code-redemption.js";
 import { NodeSupabaseBotRuntimeLeaseRepository } from "./node-supabase-bot-runtime-lease.js";
+import { createNodeSupabaseMatchPorts, withNodeSupabaseMatchPorts } from "./game/node-supabase-match-ports.js";
 import { isValidTelegramBotToken, parseAdminTelegramIds, parseCorsOrigins } from "./runtime-config.js";
 const required = ["DATABASE_URL", "TELEGRAM_BOT_TOKEN", "BOT_API_SECRET", "CORS_ORIGIN", "GAME_ADMIN_TELEGRAM_IDS"] as const;
 const missing = required.filter((key) => !process.env[key]?.trim());
@@ -57,6 +58,7 @@ const clubManagementPort = supabaseHttp ? new NodeSupabaseClubManagementReposito
 const specialAcquisitionPort = supabaseHttp ? new NodeSupabaseSpecialAcquisitionRepository(supabaseHttp) : undefined;
 const giftCodeRedemptionPort = supabaseHttp ? new NodeSupabaseGiftCodeRedemptionRepository(supabaseHttp) : undefined;
 const botRuntimeLeasePort = supabaseHttp ? new NodeSupabaseBotRuntimeLeaseRepository(supabaseHttp) : undefined;
+const matchPorts = supabaseHttp ? createNodeSupabaseMatchPorts(supabaseHttp) : undefined;
 const app = buildApp({
   ...(groupMembershipPort ? { groupMembershipPort } : {}),
   ...(alliancePort ? { alliancePort, adminAlliancePort: alliancePort } : {}),
@@ -72,6 +74,7 @@ const app = buildApp({
   ...(specialAcquisitionPort ? { specialAcquisitionPort } : {}),
   ...(giftCodeRedemptionPort ? { giftCodeRedemptionPort } : {}),
   ...(botRuntimeLeasePort ? { botRuntimeLeasePort } : {}),
+  ...(matchPorts ? { matchPorts } : {}),
 });
 let matchWorker: NodeJS.Timeout | undefined;
 let workerTask: Promise<void> | null = null;
@@ -95,7 +98,7 @@ try {
   matchWorker = setInterval(() => {
     if (workerRunning || shuttingDown) return;
     workerRunning = true;
-    workerTask = processDueMatchRuntimes("api-match-worker", new Date(), 10)
+    workerTask = (matchPorts ? withNodeSupabaseMatchPorts(matchPorts, () => processDueMatchRuntimes("api-match-worker", new Date(), 10)) : processDueMatchRuntimes("api-match-worker", new Date(), 10))
       .then(async (result) => {
         const promotions = await processDuePromotionOffers(new Date(), 50);
         if (result.advanced || result.settled || result.failed || promotions.accepted || promotions.completedLeagues) app.log.info({ ...result, promotions }, "Game worker tick");
