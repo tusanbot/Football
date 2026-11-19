@@ -12,7 +12,7 @@ export class NodeSupabaseAllianceRepository implements AlliancePort {
   private readonly baseUrl: string;
   constructor(url: string, private readonly serviceRoleKey: string, private readonly timeoutMs = 10_000) {
     const parsed = new URL(url);
-    if (parsed.protocol !== "https:" || !/^[a-z0-9-]+\\.supabase\\.co$/i.test(parsed.hostname)
+    if (parsed.protocol !== "https:" || !/^[a-z0-9-]+\.supabase\.co$/i.test(parsed.hostname)
       || parsed.username || parsed.password || parsed.port || parsed.pathname !== "/" || parsed.search || parsed.hash) {
       throw new TypeError("SUPABASE_URL must be a direct HTTPS Supabase project origin");
     }
