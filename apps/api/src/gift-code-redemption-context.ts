@@ -14,6 +14,7 @@ export interface GiftCodeRedemptionResult {
 }
 
 export interface GiftCodeRedemptionPort {
+  consumeRateLimit(input: { telegramUserId: string; limit: number }): Promise<boolean>;
   redeem(input: GiftCodeRedemptionCommand): Promise<GiftCodeRedemptionResult>;
 }
 

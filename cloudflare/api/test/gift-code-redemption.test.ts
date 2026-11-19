@@ -25,3 +25,19 @@ test("gift-code repository rejects malformed RPC responses", async () => {
     userId: "user-1", code: "WELCOME", idempotencyKey: "gift-code-test-0002",
   }), /SUPABASE_GIFT_CODE_INVALID_RESPONSE/);
 });
+
+
+test("gift-code rate limit is consumed through an atomic Supabase RPC", async () => {
+  let call: { name: string; args: Record<string, unknown> } | undefined;
+  const client = { rpc: async (name: string, args: Record<string, unknown>) => { call = { name, args }; return [true]; } } as never;
+  const allowed = await new SupabaseGiftCodeRedemptionRepository(client).consumeRateLimit({ telegramUserId: "123456789", limit: 5 });
+  assert.equal(allowed, true);
+  assert.equal(call?.name, "consume_gift_code_rate_limit");
+  assert.equal(call?.args.p_telegram_user_id, "123456789");
+  assert.equal(call?.args.p_limit, 5);
+});
+
+test("gift-code rate limit rejects exhausted windows", async () => {
+  const client = { rpc: async () => [false] } as never;
+  assert.equal(await new SupabaseGiftCodeRedemptionRepository(client).consumeRateLimit({ telegramUserId: "123456789", limit: 5 }), false);
+});

@@ -22,6 +22,13 @@ const GIFT_CODE_ERROR_CODES = new Set([
 export class SupabaseGiftCodeRedemptionRepository implements GiftCodeRedemptionPort {
   constructor(private readonly client: SupabaseHttpClient) {}
 
+  async consumeRateLimit(input: { telegramUserId: string; limit: number }): Promise<boolean> {
+    const rows = await this.client.rpc<boolean[]>("consume_gift_code_rate_limit", {
+      p_telegram_user_id: input.telegramUserId, p_limit: input.limit,
+    });
+    return Array.isArray(rows) && rows[0] === true;
+  }
+
   async redeem(input: GiftCodeRedemptionCommand): Promise<GiftCodeRedemptionResult> {
     let rows: GiftCodeRpcRow[];
     try {

@@ -18,9 +18,11 @@ export function registerGiftCodeRoutes(app: FastifyInstance) {
     }).strict().safeParse(req.body);
     if (!body.success) return reply.code(400).send({ error: "INVALID_GIFT_CODE" });
 
-    if (!await consumeAllianceActionRateLimit({ telegramUserId: user.telegramId, telegramGroupId: "global", action: "gift-code-redeem", limit: 5 })) {
-      return reply.code(429).send({ error: "GIFT_CODE_RATE_LIMITED", retryAfterSeconds: 60 });
-    }
+    const redemptionPort = getGiftCodeRedemptionPort();
+    const rateLimitAllowed = redemptionPort
+      ? await redemptionPort.consumeRateLimit({ telegramUserId: user.telegramId, limit: 5 })
+      : await consumeAllianceActionRateLimit({ telegramUserId: user.telegramId, telegramGroupId: "global", action: "gift-code-redeem", limit: 5 });
+    if (!rateLimitAllowed) return reply.code(429).send({ error: "GIFT_CODE_RATE_LIMITED", retryAfterSeconds: 60 });
     const code = body.data.code.toUpperCase();
     try {
       const priorRedemption = await prisma.giftCodeRedemption.findUnique({
@@ -55,7 +57,6 @@ export function registerGiftCodeRoutes(app: FastifyInstance) {
         if (!membership) throw new Error("GIFT_CODE_GROUP_MEMBERSHIP_REQUIRED");
         await verifyTelegramGroupActor({ telegramGroupId: group.telegramId, telegramUserId: user.telegramId });
       }
-      const redemptionPort = getGiftCodeRedemptionPort();
       if (redemptionPort) {
         return await redemptionPort.redeem({ userId: user.id, code, idempotencyKey: body.data.idempotencyKey, telegramGroupId: body.data.telegramGroupId ?? null });
       }
