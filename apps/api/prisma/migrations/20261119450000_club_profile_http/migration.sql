@@ -10,7 +10,7 @@ DECLARE
 BEGIN
   IF p_user_id IS NULL OR length(p_user_id) NOT BETWEEN 1 AND 128
      OR p_name IS NULL OR length(btrim(p_name)) NOT BETWEEN 2 AND 32
-     OR p_name !~ '^[[:alnum:] .''-]+$' THEN
+ THEN
     RAISE EXCEPTION 'INVALID_CLUB_NAME' USING ERRCODE = '22023';
   END IF;
   SELECT * INTO c FROM public."Club" WHERE "ownerId" = p_user_id FOR UPDATE;
