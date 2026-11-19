@@ -17,8 +17,20 @@ export interface SpecialAcquisitionResult {
   replayed: boolean;
 }
 
+export interface LegacyChallengeView {
+  slug: string; title: string; description: string; rewardName: string;
+  progress: { matches: number; wins: number; goals: number; requiredMatches: number; requiredWins: number; requiredGoals: number; completed: boolean };
+  claimed: boolean; available: boolean; canClaim: boolean;
+}
+export interface LegacyChallengeClaimResult {
+  acquisitionId: string; playerId: string;
+  specialPlayer: { id: string; fullName: string; rarity: string; overall: number };
+  replayed: boolean;
+}
 export interface SpecialAcquisitionPort {
   acquire(input: SpecialAcquisitionCommand): Promise<SpecialAcquisitionResult>;
+  listLegacyChallenges(userId: string): Promise<{ challenges: LegacyChallengeView[] }>;
+  claimLegacyChallenge(userId: string, slug: string): Promise<LegacyChallengeClaimResult>;
 }
 
 

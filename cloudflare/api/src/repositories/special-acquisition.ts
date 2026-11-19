@@ -24,6 +24,20 @@ const SPECIAL_ACQUISITION_ERRORS = new Set([
 export class SupabaseSpecialAcquisitionRepository implements SpecialAcquisitionPort {
   constructor(private readonly client: SupabaseHttpClient) {}
 
+  async listLegacyChallenges(userId: string) {
+    const rows = await this.client.rpc<Array<{ challenges: unknown }>>("list_legacy_special_challenges", { p_user_id: userId });
+    const value = Array.isArray(rows) ? rows[0]?.challenges : undefined;
+    if (!Array.isArray(value)) throw new Error("SUPABASE_LEGACY_CHALLENGES_INVALID_RESPONSE");
+    return { challenges: value as import("../../../../apps/api/src/players/special-acquisition-context.js").LegacyChallengeView[] };
+  }
+
+  async claimLegacyChallenge(userId: string, slug: string) {
+    const rows = await this.client.rpc<Array<{ result: unknown }>>("claim_legacy_special_challenge", { p_user_id: userId, p_slug: slug });
+    const row = Array.isArray(rows) ? rows[0]?.result : undefined;
+    if (!row || typeof row !== "object") throw new Error("SUPABASE_LEGACY_CHALLENGE_CLAIM_INVALID_RESPONSE");
+    return row as import("../../../../apps/api/src/players/special-acquisition-context.js").LegacyChallengeClaimResult;
+  }
+
   async acquire(input: SpecialAcquisitionCommand): Promise<SpecialAcquisitionResult> {
     let rows: SpecialAcquisitionRpcRow[];
     try {
