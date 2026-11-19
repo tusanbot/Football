@@ -223,7 +223,7 @@ export function buildApp(options: { logger?: boolean; pluginTimeout?: number; gr
   registerTelegramMessageDeletionRoutes(app);
   registerLeagueNoticeRoutes(app);
   registerAdminGroupBroadcastRoutes(app);
-  registerBotRuntimeRoutes(app, { ...(options.botRuntimeLeasePort ? { leasePort: options.botRuntimeLeasePort } : {}), requireLeasePort: Boolean(options.botRuntimeLeasePort) });
+  registerBotRuntimeRoutes(app, { ...(options.botRuntimeLeasePort ? { leasePort: options.botRuntimeLeasePort } : {}), requireLeasePort: true });
   registerPublicClubRoutes(app, options.publicClubLogoRepository, options.publicClubReadRepository);
   registerPublicPlayerRecordRoutes(app, options.publicPlayerRecordRepository);
   registerSeasonAwardRoutes(app);
