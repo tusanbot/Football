@@ -11,7 +11,7 @@ BEGIN
  SELECT * INTO prior FROM public."AdminAuditLog" WHERE "idempotencyKey"=p_idempotency_key FOR UPDATE;
  IF prior.id IS NOT NULL THEN
   IF prior."actorTelegramId"<>p_actor_telegram_id OR prior.action<>'start-alliance-season' OR prior."targetType"<>'alliance-season' OR prior.metadata->>'allianceId' IS DISTINCT FROM p_alliance_id OR prior.metadata->>'requestedDurationDays' IS DISTINCT FROM p_duration_days::text THEN RETURN jsonb_build_object('error','IDEMPOTENCY_CONFLICT'); END IF;
-  RETURN coalesce(prior.metadata->'result',jsonb_build_object('replayed',true,'targetId',prior."targetId"));
+  RETURN coalesce(prior.metadata->'result',jsonb_build_object('targetId',prior."targetId")) || jsonb_build_object('replayed',true);
  END IF;
  SELECT * INTO actor FROM public."User" WHERE "telegramId"=p_actor_telegram_id;
  IF actor.id IS NULL THEN RETURN jsonb_build_object('error','ACCOUNT_NOT_FOUND'); END IF;
@@ -50,7 +50,7 @@ BEGIN
  SELECT * INTO prior FROM public."AdminAuditLog" WHERE "idempotencyKey"=p_idempotency_key FOR UPDATE;
  IF prior.id IS NOT NULL THEN
   IF prior."actorTelegramId"<>p_actor_telegram_id OR prior.action<>'close-alliance-season' OR prior."targetType"<>'alliance-season' OR prior."targetId"<>p_season_id THEN RETURN jsonb_build_object('error','IDEMPOTENCY_CONFLICT'); END IF;
-  RETURN coalesce(prior.metadata->'result',jsonb_build_object('replayed',true));
+  RETURN coalesce(prior.metadata->'result','{}'::jsonb) || jsonb_build_object('replayed',true);
  END IF;
  SELECT * INTO actor FROM public."User" WHERE "telegramId"=p_actor_telegram_id;
  IF actor.id IS NULL THEN RETURN jsonb_build_object('error','ACCOUNT_NOT_FOUND'); END IF;
