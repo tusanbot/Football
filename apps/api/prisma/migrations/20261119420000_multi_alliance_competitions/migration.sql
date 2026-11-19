@@ -80,6 +80,7 @@ DECLARE u public."User"%ROWTYPE; g public."TelegramGroup"%ROWTYPE; host public."
 BEGIN
  SELECT * INTO u FROM public."User" WHERE "telegramId"=p_telegram_user_id;
  IF u.id IS NULL THEN RETURN jsonb_build_object('error','ACCOUNT_NOT_FOUND'); END IF;
+ IF u."isSuspended" THEN RETURN jsonb_build_object('error','ACCOUNT_SUSPENDED'); END IF;
  SELECT * INTO g FROM public."TelegramGroup" WHERE "telegramId"=p_telegram_group_id FOR UPDATE;
  IF g.id IS NULL OR NOT g."isActive" OR g."isSuspended" THEN RETURN jsonb_build_object('error','GROUP_INACTIVE'); END IF;
  IF NOT EXISTS(SELECT 1 FROM public."GroupMembership" WHERE "groupId"=g.id AND "userId"=u.id AND role<>'MEMBER') THEN RETURN jsonb_build_object('error','GROUP_MANAGER_REQUIRED'); END IF;
@@ -123,6 +124,8 @@ BEGIN
  IF ac.id IS NULL OR p.id IS NULL OR p.status NOT IN ('INVITED','ACCEPTED') THEN RETURN jsonb_build_object('error','INVITATION_NOT_FOUND'); END IF;
  IF c.status::text<>'REGISTRATION' THEN RETURN jsonb_build_object('error','COMPETITION_NOT_OPEN'); END IF;
  IF p.status='ACCEPTED' THEN RETURN jsonb_build_object('accepted',true,'replayed',true); END IF;
+ IF p.status='DECLINED' AND NOT p_accept THEN RETURN jsonb_build_object('accepted',false,'replayed',true); END IF;
+ IF p.status<>'INVITED' THEN RETURN jsonb_build_object('error','INVITATION_NOT_FOUND'); END IF;
  IF p_accept THEN
   SELECT * INTO s FROM public."AllianceSeason" WHERE "allianceId"=ag."allianceId" AND status='ACTIVE' AND "endsAt">now() ORDER BY number DESC LIMIT 1 FOR UPDATE;
   IF s.id IS NULL THEN RETURN jsonb_build_object('error','SEASON_REVIEW_REQUIRED'); END IF;
@@ -188,13 +191,13 @@ BEGIN
  IF c.status::text<>'REGISTRATION' THEN RETURN jsonb_build_object('error','COMPETITION_NOT_OPEN'); END IF;
  SELECT count(*) INTO v_alliance_count FROM public."AllianceCompetitionParticipant" WHERE "allianceCompetitionId"=ac.id AND status='ACCEPTED';
  IF v_alliance_count<2 THEN RETURN jsonb_build_object('error','CROSS_ALLIANCE_NEEDS_TWO_ALLIANCES'); END IF;
+ SELECT count(*) INTO n FROM public."CompetitionEntry" WHERE "competitionId"=c.id;
+ IF n<>c."maxTeams" THEN RETURN jsonb_build_object('error','COMPETITION_WAITING_FOR_TEAMS','teams',n,'requiredTeams',c."maxTeams"); END IF;
  FOR p IN SELECT * FROM public."AllianceCompetitionParticipant" WHERE "allianceCompetitionId"=ac.id AND status='ACCEPTED' ORDER BY "allianceId" FOR UPDATE LOOP
   SELECT id INTO s FROM public."AllianceSeason" WHERE "allianceId"=p."allianceId" AND status='ACTIVE' AND "endsAt">coalesce(p_now,now()) ORDER BY number DESC LIMIT 1 FOR UPDATE;
   IF s.id IS NULL THEN RETURN jsonb_build_object('error','PARTICIPANT_SEASON_UNAVAILABLE'); END IF;
   UPDATE public."AllianceCompetitionParticipant" SET "seasonId"=s.id WHERE id=p.id;
  END LOOP;
- SELECT count(*) INTO n FROM public."CompetitionEntry" WHERE "competitionId"=c.id;
- IF n<>c."maxTeams" THEN RETURN jsonb_build_object('error','COMPETITION_WAITING_FOR_TEAMS','teams',n,'requiredTeams',c."maxTeams"); END IF;
  result:=public._start_competition_locked(c.id,coalesce(p_now,now()),false);
  UPDATE public."AllianceCompetition" SET "startedAt"=coalesce(p_now,now())::timestamp(3) WHERE id=ac.id;
  INSERT INTO public."AllianceAuditLog"(id,"allianceId","actorTelegramId","groupTelegramId",action,metadata,"createdAt")
