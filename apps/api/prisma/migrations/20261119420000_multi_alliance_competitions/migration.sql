@@ -24,6 +24,9 @@ CREATE TABLE public."AllianceCompetitionParticipant" (
 CREATE INDEX "AllianceCompetitionParticipant_alliance_status_idx" ON public."AllianceCompetitionParticipant"("allianceId",status);
 CREATE INDEX "AllianceCompetitionParticipant_seasonId_idx" ON public."AllianceCompetitionParticipant"("seasonId");
 
+ALTER TABLE public."AllianceCompetition" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public."AllianceCompetitionParticipant" ENABLE ROW LEVEL SECURITY;
+
 CREATE OR REPLACE FUNCTION public.create_cross_alliance_competition_http(
  p_telegram_user_id text,p_telegram_group_id text,p_name text,p_max_teams integer,p_idempotency_key text
 ) RETURNS jsonb LANGUAGE plpgsql VOLATILE SECURITY INVOKER SET search_path=public,pg_temp AS $$
