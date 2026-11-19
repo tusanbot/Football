@@ -11,10 +11,10 @@ import { NodeSupabaseWalletEntryRepository, NodeSupabaseMarketRepository, NodeSu
 import { SupabaseHttpClient } from "./node-supabase-http.js";
 import { SupabasePlayerDevelopmentRepository } from "./players/node-supabase-player-development.js";
 import { NodeSupabaseClubEconomyRepository } from "./game/node-supabase-club-economy.js";
-import { NodeSupabaseClubManagementRepository } from "./game/node-supabase-club-management.js";
-import { NodeSupabaseSpecialAcquisitionRepository } from "./players/node-supabase-special-acquisition.js";
-import { NodeSupabaseGiftCodeRedemptionRepository } from "./node-supabase-gift-code-redemption.js";
-import { NodeSupabaseBotRuntimeLeaseRepository } from "./node-supabase-bot-runtime-lease.js";
+import { SupabaseClubManagementRepository as NodeSupabaseClubManagementRepository } from "./game/node-supabase-club-management.js";
+import { SupabaseSpecialAcquisitionRepository as NodeSupabaseSpecialAcquisitionRepository } from "./players/node-supabase-special-acquisition.js";
+import { SupabaseGiftCodeRedemptionRepository as NodeSupabaseGiftCodeRedemptionRepository } from "./node-supabase-gift-code-redemption.js";
+import { SupabaseBotRuntimeLeaseRepository as NodeSupabaseBotRuntimeLeaseRepository } from "./node-supabase-bot-runtime-lease.js";
 import { createNodeSupabaseMatchPorts, withNodeSupabaseMatchPorts } from "./game/node-supabase-match-ports.js";
 import { isValidTelegramBotToken, parseAdminTelegramIds, parseCorsOrigins } from "./runtime-config.js";
 const required = ["DATABASE_URL", "TELEGRAM_BOT_TOKEN", "BOT_API_SECRET", "CORS_ORIGIN", "GAME_ADMIN_TELEGRAM_IDS"] as const;
