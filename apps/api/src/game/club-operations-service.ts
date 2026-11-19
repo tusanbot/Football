@@ -218,7 +218,7 @@ export async function getClubOperations(userId: string, now = new Date()) {
   await settleClubDailyState(userId, now);
   const settlement = await settleClubEconomy(userId, now);
   const httpPort = getClubManagementPort();
-  if (httpPort) {
+  if (httpPort?.getOperationsSnapshot) {
     const snapshot = await httpPort.getOperationsSnapshot(userId);
     if (!snapshot) throw new ClubOperationsError("CLUB_NOT_FOUND");
     const club = snapshot.club;
