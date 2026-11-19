@@ -303,3 +303,23 @@ Remaining limitations:
 - Club operations other than the daily economy settlement still include Prisma-backed reads and mutations (sponsors, facilities, coaches, academy prospects, finance history, and upgrades).
 - Player-development repository reads still use PostgREST table access for the club, players, coach, wallet, training logs, renewals, and payroll history. These are direct Supabase HTTP calls, but the surrounding workflows are not yet all atomic end-to-end.
 - Node server startup/readiness and other background workers still require Prisma and `DATABASE_URL`. Full Prisma/pg removal remains incomplete.
+
+
+## Additional Node Fastify operational ports
+
+The direct Node Supabase HTTP client is now used by additional server-side repositories:
+
+- Club management commands: facility upgrades, coach upgrades/hiring, sponsor signing, academy scouting, and prospect recruitment use the existing `club_management_command` transactional RPC.
+- Special-player acquisition: pack purchases, legacy challenge listing, and legacy challenge claims use the existing RPCs.
+- Gift codes: rate limiting, reward preflight, and redemption use the existing RPCs; the route retains Telegram group actor verification before group-point redemption.
+- Bot polling lease: acquire/heartbeat/release uses `manage_bot_runtime_lease_http`.
+- Match and competition repositories: Node implementations were added for runtime advance/checkpoint/enqueue/forfeit/lease/settlement/snapshot, competition create/rules/join/start, competition advancement, friendly-match creation, lineup changes, ticket-price changes, match reads/opponents, event-tournament settlement, and pyramid-league settlement.
+- Fastify request scopes are wired for interactive match/competition operations. The Node match worker runs inside the same repository scopes, including promotion settlement.
+
+The new Node adapters reuse existing SQL migrations/RPCs; this work does not execute migrations against a live database.
+
+Still not complete:
+- Club operations dashboard reads still use Prisma for the club aggregate, coach, sponsors, academy prospects, finance entries, and cash wallet. Only club-management mutations and daily economy settlement have HTTP paths.
+- Some other route families and administrative workflows still fall back to Prisma when no matching port is present.
+- Node server startup, readiness and shutdown still connect/disconnect Prisma, and `DATABASE_URL` remains mandatory.
+- Other scheduler/background tasks and all Prisma-backed paths have not yet been exhaustively removed or audited. Therefore Prisma/`pg` removal and the no-`DATABASE_URL` runtime gate remain blocked.
