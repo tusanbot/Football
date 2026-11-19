@@ -5,6 +5,7 @@ import { prisma } from "../db.js";
 import { requireTelegramUser } from "../auth/require-telegram-user.js";
 import { getGameDashboardPort } from "./game-dashboard-context.js";
 import { getClubLineupPort } from "./club-lineup-context.js";
+import { getWalletReadPort } from "../economy/wallet-read-context.js";
 
 const clubUpdateSchema = z.object({
   name: z.string().trim().min(2).max(32).regex(/^[\p{L}\p{N} .'-]+$/u),
@@ -114,6 +115,11 @@ export function registerGameRoutes(app: FastifyInstance) {
   app.get("/v1/wallet", async (request, reply) => {
     const user = await requireTelegramUser(request);
     if (!user) return reply.code(401).send({ error: "UNAUTHENTICATED" });
+    const walletReadPort = getWalletReadPort();
+    if (walletReadPort) {
+      try { return { wallets: await walletReadPort.list(user.id) }; }
+      catch (error) { request.log.error({ error }, "Supabase wallet read failed"); return reply.code(503).send({ error: "WALLET_UNAVAILABLE" }); }
+    }
     const wallets = await prisma.wallet.findMany({ where: { userId: user.id }, select: { asset: true, balance: true, version: true, updatedAt: true }, orderBy: { asset: "asc" } });
     return { wallets: wallets.map((wallet) => ({ asset: wallet.asset, balance: wallet.balance.toString(), version: wallet.version, updatedAt: wallet.updatedAt.toISOString() })) };
   });
