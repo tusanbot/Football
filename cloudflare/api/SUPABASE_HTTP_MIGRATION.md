@@ -136,3 +136,51 @@ Do not remove `DATABASE_URL`, Prisma packages, Prisma schema/type generation, or
 5. CI validates SQL migrations, RPC grants/RLS, route parity, idempotency, concurrency, and Bot/Mini App end-to-end behavior without generating Prisma Client or invoking `prisma migrate`.
 
 The current branch is a compatibility hardening step, not the completion of this gate. Keep the existing database configuration until the remaining route families are migrated and tested.
+
+## Route-family audit: remaining Prisma blockers (2026-11-19)
+
+This audit was performed against `feat/supabase-http-runtime-hardening` after PR #10's readiness hardening. It distinguishes a Worker route being gated on an HTTP port from the shared Fastify service having no Prisma implementation: the latter is still required by the Node API and is not removable merely because the Worker injects a port.
+
+### Confirmed remaining group and authorization paths
+
+- `apps/api/src/groups/group-routes.ts` imports `prisma` and uses it in both Bot-secret and Mini App actor authorization when the group-membership port does not supply actor status. The Cloudflare router requests the membership port, but this does not remove the Fastify fallback.
+- `apps/api/src/groups/group-service.ts` imports Prisma and retains fallback implementations for group registration/join, daily and game activity points, group summaries/workspaces, shop/reward operations, challenges, and group leagues. The current `GroupMembershipPort` covers registration/join, actor status, membership synchronization/count checks, activity awards, group reads/workspace/shop, reward purchase, and challenge lifecycle. It does **not** expose the five group-league operations.
+- The five confirmed group-league gaps are `createGroupLeague`, `joinGroupLeague`, `startGroupLeague`, `getGroupLeagueTable`, and `listGroupLeagues`. They still perform Prisma reads/transactions and/or call the Prisma-backed `joinLeague` / `startLeague` functions. A Worker request cannot safely use them as a fallback.
+- `apps/api/src/groups/alliance-service.ts` and `alliance-context.ts` retain Prisma implementations for the standard Fastify runtime. The Worker injects an AlliancePort and registers alliance routes with `requirePort: true`; that protects the Worker route from silently falling back, but does not remove Prisma from the Node API.
+- Group route authorization also calls Telegram's live administrator verification. Keep that external authorization check, and move persisted user/group suspension and membership reads behind a repository/RPC rather than bypassing them.
+
+### Confirmed application-wide blockers
+
+- `apps/api/src/server.ts` imports Prisma, requires `DATABASE_URL`, connects and probes PostgreSQL on startup, and runs match/promotion schedulers through Prisma-backed services.
+- `apps/api/src/db.ts` imports `@prisma/client`, `@prisma/adapter-pg`, and `pg`; it owns the Prisma client, PostgreSQL pool, and request-scoped Prisma compatibility layer.
+- `apps/api/package.json` still declares `@prisma/client`, `prisma`, `@prisma/adapter-pg`, and `pg`; its database scripts still call Prisma.
+- The root `package.json` still exposes Prisma-backed generate/migrate scripts.
+- `.github/workflows/ci.yml` still generates Prisma Client, validates Prisma schema, runs `prisma migrate deploy`, and uses Prisma seed/verification commands. This remains a transitional CI pipeline, not a Prisma-free migration pipeline.
+- `cloudflare/api/src/index.ts` still imports `createPrismaClient` and `withPrismaClient`. The Worker therefore still has a PostgreSQL/Prisma compatibility path for routes, background jobs, and schedulers without complete repository coverage.
+
+### Next migration tranches (required before package removal)
+
+1. **Group leagues:** add a request-scoped group-league port; implement create/join/start/list/table repository methods and narrowly scoped SQL RPCs. Reuse the existing competition lifecycle semantics and ensure group membership, creator ownership, capacity, idempotency, and standings are checked atomically. Add SQL integration tests and Bot/Mini App route parity tests.
+2. **Group authorization and remaining group service methods:** enumerate every exported group-service operation against the existing GroupMembershipPort; implement missing methods and remove the Worker's need for any Prisma fallback. Preserve Telegram administrator verification and suspension checks.
+3. **Node API parity:** migrate the standard Fastify runtime to Supabase HTTP repositories, or retire that runtime explicitly. A Worker-only implementation is insufficient while `apps/api/src/server.ts` remains a supported runtime.
+4. **Schedulers and background work:** move due-match, promotion, tournament finalization, and every other scheduled operation to HTTP repositories/RPCs; verify lease ownership, retries, idempotency, and durable scheduling before removing PostgreSQL access.
+5. **Remaining route families:** audit auth/account provisioning, club and player CRUD, market listing lifecycle, admin/admin-league, gift codes, notifications, Telegram message deletion, store snapshots/item use, bot runtime, public club, records, season awards, and any routes registered in `workers-router.ts`. For each, record the concrete HTTP repository/RPC and parity tests.
+6. **Independent SQL migration lifecycle:** move SQL files out of Prisma's migration directory only with a migration ledger/bootstrap process that recognizes already-applied migrations. Do not re-run historical SQL against an existing database.
+7. **Removal gate:** only after both Node and Worker runtimes, all jobs, and CI are Prisma-free should Prisma schema/client/driver packages and `DATABASE_URL` / `DIRECT_URL` be removed.
+
+### CI trigger correction
+
+The hardening PR targets `feat/supabase-http-full-runtime`, not `main`. The CI workflow's pull-request trigger now includes that base branch so this PR can receive the existing transitional validation pipeline. This does **not** make CI Prisma-free; the workflow deliberately still exercises the legacy Prisma migration path until the independent SQL runner and full route migration are complete.
+
+### Status after this audit
+
+- [x] Correctly identify the group-league methods absent from the HTTP port.
+- [x] Identify the remaining Node API, Worker, package, script, and CI Prisma dependencies.
+- [x] Enable the current PR base branch in the CI pull-request trigger.
+- [ ] Implement group-league RPCs and repository wiring.
+- [ ] Complete all remaining route and scheduler migrations.
+- [ ] Introduce and validate an independent SQL migration runner/ledger.
+- [ ] Remove Prisma packages and PostgreSQL wire-protocol dependencies.
+- [ ] Pass full Prisma-free CI and Bot + Mini App parity tests.
+
+No database, secrets, webhook, DNS, deployment, or production runtime settings were changed by this audit.
