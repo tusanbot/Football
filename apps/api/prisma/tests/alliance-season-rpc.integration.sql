@@ -19,11 +19,12 @@ BEGIN
  r:=public.respond_alliance_invitation_http(v_tb,v_gb,sid,true);
  r:=public.get_alliance_workspace_http(v_ta,v_ga,true);
  IF r#>>'{alliance,name}'<>'Season RPC Alliance' OR jsonb_array_length(r#>'{alliance,groups}')<>2 OR r#>>'{alliance,canReview}'<>'true' THEN RAISE EXCEPTION 'workspace payload invalid: %',r; END IF;
+ UPDATE public."AllianceGroup" SET "joinedAt"=v_now-interval '30 minutes' WHERE "allianceId"=aid;
  SELECT id INTO sid FROM public."AllianceSeason" WHERE "allianceId"=aid AND number=1;
- UPDATE public."AllianceSeason" SET "endsAt"=clock_timestamp()-interval '1 minute' WHERE id=sid;
+ UPDATE public."AllianceSeason" SET "startsAt"=v_now-interval '30 minutes',"endsAt"=v_now-interval '10 minutes' WHERE id=sid;
  INSERT INTO public."GroupPointLedger"(id,"idempotencyKey","groupId","userId",amount,source,description,"createdAt")
- VALUES(gen_random_uuid()::text,'season-safe-a-'||v_a,(SELECT id FROM public."TelegramGroup" WHERE "telegramId"=v_ga),NULL,50,'DAILY_ACTIVITY','season test',clock_timestamp()),
- (gen_random_uuid()::text,'season-safe-b-'||v_a,(SELECT id FROM public."TelegramGroup" WHERE "telegramId"=v_gb),NULL,50,'GAME_ACTIVITY','season test',clock_timestamp());
+ VALUES(gen_random_uuid()::text,'season-safe-a-'||v_a,(SELECT id FROM public."TelegramGroup" WHERE "telegramId"=v_ga),NULL,50,'DAILY_ACTIVITY','season test',v_now-interval '20 minutes'),
+ (gen_random_uuid()::text,'season-safe-b-'||v_a,(SELECT id FROM public."TelegramGroup" WHERE "telegramId"=v_gb),NULL,50,'GAME_ACTIVITY','season test',v_now-interval '20 minutes');
  r:=public.close_alliance_season_http(v_ta,v_ga);
  IF r->>'reviewStatus'<>'APPROVED' OR r->>'prize'<>'100' OR r->>'replayed'<>'false' THEN RAISE EXCEPTION 'season close/payout failed: %',r; END IF;
  r:=public.close_alliance_season_http(v_ta,v_ga);
@@ -31,9 +32,9 @@ BEGIN
  r:=public.start_alliance_season_http(v_ta,v_ga,7);
  sid2:=r#>>'{season,id}';
  IF sid2 IS NULL OR r#>>'{season,number}'<>'2' THEN RAISE EXCEPTION 'season start failed: %',r; END IF;
- UPDATE public."AllianceSeason" SET "endsAt"=clock_timestamp()-interval '1 minute' WHERE id=sid2;
+ UPDATE public."AllianceSeason" SET "startsAt"=v_now-interval '5 minutes',"endsAt"=v_now-interval '1 minute' WHERE id=sid2;
  INSERT INTO public."GroupPointLedger"(id,"idempotencyKey","groupId","userId",amount,source,description,"createdAt")
- VALUES(gen_random_uuid()::text,'season-flag-'||v_a,(SELECT id FROM public."TelegramGroup" WHERE "telegramId"=v_ga),v_a,100,'DAILY_ACTIVITY','concentrated points',clock_timestamp());
+ VALUES(gen_random_uuid()::text,'season-flag-'||v_a,(SELECT id FROM public."TelegramGroup" WHERE "telegramId"=v_ga),v_a,100,'DAILY_ACTIVITY','concentrated points',v_now-interval '2 minutes');
  r:=public.close_alliance_season_http(v_ta,v_ga);
  IF r->>'reviewStatus'<>'FLAGGED' OR jsonb_array_length(r->'securityFlags')=0 OR r->>'prize'<>'0' THEN RAISE EXCEPTION 'security flag/payout block failed: %',r; END IF;
  r:=public.review_alliance_season_http(v_ta,v_ga,sid2,'APPROVE',true);
