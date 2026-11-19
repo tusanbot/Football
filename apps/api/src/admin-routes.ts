@@ -142,19 +142,19 @@ try{
 let rpcResult:unknown;
 if(x.action==="start-alliance-season"){
 if(!id)throw new Error("TARGET_REQUIRED");
-rpcResult=await options.adminAlliancePort.adminStartAllianceSeason({actorTelegramId:actor.telegramId,allianceId:id,idempotencyKey:x.idempotencyKey,...(x.durationDays!==undefined?{durationDays:x.durationDays}:{})});
+rpcResult=await options.adminAlliancePort.adminStartAllianceSeason({actorTelegramId:actor.telegramId,allianceId:id,idempotencyKey:x.idempotencyKey,...(x.durationDays!==undefined?{durationDays:x.durationDays}:{}),...(x.reason?{reason:x.reason}:{})});
 const result=rpcResult as {season?:{id?:string;number?:number;startsAt?:string;endsAt?:string};replayed?:boolean};
 if(!result.season?.id)throw new Error("SUPABASE_ADMIN_ALLIANCE_INVALID_RESPONSE");
 id=result.season.id;type="alliance-season";actionResult={seasonNumber:result.season.number,startsAt:result.season.startsAt,endsAt:result.season.endsAt,replayed:result.replayed??false};
 }else if(x.action==="close-alliance-season"){
 if(!id)throw new Error("TARGET_REQUIRED");
-rpcResult=await options.adminAlliancePort.adminCloseAllianceSeason({actorTelegramId:actor.telegramId,seasonId:id,idempotencyKey:x.idempotencyKey});
+rpcResult=await options.adminAlliancePort.adminCloseAllianceSeason({actorTelegramId:actor.telegramId,seasonId:id,idempotencyKey:x.idempotencyKey,...(x.reason?{reason:x.reason}:{})});
 const result=rpcResult as {reviewStatus?:string;replayed?:boolean;prize?:string;alertGroupTelegramId?:string;securityFlags?:Array<{code:string;group?:string;sharePercent?:number;groups?:Array<{group:string}>}>};
 type="alliance-season";actionResult={reviewStatus:result.reviewStatus,replayed:result.replayed??false,...(result.prize!==undefined?{prize:result.prize}:{})};
 if(!result.replayed&&result.reviewStatus==="FLAGGED"&&result.alertGroupTelegramId&&Array.isArray(result.securityFlags))seasonAlertRef.value={groupTelegramId:result.alertGroupTelegramId,flags:result.securityFlags};
 }else{
 if(!id||!x.review||!["APPROVED","REJECTED"].includes(x.review))throw new Error("INVALID_REVIEW");
-rpcResult=await options.adminAlliancePort.adminReviewAllianceSeason({actorTelegramId:actor.telegramId,seasonId:id,decision:x.review==="APPROVED"?"APPROVE":"REJECT",idempotencyKey:x.idempotencyKey});
+rpcResult=await options.adminAlliancePort.adminReviewAllianceSeason({actorTelegramId:actor.telegramId,seasonId:id,decision:x.review==="APPROVED"?"APPROVE":"REJECT",idempotencyKey:x.idempotencyKey,...(x.reason?{reason:x.reason}:{})});
 const result=rpcResult as {reviewStatus?:string;prize?:string;replayed?:boolean};
 type="alliance-season";actionResult={reviewStatus:result.reviewStatus,prize:result.prize??"0",replayed:result.replayed??false};
 }
