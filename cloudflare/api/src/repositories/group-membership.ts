@@ -71,6 +71,30 @@ export class SupabaseGroupMembershipRepository implements GroupMembershipPort {
     raiseBusinessError(value);
     return value;
   }
+  private async groupRpc(name: string, args: Record<string, unknown>): Promise<unknown> {
+    const value = ensureObject(await this.client.rpc(name, args));
+    raiseBusinessError(value);
+    return value;
+  }
+  async listShop(telegramUserId: string, telegramGroupId: string): Promise<unknown> {
+    return this.groupRpc("list_group_shop_http", { p_telegram_user_id: telegramUserId, p_telegram_group_id: telegramGroupId });
+  }
+  async purchaseReward(input: { telegramUserId: string; telegramGroupId: string; itemSlug: string; recipientTelegramId?: string; idempotencyKey: string }): Promise<unknown> {
+    return this.groupRpc("purchase_group_reward_http", { p_telegram_user_id: input.telegramUserId, p_telegram_group_id: input.telegramGroupId, p_item_slug: input.itemSlug, p_recipient_telegram_id: input.recipientTelegramId ?? null, p_idempotency_key: input.idempotencyKey });
+  }
+  async createChallenge(input: { telegramUserId: string; telegramGroupId: string; title: string; startsAt: Date; endsAt: Date; rewardPoints: string; idempotencyKey: string }): Promise<unknown> {
+    return this.groupRpc("create_group_challenge_http", { p_telegram_user_id: input.telegramUserId, p_telegram_group_id: input.telegramGroupId, p_title: input.title, p_starts_at: input.startsAt.toISOString(), p_ends_at: input.endsAt.toISOString(), p_reward_points: input.rewardPoints, p_idempotency_key: input.idempotencyKey });
+  }
+  async joinChallenge(input: { telegramUserId: string; telegramGroupId: string; challengeId: string }): Promise<unknown> {
+    return this.groupRpc("join_group_challenge_http", { p_telegram_user_id: input.telegramUserId, p_telegram_group_id: input.telegramGroupId, p_challenge_id: input.challengeId });
+  }
+  async completeChallenge(input: { telegramUserId: string; telegramGroupId: string; challengeId: string; winnerTelegramId: string }): Promise<unknown> {
+    return this.groupRpc("complete_group_challenge_http", { p_telegram_user_id: input.telegramUserId, p_telegram_group_id: input.telegramGroupId, p_challenge_id: input.challengeId, p_winner_telegram_id: input.winnerTelegramId });
+  }
+  async cancelChallenge(input: { telegramUserId: string; telegramGroupId: string; challengeId: string }): Promise<unknown> {
+    return this.groupRpc("cancel_group_challenge_http", { p_telegram_user_id: input.telegramUserId, p_telegram_group_id: input.telegramGroupId, p_challenge_id: input.challengeId });
+  }
+
   async joinGroup(input: GroupJoinInput, now = new Date()): Promise<unknown> {
     const value = ensureObject(await this.client.rpc("join_telegram_group_http", {
       p_telegram_user_id: input.telegramUserId, p_telegram_group_id: input.telegramGroupId,
