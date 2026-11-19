@@ -17,4 +17,10 @@ $function$;
 
 REVOKE ALL ON FUNCTION public.get_club_finance_totals_http(text, timestamptz) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.get_club_finance_totals_http(text, timestamptz) FROM anon, authenticated;
-GRANT EXECUTE ON FUNCTION public.get_club_finance_totals_http(text, timestamptz) TO service_role;
+DO $grant$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'service_role') THEN
+    EXECUTE 'GRANT EXECUTE ON FUNCTION public.get_club_finance_totals_http(text, timestamptz) TO service_role';
+  END IF;
+END;
+$grant$;
