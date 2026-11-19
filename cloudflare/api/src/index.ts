@@ -1,6 +1,7 @@
 import { createPrismaClient, withPrismaClient } from "../../../apps/api/src/db.js";
 import { withWalletEntryPort } from "../../../apps/api/src/economy/wallet-entry-context.js";
 import { withStorePurchasePort } from "../../../apps/api/src/store/store-purchase-context.js";
+import { withStoreSnapshotPort } from "../../../apps/api/src/store/store-snapshot-context.js";
 import { withStoreItemUsePort } from "../../../apps/api/src/store/store-item-use-context.js";
 import { withMarketPurchasePort } from "../../../apps/api/src/players/market-purchase-context.js";
 import { withGiftCodeRedemptionPort } from "../../../apps/api/src/gift-code-redemption-context.js";
@@ -18,6 +19,7 @@ import { SupabasePublicPlayerRecordRepository } from "./repositories/public-play
 import { SupabaseSeasonAwardRepository } from "./repositories/season-awards.js";
 import { SupabaseWalletEntryRepository } from "./repositories/wallet-entry.js";
 import { SupabaseStorePurchaseRepository } from "./repositories/store-purchase.js";
+import { SupabaseStoreSnapshotRepository } from "./repositories/store-snapshot.js";
 import { SupabaseStoreItemUseRepository } from "./repositories/store-item-use.js";
 import { SupabaseMarketPurchaseRepository } from "./repositories/market-purchase.js";
 import { SupabaseGiftCodeRedemptionRepository } from "./repositories/gift-code-redemption.js";
@@ -151,6 +153,7 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
       const seasonAwards = supabaseClient ? new SupabaseSeasonAwardRepository(supabaseClient) : undefined;
       const walletEntry = supabaseClient ? new SupabaseWalletEntryRepository(supabaseClient) : undefined;
       const storePurchase = supabaseClient ? new SupabaseStorePurchaseRepository(supabaseClient) : undefined;
+      const storeSnapshot = supabaseClient ? new SupabaseStoreSnapshotRepository(supabaseClient) : undefined;
       const storeItemUse = supabaseClient ? new SupabaseStoreItemUseRepository(supabaseClient) : undefined;
       const marketPurchase = supabaseClient ? new SupabaseMarketPurchaseRepository(supabaseClient) : undefined;
       const giftCodeRedemption = supabaseClient ? new SupabaseGiftCodeRedemptionRepository(supabaseClient) : undefined;
@@ -176,11 +179,13 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
         ? () => withMatchRuntimeSettlementPort(matchRuntimeSettlement, withCheckpoint) : withCheckpoint;
       const withWallet = walletEntry ? () => withWalletEntryPort(walletEntry, withSettlement) : withSettlement;
       const withStorePurchase = storePurchase ? () => withStorePurchasePort(storePurchase, withWallet) : withWallet;
+      const withStoreSnapshot = storeSnapshot ? () => withStoreSnapshotPort(storeSnapshot, withStorePurchase) : withStorePurchase;
       const withMarketPurchase = marketPurchase ? () => withMarketPurchasePort(marketPurchase, withStorePurchase) : withStorePurchase;
       const withGiftCodeRedemption = giftCodeRedemption ? () => withGiftCodeRedemptionPort(giftCodeRedemption, withMarketPurchase) : withMarketPurchase;
       const withSpecialAcquisition = specialAcquisition ? () => withSpecialAcquisitionPort(specialAcquisition, withGiftCodeRedemption) : withGiftCodeRedemption;
       const withMarketListing = marketListing ? () => withMarketListingPort(marketListing, withSpecialAcquisition) : withSpecialAcquisition;
-      return storeItemUse ? withStoreItemUsePort(storeItemUse, withMarketListing) : withMarketListing();
+      const withStoreRead = storeSnapshot ? () => withStoreSnapshotPort(storeSnapshot, withMarketListing) : withMarketListing;
+      return storeItemUse ? withStoreItemUsePort(storeItemUse, withStoreRead) : withStoreRead();
     });
     cleanupScheduled = true;
     ctx.waitUntil(client.$disconnect().catch((error: unknown) => console.error("Prisma request client cleanup failed", error)));

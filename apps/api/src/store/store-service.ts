@@ -3,6 +3,7 @@ import { prisma } from "../db.js";
 import { getStoreItem, STORE_CATALOG } from "./catalog.js";
 import { getStorePurchasePort } from "./store-purchase-context.js";
 import { getStoreItemUsePort } from "./store-item-use-context.js";
+import { getStoreSnapshotPort } from "./store-snapshot-context.js";
 import { getOpenMarketListings } from "../players/market-service.js";
 import { getSpecialPackOffers } from "../players/special-acquisition-service.js";
 
@@ -16,6 +17,18 @@ export class StoreError extends Error {
 const validKey = /^[A-Za-z0-9:_-]{8,80}$/;
 
 export async function getStoreSnapshot(userId: string) {
+  const snapshotPort = getStoreSnapshotPort();
+  if (snapshotPort) {
+    const [snapshot, listings] = await Promise.all([snapshotPort.get(userId), getOpenMarketListings()]);
+    return {
+      items: STORE_CATALOG.map(({ effect: _effect, ...item }) => item),
+      wallets: snapshot.wallets,
+      inventory: snapshot.inventory,
+      playerListings: listings,
+      specialPlayers: snapshot.specialPlayers,
+      packOffers: getSpecialPackOffers(),
+    };
+  }
   const [wallets, inventory, listings, specialPlayers] = await Promise.all([
     prisma.wallet.findMany({ where: { userId }, select: { asset: true, balance: true } }),
     prisma.storeInventoryItem.findMany({ where: { userId, quantity: { gt: 0 } }, orderBy: { updatedAt: "desc" }, select: { itemKey: true, quantity: true, updatedAt: true } }),
