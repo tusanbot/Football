@@ -4,6 +4,10 @@ export interface AlliancePort {
  inviteAllianceGroup(input: AllianceActorInput & {targetTelegramGroupId:string}):Promise<unknown>;
  respondAllianceInvitation(input: AllianceActorInput & {invitationId:string;accept:boolean}):Promise<unknown>;
  contributeAllianceTreasury(input: AllianceActorInput & {amount:string;idempotencyKey:string}):Promise<unknown>;
+ getAllianceWorkspace(input:AllianceActorInput & {isReviewer:boolean}):Promise<unknown>;
+ startAllianceSeason(input:AllianceActorInput & {durationDays?:number}):Promise<unknown>;
+ closeAllianceSeason(input:AllianceActorInput):Promise<unknown>;
+ reviewAllianceSeason(input:AllianceActorInput & {seasonId:string;decision:'APPROVE'|'REJECT';isReviewer:boolean}):Promise<unknown>;
 }
 import { AsyncLocalStorage } from "node:async_hooks";
 const scope = new AsyncLocalStorage<AlliancePort>();

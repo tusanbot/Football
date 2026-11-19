@@ -41,6 +41,7 @@ import { registerAdminGroupBroadcastRoutes } from "../../../apps/api/src/admin-g
 import { registerBotRuntimeRoutes } from "../../../apps/api/src/bot-runtime-routes.js";
 import type { BotRuntimeLeasePort } from "../../../apps/api/src/bot-runtime-lease-context.js";
 import type { GroupMembershipPort } from "../../../apps/api/src/groups/group-membership-context.js";
+import type { AlliancePort } from "../../../apps/api/src/groups/alliance-context.js";
 import { registerPublicClubRoutes } from "../../../apps/api/src/public-club-routes.js";
 import { registerPublicPlayerRecordRoutes, type PublicPlayerRecordRepository } from "../../../apps/api/src/players/public-record-routes.js";
 import { registerSeasonAwardRoutes, type SeasonAwardRepository } from "../../../apps/api/src/game/season-award-routes.js";
@@ -83,7 +84,7 @@ function queryObject(url: URL): Record<string, string | string[]> {
   return query;
 }
 
-export function createWorkersApiRouter(dependencies: { publicPlayerRecords?: PublicPlayerRecordRepository; seasonAwards?: SeasonAwardRepository; specialPlayers?: SpecialPlayerCatalogRepository; botRuntimeLease?: BotRuntimeLeasePort; groupMembership?: GroupMembershipPort } = {}) {
+export function createWorkersApiRouter(dependencies: { publicPlayerRecords?: PublicPlayerRecordRepository; seasonAwards?: SeasonAwardRepository; specialPlayers?: SpecialPlayerCatalogRepository; botRuntimeLease?: BotRuntimeLeasePort; groupMembership?: GroupMembershipPort; alliance?: AlliancePort } = {}) {
   const registry = new RouteRegistry();
   const registrar = registry as unknown as Parameters<typeof registerTelegramAuthRoutes>[0];
   registerTelegramAuthRoutes(registrar);
@@ -95,7 +96,7 @@ export function createWorkersApiRouter(dependencies: { publicPlayerRecords?: Pub
   registerMatchRoutes(registrar);
   registerMatchNotificationRoutes(registrar);
   registerGroupRoutes(registrar, { requireMembershipPort: true });
-  registerAllianceRoutes(registrar);
+  registerAllianceRoutes(registrar, { requirePort: true, port: dependencies.alliance });
   registerAdminRoutes(registrar);
   registerAdminLeagueRoutes(registrar);
   registerGiftCodeRoutes(registrar);

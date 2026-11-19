@@ -4,6 +4,7 @@ import { z } from "zod";
 import { requireTelegramUser } from "../auth/require-telegram-user.js";
 import { verifyTelegramGroupActor, TelegramGroupAuthorizationError } from "./telegram-group-authorization.js";
 import { consumeAllianceActionRateLimit } from "./alliance-rate-limit.js";
+import { getAlliancePort, type AlliancePort } from "./alliance-context.js";
 import { AllianceServiceError, closeAllianceSeason, contributeAllianceTreasury, createAlliance, createAllianceChampionship, getAllianceWorkspace, inviteAllianceGroup, joinAllianceChampionship, respondAllianceInvitation, reviewAllianceSeason, startAllianceChampionship, startAllianceSeason } from "./alliance-service.js";
 
 function sendError(reply: FastifyReply, error: unknown) {
@@ -18,8 +19,9 @@ function sendError(reply: FastifyReply, error: unknown) {
 }
 const groupId = z.string().regex(/^-?\d{1,20}$/);
 const key = z.string().regex(/^[A-Za-z0-9_-]{12,64}$/);
-export function registerAllianceRoutes(app: FastifyInstance) {
+export function registerAllianceRoutes(app: FastifyInstance, options: { requirePort?: boolean; port?: AlliancePort } = {}) {
   const actor = async (request: FastifyRequest, reply: FastifyReply, requireManager = true) => {
+    if (options.requirePort && (!options.port || !getAlliancePort())) { reply.code(503).send({ error: "ALLIANCE_SUPABASE_PORT_REQUIRED" }); return null; }
     const params = z.object({ telegramGroupId: groupId }).safeParse(request.params);
     if (!params.success) { reply.code(400).send({ error: "INVALID_GROUP_ID" }); return null; }
     const expected = process.env.BOT_API_SECRET, received = request.headers["x-football-bot-secret"], telegramId = request.headers["x-telegram-user-id"];

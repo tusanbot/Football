@@ -137,6 +137,7 @@ export async function respondAllianceInvitation(i: { telegramUserId: string; tel
 }
 
 export async function getAllianceWorkspace(telegramUserId: string, telegramGroupId: string) {
+  const port=getAlliancePort(); if(port) return port.getAllianceWorkspace({telegramUserId,telegramGroupId,isReviewer:allianceReviewers().has(telegramUserId)});
   const { group } = await prisma.$transaction(tx => manager(tx, telegramUserId, telegramGroupId, false));
   const membership = await prisma.allianceGroup.findUnique({ where: { groupId: group.id }, include: { alliance: true } });
   if (!membership) {
@@ -238,6 +239,7 @@ export async function startAllianceChampionship(i: { telegramUserId: string; tel
 }
 
 export async function startAllianceSeason(i: { telegramUserId: string; telegramGroupId: string; durationDays?: number }) {
+  const port=getAlliancePort(); if(port) return port.startAllianceSeason(i);
   return prisma.$transaction(async tx => {
     const durationDays = i.durationDays ?? await getAllianceSeasonDuration(tx);
     if (!Number.isInteger(durationDays) || durationDays < 7 || durationDays > 90) throw new AllianceServiceError("INVALID_SEASON_DURATION");
@@ -256,6 +258,7 @@ export async function startAllianceSeason(i: { telegramUserId: string; telegramG
 }
 
 export async function closeAllianceSeason(i: { telegramUserId: string; telegramGroupId: string }) {
+  const port=getAlliancePort(); if(port) return port.closeAllianceSeason(i);
   const result = await prisma.$transaction(async tx => {
     const { group } = await manager(tx, i.telegramUserId, i.telegramGroupId);
     const membership = await tx.allianceGroup.findUnique({ where: { groupId: group.id } });
@@ -315,6 +318,7 @@ export async function closeAllianceSeason(i: { telegramUserId: string; telegramG
 }
 
 export async function reviewAllianceSeason(i: { telegramUserId: string; telegramGroupId: string; seasonId: string; decision: "APPROVE" | "REJECT" }) {
+  const port=getAlliancePort(); if(port) return port.reviewAllianceSeason({...i,isReviewer:allianceReviewers().has(i.telegramUserId)});
   return prisma.$transaction(async tx => {
     const { user, group } = await manager(tx, i.telegramUserId, i.telegramGroupId);
     const membership = await tx.allianceGroup.findUnique({ where: { groupId: group.id } });
