@@ -28,6 +28,14 @@ const SPECIAL_ACQUISITION_ERRORS = new Set([
 export class SupabaseSpecialAcquisitionRepository implements SpecialAcquisitionPort {
   constructor(private readonly client: SupabaseHttpClient) {}
 
+  async listActive(): Promise<unknown[]> {
+    return this.client.select<unknown[]>("SpecialPlayer", {
+      select: "id,slug,fullName,nationality,birthDate,positions,rarity,overall,potential,attributes,acquisitionMethods",
+      active: "eq.true",
+      order: "rarity.desc,overall.desc",
+    });
+  }
+
   async listLegacyChallenges(userId: string) {
     const rows = await this.client.rpc<Array<{ challenges: unknown }>>("list_legacy_special_challenges", { p_user_id: userId });
     const value = Array.isArray(rows) ? rows[0]?.challenges : undefined;
