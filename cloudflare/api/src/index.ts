@@ -257,8 +257,6 @@ export class MatchCoordinator {
         const pyramidLeagueSettlement = supabase ? new SupabasePyramidLeagueSettlementRepository(supabase) : undefined;
         const eventTournamentSettlement = supabase ? new SupabaseEventTournamentSettlementRepository(supabase) : undefined;
         const matchNotifications = supabase ? new SupabaseMatchNotificationRepository(supabase) : undefined;
-      const pyramidLeagueSettlement = supabase ? new SupabasePyramidLeagueSettlementRepository(supabase) : undefined;
-      const eventTournamentSettlement = supabase ? new SupabaseEventTournamentSettlementRepository(supabase) : undefined;
         const now = new Date();
         // One indexed scheduler statement replaces six independent findFirst queries.
         // Its flags also let us skip queue scans and workers that have no due work.
@@ -272,7 +270,7 @@ export class MatchCoordinator {
                 processDueMatchRuntimes("cloudflare-match-coordinator", now, 10, {
                   enqueue: schedule.hasDueFixture,
                   claim: schedule.hasDueRuntime || schedule.hasDueFixture,
-                })))))));
+                }))))))));
         const matchWork = await withMatchRuntimeLeasePort(matchRuntimeLease, runMatchWork);
         const tournamentFinalizations = schedule.hasPendingTournamentFinalization
           ? await withEventTournamentSettlementPort(eventTournamentSettlement, () => processDueEventTournamentFinalizations(now, 1))
@@ -388,6 +386,8 @@ async function scheduledJobs(env: Env): Promise<void> {
       const supabase = env.SUPABASE_URL && env.SUPABASE_SERVICE_ROLE_KEY
         ? new SupabaseHttpClient({ url: env.SUPABASE_URL, serviceRoleKey: env.SUPABASE_SERVICE_ROLE_KEY }) : undefined;
       const matchNotifications = supabase ? new SupabaseMatchNotificationRepository(supabase) : undefined;
+      const pyramidLeagueSettlement = supabase ? new SupabasePyramidLeagueSettlementRepository(supabase) : undefined;
+      const eventTournamentSettlement = supabase ? new SupabaseEventTournamentSettlementRepository(supabase) : undefined;
       const matches = env.MATCH_COORDINATOR
         ? null
         : await processDueMatchRuntimes("cloudflare-api-scheduled-fallback", now, 10);

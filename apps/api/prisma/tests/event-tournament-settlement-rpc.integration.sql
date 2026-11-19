@@ -33,7 +33,7 @@ BEGIN
  ('ci-event-prize-honor',tour,0,'HONOR',5,NULL,NULL,now_at AT TIME ZONE 'UTC')
  ON CONFLICT(id) DO NOTHING;
  r:=public.finalize_event_tournament_http(comp,now_at);
- IF r->>'finalized'<>'true' OR (r->>'participants')::integer<>4 OR (r->>'awards')::integer<>4 THEN
+ IF r->>'finalized'<>'true' OR (r->>'participants')::integer<>4 OR (r->>'awards')::integer<>5 THEN
   RAISE EXCEPTION 'event tournament finalization mismatch: %',r; END IF;
  IF (SELECT status::text FROM public."EventTournament" WHERE id=tour)<>'COMPLETED'
   OR (SELECT count(*) FROM public."EventTournamentParticipant" WHERE "tournamentId"=tour AND "prizeSettledAt" IS NOT NULL)<>4

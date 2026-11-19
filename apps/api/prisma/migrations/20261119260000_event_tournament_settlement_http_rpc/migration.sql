@@ -50,6 +50,7 @@ BEGIN
     VALUES('wallet_'||replace(gen_random_uuid()::text,'-',''),v_part."userId",v_asset,0,0,
      (p_now AT TIME ZONE 'UTC'),(p_now AT TIME ZONE 'UTC'))
     ON CONFLICT("userId",asset) DO NOTHING;
+    v_ledger_id:=NULL;
     INSERT INTO public."LedgerTransaction"(id,"idempotencyKey","userId",asset,direction,amount,reason,"referenceType","referenceId","createdAt")
     VALUES('ledger_'||replace(gen_random_uuid()::text,'-',''),
      'event-tournament-prize:'||v_tournament.id||':'||v_part.id||':'||v_prize.id,
