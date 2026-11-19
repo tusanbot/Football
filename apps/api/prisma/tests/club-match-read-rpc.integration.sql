@@ -18,8 +18,8 @@ BEGIN
          (v_opponent, v_other_user, 'CI Match Opponent', 'ci-club-match-opponent', now() AT TIME ZONE 'UTC') ON CONFLICT (id) DO NOTHING;
   INSERT INTO public."Player" (id, "clubId", "firstName", "lastName", nationality, age, position, overall, potential, attributes, wage, "contractDays", "updatedAt")
   VALUES ('ci-club-match-player', v_club, 'Goal', 'Scorer', 'IR', 25, 'ST'::"PlayerPosition", 70, 75, '{}'::jsonb, 10, 365, now() AT TIME ZONE 'UTC') ON CONFLICT (id) DO NOTHING;
-  INSERT INTO public."Competition" (id, "idempotencyKey", name, season, format, status, "createdByClubId")
-  VALUES (v_competition, 'ci-club-match-competition-key', 'CI Match League', 2026, 'LEAGUE', 'ACTIVE', v_club) ON CONFLICT (id) DO NOTHING;
+  INSERT INTO public."Competition" (id, "idempotencyKey", name, season, format, status, "createdByClubId", "updatedAt")
+  VALUES (v_competition, 'ci-club-match-competition-key', 'CI Match League', 2026, 'LEAGUE', 'ACTIVE', v_club, now() AT TIME ZONE 'UTC') ON CONFLICT (id) DO NOTHING;
   INSERT INTO public."CompetitionEntry" (id, "competitionId", "clubId")
   VALUES ('ci-club-match-entry', v_competition, v_club) ON CONFLICT (id) DO NOTHING;
   INSERT INTO public."FootballMatch" (id, "idempotencyKey", type, status, "homeClubId", "awayClubId", "competitionId", "scheduledAt", seed, "homeScore", "awayScore", attendance, "ticketRevenue")
