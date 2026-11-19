@@ -16,6 +16,7 @@ import { getMatchRuntimeSettlementPort } from "./match-runtime-settlement-contex
 import { competitionKickoffAfterDays } from "./match-schedule.js";
 import { getMatchOpponentPort } from "./match-opponents-context.js";
 import { getFriendlyMatchCreationPort } from "./friendly-match-creation-context.js";
+import { getCompetitionCreationPort } from "./competition-creation-context.js";
 
 const DAY_MS = 86_400_000;
 const MATCH_MINUTE_MS = 1_000;
@@ -218,10 +219,25 @@ export async function createLeague(userId: string, name: string, maxTeams: numbe
   if (format === "CUP" && ![4, 8].includes(maxTeams)) throw new MatchServiceError("CUP_SIZE_MUST_BE_FOUR_OR_EIGHT");
   if (format === "LEAGUE" && (maxTeams < 4 || maxTeams > 10)) throw new MatchServiceError("INVALID_LEAGUE_SIZE");
   if (!Number.isInteger(cupLegs) || ![1, 2].includes(cupLegs) || (format === "LEAGUE" && cupLegs !== 1)) throw new MatchServiceError("INVALID_CUP_LEGS");
-  const club = await getOwnedClub(userId);
   const rules = validateMatchRules(inputRules ?? defaultMatchRules(format));
   if (format === "LEAGUE" && rules.penaltiesOnDraw) throw new MatchServiceError("PENALTIES_NOT_ALLOWED_FOR_LEAGUE");
   if (format === "CUP" && !rules.penaltiesOnDraw) throw new MatchServiceError("CUP_REQUIRES_PENALTIES");
+  const creationPort = getCompetitionCreationPort();
+  if (creationPort) {
+    try {
+      return await creationPort.create({
+        userId, name, maxTeams, idempotencyKey, format, cupLegs,
+        season: new Date().getUTCFullYear(),
+        rules: rules as unknown as Record<string, boolean | number>,
+        now: new Date(),
+      });
+    } catch (error) {
+      const code = error instanceof Error ? error.message : "";
+      if (/^[A-Z][A-Z0-9_]{2,80}$/.test(code)) throw new MatchServiceError(code);
+      throw error;
+    }
+  }
+  const club = await getOwnedClub(userId);
   const existing = await prisma.competition.findUnique({ where: { idempotencyKey } });
   if (existing) {
     // Rules may be edited after creation; replaying the original create command
