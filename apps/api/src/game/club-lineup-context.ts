@@ -4,11 +4,11 @@ export type ClubLineupUpdate = {
   playerIds: string[];
   expectedVersion: number;
   tactics?: {
-    mentality?: "DEFENSIVE" | "BALANCED" | "ATTACKING";
-    pressing?: "LOW_BLOCK" | "MID_BLOCK" | "HIGH_PRESS";
-    tempo?: "SLOW" | "NORMAL" | "FAST";
-    passingStyle?: "SHORT" | "MIXED" | "DIRECT";
-  };
+    mentality?: "DEFENSIVE" | "BALANCED" | "ATTACKING" | undefined;
+    pressing?: "LOW_BLOCK" | "MID_BLOCK" | "HIGH_PRESS" | undefined;
+    tempo?: "SLOW" | "NORMAL" | "FAST" | undefined;
+    passingStyle?: "SHORT" | "MIXED" | "DIRECT" | undefined;
+  } | undefined;
 };
 export interface ClubLineupPort {
   get(userId: string): Promise<unknown>;
