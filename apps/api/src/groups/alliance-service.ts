@@ -191,7 +191,6 @@ export async function getAllianceWorkspace(telegramUserId: string, telegramGroup
 
 export async function createAllianceChampionship(i: { telegramUserId: string; telegramGroupId: string; name: string; maxTeams: number; idempotencyKey: string }) {
   const port=getAlliancePort(); if(port) return port.createAllianceChampionship(i);
-  if (getAlliancePort()) throw new AllianceServiceError("ALLIANCE_CHAMPIONSHIP_SUPABASE_PENDING");
   return prisma.$transaction(async tx => {
     const { user, group } = await manager(tx, i.telegramUserId, i.telegramGroupId);
     const membership = await tx.allianceGroup.findUnique({ where: { groupId: group.id }, include: { alliance: true } });

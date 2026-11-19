@@ -15,4 +15,8 @@ export class SupabaseAllianceRepository implements AlliancePort{
  async startAllianceSeason(i:Parameters<AlliancePort["startAllianceSeason"]>[0]){return await this.call("start_alliance_season_http",{p_telegram_user_id:i.telegramUserId,p_telegram_group_id:i.telegramGroupId,p_duration_days:i.durationDays??null});}
  async closeAllianceSeason(i:Parameters<AlliancePort["closeAllianceSeason"]>[0]){return await this.call("close_alliance_season_http",{p_telegram_user_id:i.telegramUserId,p_telegram_group_id:i.telegramGroupId});}
  async reviewAllianceSeason(i:Parameters<AlliancePort["reviewAllianceSeason"]>[0]){return await this.call("review_alliance_season_http",{p_telegram_user_id:i.telegramUserId,p_telegram_group_id:i.telegramGroupId,p_season_id:i.seasonId,p_decision:i.decision,p_is_reviewer:i.isReviewer});}
+
+ async createAllianceChampionship(i:Parameters<AlliancePort["createAllianceChampionship"]>[0]){return this.call("create_alliance_championship_http",{p_telegram_user_id:i.telegramUserId,p_telegram_group_id:i.telegramGroupId,p_name:i.name,p_max_teams:i.maxTeams,p_idempotency_key:i.idempotencyKey});}
+ async joinAllianceChampionship(i:Parameters<AlliancePort["joinAllianceChampionship"]>[0]){return this.call("join_alliance_championship_http",{p_telegram_user_id:i.telegramUserId,p_telegram_group_id:i.telegramGroupId,p_competition_id:i.competitionId});}
+ async startAllianceChampionship(i:Parameters<AlliancePort["startAllianceChampionship"]>[0]){return this.call("start_alliance_championship_http",{p_telegram_user_id:i.telegramUserId,p_telegram_group_id:i.telegramGroupId,p_competition_id:i.competitionId,p_now:i.now});}
 }
