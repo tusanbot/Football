@@ -47,7 +47,9 @@ import { withMatchRuntimeAdvancePort } from "../../../apps/api/src/game/match-ru
 import { withMatchRuntimeCheckpointPort } from "../../../apps/api/src/game/match-runtime-checkpoint-context.js";
 import { withMatchRuntimeSettlementPort } from "../../../apps/api/src/game/match-runtime-settlement-context.js";
 import { withMatchRuntimeEnqueuePort } from "../../../apps/api/src/game/match-runtime-enqueue-context.js";
+import { withMatchRuntimeForfeitPort } from "../../../apps/api/src/game/match-runtime-forfeit-context.js";
 import { SupabaseMatchRuntimeEnqueueRepository } from "./repositories/match-runtime-enqueue.js";
+import { SupabaseMatchRuntimeForfeitRepository } from "./repositories/match-runtime-forfeit.js";
 import { SupabaseMatchRuntimeAdvanceRepository } from "./repositories/match-runtime-advance.js";
 import { SupabaseMatchRuntimeCheckpointRepository } from "./repositories/match-runtime-checkpoint.js";
 import { SupabaseMatchRuntimeSettlementRepository } from "./repositories/match-runtime-settlement.js";
@@ -253,6 +255,7 @@ export class MatchCoordinator {
         const matchRuntimeLease = supabase ? new SupabaseMatchRuntimeLeaseRepository(supabase) : undefined;
         const matchRuntimeSnapshot = supabase ? new SupabaseMatchRuntimeSnapshotRepository(supabase) : undefined;
         const matchRuntimeEnqueue = supabase ? new SupabaseMatchRuntimeEnqueueRepository(supabase) : undefined;
+        const matchRuntimeForfeit = supabase ? new SupabaseMatchRuntimeForfeitRepository(supabase) : undefined;
         const matchRuntimeAdvance = supabase ? new SupabaseMatchRuntimeAdvanceRepository(supabase) : undefined;
         const matchRuntimeCheckpoint = supabase ? new SupabaseMatchRuntimeCheckpointRepository(supabase) : undefined;
         const matchRuntimeSettlement = supabase ? new SupabaseMatchRuntimeSettlementRepository(supabase) : undefined;
@@ -263,17 +266,18 @@ export class MatchCoordinator {
         const now = new Date();
         // One indexed scheduler statement replaces six independent findFirst queries.
         // Its flags also let us skip queue scans and workers that have no due work.
-        if (!matchRuntimeLease || !matchRuntimeSnapshot || !matchRuntimeEnqueue || !matchRuntimeAdvance || !matchRuntimeCheckpoint || !matchRuntimeSettlement || !competitionAdvancement || !pyramidLeagueSettlement || !eventTournamentSettlement) throw new Error("SUPABASE_MATCH_RUNTIME_REPOSITORY_UNAVAILABLE");
+        if (!matchRuntimeLease || !matchRuntimeSnapshot || !matchRuntimeEnqueue || !matchRuntimeForfeit || !matchRuntimeAdvance || !matchRuntimeCheckpoint || !matchRuntimeSettlement || !competitionAdvancement || !pyramidLeagueSettlement || !eventTournamentSettlement) throw new Error("SUPABASE_MATCH_RUNTIME_REPOSITORY_UNAVAILABLE");
         const schedule = await matchRuntimeLease.getSchedule();
         const runMatchWork = () => withMatchRuntimeSnapshotPort(matchRuntimeSnapshot, () => withEventTournamentSettlementPort(eventTournamentSettlement, () => withPyramidLeagueSettlementPort(pyramidLeagueSettlement, () => withCompetitionAdvancementPort(competitionAdvancement, () =>
           withMatchRuntimeEnqueuePort(matchRuntimeEnqueue, () =>
+            withMatchRuntimeForfeitPort(matchRuntimeForfeit, () =>
             withMatchRuntimeAdvancePort(matchRuntimeAdvance, () =>
               withMatchRuntimeCheckpointPort(matchRuntimeCheckpoint, () =>
                 withMatchRuntimeSettlementPort(matchRuntimeSettlement, () =>
                 processDueMatchRuntimes("cloudflare-match-coordinator", now, 10, {
                   enqueue: schedule.hasDueFixture,
                   claim: schedule.hasDueRuntime || schedule.hasDueFixture,
-                })))))))));
+                }))))))))));
         const matchWork = await withMatchRuntimeLeasePort(matchRuntimeLease, runMatchWork);
         const tournamentFinalizations = schedule.hasPendingTournamentFinalization
           ? await withEventTournamentSettlementPort(eventTournamentSettlement, () => processDueEventTournamentFinalizations(now, 1))

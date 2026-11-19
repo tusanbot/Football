@@ -11,6 +11,7 @@ import { prisma } from "../db.js";
 import { getMatchRuntimeLeasePort } from "./match-runtime-lease-context.js";
 import { getMatchRuntimeSnapshotPort } from "./match-runtime-snapshot-context.js";
 import { getMatchRuntimeEnqueuePort } from "./match-runtime-enqueue-context.js";
+import { getMatchRuntimeForfeitPort } from "./match-runtime-forfeit-context.js";
 import { getMatchRuntimeAdvancePort } from "./match-runtime-advance-context.js";
 import { getMatchRuntimeCheckpointPort } from "./match-runtime-checkpoint-context.js";
 import { getMatchRuntimeSettlementPort } from "./match-runtime-settlement-context.js";
@@ -1327,7 +1328,24 @@ export async function enqueueDueMatchRuntimes(now = new Date(), limit = 50) {
   const enqueuePort = getMatchRuntimeEnqueuePort();
   if (enqueuePort) {
     const result = await enqueuePort.enqueue(now.toISOString(), limit);
-    for (const fixture of result.invalidFixtures) await simulateScheduledMatch(fixture.ownerId, fixture.id, now);
+    for (const fixture of result.invalidFixtures) {
+      const forfeitPort = getMatchRuntimeForfeitPort();
+      if (!forfeitPort) {
+        if (getMatchRuntimeSnapshotPort()) throw new MatchServiceError("WORKER_MATCH_RUNTIME_FORFEIT_REPOSITORY_REQUIRED");
+        await simulateScheduledMatch(fixture.ownerId, fixture.id, now);
+        continue;
+      }
+      const settlement = await forfeitPort.forfeit(fixture.id, now.toISOString());
+      if (!settlement.settled || !settlement.competitionId || settlement.round === null) continue;
+      const advancement = getCompetitionAdvancementPort();
+      if (!advancement) throw new MatchServiceError("WORKER_COMPETITION_ADVANCEMENT_REPOSITORY_REQUIRED");
+      const result = await advancement.advance({competitionId:settlement.competitionId,round:settlement.round,now:now.toISOString()});
+      if (result.completed && result.format==="LEAGUE") {
+        const pyramid = getPyramidLeagueSettlementPort();
+        if (!pyramid) throw new MatchServiceError("WORKER_PYRAMID_SETTLEMENT_REPOSITORY_REQUIRED");
+        await pyramid.finalize(settlement.competitionId,now.toISOString());
+      }
+    }
     return result.enqueued;
   }
   const fixtures = await prisma.footballMatch.findMany({

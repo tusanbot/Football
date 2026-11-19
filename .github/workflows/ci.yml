@@ -100,6 +100,10 @@ jobs:
         run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f apps/api/prisma/tests/friendly-match-rpc.integration.sql
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/football_empire
+      - name: Test invalid match runtime forfeit settlement and idempotency
+        run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f apps/api/prisma/tests/match-runtime-forfeit-rpc.integration.sql
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/football_empire
       - name: Seed special-player catalog in ephemeral PostgreSQL
         run: pnpm --filter @football/api db:seed:special
         env:
