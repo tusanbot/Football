@@ -16,7 +16,7 @@ BEGIN
  r:=public.create_alliance_http(v_ta,v_ga,'Season RPC Alliance','season lifecycle','alliance-season-rpc-0001');
  aid:=r#>>'{alliance,id}';
  r:=public.contribute_alliance_treasury_http(v_ta,v_ga,100,'season-treasury-first-'||substr(v_a,1,12));
- IF r->>'contributed'<>'true' THEN RAISE EXCEPTION 'first season treasury funding failed: %',r; END IF;
+ IF r->>'contributed' IS DISTINCT FROM 'true' THEN RAISE EXCEPTION 'first season treasury funding failed: %',r; END IF;
  r:=public.invite_alliance_group_http(v_ta,v_ga,v_gb); sid:=r#>>'{invitation,id}';
  r:=public.respond_alliance_invitation_http(v_tb,v_gb,sid,true);
  r:=public.get_alliance_workspace_http(v_ta,v_ga,true);
@@ -28,19 +28,19 @@ BEGIN
  VALUES(gen_random_uuid()::text,'season-safe-a-'||v_a,(SELECT id FROM public."TelegramGroup" WHERE "telegramId"=v_ga),NULL,50,'DAILY_ACTIVITY','season test',v_now-interval '20 minutes'),
  (gen_random_uuid()::text,'season-safe-b-'||v_a,(SELECT id FROM public."TelegramGroup" WHERE "telegramId"=v_gb),NULL,50,'GAME_ACTIVITY','season test',v_now-interval '20 minutes');
  r:=public.close_alliance_season_http(v_ta,v_ga);
- IF r->>'reviewStatus'<>'APPROVED' OR r->>'prize'<>'100' OR r->>'replayed'<>'false' THEN RAISE EXCEPTION 'season close/payout failed: %',r; END IF;
+ IF r->>'reviewStatus' IS DISTINCT FROM 'APPROVED' OR r->>'prize' IS DISTINCT FROM '100' OR r->>'replayed' IS DISTINCT FROM 'false' THEN RAISE EXCEPTION 'season close/payout failed: %',r; END IF;
  r:=public.close_alliance_season_http(v_ta,v_ga);
- IF r->>'replayed'<>'true' THEN RAISE EXCEPTION 'season close replay failed: %',r; END IF;
- r:=public.contribute_alliance_treasury_http(v_ta,v_ga,100,'season-treasury-next-'||substr(v_a,1,12));
- IF r->>'contributed'<>'true' OR r->>'treasuryPoints'<>'100' THEN RAISE EXCEPTION 'second season treasury funding failed: %',r; END IF;
+ IF r->>'replayed' IS DISTINCT FROM 'true' THEN RAISE EXCEPTION 'season close replay failed: %',r; END IF;
  r:=public.start_alliance_season_http(v_ta,v_ga,7);
  sid2:=r#>>'{season,id}';
  IF sid2 IS NULL OR r#>>'{season,number}'<>'2' THEN RAISE EXCEPTION 'season start failed: %',r; END IF;
+ r:=public.contribute_alliance_treasury_http(v_ta,v_ga,100,'season-treasury-next-'||substr(v_a,1,12));
+ IF r->>'contributed'<>'true' OR r->>'treasuryPoints' IS DISTINCT FROM '100' THEN RAISE EXCEPTION 'second season treasury funding failed: %',r; END IF;
  UPDATE public."AllianceSeason" SET "startsAt"=v_now-interval '5 minutes',"endsAt"=v_now-interval '1 minute' WHERE id=sid2;
  INSERT INTO public."GroupPointLedger"(id,"idempotencyKey","groupId","userId",amount,source,description,"createdAt")
  VALUES(gen_random_uuid()::text,'season-flag-'||v_a,(SELECT id FROM public."TelegramGroup" WHERE "telegramId"=v_ga),v_a,100,'DAILY_ACTIVITY','concentrated points',v_now-interval '2 minutes');
  r:=public.close_alliance_season_http(v_ta,v_ga);
- IF r->>'reviewStatus'<>'FLAGGED' OR jsonb_array_length(r->'securityFlags')=0 OR r->>'prize'<>'0' THEN RAISE EXCEPTION 'security flag/payout block failed: %',r; END IF;
+ IF r->>'reviewStatus' IS DISTINCT FROM 'FLAGGED' OR jsonb_array_length(r->'securityFlags')=0 OR r->>'prize' IS DISTINCT FROM '0' THEN RAISE EXCEPTION 'security flag/payout block failed: %',r; END IF;
  r:=public.review_alliance_season_http(v_ta,v_ga,sid2,'APPROVE',true);
  IF r->>'reviewStatus'<>'APPROVED' OR r->>'prize'<>'100' THEN RAISE EXCEPTION 'season review payout failed: %',r; END IF;
  r:=public.review_alliance_season_http(v_ta,v_ga,sid2,'APPROVE',true);
