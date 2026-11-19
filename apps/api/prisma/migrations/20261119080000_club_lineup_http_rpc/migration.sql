@@ -51,6 +51,12 @@ BEGIN
   END IF;
   SELECT count(DISTINCT value) INTO v_count FROM jsonb_array_elements_text(p_player_ids);
   IF v_count <> 11 THEN RETURN jsonb_build_object('ok',false,'error','LINEUP_PLAYERS_INVALID'); END IF;
+  PERFORM p.id
+    FROM public."Player" p
+    JOIN jsonb_array_elements_text(p_player_ids) selected(value) ON selected.value = p.id
+   WHERE p."clubId" = v_club.id
+   ORDER BY p.id
+   FOR UPDATE OF p;
   WITH selected AS (SELECT value player_id, ordinality::INTEGER slot FROM jsonb_array_elements_text(p_player_ids) WITH ORDINALITY)
   SELECT count(*) INTO v_count FROM selected s JOIN public."Player" p ON p.id=s.player_id
    WHERE p."clubId"=v_club.id AND p.status::text='ACTIVE' AND p."suspensionMatchesRemaining"=0;
@@ -69,6 +75,10 @@ BEGIN
   WITH selected AS (SELECT value player_id, ordinality::INTEGER slot FROM jsonb_array_elements_text(p_player_ids) WITH ORDINALITY)
   UPDATE public."Player" p SET "lineupSlot"=s.slot FROM selected s
    WHERE p.id=s.player_id AND p."clubId"=v_club.id AND p.status::text='ACTIVE' AND p."suspensionMatchesRemaining"=0;
+  GET DIAGNOSTICS v_count = ROW_COUNT;
+  IF v_count <> 11 THEN
+    RAISE EXCEPTION 'LINEUP_PLAYERS_CHANGED';
+  END IF;
   RETURN jsonb_build_object('ok',true,'lineupVersion',p_expected_version+1);
 END;
 $$;
