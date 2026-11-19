@@ -122,3 +122,17 @@ The migration is `20261118150000_gift_code_redemption_rpc`. The route's prelimin
 `acquire_special_player` serializes idempotency keys, locks the selected special-player card and gold wallet, rechecks copy limits and per-club uniqueness, debits gold, creates the player and acquisition record, and inserts the ledger debit in one transaction. The selected player and exact gold balance are returned. The function is `SECURITY INVOKER`, uses a fixed search path, and is restricted to `service_role`.
 
 The migration is `20261118160000_special_player_acquisition_rpc`. Legacy challenge claims, special-player offers, and other special-player read paths remain on Prisma.
+
+## Runtime removal gate (current status)
+
+The Supabase HTTPS repositories are still injected into a compatibility runtime; they do not yet replace every Prisma-backed route. The Worker entry point still creates a Prisma client, the Fastify API still imports Prisma, and the API package still carries Prisma/PostgreSQL driver dependencies. The Worker readiness endpoint must therefore continue requiring `DATABASE_URL` while any route or scheduler path can fall back to Prisma. Bot startup checks this endpoint and reports the missing configuration instead of starting against a partially available API.
+
+Do not remove `DATABASE_URL`, Prisma packages, Prisma schema/type generation, or the historical migration runner until all of the following are verified:
+
+1. Every route registered by `workers-router.ts` and every Fastify route has a Supabase HTTP repository or a deliberately retired endpoint.
+2. Every scheduler, Durable Object, background job, bot runtime lease, and admin/group operation uses only Supabase HTTP/RPC.
+3. No production runtime module imports `@prisma/client`, `pg`, `@prisma/adapter-pg`, or `src/db.ts`.
+4. SQL migrations have an independent, deterministic runner and a migration ledger that preserves the already-applied database history.
+5. CI validates SQL migrations, RPC grants/RLS, route parity, idempotency, concurrency, and Bot/Mini App end-to-end behavior without generating Prisma Client or invoking `prisma migrate`.
+
+The current branch is a compatibility hardening step, not the completion of this gate. Keep the existing database configuration until the remaining route families are migrated and tested.
