@@ -61,6 +61,8 @@ BEGIN
  IF (SELECT count(*) FROM public."AllianceCompetitionParticipant" WHERE "allianceCompetitionId"=ac AND status='ACCEPTED' AND "seasonId" IS NOT NULL)<>2 THEN
   RAISE EXCEPTION 'each alliance did not capture its own active season';
  END IF;
+ UPDATE public."AllianceSeason" SET "startsAt"=now_at-interval '1 minute',"endsAt"=now_at+interval '1 day'
+ WHERE id IN (SELECT "seasonId" FROM public."AllianceCompetitionParticipant" WHERE "allianceCompetitionId"=ac);
  SELECT fm.id INTO m FROM public."FootballMatch" fm WHERE fm."competitionId"=comp ORDER BY fm.round,fm.id LIMIT 1;
  SELECT ag."groupId",ag."allianceId",p."seasonId" INTO home_group,home_alliance,home_season
  FROM public."CompetitionEntry" ce JOIN public."AllianceGroup" ag ON ag.id=ce."allianceGroupId"
