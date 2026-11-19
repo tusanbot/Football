@@ -268,3 +268,21 @@ Implementation:
 - Node tests cover RPC names/arguments, authenticated HTTPS headers, bigint-safe balance strings, replay responses, business errors, malformed responses, and unsafe configuration.
 
 Remaining store work: the Node store snapshot still uses Prisma for wallets/inventory/special-player catalog unless a snapshot port is added; its market listings and pack offers also depend on their respective Node ports. This tranche migrates store purchase and item-use writes only. No live database migration or production configuration was changed.
+
+
+## Node Fastify wallet, market, and store snapshot tranche
+
+The Node Fastify runtime now has direct Supabase HTTPS adapters for:
+
+- Wallet ledger entries through `apply_wallet_entry`, preserving bigint balances as decimal strings and validating replay/version metadata.
+- Market listing creation, cancellation, public listing reads, seller-owned listing reads, seller lookup, and atomic purchase through the existing market RPC set.
+- Store snapshot reads through `get_store_snapshot`, with validation of wallet, inventory, and special-player catalog rows.
+- All three adapters use the server-only service-role key, direct HTTPS project-origin validation, redirect rejection, request timeout, and strict response validation.
+- `server.ts` constructs the adapters when Supabase credentials are configured and `app.ts` scopes them per request using AsyncLocalStorage.
+- Node tests cover authenticated RPC calls, arguments, bigint-safe balances, market lifecycle responses, expiration results, snapshot shape, business error mapping, malformed responses, and unsafe origins.
+
+Important remaining limitations:
+- Market create/buy still call `settleClubDailyState` before the market RPC; that settlement path remains Prisma-backed and must be migrated before the full market route can be considered Prisma-free.
+- Other wallet callers only use the HTTP adapter where they call `applyWalletEntry`; surrounding multi-step workflows may still perform Prisma reads/writes.
+- Store snapshot migration covers the snapshot read only; store catalogue definitions remain application code and special acquisition/pack purchase remain separate operations.
+- The Node server still requires `DATABASE_URL` and runs Prisma-backed background workers/readiness. Prisma removal is not complete.
