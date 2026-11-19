@@ -519,6 +519,7 @@ model Competition {
   @@index([allianceId])
   pyramidLeague PyramidLeague?
   eventTournament EventTournament?
+  allianceCompetition AllianceCompetition?
 }
 
 model PyramidLeague {
@@ -969,6 +970,7 @@ model TelegramGroup {
   friendlyChallenges FriendlyChallenge[]
   createdAlliances Alliance[] @relation("AllianceCreatorGroup")
   allianceMembership AllianceGroup?
+  crossCompetitionInvitations AllianceCompetitionParticipant[]
   allianceInvitations AllianceInvitation[]
   rewardGrants GroupRewardGrant[]
   memberCount Int @default(0)
@@ -1102,6 +1104,8 @@ model Alliance {
   invitations AllianceInvitation[]
   seasons AllianceSeason[]
   competitions Competition[]
+  crossCompetitions AllianceCompetition[] @relation("AllianceCompetitionHost")
+  crossCompetitionParticipations AllianceCompetitionParticipant[]
   ledger AllianceLedger[]
   auditLogs AllianceAuditLog[]
   @@index([status, createdAt])
@@ -1150,8 +1154,42 @@ model AllianceSeason {
   reviewedByUserId String?
   createdAt DateTime @default(now())
   alliance Alliance @relation(fields: [allianceId], references: [id], onDelete: Cascade)
+  competitionParticipants AllianceCompetitionParticipant[]
   @@unique([allianceId, number])
   @@index([allianceId, status, endsAt])
+}
+
+
+model AllianceCompetition {
+  id String @id
+  competitionId String @unique
+  hostAllianceId String
+  createdAt DateTime @default(now())
+  startedAt DateTime?
+  completedAt DateTime?
+  competition Competition @relation(fields: [competitionId], references: [id], onDelete: Cascade)
+  hostAlliance Alliance @relation("AllianceCompetitionHost", fields: [hostAllianceId], references: [id], onDelete: Restrict)
+  participants AllianceCompetitionParticipant[]
+  @@index([hostAllianceId, createdAt])
+}
+
+model AllianceCompetitionParticipant {
+  id String @id
+  allianceCompetitionId String
+  allianceId String
+  status String @default("INVITED")
+  seasonId String?
+  invitedByGroupId String?
+  invitedAt DateTime @default(now())
+  respondedAt DateTime?
+  createdAt DateTime @default(now())
+  competition AllianceCompetition @relation(fields: [allianceCompetitionId], references: [id], onDelete: Cascade)
+  alliance Alliance @relation(fields: [allianceId], references: [id], onDelete: Restrict)
+  season AllianceSeason? @relation(fields: [seasonId], references: [id], onDelete: Restrict)
+  invitedByGroup TelegramGroup? @relation(fields: [invitedByGroupId], references: [id], onDelete: SetNull)
+  @@unique([allianceCompetitionId, allianceId])
+  @@index([allianceId, status])
+  @@index([seasonId])
 }
 
 model AllianceLedger {

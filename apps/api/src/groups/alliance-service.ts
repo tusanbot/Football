@@ -462,3 +462,11 @@ export async function adminStartAllianceSeasonInTransaction(
   });
   return { season, replayed: false };
 }
+
+
+// Cross-alliance lifecycle is intentionally RPC-only; all ownership checks and writes run in one database transaction.
+export async function createCrossAllianceCompetition(i:{telegramUserId:string;telegramGroupId:string;name:string;maxTeams:number;idempotencyKey:string}){const port=getAlliancePort();if(!port)throw new AllianceServiceError("SUPABASE_ALLIANCE_PORT_REQUIRED");return port.createCrossAllianceCompetition(i);}
+export async function inviteCrossAllianceCompetition(i:{telegramUserId:string;telegramGroupId:string;competitionId:string;targetAllianceSlug:string}){const port=getAlliancePort();if(!port)throw new AllianceServiceError("SUPABASE_ALLIANCE_PORT_REQUIRED");return port.inviteCrossAllianceCompetition(i);}
+export async function respondCrossAllianceCompetitionInvitation(i:{telegramUserId:string;telegramGroupId:string;competitionId:string;accept:boolean}){const port=getAlliancePort();if(!port)throw new AllianceServiceError("SUPABASE_ALLIANCE_PORT_REQUIRED");return port.respondCrossAllianceCompetitionInvitation(i);}
+export async function joinCrossAllianceCompetition(i:{telegramUserId:string;telegramGroupId:string;competitionId:string}){const port=getAlliancePort();if(!port)throw new AllianceServiceError("SUPABASE_ALLIANCE_PORT_REQUIRED");return port.joinCrossAllianceCompetition(i);}
+export async function startCrossAllianceCompetition(i:{telegramUserId:string;telegramGroupId:string;competitionId:string}){const port=getAlliancePort();if(!port)throw new AllianceServiceError("SUPABASE_ALLIANCE_PORT_REQUIRED");return port.startCrossAllianceCompetition({...i,now:new Date().toISOString()});}

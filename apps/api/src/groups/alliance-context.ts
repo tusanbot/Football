@@ -11,6 +11,11 @@ export interface AlliancePort {
  createAllianceChampionship(input:AllianceActorInput & {name:string;maxTeams:number;idempotencyKey:string}):Promise<unknown>;
  joinAllianceChampionship(input:AllianceActorInput & {competitionId:string}):Promise<unknown>;
  startAllianceChampionship(input:AllianceActorInput & {competitionId:string;now:string}):Promise<unknown>;
+ createCrossAllianceCompetition(input:AllianceActorInput & {name:string;maxTeams:number;idempotencyKey:string}):Promise<unknown>;
+ inviteCrossAllianceCompetition(input:AllianceActorInput & {competitionId:string;targetAllianceSlug:string}):Promise<unknown>;
+ respondCrossAllianceCompetitionInvitation(input:AllianceActorInput & {competitionId:string;accept:boolean}):Promise<unknown>;
+ joinCrossAllianceCompetition(input:AllianceActorInput & {competitionId:string}):Promise<unknown>;
+ startCrossAllianceCompetition(input:AllianceActorInput & {competitionId:string;now:string}):Promise<unknown>;
  consumeRateLimit(input:AllianceActorInput & {action:string;limit:number;now:string}):Promise<boolean>;
 }
 import { AsyncLocalStorage } from "node:async_hooks";
