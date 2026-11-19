@@ -162,7 +162,7 @@ BEGIN
  UPDATE public."AllianceSeason" SET "reviewStatus"=(CASE WHEN p_decision='APPROVE' THEN 'APPROVED' ELSE 'REJECTED' END)::"AllianceSeasonReviewStatus","reviewedAt"=now(),"reviewedByUserId"=u.id WHERE id=s.id RETURNING * INTO s;
  IF p_decision='APPROVE' THEN
   SELECT (x->>'groupId') group_id,(x->>'group') group_name,(x->>'points')::bigint points INTO v_winner FROM jsonb_array_elements(coalesce(s.standings,'[]'::jsonb)) x ORDER BY (x->>'rank')::int LIMIT 1;
-  SELECT "treasuryPoints" INTO v_treasury FROM public."Alliance" WHERE id=a.id FOR UPDATE;
+  v_treasury:=a."treasuryPoints";
   IF v_winner.group_id IS NOT NULL AND v_winner.points>0 AND v_treasury>0 THEN
    v_key:='alliance-season-payout:'||s.id;
    SELECT -amount INTO v_prize FROM public."AllianceLedger" WHERE "idempotencyKey"=v_key;

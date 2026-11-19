@@ -32,7 +32,7 @@ BEGIN
  r:=public.close_alliance_season_http(v_ta,v_ga);
  IF r->>'replayed'<>'true' THEN RAISE EXCEPTION 'season close replay failed: %',r; END IF;
  r:=public.contribute_alliance_treasury_http(v_ta,v_ga,100,'season-treasury-next-'||substr(v_a,1,12));
- IF r->>'contributed'<>'true' THEN RAISE EXCEPTION 'second season treasury funding failed: %',r; END IF;
+ IF r->>'contributed'<>'true' OR r->>'treasuryPoints'<>'100' THEN RAISE EXCEPTION 'second season treasury funding failed: %',r; END IF;
  r:=public.start_alliance_season_http(v_ta,v_ga,7);
  sid2:=r#>>'{season,id}';
  IF sid2 IS NULL OR r#>>'{season,number}'<>'2' THEN RAISE EXCEPTION 'season start failed: %',r; END IF;
