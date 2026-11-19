@@ -3,6 +3,7 @@ import { buildApp } from "./app.js";
 import { processDueMatchRuntimes } from "./game/match-service.js";
 import { processDuePromotionOffers } from "./game/league-pyramid-service.js";
 import { prisma } from "./db.js";
+import { NodeSupabaseGroupMembershipRepository } from "./groups/node-supabase-group-membership.js";
 import { isValidTelegramBotToken, parseAdminTelegramIds, parseCorsOrigins } from "./runtime-config.js";
 const required = ["DATABASE_URL", "TELEGRAM_BOT_TOKEN", "BOT_API_SECRET", "CORS_ORIGIN", "GAME_ADMIN_TELEGRAM_IDS"] as const;
 const missing = required.filter((key) => !process.env[key]?.trim());
@@ -17,7 +18,13 @@ if (!corsOrigins.length) throw new Error("CORS_ORIGIN must contain at least one 
 const port = Number(process.env.API_PORT ?? 4000);
 if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error("API_PORT must be an integer between 1 and 65535.");
 const host = process.env.API_HOST ?? "0.0.0.0";
-const app = buildApp();
+const hasSupabaseUrl = Boolean(process.env.SUPABASE_URL?.trim());
+const hasSupabaseKey = Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY?.trim());
+if (hasSupabaseUrl !== hasSupabaseKey) throw new Error("SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be configured together.");
+const groupMembershipPort = hasSupabaseUrl
+  ? new NodeSupabaseGroupMembershipRepository(process.env.SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
+  : undefined;
+const app = buildApp({ ...(groupMembershipPort ? { groupMembershipPort } : {}) });
 let matchWorker: NodeJS.Timeout | undefined;
 let workerTask: Promise<void> | null = null;
 let shuttingDown = false;
