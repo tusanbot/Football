@@ -2,6 +2,8 @@ import "dotenv/config";
 import { buildApp } from "./app.js";
 import { processDueMatchRuntimes } from "./game/match-service.js";
 import { processDuePromotionOffers } from "./game/league-pyramid-service.js";
+import { processDueEventTournamentFinalizations } from "./event-tournament-service.js";
+import { withEventTournamentSettlementPort } from "./event-tournament-settlement-context.js";
 import { prisma } from "./db.js";
 import { NodeSupabaseGroupMembershipRepository } from "./groups/node-supabase-group-membership.js";
 import { NodeSupabaseAllianceRepository } from "./groups/node-supabase-alliance.js";
@@ -21,6 +23,7 @@ import { NodeSupabaseWalletReadRepository } from "./economy/node-supabase-wallet
 import { SupabaseClubLineupRepository } from "./game/node-supabase-club-lineup.js";
 import { NodeSupabasePublicPlayerRecordRepository } from "./players/node-supabase-public-records.js";
 import { NodeSupabasePublicClubLogoRepository } from "./node-supabase-public-club-logo.js";
+import { SupabaseEventTournamentSettlementRepository } from "./game/node-supabase-event-tournament-settlement.js";
 import { isValidTelegramBotToken, parseAdminTelegramIds, parseCorsOrigins } from "./runtime-config.js";
 const required = ["DATABASE_URL", "TELEGRAM_BOT_TOKEN", "BOT_API_SECRET", "CORS_ORIGIN", "GAME_ADMIN_TELEGRAM_IDS"] as const;
 const missing = required.filter((key) => !process.env[key]?.trim());
@@ -69,6 +72,7 @@ const walletReadPort = supabaseHttp ? new NodeSupabaseWalletReadRepository(supab
 const clubLineupPort = supabaseHttp ? new SupabaseClubLineupRepository(supabaseHttp) : undefined;
 const publicPlayerRecordRepository = supabaseHttp ? new NodeSupabasePublicPlayerRecordRepository(supabaseHttp) : undefined;
 const publicClubLogoRepository = supabaseHttp ? new NodeSupabasePublicClubLogoRepository(supabaseHttp) : undefined;
+const eventTournamentSettlementPort = supabaseHttp ? new SupabaseEventTournamentSettlementRepository(supabaseHttp) : undefined;
 const app = buildApp({
   ...(groupMembershipPort ? { groupMembershipPort } : {}),
   ...(alliancePort ? { alliancePort, adminAlliancePort: alliancePort } : {}),
@@ -90,6 +94,7 @@ const app = buildApp({
   ...(clubLineupPort ? { clubLineupPort } : {}),
   ...(publicPlayerRecordRepository ? { publicPlayerRecordRepository } : {}),
   ...(publicClubLogoRepository ? { publicClubLogoRepository } : {}),
+  ...(eventTournamentSettlementPort ? { eventTournamentSettlementPort } : {}),
 });
 let matchWorker: NodeJS.Timeout | undefined;
 let workerTask: Promise<void> | null = null;
@@ -114,11 +119,13 @@ try {
     if (workerRunning || shuttingDown) return;
     workerRunning = true;
     workerTask = (matchPorts
-      ? withNodeSupabaseMatchPorts(matchPorts, async () => {
-          const result = await processDueMatchRuntimes("api-match-worker", new Date(), 10);
-          const promotions = await processDuePromotionOffers(new Date(), 50);
-          if (result.advanced || result.settled || result.failed || promotions.accepted || promotions.completedLeagues) app.log.info({ ...result, promotions }, "Game worker tick");
-        })
+      ? withNodeSupabaseMatchPorts(matchPorts, async () => withEventTournamentSettlementPort(eventTournamentSettlementPort!, async () => {
+          const now = new Date();
+          const result = await processDueMatchRuntimes("api-match-worker", now, 10);
+          const promotions = await processDuePromotionOffers(now, 50);
+          const tournaments = await processDueEventTournamentFinalizations(now, 10);
+          if (result.advanced || result.settled || result.failed || promotions.accepted || promotions.completedLeagues || tournaments.finalized || tournaments.failed) app.log.info({ ...result, promotions, tournaments }, "Game worker tick");
+        }))
       : processDueMatchRuntimes("api-match-worker", new Date(), 10).then(async (result) => {
           const promotions = await processDuePromotionOffers(new Date(), 50);
           if (result.advanced || result.settled || result.failed || promotions.accepted || promotions.completedLeagues) app.log.info({ ...result, promotions }, "Game worker tick");
