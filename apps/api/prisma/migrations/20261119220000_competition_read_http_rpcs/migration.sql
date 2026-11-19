@@ -83,7 +83,7 @@ BEGIN
         cl.name AS club_name, sum(pmp.goals)::integer AS goals, sum(pmp.assists)::integer AS assists
         FROM public."PlayerMatchPerformance" pmp JOIN public."FootballMatch" fm ON fm.id = pmp."matchId"
         JOIN public."Player" pl ON pl.id = pmp."playerId" JOIN public."Club" cl ON cl.id = pmp."clubId"
-        WHERE fm."competitionId" = p_competition_id GROUP BY pmp."playerId", pmp."clubId", cl.name
+        WHERE fm."competitionId" = p_competition_id GROUP BY player_id, club_id, cl.name
         ORDER BY sum(pmp.goals) DESC LIMIT 20) ranked
     ), '[]'::jsonb)
   ) INTO v_result;
