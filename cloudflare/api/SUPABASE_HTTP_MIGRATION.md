@@ -144,9 +144,9 @@ This audit was performed against `feat/supabase-http-runtime-hardening` after PR
 ### Confirmed remaining group and authorization paths
 
 - `apps/api/src/groups/group-routes.ts` imports `prisma` and uses it in both Bot-secret and Mini App actor authorization when the group-membership port does not supply actor status. The Cloudflare router requests the membership port, but this does not remove the Fastify fallback.
-- `apps/api/src/groups/group-service.ts` imports Prisma and retains fallback implementations for group registration/join, daily and game activity points, group summaries/workspaces, shop/reward operations, challenges, and group leagues. The current `GroupMembershipPort` covers registration/join, actor status, membership synchronization/count checks, activity awards, group reads/workspace/shop, reward purchase, and challenge lifecycle. It does **not** expose the five group-league operations.
-- The five confirmed group-league gaps are `createGroupLeague`, `joinGroupLeague`, `startGroupLeague`, `getGroupLeagueTable`, and `listGroupLeagues`. They still perform Prisma reads/transactions and/or call the Prisma-backed `joinLeague` / `startLeague` functions. A Worker request cannot safely use them as a fallback.
-- `apps/api/src/groups/alliance-service.ts` and `alliance-context.ts` retain Prisma implementations for the standard Fastify runtime. The Worker injects an AlliancePort and registers alliance routes with `requirePort: true`; that protects the Worker route from silently falling back, but does not remove Prisma from the Node API.
+- `apps/api/src/groups/group-service.ts` imports Prisma and retains compatibility fallbacks for group registration/join, activity points, summaries/workspaces, shop/reward operations, challenges, and group leagues. `GroupMembershipPort` now exposes all five group-league operations as well as the existing membership, workspace, shop, reward, and challenge methods. The Node repository implements that full port, but the Prisma fallback remains when the Node server starts without Supabase credentials.
+- Group-league operations now have dedicated HTTP RPCs and are wired in both Worker and Node Fastify when the corresponding port is configured. Their Prisma implementations remain only as a transitional compatibility fallback.
+- `apps/api/src/groups/alliance-service.ts` retains Prisma implementations as a transitional fallback. Node Fastify now wires both public alliance operations and the three superadmin season actions through dedicated Supabase HTTP ports/RPCs when credentials are configured.
 - Group route authorization also calls Telegram's live administrator verification. Keep that external authorization check, and move persisted user/group suspension and membership reads behind a repository/RPC rather than bypassing them.
 
 ### Confirmed application-wide blockers
@@ -177,7 +177,7 @@ The hardening PR targets `feat/supabase-http-full-runtime`, not `main`. The CI w
 - [x] Correctly identify the group-league methods absent from the HTTP port.
 - [x] Identify the remaining Node API, Worker, package, script, and CI Prisma dependencies.
 - [x] Enable the current PR base branch in the CI pull-request trigger.
-- [ ] Implement group-league RPCs and repository wiring.
+- [x] Implement group-league RPCs and repository wiring.
 - [ ] Complete all remaining route and scheduler migrations.
 - [ ] Introduce and validate an independent SQL migration runner/ledger.
 - [ ] Remove Prisma packages and PostgreSQL wire-protocol dependencies.
@@ -248,5 +248,23 @@ The standard Node Fastify runtime now accepts an `AlliancePort` alongside the gr
 
 The HTTP-backed route/service surface includes alliance creation, group invitations and responses, treasury contributions, workspace reads, season lifecycle/review, alliance championships, cross-alliance competitions, and database-backed action throttling. The SQL RPCs are already represented by migrations and integration SQL in this repository. The runtime change does not apply migrations to any live database.
 
-Remaining alliance work: admin-only transaction helpers (`adminCloseAllianceSeasonInTransaction`, `adminReviewAllianceSeasonInTransaction`, and `adminStartAllianceSeasonInTransaction`) still execute through Prisma and require a dedicated admin RPC/port path. Also, until Supabase credentials are configured, the existing Node service fallback remains available for compatibility. This tranche therefore migrates the public/group alliance route surface, not every alliance/admin execution path or all Prisma dependencies.
+The three admin-only transaction helpers are now bypassed by the Node route when the dedicated admin RPC port is configured; their Prisma implementation remains solely as a transitional fallback when the Node runtime is started without Supabase credentials. This does not remove Prisma from other admin actions or from unrelated API domains.
 
+
+
+## Node Fastify store transaction tranche
+
+The Node API now wires direct HTTPS/PostgREST implementations for the two atomic store write operations:
+
+- `purchase_store_item` handles wallet debit, ledger insertion, purchase idempotency, and inventory grant in one PostgreSQL transaction.
+- `use_store_item` handles inventory consumption, player fitness/morale updates, and replay semantics in one PostgreSQL transaction.
+
+Implementation:
+- `NodeSupabaseStorePurchaseRepository` implements `StorePurchasePort`.
+- `NodeSupabaseStoreItemUseRepository` implements `StoreItemUsePort`.
+- `server.ts` constructs both adapters only when the Supabase URL and service-role key are configured together.
+- Fastify scopes each port with `AsyncLocalStorage` per request; the service-role key remains server-side.
+- The adapters reject non-Supabase origins, non-HTTPS requests, redirects, weak credentials, malformed RPC responses, and map known SQL business errors to the service's typed error handling.
+- Node tests cover RPC names/arguments, authenticated HTTPS headers, bigint-safe balance strings, replay responses, business errors, malformed responses, and unsafe configuration.
+
+Remaining store work: the Node store snapshot still uses Prisma for wallets/inventory/special-player catalog unless a snapshot port is added; its market listings and pack offers also depend on their respective Node ports. This tranche migrates store purchase and item-use writes only. No live database migration or production configuration was changed.
