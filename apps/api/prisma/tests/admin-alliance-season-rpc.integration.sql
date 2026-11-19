@@ -20,7 +20,7 @@ BEGIN
  aid:=r#>>'{alliance,id}';
  IF aid IS NULL THEN RAISE EXCEPTION 'test alliance creation failed: %',r; END IF;
  UPDATE public."AllianceSeason" SET status='COMPLETED',"reviewStatus"='APPROVED',"closedAt"=v_now WHERE "allianceId"=aid AND number=1;
- r:=public.admin_start_alliance_season_http(v_admin_tg,aid,7,'admin-start-alliance-season-'||substr(v_admin_id,1,12));
+ r:=public.admin_start_alliance_season_http(v_admin_tg,aid,7,'admin-start-alliance-season-'||substr(v_admin_id,1,12),'test admin start');
  sid:=r#>>'{season,id}';
  IF sid IS NULL OR r#>>'{season,number}'<>'2' OR r->>'replayed'<>'false' THEN RAISE EXCEPTION 'admin season start failed: %',r; END IF;
  r:=public.admin_start_alliance_season_http(v_admin_tg,aid,7,'admin-start-alliance-season-'||substr(v_admin_id,1,12));
@@ -31,18 +31,18 @@ BEGIN
  INSERT INTO public."GroupPointLedger"(id,"idempotencyKey","groupId","userId",amount,source,description,"createdAt")
  VALUES(gen_random_uuid()::text,'admin-close-points-'||substr(v_admin_id,1,12),group_db_id,v_founder_id,100,'DAILY_ACTIVITY','admin close test',v_now-interval '10 minutes');
  UPDATE public."Alliance" SET "treasuryPoints"=50 WHERE id=aid;
- r:=public.admin_close_alliance_season_http(v_admin_tg,sid,'admin-close-alliance-season-'||substr(v_admin_id,1,12));
+ r:=public.admin_close_alliance_season_http(v_admin_tg,sid,'admin-close-alliance-season-'||substr(v_admin_id,1,12),'test admin close');
  IF r->>'replayed'<>'false' OR r->>'reviewStatus'<>'FLAGGED' OR r->>'prize'<>'0' THEN RAISE EXCEPTION 'admin close/security gate failed: %',r; END IF;
  r:=public.admin_close_alliance_season_http(v_admin_tg,sid,'admin-close-alliance-season-'||substr(v_admin_id,1,12));
  IF r->>'replayed'<>'false' AND r->>'reviewStatus'<>'FLAGGED' THEN RAISE EXCEPTION 'admin close idempotent replay failed: %',r; END IF;
  IF (SELECT count(*) FROM public."AdminAuditLog" WHERE "idempotencyKey"='admin-close-alliance-season-'||substr(v_admin_id,1,12) AND "actorTelegramId"=v_admin_tg AND action='close-alliance-season')<>1 THEN RAISE EXCEPTION 'admin close audit missing or duplicated'; END IF;
- r:=public.admin_review_alliance_season_http(v_admin_tg,sid,'APPROVE','admin-review-alliance-season-'||substr(v_admin_id,1,12));
+ r:=public.admin_review_alliance_season_http(v_admin_tg,sid,'APPROVE','admin-review-alliance-season-'||substr(v_admin_id,1,12),'test admin review');
  IF r->>'reviewStatus'<>'APPROVED' OR r->>'prize'<>'50' OR r->>'replayed'<>'false' THEN RAISE EXCEPTION 'admin review and payout failed: %',r; END IF;
  r:=public.admin_review_alliance_season_http(v_admin_tg,sid,'APPROVE','admin-review-alliance-season-'||substr(v_admin_id,1,12));
  IF r->>'replayed'<>'false' AND r->>'reviewStatus'<>'APPROVED' THEN RAISE EXCEPTION 'admin review idempotent replay failed: %',r; END IF;
  IF (SELECT count(*) FROM public."AllianceAuditLog" WHERE "allianceId"=aid AND "actorTelegramId"=v_admin_tg AND action='ADMIN_SEASON_REVIEWED')<>1 THEN RAISE EXCEPTION 'admin alliance audit actor identity missing'; END IF;
  IF (SELECT count(*) FROM public."AdminAuditLog" WHERE "actorTelegramId"=v_admin_tg AND "targetType"='alliance-season' AND "idempotencyKey" IN ('admin-start-alliance-season-'||substr(v_admin_id,1,12),'admin-close-alliance-season-'||substr(v_admin_id,1,12),'admin-review-alliance-season-'||substr(v_admin_id,1,12)))<>3 THEN RAISE EXCEPTION 'expected three atomic admin audit entries'; END IF;
- r:=public.admin_start_alliance_season_http(v_admin_tg,aid,7,'admin-start-third-season-'||substr(v_admin_id,1,12));
+ r:=public.admin_start_alliance_season_http(v_admin_tg,aid,7,'admin-start-third-season-'||substr(v_admin_id,1,12),'test third start');
  sid3:=r#>>'{season,id}';
  IF sid3 IS NULL OR r#>>'{season,number}'<>'3' THEN RAISE EXCEPTION 'admin third season start failed: %',r; END IF;
  r:=public.admin_start_alliance_season_http(v_admin_tg,aid,7,'admin-start-third-season-'||substr(v_admin_id,1,12));
