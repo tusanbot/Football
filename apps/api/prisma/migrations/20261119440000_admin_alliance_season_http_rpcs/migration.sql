@@ -7,9 +7,10 @@ CREATE OR REPLACE FUNCTION public.admin_start_alliance_season_http(
 DECLARE actor public."User"%ROWTYPE; a public."Alliance"%ROWTYPE; founder public."AllianceGroup"%ROWTYPE;
  prev public."AllianceSeason"%ROWTYPE; s public."AllianceSeason"%ROWTYPE; days integer; prior public."AdminAuditLog"%ROWTYPE; result jsonb;
 BEGIN
+ PERFORM pg_advisory_xact_lock(hashtextextended(p_idempotency_key,0));
  SELECT * INTO prior FROM public."AdminAuditLog" WHERE "idempotencyKey"=p_idempotency_key FOR UPDATE;
  IF prior.id IS NOT NULL THEN
-  IF prior."actorTelegramId"<>p_actor_telegram_id OR prior.action<>'start-alliance-season' OR prior."targetType"<>'alliance-season' THEN RETURN jsonb_build_object('error','IDEMPOTENCY_CONFLICT'); END IF;
+  IF prior."actorTelegramId"<>p_actor_telegram_id OR prior.action<>'start-alliance-season' OR prior."targetType"<>'alliance-season' OR prior.metadata->>'allianceId' IS DISTINCT FROM p_alliance_id OR prior.metadata->>'requestedDurationDays' IS DISTINCT FROM p_duration_days::text THEN RETURN jsonb_build_object('error','IDEMPOTENCY_CONFLICT'); END IF;
   RETURN coalesce(prior.metadata->'result',jsonb_build_object('replayed',true,'targetId',prior."targetId"));
  END IF;
  SELECT * INTO actor FROM public."User" WHERE "telegramId"=p_actor_telegram_id;
@@ -34,7 +35,7 @@ BEGIN
  VALUES(gen_random_uuid()::text,a.id,p_actor_telegram_id,(SELECT "telegramId" FROM public."TelegramGroup" WHERE id=founder."groupId"),'ADMIN_SEASON_STARTED',jsonb_build_object('seasonId',s.id,'number',s.number,'durationDays',days),now());
  result:=jsonb_build_object('season',to_jsonb(s),'replayed',false);
  INSERT INTO public."AdminAuditLog"(id,"actorTelegramId",action,"targetType","targetId","idempotencyKey",metadata,"createdAt")
- VALUES(gen_random_uuid()::text,p_actor_telegram_id,'start-alliance-season','alliance-season',s.id,p_idempotency_key,jsonb_build_object('allianceId',a.id,'result',result),now());
+ VALUES(gen_random_uuid()::text,p_actor_telegram_id,'start-alliance-season','alliance-season',s.id,p_idempotency_key,jsonb_build_object('allianceId',a.id,'requestedDurationDays',p_duration_days,'result',result),now());
  RETURN result;
 END $$;
 
@@ -138,7 +139,7 @@ DECLARE actor public."User"%ROWTYPE; s public."AllianceSeason"%ROWTYPE; a public
 BEGIN
  SELECT * INTO prior FROM public."AdminAuditLog" WHERE "idempotencyKey"=p_idempotency_key FOR UPDATE;
  IF prior.id IS NOT NULL THEN
-  IF prior."actorTelegramId"<>p_actor_telegram_id OR prior.action<>'review-alliance-season' OR prior."targetType"<>'alliance-season' OR prior."targetId"<>p_season_id THEN RETURN jsonb_build_object('error','IDEMPOTENCY_CONFLICT'); END IF;
+  IF prior."actorTelegramId"<>p_actor_telegram_id OR prior.action<>'review-alliance-season' OR prior."targetType"<>'alliance-season' OR prior."targetId"<>p_season_id OR prior.metadata->>'decision' IS DISTINCT FROM p_decision THEN RETURN jsonb_build_object('error','IDEMPOTENCY_CONFLICT'); END IF;
   RETURN coalesce(prior.metadata->'result',jsonb_build_object('replayed',true));
  END IF;
  SELECT * INTO actor FROM public."User" WHERE "telegramId"=p_actor_telegram_id;
