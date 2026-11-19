@@ -20,6 +20,7 @@ import { getCompetitionCreationPort } from "./competition-creation-context.js";
 import { getClubMatchReadPort } from "./club-match-read-context.js";
 import { getCompetitionAdvancementPort } from "./competition-advancement-context.js";
 import { getEventTournamentSettlementPort } from "../event-tournament-settlement-context.js";
+import { getPyramidLeagueSettlementPort } from "./pyramid-league-settlement-context.js";
 
 const DAY_MS = 86_400_000;
 const MATCH_MINUTE_MS = 1_000;
@@ -1178,7 +1179,13 @@ export async function simulateScheduledMatch(userId: string, matchId: string, no
   }, { timeout: 30_000, maxWait: 10_000 });
   if (settlement.competitionId && settlement.round !== null && settlement.round !== undefined) {
     const advancementPort=getCompetitionAdvancementPort();
-    if(advancementPort) await advancementPort.advance({competitionId:settlement.competitionId,round:settlement.round,now:now.toISOString()});
+    if(advancementPort) {
+      const advancement=await advancementPort.advance({competitionId:settlement.competitionId,round:settlement.round,now:now.toISOString()});
+      if(advancement.completed&&advancement.format==="LEAGUE"){
+        const pyramidPort=getPyramidLeagueSettlementPort();
+        if(pyramidPort)await pyramidPort.finalize(settlement.competitionId,now.toISOString());
+      }
+    }
     else {
       const competition=await prisma.competition.findUnique({where:{id:settlement.competitionId},select:{format:true}});
       if(competition?.format==="LEAGUE"){
