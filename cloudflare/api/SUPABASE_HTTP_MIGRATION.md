@@ -206,3 +206,21 @@ Implementation details:
 - An ephemeral PostgreSQL integration test now covers group-scoped creation/replay/conflict, manager-only creation, member joins, capacity-triggered atomic auto-start, fixture count, start replay, standings, and suspended-group rejection. CI runs this test immediately after the group membership RPC integration test.
 
 This tranche does not remove Prisma from the Fastify runtime or from unrelated group operations. The migration has been added to the existing Prisma migration directory and will be exercised by CI's current migration pipeline; it has not been applied to any live database. The Node API group paths still use their Prisma fallback when no request-scoped port is installed.
+
+
+## Node Fastify group membership: HTTP runtime wiring
+
+The Node API now has a native Node-side `NodeSupabaseGroupMembershipRepository` that implements the complete `GroupMembershipPort` contract over HTTPS/PostgREST RPCs. It deliberately does not import Cloudflare Worker modules, and it validates the Supabase project origin, service-role key, timeout, redirect behavior, and typed business errors.
+
+Runtime behavior:
+- When both `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are present, `apps/api/src/server.ts` constructs the Node repository and injects it into `buildApp`.
+- Supplying only one of those variables fails startup rather than silently switching the group subsystem back to Prisma.
+- Fastify establishes the port through a callback-style `onRequest` hook and `AsyncLocalStorage`; the request continuation is created inside the request scope.
+- Group routes are registered with `requireMembershipPort: true` when the Node repository is configured, preventing silent Prisma fallback for those routes.
+- When neither variable is configured, the legacy Prisma group path remains available for transitional environments. Other API domains still use Prisma and still require `DATABASE_URL`.
+
+Coverage added:
+- Node transport tests assert direct HTTPS RPC addressing, server-side service-role headers, argument serialization, origin/key validation, and SQL business-error mapping.
+- Fastify route test injects a port and verifies group actor authorization and league listing both use that injected port without requiring Prisma group reads.
+
+This completes the Node runtime wiring for the existing GroupMembershipPort contract, but it does not mean all group-related behavior is Prisma-free: alliance routes/services, group-related background jobs, and any unported group code remain in the broader migration audit. No production environment variables were set and no database migration was applied.
