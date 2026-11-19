@@ -9,11 +9,41 @@ interface ProvisioningRpcResponse {
   wallets: { asset: "CASH" | "GOLD" | "HONOR"; balance: string }[];
 }
 
+function unwrapProvisioningResponse(value: unknown): ProvisioningRpcResponse | undefined {
+  // PostgREST returns a scalar jsonb function result as an object. Set-returning
+  // functions return arrays, so accept a one-row array for backwards compatibility.
+  if (Array.isArray(value)) {
+    if (value.length !== 1) return undefined;
+    value = value[0];
+  }
+  if (!value || typeof value !== "object") return undefined;
+  return value as ProvisioningRpcResponse;
+}
+
+function isProvisioningResponse(value: unknown, telegramId: string): value is ProvisioningRpcResponse {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const row = value as Record<string, unknown>;
+  if (typeof row.id !== "string" || row.telegramId !== telegramId || typeof row.displayName !== "string") return false;
+  if (row.club !== null) {
+    if (!row.club || typeof row.club !== "object" || Array.isArray(row.club)) return false;
+    const club = row.club as Record<string, unknown>;
+    if (typeof club.id !== "string" || typeof club.name !== "string"
+      || !Number.isInteger(club.level) || !Number.isInteger(club.reputation)) return false;
+  }
+  if (!Array.isArray(row.wallets)) return false;
+  return row.wallets.every((wallet) => {
+    if (!wallet || typeof wallet !== "object" || Array.isArray(wallet)) return false;
+    const item = wallet as Record<string, unknown>;
+    return ["CASH", "GOLD", "HONOR"].includes(String(item.asset))
+      && typeof item.balance === "string" && /^-?\d+$/.test(item.balance);
+  });
+}
+
 export class SupabaseTelegramAccountProvisioningRepository implements TelegramAccountProvisioningPort {
   constructor(private readonly client: SupabaseHttpClient) {}
 
   async provision(input: TelegramAccountProvisioningCommand): Promise<ProvisionedTelegramAccount> {
-    const rows = await this.client.rpc<ProvisioningRpcResponse[]>("provision_telegram_account", {
+    const response = await this.client.rpc<unknown>("provision_telegram_account", {
       p_telegram_id: input.telegramId,
       p_username: input.username,
       p_display_name: input.displayName,
@@ -31,15 +61,10 @@ export class SupabaseTelegramAccountProvisioningRepository implements TelegramAc
         contractDays: player.contractDays,
       })),
     });
-    const row = Array.isArray(rows) ? rows[0] : undefined;
-    if (!row || typeof row.id !== "string" || row.telegramId !== input.telegramId
-      || typeof row.displayName !== "string" || !Array.isArray(row.wallets)
-      || (row.club !== null && (typeof row.club?.id !== "string" || typeof row.club?.name !== "string"
-        || !Number.isInteger(row.club?.level) || !Number.isInteger(row.club?.reputation)))
-      || row.wallets.some((wallet) => !["CASH", "GOLD", "HONOR"].includes(wallet.asset)
-        || typeof wallet.balance !== "string" || !/^-?\d+$/.test(wallet.balance))) {
+    const row = unwrapProvisioningResponse(response);
+    if (!isProvisioningResponse(row, input.telegramId)) {
       throw new Error("SUPABASE_ACCOUNT_PROVISIONING_INVALID_RESPONSE");
     }
-    return row;
+    return row as ProvisionedTelegramAccount;
   }
 }
