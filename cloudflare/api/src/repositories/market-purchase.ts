@@ -25,6 +25,17 @@ const MARKET_ERROR_CODES = new Set([
 export class SupabaseMarketPurchaseRepository implements MarketPurchasePort {
   constructor(private readonly client: SupabaseHttpClient) {}
 
+  async getSellerUserId(listingId: string): Promise<string | null> {
+    const rows = await this.client.rpc<Array<{ seller_user_id: string | null }>>("get_market_listing_seller", {
+      p_listing_id: listingId,
+    });
+    const row = Array.isArray(rows) ? rows[0] : undefined;
+    if (!row || (row.seller_user_id !== null && typeof row.seller_user_id !== "string")) {
+      throw new Error("SUPABASE_MARKET_SELLER_INVALID_RESPONSE");
+    }
+    return row.seller_user_id;
+  }
+
   async purchase(input: MarketPurchaseCommand): Promise<MarketPurchaseResult> {
     let rows: MarketPurchaseRpcRow[];
     try {

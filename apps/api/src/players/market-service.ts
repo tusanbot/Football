@@ -64,20 +64,25 @@ export async function createMarketListing(userId: string, playerId: string, aski
 
 export async function buyMarketListing(userId: string, listingId: string) {
   await settleClubDailyState(userId);
-  const sellerIdentity = await prisma.playerMarketListing.findUnique({ where: { id: listingId }, select: { sellerClub: { select: { ownerId: true } } } });
-  if (sellerIdentity?.sellerClub.ownerId) await settleClubDailyState(sellerIdentity.sellerClub.ownerId);
-  const buyerClub = await prisma.club.findUnique({ where: { ownerId: userId }, select: { id: true } });
-  if (!buyerClub) throw new MarketError("CLUB_NOT_FOUND");
-
   const purchasePort = getMarketPurchasePort();
   if (purchasePort) {
-    try { return await purchasePort.purchase({ userId, listingId }); }
-    catch (error) {
+    try {
+      // Resolve the seller through the same Supabase boundary before settling either club.
+      // The purchase RPC revalidates the listing and ownership under row locks.
+      const sellerUserId = await purchasePort.getSellerUserId(listingId);
+      if (sellerUserId && sellerUserId !== userId) await settleClubDailyState(sellerUserId);
+      return await purchasePort.purchase({ userId, listingId });
+    } catch (error) {
       const code = error && typeof error === "object" && "code" in error ? String(error.code) : "";
       if (code) throw new MarketError(code);
       throw error;
     }
   }
+
+  const sellerIdentity = await prisma.playerMarketListing.findUnique({ where: { id: listingId }, select: { sellerClub: { select: { ownerId: true } } } });
+  if (sellerIdentity?.sellerClub.ownerId) await settleClubDailyState(sellerIdentity.sellerClub.ownerId);
+  const buyerClub = await prisma.club.findUnique({ where: { ownerId: userId }, select: { id: true } });
+  if (!buyerClub) throw new MarketError("CLUB_NOT_FOUND");
 
   return prisma.$transaction(async (tx) => {
     const listing = await tx.playerMarketListing.findUnique({

@@ -10,6 +10,7 @@ export type MarketPurchaseResult =
   | { error: "PLAYER_CONTRACT_EXPIRED" | "LISTING_EXPIRED" };
 
 export interface MarketPurchasePort {
+  getSellerUserId(listingId: string): Promise<string | null>;
   purchase(input: MarketPurchaseCommand): Promise<MarketPurchaseResult>;
 }
 

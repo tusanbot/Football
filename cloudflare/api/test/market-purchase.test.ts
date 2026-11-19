@@ -10,7 +10,8 @@ test("market purchase repository calls the atomic RPC and preserves exact price 
       return [{ listing_id: "listing-1", player_id: "player-1", price: "9007199254740993123", replayed: false, error_code: null }];
     },
   } as never;
-  const result = await new SupabaseMarketPurchaseRepository(client).purchase({ userId: "buyer-1", listingId: "listing-1" });
+  const repository = new SupabaseMarketPurchaseRepository(client);
+  const result = await repository.purchase({ userId: "buyer-1", listingId: "listing-1" });
   assert.equal(call?.name, "buy_market_listing");
   assert.equal(call?.args.p_listing_id, "listing-1");
   assert.equal(result.replayed, false);
