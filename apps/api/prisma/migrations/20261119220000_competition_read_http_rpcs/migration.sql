@@ -69,12 +69,24 @@ BEGIN
     'nextRoundMatches', COALESCE((
       SELECT jsonb_agg(jsonb_build_object('id', m.id, 'round', m.round, 'scheduledAt', to_jsonb(m."scheduledAt" AT TIME ZONE 'UTC'),
         'status', m.status::text, 'homeClub', jsonb_build_object('id', hc.id, 'name', hc.name),
-        'awayClub', jsonb_build_object('id', ac.id, 'name', ac.name), 'homeScore', m."homeScore", 'awayScore', m."awayScore')
+        'awayClub', jsonb_build_object('id', ac.id, 'name', ac.name), 'homeScore', m."homeScore", 'awayScore', m."awayScore")
         ORDER BY m."scheduledAt" ASC)
       FROM public."FootballMatch" m JOIN public."Club" hc ON hc.id = m."homeClubId" JOIN public."Club" ac ON ac.id = m."awayClubId"
       WHERE (to_jsonb(m)->>'competitionId') = p_competition_id AND m.round = (SELECT min(next_fixture.round) FROM public."FootballMatch" AS next_fixture WHERE (to_jsonb(next_fixture)->>'competitionId') = p_competition_id AND next_fixture.status::text <> 'COMPLETED' AND next_fixture.round IS NOT NULL)
     ), '[]'::jsonb),
-    'topScorers', '[]'::jsonb
+    'topScorers', COALESCE((
+      SELECT jsonb_agg(jsonb_build_object('playerId', ranked.player_id, 'playerName', ranked.player_name,
+        'clubId', ranked.club_id, 'clubName', ranked.club_name, 'goals', ranked.goals, 'assists', ranked.assists)
+        ORDER BY ranked.goals DESC)
+      FROM (SELECT pmp."playerId" AS player_id, pmp."clubId" AS club_id,
+        pl."firstName" || ' ' || pl."lastName" AS player_name,
+        cl.name AS club_name, sum(pmp.goals)::integer AS goals, sum(pmp.assists)::integer AS assists
+        FROM public."PlayerMatchPerformance" pmp JOIN public."FootballMatch" fm ON fm.id = pmp."matchId"
+        JOIN public."Player" pl ON pl.id = pmp."playerId" JOIN public."Club" cl ON cl.id = pmp."clubId"
+        WHERE fm."competitionId" = p_competition_id
+        GROUP BY pmp."playerId", pmp."clubId", pl."firstName", pl."lastName", cl.name
+        ORDER BY sum(pmp.goals) DESC LIMIT 20) ranked
+    ), '[]'::jsonb)
 )
   ) INTO v_result;
   RETURN v_result;
