@@ -22,16 +22,16 @@ BEGIN
   VALUES (v_competition, 'ci-club-match-competition-key', 'CI Match League', 2026, 'LEAGUE', 'ACTIVE', v_club, now() AT TIME ZONE 'UTC') ON CONFLICT (id) DO NOTHING;
   INSERT INTO public."CompetitionEntry" (id, "competitionId", "clubId")
   VALUES ('ci-club-match-entry', v_competition, v_club) ON CONFLICT (id) DO NOTHING;
-  INSERT INTO public."FootballMatch" (id, "idempotencyKey", type, status, "homeClubId", "awayClubId", "competitionId", "scheduledAt", seed, "homeScore", "awayScore", attendance, "ticketRevenue")
+  INSERT INTO public."FootballMatch" (id, "idempotencyKey", type, status, "homeClubId", "awayClubId", "competitionId", "scheduledAt", seed, "homeScore", "awayScore", attendance, "ticketRevenue", "updatedAt")
   VALUES (v_match, 'ci-club-match-idempotency', 'LEAGUE', 'IN_PROGRESS', v_club, v_opponent, v_competition,
-    '2026-11-19T12:00:00Z', 'ci-club-match-seed', 1, 0, 1200, 4500) ON CONFLICT (id) DO NOTHING;
-  INSERT INTO public."MatchRuntime" (id, "matchId", status, "currentMinute", "nextActionAt", "simulationState", "kickoffSnapshot")
+    '2026-11-19T12:00:00Z', 'ci-club-match-seed', 1, 0, 1200, 4500, now() AT TIME ZONE 'UTC') ON CONFLICT (id) DO NOTHING;
+  INSERT INTO public."MatchRuntime" (id, "matchId", status, "currentMinute", "nextActionAt", "simulationState", "kickoffSnapshot", "updatedAt")
   VALUES ('ci-club-match-runtime', v_match, 'RUNNING', 45, '2026-11-19T12:45:00Z',
     '{"segment":{"home":{"side":{"formation":"4-3-3","tactics":{},"players":[]}}},"substitutions":{"home":{"substitutionsUsed":2}}}'::jsonb,
     '{"home":{"formation":"4-3-3","tactics":{},"players":[]}}'::jsonb) ON CONFLICT ("matchId") DO NOTHING;
-  INSERT INTO public."MatchTacticalCheckpoint" (id, "matchId", "checkpointKey", kind, minute, status, "openedAt", "decisionDeadlineAt", "nextSegmentAt")
+  INSERT INTO public."MatchTacticalCheckpoint" (id, "matchId", "checkpointKey", kind, minute, status, "openedAt", "decisionDeadlineAt", "nextSegmentAt", "updatedAt")
   VALUES ('ci-club-match-checkpoint', v_match, 'half-time', 'HALF_TIME', 45, 'OPEN',
-    '2026-11-19T12:45:00Z', '2026-11-19T12:45:05Z', '2026-11-19T12:45:05Z') ON CONFLICT (id) DO NOTHING;
+    '2026-11-19T12:45:00Z', '2026-11-19T12:45:05Z', '2026-11-19T12:45:05Z', now() AT TIME ZONE 'UTC') ON CONFLICT (id) DO NOTHING;
   INSERT INTO public."MatchTacticalDecision" (id, "idempotencyKey", "checkpointId", "clubId", "submittedByUserId", instruction, "submittedAt")
   VALUES ('ci-club-match-decision', 'ci-club-match-decision-key', 'ci-club-match-checkpoint',
     v_club, v_user, '{"mentality":"BALANCED"}'::jsonb, '2026-11-19T12:45:01Z') ON CONFLICT (id) DO NOTHING;
