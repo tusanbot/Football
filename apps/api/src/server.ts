@@ -16,6 +16,7 @@ import { SupabaseSpecialAcquisitionRepository as NodeSupabaseSpecialAcquisitionR
 import { SupabaseGiftCodeRedemptionRepository as NodeSupabaseGiftCodeRedemptionRepository } from "./node-supabase-gift-code-redemption.js";
 import { SupabaseBotRuntimeLeaseRepository as NodeSupabaseBotRuntimeLeaseRepository } from "./node-supabase-bot-runtime-lease.js";
 import { createNodeSupabaseMatchPorts, withNodeSupabaseMatchPorts } from "./game/node-supabase-match-ports.js";
+import { SupabaseGameDashboardRepository } from "./game/node-supabase-game-dashboard.js";
 import { isValidTelegramBotToken, parseAdminTelegramIds, parseCorsOrigins } from "./runtime-config.js";
 const required = ["DATABASE_URL", "TELEGRAM_BOT_TOKEN", "BOT_API_SECRET", "CORS_ORIGIN", "GAME_ADMIN_TELEGRAM_IDS"] as const;
 const missing = required.filter((key) => !process.env[key]?.trim());
@@ -59,6 +60,7 @@ const specialAcquisitionPort = supabaseHttp ? new NodeSupabaseSpecialAcquisition
 const giftCodeRedemptionPort = supabaseHttp ? new NodeSupabaseGiftCodeRedemptionRepository(supabaseHttp) : undefined;
 const botRuntimeLeasePort = supabaseHttp ? new NodeSupabaseBotRuntimeLeaseRepository(supabaseHttp) : undefined;
 const matchPorts = supabaseHttp ? createNodeSupabaseMatchPorts(supabaseHttp) : undefined;
+const gameDashboardPort = supabaseHttp ? new SupabaseGameDashboardRepository(supabaseHttp) : undefined;
 const app = buildApp({
   ...(groupMembershipPort ? { groupMembershipPort } : {}),
   ...(alliancePort ? { alliancePort, adminAlliancePort: alliancePort } : {}),
@@ -75,6 +77,7 @@ const app = buildApp({
   ...(giftCodeRedemptionPort ? { giftCodeRedemptionPort } : {}),
   ...(botRuntimeLeasePort ? { botRuntimeLeasePort } : {}),
   ...(matchPorts ? { matchPorts } : {}),
+  ...(gameDashboardPort ? { gameDashboardPort } : {}),
 });
 let matchWorker: NodeJS.Timeout | undefined;
 let workerTask: Promise<void> | null = null;
