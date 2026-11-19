@@ -118,7 +118,7 @@ BEGIN
  )
  SELECT v_flags||coalesce(jsonb_agg(jsonb_build_object('code','CROSS_GROUP_MEMBER_OVERLAP','memberPoints',total::text,'groupCount',n,'groups',groups)),'[]'::jsonb) INTO v_flags FROM overlap_rows;
  v_review:=CASE WHEN jsonb_array_length(v_flags)>0 THEN 'FLAGGED' ELSE 'APPROVED' END;
- UPDATE public."AllianceSeason" SET status='COMPLETED',"closedAt"=now(),standings=v_standings,"securityFlags"=v_flags,"reviewStatus"=v_review WHERE id=s.id AND status='ACTIVE';
+ UPDATE public."AllianceSeason" SET status='COMPLETED',"closedAt"=now(),standings=v_standings,"securityFlags"=v_flags,"reviewStatus"=v_review::"AllianceSeasonReviewStatus" WHERE id=s.id AND status='ACTIVE';
  GET DIAGNOSTICS v_changed=ROW_COUNT;
  IF v_changed=0 THEN RETURN jsonb_build_object('error','SEASON_ALREADY_SETTLED'); END IF;
  INSERT INTO public."AllianceAuditLog"(id,"allianceId","actorTelegramId","groupTelegramId",action,metadata,"createdAt") VALUES(gen_random_uuid()::text,a.id,p_telegram_user_id,p_telegram_group_id,'SEASON_CLOSED',jsonb_build_object('seasonId',s.id,'reviewStatus',v_review,'securityFlags',jsonb_array_length(v_flags)),now());
@@ -159,7 +159,7 @@ BEGIN
  IF s."reviewStatus" IN ('APPROVED','REJECTED') THEN RETURN jsonb_build_object('reviewStatus',s."reviewStatus",'replayed',true,'prize','0'); END IF;
  IF s.status<>'COMPLETED' OR s."reviewStatus"<>'FLAGGED' THEN RETURN jsonb_build_object('error','SEASON_NOT_FLAGGED'); END IF;
  IF p_decision NOT IN ('APPROVE','REJECT') THEN RETURN jsonb_build_object('error','INVALID_SEASON_DECISION'); END IF;
- UPDATE public."AllianceSeason" SET "reviewStatus"=CASE WHEN p_decision='APPROVE' THEN 'APPROVED' ELSE 'REJECTED' END,"reviewedAt"=now(),"reviewedByUserId"=u.id WHERE id=s.id RETURNING * INTO s;
+ UPDATE public."AllianceSeason" SET "reviewStatus"=(CASE WHEN p_decision='APPROVE' THEN 'APPROVED' ELSE 'REJECTED' END)::"AllianceSeasonReviewStatus","reviewedAt"=now(),"reviewedByUserId"=u.id WHERE id=s.id RETURNING * INTO s;
  IF p_decision='APPROVE' THEN
   SELECT (x->>'groupId') group_id,(x->>'group') group_name,(x->>'points')::bigint points INTO v_winner FROM jsonb_array_elements(coalesce(s.standings,'[]'::jsonb)) x ORDER BY (x->>'rank')::int LIMIT 1;
   SELECT "treasuryPoints" INTO v_treasury FROM public."Alliance" WHERE id=a.id FOR UPDATE;
