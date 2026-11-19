@@ -80,13 +80,12 @@ BEGIN
         ORDER BY ranked.goals DESC)
       FROM (SELECT (to_jsonb(pmp)->>'playerId') AS player_id, (to_jsonb(pmp)->>'clubId') AS club_id,
         concat_ws(' ', max(to_jsonb(pl)->>'firstName'), max(to_jsonb(pl)->>'lastName')) AS player_name,
-        cl.name AS club_name, sum(pmp.goals)::integer AS goals, sum(pmp.assists)::integer AS assists
+        'Club'::text AS club_name, sum(pmp.goals)::integer AS goals, sum(pmp.assists)::integer AS assists
         FROM public."PlayerMatchPerformance" AS pmp
         JOIN public."FootballMatch" AS fm ON fm.id::text = (to_jsonb(pmp)->>'matchId')
         JOIN public."Player" AS pl ON pl.id::text = (to_jsonb(pmp)->>'playerId')
-        JOIN public."Club" cl ON cl.id::text = (to_jsonb(pmp)->>'clubId')
         WHERE (to_jsonb(fm)->>'competitionId') = p_competition_id
-        GROUP BY 1, 2, cl.name
+        GROUP BY 1, 2
         ORDER BY sum(pmp.goals) DESC LIMIT 20) ranked
     ), '[]'::jsonb)
   ) INTO v_result;
