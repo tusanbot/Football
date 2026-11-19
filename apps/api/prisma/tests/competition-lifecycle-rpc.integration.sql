@@ -22,6 +22,13 @@ BEGIN
 
   v_result := public.create_competition_http(v_users[1], 'CI Lifecycle League', 4, 'ci-life-league-create-key-01', 'LEAGUE', 1, 2026, v_rules_league, v_now);
   v_league_id := v_result->'competition'->>'id';
+  v_result := public.update_competition_rules_http(v_users[1], v_league_id, '{"maxSubstitutions":4,"maxInPlayWindows":2,"injuriesEnabled":true,"injuryDurationDays":6,"redCardSuspensionMatches":2,"yellowCardsToSuspend":4,"yellowCardSuspensionMatches":2,"penaltiesOnDraw":false}'::jsonb, v_now);
+  IF v_result->>'competitionId' <> v_league_id OR v_result->'rules'->>'maxSubstitutions' <> '4' THEN RAISE EXCEPTION 'rules update mismatch: %', v_result; END IF;
+  BEGIN
+    PERFORM public.update_competition_rules_http(v_users[2], v_league_id, v_rules_league, v_now);
+    RAISE EXCEPTION 'expected ONLY_CREATOR_CAN_START';
+  EXCEPTION WHEN SQLSTATE 'P0001' THEN GET STACKED DIAGNOSTICS v_message = MESSAGE_TEXT; IF v_message <> 'ONLY_CREATOR_CAN_START' THEN RAISE; END IF;
+  END;
   INSERT INTO public."CompetitionEntry" (id, "competitionId", "clubId", "joinedAt")
   VALUES ('ci-life-entry-2', v_league_id, v_clubs[2], (v_now AT TIME ZONE 'UTC') + interval '1 second'),
          ('ci-life-entry-3', v_league_id, v_clubs[3], (v_now AT TIME ZONE 'UTC') + interval '2 seconds');
@@ -48,13 +55,6 @@ BEGIN
   IF v_result->>'replayed' <> 'true' OR (v_result->>'fixturesCreated')::integer <> 4 THEN RAISE EXCEPTION 'cup start replay mismatch'; END IF;
   BEGIN
     PERFORM public.start_competition_http(v_users[2], v_cup_id, v_now);
-    RAISE EXCEPTION 'expected ONLY_CREATOR_CAN_START';
-  EXCEPTION WHEN SQLSTATE 'P0001' THEN GET STACKED DIAGNOSTICS v_message = MESSAGE_TEXT; IF v_message <> 'ONLY_CREATOR_CAN_START' THEN RAISE; END IF;
-  END;
-  v_result := public.update_competition_rules_http(v_users[1], v_league_id, '{"maxSubstitutions":4,"maxInPlayWindows":2,"injuriesEnabled":true,"injuryDurationDays":6,"redCardSuspensionMatches":2,"yellowCardsToSuspend":4,"yellowCardSuspensionMatches":2,"penaltiesOnDraw":false}'::jsonb, v_now);
-  IF v_result->>'competitionId' <> v_league_id OR v_result->'rules'->>'maxSubstitutions' <> '4' THEN RAISE EXCEPTION 'rules update mismatch: %', v_result; END IF;
-  BEGIN
-    PERFORM public.update_competition_rules_http(v_users[2], v_league_id, v_rules_league, v_now);
     RAISE EXCEPTION 'expected ONLY_CREATOR_CAN_START';
   EXCEPTION WHEN SQLSTATE 'P0001' THEN GET STACKED DIAGNOSTICS v_message = MESSAGE_TEXT; IF v_message <> 'ONLY_CREATOR_CAN_START' THEN RAISE; END IF;
   END;
