@@ -4,6 +4,7 @@ import { SupabaseHttpClient, SupabaseHttpError } from "../src/node-supabase-http
 import { SupabaseGameDashboardRepository } from "../src/game/node-supabase-game-dashboard.js";
 import { NodeSupabasePublicPlayerRecordRepository } from "../src/players/node-supabase-public-records.js";
 import { NodeSupabasePublicClubLogoRepository } from "../src/node-supabase-public-club-logo.js";
+import { SupabaseEventTournamentSettlementRepository } from "../src/game/node-supabase-event-tournament-settlement.js";
 import { SupabaseClubLineupRepository } from "../src/game/node-supabase-club-lineup.js";
 import { NodeSupabaseWalletReadRepository } from "../src/economy/node-supabase-wallet-read.js";
 import { SupabaseClubManagementRepository as NodeSupabaseClubManagementRepository } from "../src/game/node-supabase-club-management.js";
@@ -178,4 +179,19 @@ test("public club logo reads and guarded mutations use Supabase HTTP", async () 
  assert.deepEqual(JSON.parse(String(f.calls[1]!.init.body)),{
   p_user_id:"user-1",p_action:"upload",p_logo_data:"aGVsbG8=",p_logo_mime:"image/png",
  });
+});
+
+test("event tournament finalization and retry queue use Supabase RPCs", async () => {
+ const f=clientWith((url)=>url.pathname.endsWith("/rpc/finalize_event_tournament_http")
+  ? {finalized:true,replayed:false,participants:12,awards:18}
+  : {candidates:3,finalized:2,failed:1});
+ const repo=new SupabaseEventTournamentSettlementRepository(f.client);
+ const finalized=await repo.finalize("competition-1","2026-11-19T12:00:00.000Z");
+ assert.deepEqual(finalized,{finalized:true,replayed:false,participants:12,awards:18});
+ const retried=await repo.processDue("2026-11-19T12:00:00.000Z",10);
+ assert.deepEqual(retried,{candidates:3,finalized:2,failed:1});
+ assert.equal(f.calls[0]!.url.pathname,"/rest/v1/rpc/finalize_event_tournament_http");
+ assert.equal(f.calls[1]!.url.pathname,"/rest/v1/rpc/process_due_event_tournament_finalizations_http");
+ assert.deepEqual(JSON.parse(String(f.calls[0]!.init.body)),{p_competition_id:"competition-1",p_now:"2026-11-19T12:00:00.000Z"});
+ assert.deepEqual(JSON.parse(String(f.calls[1]!.init.body)),{p_now:"2026-11-19T12:00:00.000Z",p_limit:10});
 });
