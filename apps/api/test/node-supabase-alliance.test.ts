@@ -38,3 +38,24 @@ test("Node alliance repository rejects unsafe origins and credentials",()=>{
   assert.throws(()=>new NodeSupabaseAllianceRepository("https://attacker.example","node-alliance-service-role-test-key"));
   assert.throws(()=>new NodeSupabaseAllianceRepository("https://example.supabase.co","short"));
 });
+
+test("Node alliance repository preserves the real admin actor for atomic admin season RPCs", async () => {
+  const previous=globalThis.fetch;
+  const calls:Array<{url:string;body:Record<string,unknown>}>=[];
+  globalThis.fetch=(async(input,init)=>{
+    calls.push({url:String(input),body:JSON.parse(String(init?.body)) as Record<string,unknown>});
+    return new Response(JSON.stringify({season:{id:"season-1",number:2,startsAt:"2026-11-19T00:00:00.000Z",endsAt:"2026-11-26T00:00:00.000Z"},replayed:false}),{status:200});
+  }) as typeof fetch;
+  try {
+    const repo=new NodeSupabaseAllianceRepository("https://example.supabase.co","node-alliance-service-role-test-key");
+    await repo.adminStartAllianceSeason({actorTelegramId:"987654321",allianceId:"alliance-1",durationDays:7,idempotencyKey:"admin-start-idempotency"});
+    await repo.adminCloseAllianceSeason({actorTelegramId:"987654321",seasonId:"season-1",idempotencyKey:"admin-close-idempotency"});
+    await repo.adminReviewAllianceSeason({actorTelegramId:"987654321",seasonId:"season-1",decision:"APPROVE",idempotencyKey:"admin-review-idempotency"});
+    assert.equal(calls[0]!.url.endsWith("/admin_start_alliance_season_http"),true);
+    assert.deepEqual(calls[0]!.body,{p_actor_telegram_id:"987654321",p_alliance_id:"alliance-1",p_duration_days:7,p_idempotency_key:"admin-start-idempotency"});
+    assert.equal(calls[1]!.url.endsWith("/admin_close_alliance_season_http"),true);
+    assert.deepEqual(calls[1]!.body,{p_actor_telegram_id:"987654321",p_season_id:"season-1",p_idempotency_key:"admin-close-idempotency"});
+    assert.equal(calls[2]!.url.endsWith("/admin_review_alliance_season_http"),true);
+    assert.deepEqual(calls[2]!.body,{p_actor_telegram_id:"987654321",p_season_id:"season-1",p_decision:"APPROVE",p_idempotency_key:"admin-review-idempotency"});
+  } finally { globalThis.fetch=previous; }
+});
