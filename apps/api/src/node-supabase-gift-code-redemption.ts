@@ -1,5 +1,5 @@
 import type { GiftCodeRedemptionCommand, GiftCodeRedemptionPort, GiftCodeRedemptionResult } from "./gift-code-redemption-context.js";
-import { SupabaseHttpClient, SupabaseHttpError } from "../node-supabase-http.js";
+import { SupabaseHttpClient, SupabaseHttpError } from "./node-supabase-http.js";
 
 interface GiftCodeRpcRow {
   cash: string;
@@ -44,7 +44,7 @@ export class SupabaseGiftCodeRedemptionRepository implements GiftCodeRedemptionP
         p_telegram_group_id: input.telegramGroupId ?? null,
       });
     } catch (error) {
-      const message = error instanceof SupabaseHttpError ? error.message : error instanceof Error ? error.message : "";
+      const message = error instanceof SupabaseHttpError ? error.message : error instanceof Error ? error.message : String(error);
       const code = message.toLowerCase().includes("duplicate key") || message.toLowerCase().includes("unique constraint")
         ? "IDEMPOTENCY_CONFLICT"
         : [...GIFT_CODE_ERROR_CODES].find((candidate) => message.includes(candidate));
