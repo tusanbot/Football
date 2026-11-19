@@ -1,0 +1,82 @@
+name: CI
+
+on:
+  push:
+    branches: ["main", "feat/**"]
+  pull_request:
+    branches: ["main"]
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: football_empire
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d football_empire"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          package_json_file: package.json
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install dependencies
+        run: pnpm install
+      - name: Generate Prisma Client
+        run: pnpm db:generate
+      - name: Validate Prisma schema
+        run: pnpm --filter @football/api exec prisma validate
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/football_empire
+      - name: Apply migrations to ephemeral PostgreSQL
+        run: pnpm db:migrate:deploy
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/football_empire
+      - name: Seed special-player catalog in ephemeral PostgreSQL
+        run: pnpm --filter @football/api db:seed:special
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/football_empire
+      - name: Verify seeded special-player catalog
+        run: |
+          pnpm --filter @football/api exec tsx -e 'import { PrismaClient } from "@prisma/client"; void (async () => { const prisma = new PrismaClient(); try { const count = await prisma.specialPlayer.count(); console.log(`Seeded special players: ${count}`); if (count !== 15) process.exitCode = 1; } finally { await prisma.$disconnect(); } })();'
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/football_empire
+      - name: Build shared domain package
+        run: pnpm --filter @football/domain build
+      - name: Typecheck
+        run: pnpm typecheck
+      - name: Typecheck Cloudflare API migration scaffold
+        run: pnpm exec tsc --noEmit -p cloudflare/api/tsconfig.json
+      - name: Test Cloudflare API migration scaffold
+        run: pnpm exec tsx --test cloudflare/api/test/*.test.ts
+      - name: Generate and validate D1 schema on SQLite
+        run: |
+          node cloudflare/api/scripts/prisma-d1-schema.mjs
+          python3 cloudflare/api/scripts/validate-d1-schema.py
+      - name: Verify committed D1 schema snapshot
+        run: git diff --exit-code -- cloudflare/api/migrations/0002_game_schema.sql cloudflare/api/schema/prisma-d1-inventory.json
+      - name: Test
+        run: pnpm test
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/football_empire
+      - name: Build
+        run: pnpm build
+        env:
+          NEXT_PUBLIC_API_URL: https://api.example.invalid

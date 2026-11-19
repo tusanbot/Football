@@ -1,0 +1,17 @@
+export interface AllianceSeasonGroupInput { groupId: string; group: string; joinedAt: Date; }
+export interface AllianceSeasonLedgerEntry { groupId: string; userId: string | null; amount: bigint; source: string; createdAt: Date; }
+export type AllianceSeasonSecurityFlag =
+ | { code: "SINGLE_MEMBER_CONCENTRATION"; groupId: string; group: string; memberPoints: string; totalPoints: string; sharePercent: number }
+ | { code: "CROSS_GROUP_MEMBER_OVERLAP"; memberPoints: string; groupCount: number; groups: Array<{ groupId: string; group: string; points: string }> };
+const ELIGIBLE_SOURCES = new Set(["DAILY_ACTIVITY", "GAME_ACTIVITY", "CHALLENGE_REWARD", "LEAGUE_REWARD"]);
+const MIN_FLAGGED_SCORE = 30n, MIN_FLAGGED_MEMBER_SCORE = 30n, CONCENTRATION_PERCENT = 80;
+const CROSS_GROUP_MIN_POINTS = 50n, CROSS_GROUP_MIN_TOTAL = 100n;
+export function buildAllianceSeasonStandings(groups: AllianceSeasonGroupInput[], entries: AllianceSeasonLedgerEntry[], startsAt: Date, endsAt: Date): { standings: Array<{ rank: number; groupId: string; group: string; points: string }>; securityFlags: AllianceSeasonSecurityFlag[] } {
+ const totals = new Map<string,bigint>(), memberTotals = new Map<string,Map<string,bigint>>(), userGroupTotals = new Map<string,Map<string,bigint>>(), groupById = new Map(groups.map(g=>[g.groupId,g]));
+ for (const group of groups) { totals.set(group.groupId,0n); memberTotals.set(group.groupId,new Map()); }
+ for (const entry of entries) { if (!ELIGIBLE_SOURCES.has(entry.source) || entry.createdAt < startsAt || entry.createdAt >= endsAt) continue; const group=groupById.get(entry.groupId); if(!group || entry.createdAt < group.joinedAt) continue; totals.set(entry.groupId,(totals.get(entry.groupId)??0n)+entry.amount); if(entry.userId){const members=memberTotals.get(entry.groupId)!;members.set(entry.userId,(members.get(entry.userId)??0n)+entry.amount);const byGroup=userGroupTotals.get(entry.userId)??new Map<string,bigint>();byGroup.set(entry.groupId,(byGroup.get(entry.groupId)??0n)+entry.amount);userGroupTotals.set(entry.userId,byGroup);} }
+ const securityFlags: AllianceSeasonSecurityFlag[]=[];
+ const ranked=groups.map(group=>{const net=totals.get(group.groupId)??0n,score=net>0n?net:0n,memberScores=[...(memberTotals.get(group.groupId)?.values()??[])].filter(x=>x>0n),topMember=memberScores.reduce((m,v)=>v>m?v:m,0n);if(score>=MIN_FLAGGED_SCORE&&topMember>=MIN_FLAGGED_MEMBER_SCORE&&topMember*100n>=score*BigInt(CONCENTRATION_PERCENT))securityFlags.push({code:"SINGLE_MEMBER_CONCENTRATION",groupId:group.groupId,group:group.group,memberPoints:topMember.toString(),totalPoints:score.toString(),sharePercent:Number((topMember*10000n)/score)/100});return {groupId:group.groupId,group:group.group,points:score.toString()};}).sort((a,b)=>BigInt(a.points)>BigInt(b.points)?-1:BigInt(a.points)<BigInt(b.points)?1:a.group.localeCompare(b.group));
+ for(const byGroup of userGroupTotals.values()){const involved=[...byGroup.entries()].filter(([,points])=>points>=CROSS_GROUP_MIN_POINTS).map(([groupId,points])=>({groupId,group:groupById.get(groupId)?.group??groupId,points}));const combined=involved.reduce((sum,x)=>sum+x.points,0n);if(involved.length>=2&&combined>=CROSS_GROUP_MIN_TOTAL)securityFlags.push({code:"CROSS_GROUP_MEMBER_OVERLAP",memberPoints:combined.toString(),groupCount:involved.length,groups:involved.map(x=>({groupId:x.groupId,group:x.group,points:x.points.toString()}))});}
+ return {standings:ranked.map((x,index)=>({rank:index+1,...x})),securityFlags};
+}
