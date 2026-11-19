@@ -165,7 +165,7 @@ CREATE OR REPLACE FUNCTION public.start_cross_alliance_competition_http(
  p_telegram_user_id text,p_telegram_group_id text,p_competition_id text,p_now timestamptz
 ) RETURNS jsonb LANGUAGE plpgsql VOLATILE SECURITY INVOKER SET search_path=public,pg_temp AS $$
 DECLARE u public."User"%ROWTYPE; g public."TelegramGroup"%ROWTYPE; ag public."AllianceGroup"%ROWTYPE;
- ac public."AllianceCompetition"%ROWTYPE; c public."Competition"%ROWTYPE; club_id text; n integer; p record; s record; result jsonb;
+ ac public."AllianceCompetition"%ROWTYPE; c public."Competition"%ROWTYPE; club_id text; n integer; v_alliance_count integer; p record; s record; result jsonb;
 BEGIN
  SELECT * INTO u FROM public."User" WHERE "telegramId"=p_telegram_user_id;
  IF u.id IS NULL THEN RETURN jsonb_build_object('error','ACCOUNT_NOT_FOUND'); END IF;
@@ -183,8 +183,8 @@ BEGIN
  IF c."createdByClubId"<>club_id THEN RETURN jsonb_build_object('error','ONLY_CREATOR_CAN_START'); END IF;
  IF c.status::text='ACTIVE' THEN RETURN jsonb_build_object('competitionId',c.id,'replayed',true); END IF;
  IF c.status::text<>'REGISTRATION' THEN RETURN jsonb_build_object('error','COMPETITION_NOT_OPEN'); END IF;
- SELECT count(*) INTO n FROM public."AllianceCompetitionParticipant" WHERE "allianceCompetitionId"=ac.id AND status='ACCEPTED';
- IF n<2 THEN RETURN jsonb_build_object('error','CROSS_ALLIANCE_NEEDS_TWO_ALLIANCES'); END IF;
+ SELECT count(*) INTO v_alliance_count FROM public."AllianceCompetitionParticipant" WHERE "allianceCompetitionId"=ac.id AND status='ACCEPTED';
+ IF v_alliance_count<2 THEN RETURN jsonb_build_object('error','CROSS_ALLIANCE_NEEDS_TWO_ALLIANCES'); END IF;
  FOR p IN SELECT * FROM public."AllianceCompetitionParticipant" WHERE "allianceCompetitionId"=ac.id AND status='ACCEPTED' ORDER BY "allianceId" FOR UPDATE LOOP
   SELECT id INTO s FROM public."AllianceSeason" WHERE "allianceId"=p."allianceId" AND status='ACTIVE' AND "endsAt">coalesce(p_now,now()) ORDER BY number DESC LIMIT 1 FOR UPDATE;
   IF s.id IS NULL THEN RETURN jsonb_build_object('error','PARTICIPANT_SEASON_UNAVAILABLE'); END IF;
@@ -196,7 +196,7 @@ BEGIN
  UPDATE public."AllianceCompetition" SET "startedAt"=coalesce(p_now,now())::timestamp(3) WHERE id=ac.id;
  INSERT INTO public."AllianceAuditLog"(id,"allianceId","actorTelegramId","groupTelegramId",action,metadata,"createdAt")
  VALUES(gen_random_uuid()::text,ag."allianceId",p_telegram_user_id,p_telegram_group_id,'CROSS_ALLIANCE_COMPETITION_STARTED',jsonb_build_object('competitionId',c.id,'alliances',n),now());
- RETURN result||jsonb_build_object('competitionId',c.id,'allianceCount',n);
+ RETURN result||jsonb_build_object('competitionId',c.id,'allianceCount',v_alliance_count);
 END $$;
 
 CREATE OR REPLACE FUNCTION public.record_alliance_competition_match_points()
