@@ -34,10 +34,10 @@ export class NodeSupabaseTelegramUserLookupRepository implements TelegramUserLoo
     const user = value as Record<string, unknown>;
     if (typeof user.id !== "string" || user.telegramId !== telegramId
       || typeof user.createdAt !== "string"
-      || (user.username !== null && typeof user.username !== "string")
-      || (user.displayName !== null && typeof user.displayName !== "string")) {
+      || (user.username !== null && user.username !== undefined && typeof user.username !== "string")
+      || (user.displayName !== null && user.displayName !== undefined && typeof user.displayName !== "string")) {
       throw new Error("SUPABASE_TELEGRAM_USER_LOOKUP_INVALID_RESPONSE");
     }
-    return { id: user.id, telegramId, username: user.username as string | null, displayName: user.displayName as string, createdAt: user.createdAt };
+    return { id: user.id, telegramId, username: typeof user.username === "string" ? user.username : null, displayName: typeof user.displayName === "string" ? user.displayName : "", createdAt: user.createdAt };
   }
 }
