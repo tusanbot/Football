@@ -61,7 +61,7 @@ export function registerPlayerMarketRoutes(app: FastifyInstance, specialPlayers?
     const user = await requireTelegramUser(request);
     if (!user) return reply.code(401).send({ error: "UNAUTHENTICATED" });
     const acquisitionPort = getSpecialAcquisitionPort();
-    const players = acquisitionPort
+    const players = acquisitionPort?.listActive
       ? await acquisitionPort.listActive()
       : specialPlayers
         ? await specialPlayers.listActive()
