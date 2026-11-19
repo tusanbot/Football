@@ -29,13 +29,19 @@ CREATE OR REPLACE FUNCTION public.update_club_lineup_http(
 ) RETURNS JSONB LANGUAGE plpgsql SECURITY INVOKER SET search_path = public AS $$
 DECLARE v_club "Club"%ROWTYPE; v_count INTEGER; v_invalid INTEGER;
 BEGIN
-  IF p_formation NOT IN ('4-3-3','4-4-2','3-5-2','4-2-3-1')
-    OR jsonb_typeof(p_player_ids) <> 'array' OR jsonb_array_length(p_player_ids) <> 11
-    OR p_expected_version < 0 OR jsonb_typeof(COALESCE(p_tactics,'{}'::jsonb)) <> 'object'
-    OR (p_tactics ? 'mentality' AND p_tactics->>'mentality' NOT IN ('DEFENSIVE','BALANCED','ATTACKING'))
-    OR (p_tactics ? 'pressing' AND p_tactics->>'pressing' NOT IN ('LOW_BLOCK','MID_BLOCK','HIGH_PRESS'))
-    OR (p_tactics ? 'tempo' AND p_tactics->>'tempo' NOT IN ('SLOW','NORMAL','FAST'))
-    OR (p_tactics ? 'passingStyle' AND p_tactics->>'passingStyle' NOT IN ('SHORT','MIXED','DIRECT')) THEN
+  IF p_formation IS NULL OR p_formation NOT IN ('4-3-3','4-4-2','3-5-2','4-2-3-1')
+    OR p_expected_version IS NULL OR p_expected_version < 0
+    OR jsonb_typeof(COALESCE(p_tactics,'{}'::jsonb)) IS DISTINCT FROM 'object'
+    OR (p_tactics ? 'mentality' AND (p_tactics->>'mentality') NOT IN ('DEFENSIVE','BALANCED','ATTACKING'))
+    OR (p_tactics ? 'pressing' AND (p_tactics->>'pressing') NOT IN ('LOW_BLOCK','MID_BLOCK','HIGH_PRESS'))
+    OR (p_tactics ? 'tempo' AND (p_tactics->>'tempo') NOT IN ('SLOW','NORMAL','FAST'))
+    OR (p_tactics ? 'passingStyle' AND (p_tactics->>'passingStyle') NOT IN ('SHORT','MIXED','DIRECT')) THEN
+    RETURN jsonb_build_object('ok',false,'error','INVALID_LINEUP_REQUEST');
+  END IF;
+  IF p_player_ids IS NULL OR jsonb_typeof(p_player_ids) IS DISTINCT FROM 'array' THEN
+    RETURN jsonb_build_object('ok',false,'error','INVALID_LINEUP_REQUEST');
+  END IF;
+  IF jsonb_array_length(p_player_ids) <> 11 THEN
     RETURN jsonb_build_object('ok',false,'error','INVALID_LINEUP_REQUEST');
   END IF;
   SELECT * INTO v_club FROM public."Club" WHERE "ownerId"=p_user_id FOR UPDATE;
@@ -69,3 +75,4 @@ $$;
 REVOKE ALL ON FUNCTION public.update_club_lineup_http(TEXT,TEXT,JSONB,INTEGER,JSONB) FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.p_player_formation_slot_allowed(TEXT,INTEGER,TEXT) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.update_club_lineup_http(TEXT,TEXT,JSONB,INTEGER,JSONB) TO service_role;
+GRANT EXECUTE ON FUNCTION public.p_player_formation_slot_allowed(TEXT,INTEGER,TEXT) TO service_role;
