@@ -27,6 +27,12 @@ BEGIN
  IF r->>'contributed' IS DISTINCT FROM 'true' THEN RAISE EXCEPTION 'first season treasury funding failed: %',r; END IF;
  r:=public.invite_alliance_group_http(v_ta,v_ga,v_gb); sid:=r#>>'{invitation,id}';
  r:=public.respond_alliance_invitation_http(v_tb,v_gb,sid,true);
+ r:=public.consume_alliance_action_rate_limit_http(v_ta,v_ga,'alliance-test-action',1,v_now);
+ IF r->>'allowed' IS DISTINCT FROM 'true' THEN RAISE EXCEPTION 'first alliance rate limit attempt denied: %',r; END IF;
+ r:=public.consume_alliance_action_rate_limit_http(v_ta,v_ga,'alliance-test-action',1,v_now+interval '20 seconds');
+ IF r->>'allowed' IS DISTINCT FROM 'false' THEN RAISE EXCEPTION 'alliance rate limit did not enforce window: %',r; END IF;
+ r:=public.consume_alliance_action_rate_limit_http(v_ta,v_ga,'alliance-test-action',1,v_now+interval '1 minute');
+ IF r->>'allowed' IS DISTINCT FROM 'true' THEN RAISE EXCEPTION 'alliance rate limit did not reset: %',r; END IF;
  r:=public.get_alliance_workspace_http(v_ta,v_ga,true);
  IF r#>>'{alliance,name}'<>'Season RPC Alliance' OR jsonb_array_length(r#>'{alliance,groups}')<>2 OR r#>>'{alliance,canReview}'<>'true' THEN RAISE EXCEPTION 'workspace payload invalid: %',r; END IF;
  r:=public.create_alliance_championship_http(v_ta,v_ga,'Alliance RPC Cup',4,'alliance-champ-create-0001');

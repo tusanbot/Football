@@ -47,7 +47,9 @@ export function registerAllianceRoutes(app: FastifyInstance, options: { requireP
     if (request.method === "POST") {
       const routeKey = request.routeOptions.url ?? request.url.split("?")[0] ?? "unknown";
       const limit = /treasury|seasons|invitations/.test(routeKey) ? 4 : 10;
-      if (!await consumeAllianceActionRateLimit({ telegramUserId: id, telegramGroupId: params.data.telegramGroupId, action: routeKey, limit })) {
+      const port = getAlliancePort();
+      const allowed = port ? await port.consumeRateLimit({ telegramUserId: id, telegramGroupId: params.data.telegramGroupId, action: routeKey, limit, now: new Date().toISOString() }) : await consumeAllianceActionRateLimit({ telegramUserId: id, telegramGroupId: params.data.telegramGroupId, action: routeKey, limit });
+      if (!allowed) {
         reply.code(429).send({ error: "ALLIANCE_RATE_LIMITED", retryAfterSeconds: 60 }); return null;
       }
     }
