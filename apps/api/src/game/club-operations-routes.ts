@@ -51,7 +51,7 @@ export function registerClubOperationsRoutes(app: FastifyInstance) {
       const operations = await getClubOperations(user.id);
       const since = new Date(Date.now() - query.data.days * 86_400_000);
       const httpPort = getClubManagementPort();
-      if (httpPort) {
+      if (httpPort?.getFinanceReport) {
         const report = await httpPort.getFinanceReport(user.id, since);
         if (!report) return reply.code(404).send({ error: "CLUB_NOT_FOUND" });
         const income = BigInt(report.income);
