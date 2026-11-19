@@ -72,7 +72,7 @@ BEGIN
         'awayClub', jsonb_build_object('id', ac.id, 'name', ac.name), 'homeScore', m."homeScore", 'awayScore', m."awayScore')
         ORDER BY m."scheduledAt" ASC)
       FROM public."FootballMatch" m JOIN public."Club" hc ON hc.id = m."homeClubId" JOIN public."Club" ac ON ac.id = m."awayClubId"
-      WHERE m."competitionId" = p_competition_id AND m.round = (SELECT min(n.round) FROM public."FootballMatch" n WHERE n."competitionId" = p_competition_id AND n.status::text <> 'COMPLETED' AND n.round IS NOT NULL)
+      WHERE (to_jsonb(m)->>'competitionId') = p_competition_id AND m.round = (SELECT min(n.round) FROM public."FootballMatch" n WHERE (to_jsonb(n)->>'competitionId') = p_competition_id AND n.status::text <> 'COMPLETED' AND n.round IS NOT NULL)
     ), '[]'::jsonb),
     'topScorers', '[]'::jsonb
 )
