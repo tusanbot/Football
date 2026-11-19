@@ -46,6 +46,7 @@ DECLARE actor public."User"%ROWTYPE; s public."AllianceSeason"%ROWTYPE; a public
  founder public."AllianceGroup"%ROWTYPE; founder_telegram_id text; prior public."AdminAuditLog"%ROWTYPE;
  v_standings jsonb; v_flags jsonb:='[]'::jsonb; review text; winner record; prize bigint:=0; payout_key text; changed integer; result jsonb;
 BEGIN
+ PERFORM pg_advisory_xact_lock(hashtextextended(p_idempotency_key,0));
  SELECT * INTO prior FROM public."AdminAuditLog" WHERE "idempotencyKey"=p_idempotency_key FOR UPDATE;
  IF prior.id IS NOT NULL THEN
   IF prior."actorTelegramId"<>p_actor_telegram_id OR prior.action<>'close-alliance-season' OR prior."targetType"<>'alliance-season' OR prior."targetId"<>p_season_id THEN RETURN jsonb_build_object('error','IDEMPOTENCY_CONFLICT'); END IF;
@@ -137,6 +138,7 @@ DECLARE actor public."User"%ROWTYPE; s public."AllianceSeason"%ROWTYPE; a public
  founder public."AllianceGroup"%ROWTYPE; founder_telegram_id text; prior public."AdminAuditLog"%ROWTYPE;
  winner record; prize bigint:=0; treasury bigint; payout_key text; result jsonb;
 BEGIN
+ PERFORM pg_advisory_xact_lock(hashtextextended(p_idempotency_key,0));
  SELECT * INTO prior FROM public."AdminAuditLog" WHERE "idempotencyKey"=p_idempotency_key FOR UPDATE;
  IF prior.id IS NOT NULL THEN
   IF prior."actorTelegramId"<>p_actor_telegram_id OR prior.action<>'review-alliance-season' OR prior."targetType"<>'alliance-season' OR prior."targetId"<>p_season_id OR prior.metadata->>'decision' IS DISTINCT FROM p_decision THEN RETURN jsonb_build_object('error','IDEMPOTENCY_CONFLICT'); END IF;
