@@ -47,6 +47,13 @@ import { registerPublicPlayerRecordRoutes } from "./players/public-record-routes
 import { registerSeasonAwardRoutes } from "./game/season-award-routes.js";
 import { registerStoreRoutes } from "./store/store-routes.js";
 import { registerEventTournamentRoutes } from "./event-tournament-routes.js";
+import type { ClubManagementPort } from "./game/club-management-context.js";
+import { withClubManagementPort } from "./game/club-management-context.js";
+import type { SpecialAcquisitionPort } from "./players/special-acquisition-context.js";
+import { withSpecialAcquisitionPort } from "./players/special-acquisition-context.js";
+import type { GiftCodeRedemptionPort } from "./gift-code-redemption-context.js";
+import { withGiftCodeRedemptionPort } from "./gift-code-redemption-context.js";
+import type { BotRuntimeLeasePort } from "./bot-runtime-lease-context.js";
 
 const healthResponse = z.object({
   status: z.literal("ok"),
@@ -54,7 +61,7 @@ const healthResponse = z.object({
   version: z.string(),
 });
 
-export function buildApp(options: { logger?: boolean; pluginTimeout?: number; groupMembershipPort?: GroupMembershipPort; alliancePort?: AlliancePort; adminAlliancePort?: AdminAlliancePort; telegramUserLookupPort?: TelegramUserLookupPort; storePurchasePort?: StorePurchasePort; storeItemUsePort?: StoreItemUsePort; walletEntryPort?: WalletEntryPort; marketListingPort?: MarketListingPort; marketPurchasePort?: MarketPurchasePort; storeSnapshotPort?: StoreSnapshotPort; playerDevelopmentPort?: PlayerDevelopmentPort; clubEconomySettlementPort?: ClubEconomySettlementPort } = {}) {
+export function buildApp(options: { logger?: boolean; pluginTimeout?: number; groupMembershipPort?: GroupMembershipPort; alliancePort?: AlliancePort; adminAlliancePort?: AdminAlliancePort; telegramUserLookupPort?: TelegramUserLookupPort; storePurchasePort?: StorePurchasePort; storeItemUsePort?: StoreItemUsePort; walletEntryPort?: WalletEntryPort; marketListingPort?: MarketListingPort; marketPurchasePort?: MarketPurchasePort; storeSnapshotPort?: StoreSnapshotPort; playerDevelopmentPort?: PlayerDevelopmentPort; clubEconomySettlementPort?: ClubEconomySettlementPort; clubManagementPort?: ClubManagementPort; specialAcquisitionPort?: SpecialAcquisitionPort; giftCodeRedemptionPort?: GiftCodeRedemptionPort; botRuntimeLeasePort?: BotRuntimeLeasePort } = {}) {
   const app = Fastify({
     logger: options.logger ?? process.env.NODE_ENV !== "test",
     pluginTimeout: options.pluginTimeout ?? 10_000,
@@ -110,6 +117,10 @@ export function buildApp(options: { logger?: boolean; pluginTimeout?: number; gr
   if (options.marketPurchasePort) app.addHook("onRequest", (_request, _reply, done) => withMarketPurchasePort(options.marketPurchasePort!, () => done()));
   if (options.storeSnapshotPort) app.addHook("onRequest", (_request, _reply, done) => withStoreSnapshotPort(options.storeSnapshotPort!, () => done()));
   if (options.playerDevelopmentPort) app.addHook("onRequest", (_request, _reply, done) => { void withPlayerDevelopmentPort(options.playerDevelopmentPort!, async () => { done(); }); });
+  if (options.clubManagementPort) app.addHook("onRequest", (_request, _reply, done) => { void withClubManagementPort(options.clubManagementPort!, async () => done()); });
+  if (options.specialAcquisitionPort) app.addHook("onRequest", (_request, _reply, done) => { void withSpecialAcquisitionPort(options.specialAcquisitionPort!, async () => done()); });
+  if (options.giftCodeRedemptionPort) app.addHook("onRequest", (_request, _reply, done) => { void withGiftCodeRedemptionPort(options.giftCodeRedemptionPort!, async () => done()); });
+
   if (options.clubEconomySettlementPort) app.addHook("onRequest", (_request, _reply, done) => { void withClubEconomySettlementPort(options.clubEconomySettlementPort!, async () => { done(); }); });
 
   // Implement CORS with native Fastify hooks instead of @fastify/cors.
@@ -195,7 +206,7 @@ export function buildApp(options: { logger?: boolean; pluginTimeout?: number; gr
   registerTelegramMessageDeletionRoutes(app);
   registerLeagueNoticeRoutes(app);
   registerAdminGroupBroadcastRoutes(app);
-  registerBotRuntimeRoutes(app);
+  registerBotRuntimeRoutes(app, { ...(options.botRuntimeLeasePort ? { leasePort: options.botRuntimeLeasePort } : {}), requireLeasePort: Boolean(options.botRuntimeLeasePort) });
   registerPublicClubRoutes(app);
   registerPublicPlayerRecordRoutes(app);
   registerSeasonAwardRoutes(app);
