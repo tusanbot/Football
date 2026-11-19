@@ -211,7 +211,6 @@ export async function createAllianceChampionship(i: { telegramUserId: string; te
 
 export async function joinAllianceChampionship(i: { telegramUserId: string; telegramGroupId: string; competitionId: string }) {
   const port=getAlliancePort(); if(port) return port.joinAllianceChampionship(i);
-  if (getAlliancePort()) throw new AllianceServiceError("ALLIANCE_CHAMPIONSHIP_SUPABASE_PENDING");
   return prisma.$transaction(async tx => {
     const { user, group } = await manager(tx, i.telegramUserId, i.telegramGroupId, false);
     const membership = await tx.allianceGroup.findUnique({ where: { groupId: group.id } });
@@ -229,7 +228,6 @@ export async function joinAllianceChampionship(i: { telegramUserId: string; tele
 
 export async function startAllianceChampionship(i: { telegramUserId: string; telegramGroupId: string; competitionId: string }) {
   const port=getAlliancePort(); if(port) return port.startAllianceChampionship({...i,now:new Date().toISOString()});
-  if (getAlliancePort()) throw new AllianceServiceError("ALLIANCE_CHAMPIONSHIP_SUPABASE_PENDING");
   const { user, group } = await prisma.$transaction(tx => manager(tx, i.telegramUserId, i.telegramGroupId));
   const membership = await prisma.allianceGroup.findUnique({ where: { groupId: group.id } });
   if (!membership) throw new AllianceServiceError("ALLIANCE_NOT_FOUND");

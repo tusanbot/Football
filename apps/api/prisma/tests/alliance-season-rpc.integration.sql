@@ -55,6 +55,8 @@ BEGIN
  IF r->>'reviewStatus' IS DISTINCT FROM 'APPROVED' OR r->>'prize' IS DISTINCT FROM '100' OR r->>'replayed' IS DISTINCT FROM 'false' THEN RAISE EXCEPTION 'season close/payout failed: %',r; END IF;
  r:=public.close_alliance_season_http(v_ta,v_ga);
  IF r->>'replayed' IS DISTINCT FROM 'true' THEN RAISE EXCEPTION 'season close replay failed: %',r; END IF;
+ r:=public.create_alliance_championship_http(v_ta,v_ga,'Alliance RPC Cup',4,'alliance-champ-create-0001');
+ IF r->>'replayed' IS DISTINCT FROM 'true' THEN RAISE EXCEPTION 'alliance championship replay after season closure failed: %',r; END IF;
  r:=public.start_alliance_season_http(v_ta,v_ga,7);
  sid2:=r#>>'{season,id}';
  IF sid2 IS NULL OR r#>>'{season,number}'<>'2' THEN RAISE EXCEPTION 'season start failed: %',r; END IF;
