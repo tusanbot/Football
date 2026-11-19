@@ -17,6 +17,7 @@ import { withAlliancePort } from "./groups/alliance-context.js";
 import { prisma } from "./db.js";
 import { parseAdminTelegramIds, parseCorsOrigins } from "./runtime-config.js";
 import { registerAdminRoutes } from "./admin-routes.js";
+import type { AdminAlliancePort } from "./groups/node-supabase-alliance.js";
 import { registerAdminLeagueRoutes } from "./admin-league-routes.js";
 import { registerGiftCodeRoutes } from "./gift-code-routes.js";
 import { registerTelegramMessageDeletionRoutes } from "./telegram-message-deletion-routes.js";
@@ -35,7 +36,7 @@ const healthResponse = z.object({
   version: z.string(),
 });
 
-export function buildApp(options: { logger?: boolean; pluginTimeout?: number; groupMembershipPort?: GroupMembershipPort; alliancePort?: AlliancePort } = {}) {
+export function buildApp(options: { logger?: boolean; pluginTimeout?: number; groupMembershipPort?: GroupMembershipPort; alliancePort?: AlliancePort; adminAlliancePort?: AdminAlliancePort } = {}) {
   const app = Fastify({
     logger: options.logger ?? process.env.NODE_ENV !== "test",
     pluginTimeout: options.pluginTimeout ?? 10_000,
@@ -146,7 +147,7 @@ export function buildApp(options: { logger?: boolean; pluginTimeout?: number; gr
   registerMatchNotificationRoutes(app);
   registerGroupRoutes(app, { requireMembershipPort: Boolean(options.groupMembershipPort) });
   registerAllianceRoutes(app, { requirePort: Boolean(options.alliancePort), ...(options.alliancePort ? { port: options.alliancePort } : {}) });
-  registerAdminRoutes(app);
+  registerAdminRoutes(app, { ...(options.adminAlliancePort ? { adminAlliancePort: options.adminAlliancePort } : {}) });
   registerAdminLeagueRoutes(app);
   registerGiftCodeRoutes(app);
   registerTelegramMessageDeletionRoutes(app);
