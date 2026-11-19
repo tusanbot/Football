@@ -23,6 +23,7 @@ import { NodeSupabaseWalletReadRepository } from "./economy/node-supabase-wallet
 import { SupabaseClubLineupRepository } from "./game/node-supabase-club-lineup.js";
 import { NodeSupabasePublicPlayerRecordRepository } from "./players/node-supabase-public-records.js";
 import { NodeSupabasePublicClubLogoRepository } from "./node-supabase-public-club-logo.js";
+import { NodeSupabasePublicClubRepository } from "./node-supabase-public-clubs.js";
 import { SupabaseEventTournamentSettlementRepository } from "./game/node-supabase-event-tournament-settlement.js";
 import { isValidTelegramBotToken, parseAdminTelegramIds, parseCorsOrigins } from "./runtime-config.js";
 const required = ["DATABASE_URL", "TELEGRAM_BOT_TOKEN", "BOT_API_SECRET", "CORS_ORIGIN", "GAME_ADMIN_TELEGRAM_IDS"] as const;
@@ -72,6 +73,7 @@ const walletReadPort = supabaseHttp ? new NodeSupabaseWalletReadRepository(supab
 const clubLineupPort = supabaseHttp ? new SupabaseClubLineupRepository(supabaseHttp) : undefined;
 const publicPlayerRecordRepository = supabaseHttp ? new NodeSupabasePublicPlayerRecordRepository(supabaseHttp) : undefined;
 const publicClubLogoRepository = supabaseHttp ? new NodeSupabasePublicClubLogoRepository(supabaseHttp) : undefined;
+const publicClubReadRepository = supabaseHttp ? new NodeSupabasePublicClubRepository(supabaseHttp) : undefined;
 const eventTournamentSettlementPort = supabaseHttp ? new SupabaseEventTournamentSettlementRepository(supabaseHttp) : undefined;
 const app = buildApp({
   ...(groupMembershipPort ? { groupMembershipPort } : {}),
@@ -94,6 +96,7 @@ const app = buildApp({
   ...(clubLineupPort ? { clubLineupPort } : {}),
   ...(publicPlayerRecordRepository ? { publicPlayerRecordRepository } : {}),
   ...(publicClubLogoRepository ? { publicClubLogoRepository } : {}),
+  ...(publicClubReadRepository ? { publicClubReadRepository } : {}),
   ...(eventTournamentSettlementPort ? { eventTournamentSettlementPort } : {}),
 });
 let matchWorker: NodeJS.Timeout | undefined;
