@@ -1178,33 +1178,60 @@ export async function simulateScheduledMatch(userId: string, matchId: string, no
     };
   }, { timeout: 30_000, maxWait: 10_000 });
   if (settlement.competitionId && settlement.round !== null && settlement.round !== undefined) {
-    const advancementPort=getCompetitionAdvancementPort();
-    if(advancementPort) {
-      const advancement=await advancementPort.advance({competitionId:settlement.competitionId,round:settlement.round,now:now.toISOString()});
-      if(advancement.completed&&advancement.format==="LEAGUE"){
-        const pyramidPort=getPyramidLeagueSettlementPort();
-        if(pyramidPort)await pyramidPort.finalize(settlement.competitionId,now.toISOString());
-      }
+    const workerSettlementRuntime = getMatchRuntimeSettlementPort();
+    const advancementPort = getCompetitionAdvancementPort();
+    if (workerSettlementRuntime && !advancementPort) {
+      throw new MatchServiceError("WORKER_COMPETITION_ADVANCEMENT_REPOSITORY_REQUIRED");
     }
-    else {
-      const competition=await prisma.competition.findUnique({where:{id:settlement.competitionId},select:{format:true}});
-      if(competition?.format==="LEAGUE"){
-        const remaining=await prisma.footballMatch.count({where:{competitionId:settlement.competitionId,status:{not:"COMPLETED"}}});
-        if(remaining===0){
-          await prisma.competition.updateMany({where:{id:settlement.competitionId,status:"ACTIVE"},data:{status:"COMPLETED",completedAt:now}});
-          const pyramid=await import("./league-pyramid-service.js"); await pyramid.processPyramidLeagueCompletion(settlement.competitionId,now);
+    if (advancementPort) {
+      const advancement = await advancementPort.advance({
+        competitionId: settlement.competitionId, round: settlement.round, now: now.toISOString(),
+      });
+      if (advancement.completed && advancement.format === "LEAGUE") {
+        const pyramidPort = getPyramidLeagueSettlementPort();
+        if (workerSettlementRuntime && !pyramidPort) {
+          throw new MatchServiceError("WORKER_PYRAMID_SETTLEMENT_REPOSITORY_REQUIRED");
         }
-        await publishLeagueRoundSummary(settlement.competitionId,settlement.round,now);
-      } else if(competition?.format==="CUP"){
-        const fixture=await prisma.footballMatch.findUnique({where:{id:settlement.matchId},select:{round:true}});
-        if(fixture?.round!==null&&fixture?.round!==undefined) await advanceCupRoundLegacy(settlement.competitionId,fixture.round,now);
+        if (pyramidPort) await pyramidPort.finalize(settlement.competitionId, now.toISOString());
+      }
+    } else {
+      const competition = await prisma.competition.findUnique({
+        where: { id: settlement.competitionId }, select: { format: true },
+      });
+      if (competition?.format === "LEAGUE") {
+        const remaining = await prisma.footballMatch.count({
+          where: { competitionId: settlement.competitionId, status: { not: "COMPLETED" } },
+        });
+        if (remaining === 0) {
+          await prisma.competition.updateMany({
+            where: { id: settlement.competitionId, status: "ACTIVE" }, data: { status: "COMPLETED", completedAt: now },
+          });
+          const pyramid = await import("./league-pyramid-service.js");
+          await pyramid.processPyramidLeagueCompletion(settlement.competitionId, now);
+        }
+        await publishLeagueRoundSummary(settlement.competitionId, settlement.round, now);
+      } else if (competition?.format === "CUP") {
+        const fixture = await prisma.footballMatch.findUnique({
+          where: { id: settlement.matchId }, select: { round: true },
+        });
+        if (fixture?.round !== null && fixture?.round !== undefined) {
+          await advanceCupRoundLegacy(settlement.competitionId, fixture.round, now);
+        }
       }
     }
-    const eventTournamentPort=getEventTournamentSettlementPort();
-    if(eventTournamentPort) await eventTournamentPort.finalize(settlement.competitionId,now.toISOString());
+    const eventTournamentPort = getEventTournamentSettlementPort();
+    if (workerSettlementRuntime && !eventTournamentPort) {
+      throw new MatchServiceError("WORKER_EVENT_TOURNAMENT_REPOSITORY_REQUIRED");
+    }
+    if (eventTournamentPort) await eventTournamentPort.finalize(settlement.competitionId, now.toISOString());
     else {
-      const eventTournament=await prisma.eventTournament.findUnique({where:{competitionId:settlement.competitionId},select:{id:true}});
-      if(eventTournament){const tournamentService=await import("../event-tournament-service.js");await tournamentService.finalizeEventTournamentFromCompetition(settlement.competitionId,now);}
+      const eventTournament = await prisma.eventTournament.findUnique({
+        where: { competitionId: settlement.competitionId }, select: { id: true },
+      });
+      if (eventTournament) {
+        const tournamentService = await import("../event-tournament-service.js");
+        await tournamentService.finalizeEventTournamentFromCompetition(settlement.competitionId, now);
+      }
     }
   }
   return settlement;
