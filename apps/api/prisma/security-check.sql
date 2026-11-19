@@ -74,7 +74,8 @@ BEGIN
     INTO missing_alliance_fk
   FROM (VALUES
     ('AllianceSeason_allianceId_fkey'),
-    ('AllianceLedger_allianceId_fkey')
+    ('AllianceLedger_allianceId_fkey'),
+    ('CompetitionEntry_allianceGroupId_fkey')
   ) AS required(conname)
   WHERE NOT EXISTS (
     SELECT 1
@@ -95,6 +96,7 @@ BEGIN
   FROM (VALUES
     ('Alliance_createdByGroupId_idx'),
     ('CompetitionEntry_clubId_idx'),
+    ('CompetitionEntry_allianceGroupId_idx'),
     ('FriendlyChallenge_creatorUserId_idx'),
     ('GroupMemberRewardBalance_userId_idx'),
     ('GroupMembership_userId_idx'),

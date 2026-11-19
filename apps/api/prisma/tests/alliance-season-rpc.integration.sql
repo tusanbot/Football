@@ -6,7 +6,7 @@ DECLARE
  v_tb text:=(100000000000+floor(random()*899999999999)::bigint)::text; v_tc text:=(100000000000+floor(random()*899999999999)::bigint)::text; v_td text:=(100000000000+floor(random()*899999999999)::bigint)::text;
  v_ga text:='-100'||(100000000000+floor(random()*899999999999)::bigint)::text;
  v_gb text:='-100'||(100000000000+floor(random()*899999999999)::bigint)::text;
- v_now timestamptz:=date_trunc('minute',clock_timestamp())+interval '10 seconds'; r jsonb; aid text; sid text; sid2 text; cid text; clubs text[];
+ v_now timestamptz:=date_trunc('minute',clock_timestamp())+interval '10 seconds'; v_match_now timestamp without time zone:=localtimestamp-interval '2 minutes'; r jsonb; aid text; sid text; sid2 text; cid text; cid2 text; mid text; clubs text[];
 BEGIN
  INSERT INTO public."User"(id,"telegramId","displayName","createdAt","updatedAt","lastActiveAt") VALUES(v_a,v_ta,'Season Founder',v_now,v_now,v_now),(v_b,v_tb,'Season Member',v_now,v_now,v_now);
  INSERT INTO public."User"(id,"telegramId","displayName","createdAt","updatedAt","lastActiveAt") VALUES(v_c,v_tc,'Season Club C',v_now,v_now,v_now),(v_d,v_td,'Season Club D',v_now,v_now,v_now);
@@ -68,9 +68,33 @@ BEGIN
  IF sid2 IS NULL OR r#>>'{season,number}'<>'2' THEN RAISE EXCEPTION 'season start failed: %',r; END IF;
  r:=public.contribute_alliance_treasury_http(v_ta,v_ga,100,'season-treasury-next-'||substr(v_a,1,12));
  IF r->>'contributed'<>'true' OR r->>'treasuryPoints' IS DISTINCT FROM '100' THEN RAISE EXCEPTION 'second season treasury funding failed: %',r; END IF;
- UPDATE public."AllianceSeason" SET "startsAt"=v_now-interval '5 minutes',"endsAt"=v_now-interval '1 minute' WHERE id=sid2;
+
+ -- Attribute clubs to their registering alliance groups and award season points
+ -- atomically when an alliance competition match transitions to COMPLETED.
+ UPDATE public."AllianceSeason" SET "startsAt"=v_match_now-interval '1 minute',"endsAt"=v_match_now+interval '1 minute' WHERE id=sid2;
+ r:=public.create_alliance_championship_http(v_ta,v_ga,'Alliance Season Two Cup',4,'alliance-season-two-cup-0001');
+ cid2:=r#>>'{competition,id}';
+ r:=public.join_alliance_championship_http(v_tb,v_gb,cid2);
+ IF NOT EXISTS(SELECT 1 FROM public."CompetitionEntry" WHERE "competitionId"=cid2 AND "clubId"=clubs[1] AND "allianceGroupId"=(SELECT ag.id FROM public."AllianceGroup" ag JOIN public."TelegramGroup" tg ON tg.id=ag."groupId" WHERE tg."telegramId"=v_ga)) THEN
+  RAISE EXCEPTION 'founder competition entry group attribution missing';
+ END IF;
+ IF NOT EXISTS(SELECT 1 FROM public."CompetitionEntry" WHERE "competitionId"=cid2 AND "clubId"=clubs[2] AND "allianceGroupId"=(SELECT ag.id FROM public."AllianceGroup" ag JOIN public."TelegramGroup" tg ON tg.id=ag."groupId" WHERE tg."telegramId"=v_gb)) THEN
+  RAISE EXCEPTION 'joining competition entry group attribution missing';
+ END IF;
+ UPDATE public."Competition" SET status='ACTIVE' WHERE id=cid2;
+ mid:='alliance-season-match-'||substr(v_a,1,12);
+ INSERT INTO public."FootballMatch"(id,"idempotencyKey",type,status,"homeClubId","awayClubId","competitionId","scheduledAt",seed,"createdAt","updatedAt")
+ VALUES(mid,'alliance-season-match-key-'||substr(v_a,1,12),'LEAGUE','IN_PROGRESS',clubs[1],clubs[2],cid2,v_match_now,'alliance-season-test-seed',v_match_now,v_match_now);
+ UPDATE public."FootballMatch" SET status='COMPLETED',"homeScore"=2,"awayScore"=0,"completedAt"=v_match_now,"updatedAt"=v_match_now WHERE id=mid;
+ UPDATE public."FootballMatch" SET status='COMPLETED',"updatedAt"=v_match_now+interval '1 second' WHERE id=mid;
+ IF (SELECT count(*) FROM public."GroupPointLedger" WHERE "idempotencyKey"='alliance-match:'||mid||':'||clubs[1] AND amount=3 AND source::text='LEAGUE_REWARD' AND "userId"=v_a)<>1 THEN
+  RAISE EXCEPTION 'alliance match points were not recorded exactly once';
+ END IF;
+ IF (SELECT points FROM public."TelegramGroup" WHERE "telegramId"=v_ga)<>3 THEN RAISE EXCEPTION 'alliance group balance did not receive match reward'; END IF;
+
+ UPDATE public."AllianceSeason" SET "startsAt"=v_match_now-interval '1 minute',"endsAt"=v_match_now+interval '1 minute' WHERE id=sid2;
  INSERT INTO public."GroupPointLedger"(id,"idempotencyKey","groupId","userId",amount,source,description,"createdAt")
- VALUES(gen_random_uuid()::text,'season-flag-'||v_a,(SELECT id FROM public."TelegramGroup" WHERE "telegramId"=v_ga),v_a,100,'DAILY_ACTIVITY','concentrated points',v_now-interval '2 minutes');
+ VALUES(gen_random_uuid()::text,'season-flag-'||v_a,(SELECT id FROM public."TelegramGroup" WHERE "telegramId"=v_ga),v_a,100,'DAILY_ACTIVITY','concentrated points',v_match_now+interval '30 seconds');
  r:=public.close_alliance_season_http(v_ta,v_ga);
  IF r->>'reviewStatus' IS DISTINCT FROM 'FLAGGED' OR jsonb_array_length(r->'securityFlags')=0 OR r->>'prize' IS DISTINCT FROM '0' THEN RAISE EXCEPTION 'security flag/payout block failed: %',r; END IF;
  r:=public.review_alliance_season_http(v_ta,v_ga,sid2,'APPROVE',true);

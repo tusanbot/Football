@@ -203,7 +203,7 @@ export async function createAllianceChampionship(i: { telegramUserId: string; te
     }
     const season = await tx.allianceSeason.findFirst({ where: { allianceId: membership.allianceId, status: "ACTIVE" }, orderBy: { number: "desc" } });
     if (!season) throw new AllianceServiceError("SEASON_REVIEW_REQUIRED");
-    const competition = await tx.competition.create({ data: { idempotencyKey: i.idempotencyKey, name: i.name, season: season?.number ?? 1, format: "LEAGUE", maxTeams: i.maxTeams, createdByClubId: clubId, allianceId: membership.allianceId, ...(season ? { allianceSeasonId: season.id } : {}), entries: { create: { clubId } } } });
+    const competition = await tx.competition.create({ data: { idempotencyKey: i.idempotencyKey, name: i.name, season: season?.number ?? 1, format: "LEAGUE", maxTeams: i.maxTeams, createdByClubId: clubId, allianceId: membership.allianceId, ...(season ? { allianceSeasonId: season.id } : {}), entries: { create: { clubId, allianceGroupId: membership.id } } } });
     await audit(tx, { allianceId: membership.allianceId, actorTelegramId: i.telegramUserId, groupTelegramId: group.telegramId, action: "CHAMPIONSHIP_CREATED", metadata: { competitionId: competition.id, name: competition.name, maxTeams: competition.maxTeams } });
     return { competition, replayed: false };
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
@@ -220,7 +220,7 @@ export async function joinAllianceChampionship(i: { telegramUserId: string; tele
     if (c.status !== "REGISTRATION") throw new AllianceServiceError("COMPETITION_NOT_OPEN");
     if (c.entries.some(e => e.clubId === user.club!.id)) return { joined: true, replayed: true, teams: c.entries.length };
     if (c.entries.length >= c.maxTeams) throw new AllianceServiceError("COMPETITION_FULL");
-    await tx.competitionEntry.create({ data: { competitionId: c.id, clubId: user.club!.id } });
+    await tx.competitionEntry.create({ data: { competitionId: c.id, clubId: user.club!.id, allianceGroupId: membership.id } });
     await audit(tx, { allianceId: membership.allianceId, actorTelegramId: i.telegramUserId, groupTelegramId: group.telegramId, action: "CHAMPIONSHIP_JOINED", metadata: { competitionId: c.id, clubId: user.club!.id } });
     return { joined: true, replayed: false, teams: c.entries.length + 1 };
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });

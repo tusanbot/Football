@@ -26,7 +26,7 @@ BEGIN
  IF s.id IS NULL THEN RETURN jsonb_build_object('error','SEASON_REVIEW_REQUIRED'); END IF;
  INSERT INTO public."Competition"(id,"idempotencyKey",name,season,format,status,"maxTeams","cupLegs","createdByClubId","allianceId","allianceSeasonId","createdAt","updatedAt")
  VALUES('competition_'||replace(gen_random_uuid()::text,'-',''),p_idempotency_key,btrim(p_name),s.number,'LEAGUE','REGISTRATION',p_max_teams,1,v_club_id,a.id,s.id,now(),now()) RETURNING * INTO c;
- INSERT INTO public."CompetitionEntry"(id,"competitionId","clubId","joinedAt") VALUES('competition_entry_'||replace(gen_random_uuid()::text,'-',''),c.id,v_club_id,now());
+ INSERT INTO public."CompetitionEntry"(id,"competitionId","clubId","allianceGroupId","joinedAt") VALUES('competition_entry_'||replace(gen_random_uuid()::text,'-',''),c.id,v_club_id,m.id,now());
  INSERT INTO public."AllianceAuditLog"(id,"allianceId","actorTelegramId","groupTelegramId",action,metadata,"createdAt") VALUES(gen_random_uuid()::text,a.id,p_telegram_user_id,p_telegram_group_id,'CHAMPIONSHIP_CREATED',jsonb_build_object('competitionId',c.id,'name',c.name,'maxTeams',c."maxTeams"),now());
  RETURN jsonb_build_object('competition',to_jsonb(c),'replayed',false);
 END $$;

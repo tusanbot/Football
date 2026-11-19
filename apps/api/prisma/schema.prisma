@@ -655,6 +655,7 @@ model CompetitionEntry {
   id            String @id @default(cuid())
   competitionId String
   clubId        String
+  allianceGroupId String?
   played        Int @default(0)
   won           Int @default(0)
   drawn         Int @default(0)
@@ -665,9 +666,11 @@ model CompetitionEntry {
   joinedAt      DateTime @default(now())
   competition   Competition @relation(fields: [competitionId], references: [id], onDelete: Cascade)
   club          Club @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  allianceGroup AllianceGroup? @relation(fields: [allianceGroupId], references: [id], onDelete: SetNull)
   @@unique([competitionId, clubId])
   @@index([competitionId, points, goalsFor])
   @@index([clubId])
+  @@index([allianceGroupId])
 }
 
 model FootballMatch {
@@ -1113,6 +1116,7 @@ model AllianceGroup {
   joinedAt DateTime @default(now())
   alliance Alliance @relation(fields: [allianceId], references: [id], onDelete: Cascade)
   group TelegramGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  competitionEntries CompetitionEntry[]
   @@unique([allianceId, groupId])
   @@index([allianceId, joinedAt])
 }
