@@ -98,11 +98,16 @@ try {
   matchWorker = setInterval(() => {
     if (workerRunning || shuttingDown) return;
     workerRunning = true;
-    workerTask = (matchPorts ? withNodeSupabaseMatchPorts(matchPorts, () => processDueMatchRuntimes("api-match-worker", new Date(), 10)) : processDueMatchRuntimes("api-match-worker", new Date(), 10))
-      .then(async (result) => {
-        const promotions = await processDuePromotionOffers(new Date(), 50);
-        if (result.advanced || result.settled || result.failed || promotions.accepted || promotions.completedLeagues) app.log.info({ ...result, promotions }, "Game worker tick");
-      })
+    workerTask = (matchPorts
+      ? withNodeSupabaseMatchPorts(matchPorts, async () => {
+          const result = await processDueMatchRuntimes("api-match-worker", new Date(), 10);
+          const promotions = await processDuePromotionOffers(new Date(), 50);
+          if (result.advanced || result.settled || result.failed || promotions.accepted || promotions.completedLeagues) app.log.info({ ...result, promotions }, "Game worker tick");
+        })
+      : processDueMatchRuntimes("api-match-worker", new Date(), 10).then(async (result) => {
+          const promotions = await processDuePromotionOffers(new Date(), 50);
+          if (result.advanced || result.settled || result.failed || promotions.accepted || promotions.completedLeagues) app.log.info({ ...result, promotions }, "Game worker tick");
+        }))
       .catch((error: unknown) => app.log.error({ error }, "Match runtime worker failed"))
       .finally(() => { workerRunning = false; workerTask = null; });
   }, 5_000);
