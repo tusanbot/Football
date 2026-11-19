@@ -31,8 +31,8 @@ DECLARE u public."User"%ROWTYPE; g public."TelegramGroup"%ROWTYPE; ag public."Al
  a public."Alliance"%ROWTYPE; s public."AllianceSeason"%ROWTYPE; c public."Competition"%ROWTYPE;
  ac_id text; club_id text; old public."Competition"%ROWTYPE;
 BEGIN
- IF p_name IS NULL OR length(btrim(p_name)) NOT BETWEEN 3 AND 60 OR p_max_teams NOT BETWEEN 4 AND 20
-  OR p_idempotency_key !~ '^[A-Za-z0-9_-]{12,64}$' THEN RETURN jsonb_build_object('error','INVALID_CHAMPIONSHIP'); END IF;
+ IF p_name IS NULL OR length(btrim(p_name)) NOT BETWEEN 3 AND 60 OR p_max_teams IS NULL OR p_max_teams NOT BETWEEN 4 AND 20
+  OR p_idempotency_key IS NULL OR p_idempotency_key !~ '^[A-Za-z0-9_-]{12,64}$' THEN RETURN jsonb_build_object('error','INVALID_CHAMPIONSHIP'); END IF;
  SELECT * INTO u FROM public."User" WHERE "telegramId"=p_telegram_user_id;
  IF u.id IS NULL THEN RETURN jsonb_build_object('error','ACCOUNT_NOT_FOUND'); END IF;
  IF u."isSuspended" THEN RETURN jsonb_build_object('error','ACCOUNT_SUSPENDED'); END IF;
