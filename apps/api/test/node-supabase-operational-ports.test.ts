@@ -3,6 +3,7 @@ import test from "node:test";
 import { SupabaseHttpClient, SupabaseHttpError } from "../src/node-supabase-http.js";
 import { SupabaseGameDashboardRepository } from "../src/game/node-supabase-game-dashboard.js";
 import { NodeSupabasePublicPlayerRecordRepository } from "../src/players/node-supabase-public-records.js";
+import { NodeSupabasePublicClubLogoRepository } from "../src/node-supabase-public-club-logo.js";
 import { SupabaseClubLineupRepository } from "../src/game/node-supabase-club-lineup.js";
 import { NodeSupabaseWalletReadRepository } from "../src/economy/node-supabase-wallet-read.js";
 import { SupabaseClubManagementRepository as NodeSupabaseClubManagementRepository } from "../src/game/node-supabase-club-management.js";
@@ -162,4 +163,19 @@ test("public player records are aggregated by the Supabase HTTP RPC", async () =
  assert.equal(f.calls[0]!.url.pathname,"/rest/v1/rpc/get_public_player_records_http");
  const body=JSON.parse(String(f.calls[0]!.init.body));
  assert.deepEqual(body,{p_metric:"goals",p_limit:10});
+});
+
+test("public club logo reads and guarded mutations use Supabase HTTP", async () => {
+ const f=clientWith((url)=>url.pathname.endsWith("/rpc/manage_club_logo_http")
+  ? {kind:"LOCKED",activeCompetition:{id:"competition-1",name:"League"}}
+  : [{logoData:"aGVsbG8=",logoMime:"image/png"}]);
+ const repo=new NodeSupabasePublicClubLogoRepository(f.client);
+ assert.deepEqual(await repo.getLogo("club-1"),{logoData:"aGVsbG8=",logoMime:"image/png"});
+ const result=await repo.manageLogo("user-1","upload","aGVsbG8=","image/png");
+ assert.deepEqual(result,{kind:"LOCKED",activeCompetition:{id:"competition-1",name:"League"}});
+ assert.equal(f.calls[0]!.url.pathname,"/rest/v1/Club");
+ assert.equal(f.calls[1]!.url.pathname,"/rest/v1/rpc/manage_club_logo_http");
+ assert.deepEqual(JSON.parse(String(f.calls[1]!.init.body)),{
+  p_user_id:"user-1",p_action:"upload",p_logo_data:"aGVsbG8=",p_logo_mime:"image/png",
+ });
 });
