@@ -22,7 +22,7 @@ BEGIN
     OR p_now IS NULL THEN
     RAISE EXCEPTION USING MESSAGE='INVALID_GROUP_LEAGUE', ERRCODE='22023';
   END IF;
-  PERFORM pg_advisory_xact_lock(hashtextextended('group-league-create:' || p_idempotency_key, 0));
+  PERFORM pg_advisory_xact_lock(hashtextextended('competition-create:' || p_idempotency_key, 0));
   SELECT * INTO v_user FROM public."User" WHERE "telegramId"=p_telegram_user_id FOR UPDATE;
   IF NOT FOUND THEN RAISE EXCEPTION USING MESSAGE='ACCOUNT_NOT_FOUND', ERRCODE='P0001'; END IF;
   IF v_user."isSuspended" THEN RAISE EXCEPTION USING MESSAGE='ACCOUNT_SUSPENDED', ERRCODE='P0001'; END IF;
