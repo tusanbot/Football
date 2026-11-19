@@ -101,7 +101,20 @@ test("the Worker dispatches Fetch requests through the shared API route handlers
   await Promise.all(pending.splice(0));
 });
 
-test("readiness checks schema through Supabase HTTPS without DATABASE_URL or Prisma", async () => {
+test("readiness requires the legacy database URL while Prisma-backed routes remain", async () => {
+  const response = await worker.fetch(new Request("https://api.example.test/ready"), {
+    ...configuredEnv,
+    DATABASE_URL: undefined,
+    SUPABASE_URL: "https://example-project.supabase.co",
+    SUPABASE_SERVICE_ROLE_KEY: "service-role-key-that-is-long-enough-for-tests",
+  }, context);
+  assert.equal(response.status, 503);
+  const body = await response.json() as { status: string; missing: string[] };
+  assert.equal(body.status, "not_ready");
+  assert.ok(body.missing.includes("DATABASE_URL"));
+});
+
+test("readiness checks schema through Supabase HTTPS when legacy route fallback is configured", async () => {
   const originalFetch = globalThis.fetch;
   let requestedUrl: URL | undefined;
   let requestedHeaders: Headers | undefined;
@@ -113,7 +126,6 @@ test("readiness checks schema through Supabase HTTPS without DATABASE_URL or Pri
   try {
     const response = await worker.fetch(new Request("https://api.example.test/ready"), {
       ...configuredEnv,
-      DATABASE_URL: undefined,
       SUPABASE_URL: "https://example-project.supabase.co",
       SUPABASE_SERVICE_ROLE_KEY: "service-role-key-that-is-long-enough-for-tests",
     }, context);
