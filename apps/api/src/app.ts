@@ -109,8 +109,8 @@ export function buildApp(options: { logger?: boolean; pluginTimeout?: number; gr
   if (options.marketListingPort) app.addHook("onRequest", (_request, _reply, done) => withMarketListingPort(options.marketListingPort!, () => done()));
   if (options.marketPurchasePort) app.addHook("onRequest", (_request, _reply, done) => withMarketPurchasePort(options.marketPurchasePort!, () => done()));
   if (options.storeSnapshotPort) app.addHook("onRequest", (_request, _reply, done) => withStoreSnapshotPort(options.storeSnapshotPort!, () => done()));
-  if (options.playerDevelopmentPort) app.addHook("onRequest", (_request, _reply, done) => withPlayerDevelopmentPort(options.playerDevelopmentPort!, () => done()));
-  if (options.clubEconomySettlementPort) app.addHook("onRequest", (_request, _reply, done) => withClubEconomySettlementPort(options.clubEconomySettlementPort!, () => done()));
+  if (options.playerDevelopmentPort) app.addHook("onRequest", (_request, _reply, done) => { void withPlayerDevelopmentPort(options.playerDevelopmentPort!, async () => { done(); }); });
+  if (options.clubEconomySettlementPort) app.addHook("onRequest", (_request, _reply, done) => { void withClubEconomySettlementPort(options.clubEconomySettlementPort!, async () => { done(); }); });
 
   // Implement CORS with native Fastify hooks instead of @fastify/cors.
   // The plugin lifecycle can stall in the Cloudflare Workers runtime, preventing
