@@ -52,9 +52,10 @@ BEGIN
  END IF;
  SELECT * INTO actor FROM public."User" WHERE "telegramId"=p_actor_telegram_id;
  IF actor.id IS NULL THEN RETURN jsonb_build_object('error','ACCOUNT_NOT_FOUND'); END IF;
- SELECT * INTO s FROM public."AllianceSeason" WHERE id=p_season_id FOR UPDATE;
+ SELECT * INTO s FROM public."AllianceSeason" WHERE id=p_season_id;
  IF s.id IS NULL THEN RETURN jsonb_build_object('error','SEASON_NOT_FOUND'); END IF;
  SELECT * INTO a FROM public."Alliance" WHERE id=s."allianceId" FOR UPDATE;
+ SELECT * INTO s FROM public."AllianceSeason" WHERE id=p_season_id FOR UPDATE;
  SELECT * INTO founder FROM public."AllianceGroup" WHERE "allianceId"=a.id AND role='FOUNDER';
  IF founder.id IS NULL THEN RETURN jsonb_build_object('error','ALLIANCE_FOUNDER_REQUIRED'); END IF;
  SELECT "telegramId" INTO founder_telegram_id FROM public."TelegramGroup" WHERE id=founder."groupId";
@@ -143,9 +144,10 @@ BEGIN
  SELECT * INTO actor FROM public."User" WHERE "telegramId"=p_actor_telegram_id;
  IF actor.id IS NULL THEN RETURN jsonb_build_object('error','ACCOUNT_NOT_FOUND'); END IF;
  IF p_decision NOT IN ('APPROVE','REJECT') THEN RETURN jsonb_build_object('error','INVALID_SEASON_DECISION'); END IF;
- SELECT * INTO s FROM public."AllianceSeason" WHERE id=p_season_id FOR UPDATE;
+ SELECT * INTO s FROM public."AllianceSeason" WHERE id=p_season_id;
  IF s.id IS NULL THEN RETURN jsonb_build_object('error','SEASON_NOT_FOUND'); END IF;
  SELECT * INTO a FROM public."Alliance" WHERE id=s."allianceId" FOR UPDATE;
+ SELECT * INTO s FROM public."AllianceSeason" WHERE id=p_season_id FOR UPDATE;
  SELECT * INTO founder FROM public."AllianceGroup" WHERE "allianceId"=a.id AND role='FOUNDER';
  IF founder.id IS NULL THEN RETURN jsonb_build_object('error','ALLIANCE_FOUNDER_REQUIRED'); END IF;
  SELECT "telegramId" INTO founder_telegram_id FROM public."TelegramGroup" WHERE id=founder."groupId";
