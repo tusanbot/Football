@@ -26,6 +26,7 @@ BEGIN
  r:=public.admin_start_alliance_season_http(v_admin_tg,aid,7,'admin-start-alliance-season-'||substr(v_admin_id,1,12));
  IF r->>'replayed'<>'false' AND r#>>'{season,id}' IS DISTINCT FROM sid THEN RAISE EXCEPTION 'admin start idempotent replay failed: %',r; END IF;
  IF (SELECT count(*) FROM public."AdminAuditLog" WHERE "idempotencyKey"='admin-start-alliance-season-'||substr(v_admin_id,1,12) AND "actorTelegramId"=v_admin_tg AND action='start-alliance-season')<>1 THEN RAISE EXCEPTION 'admin start audit missing or duplicated'; END IF;
+ UPDATE public."AllianceGroup" SET "joinedAt"=v_now-interval '2 hours' WHERE "allianceId"=aid;
  UPDATE public."AllianceSeason" SET "startsAt"=v_now-interval '1 hour',"endsAt"=v_now-interval '1 minute' WHERE id=sid;
  INSERT INTO public."GroupPointLedger"(id,"idempotencyKey","groupId","userId",amount,source,description,"createdAt")
  VALUES(gen_random_uuid()::text,'admin-close-points-'||substr(v_admin_id,1,12),group_db_id,v_founder_id,100,'DAILY_ACTIVITY','admin close test',v_now-interval '10 minutes');
