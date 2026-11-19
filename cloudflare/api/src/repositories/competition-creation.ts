@@ -44,4 +44,32 @@ export class SupabaseCompetitionCreationRepository implements CompetitionCreatio
     }
     return { competition, replayed: result.replayed };
   }
+  async join(userId: string, competitionId: string, now: Date) {
+    return this.lifecycleRpc("join_competition_http", {
+      p_user_id: userId, p_competition_id: competitionId, p_now: now.toISOString(),
+    }, "join");
+  }
+  async start(userId: string, competitionId: string, now: Date) {
+    return this.lifecycleRpc("start_competition_http", {
+      p_user_id: userId, p_competition_id: competitionId, p_now: now.toISOString(),
+    }, "start");
+  }
+  private async lifecycleRpc(name: string, args: Record<string, unknown>, operation: "join" | "start") {
+    let result: Record<string, unknown>;
+    try { result = await this.client.rpc(name, args); }
+    catch (error) {
+      if (error instanceof SupabaseHttpError && /^[A-Z][A-Z0-9_]{2,80}$/.test(error.message)) throw new Error(error.message);
+      throw error;
+    }
+    const integer = (value: unknown) => Number.isInteger(value) && Number(value) >= 0;
+    if (!result || typeof result !== "object" || !integer(result.teams)
+      || (operation === "join" && (typeof result.joined !== "boolean" || typeof result.replayed !== "boolean" || typeof result.autoStarted !== "boolean"))
+      || (operation === "start" && (typeof result.replayed !== "boolean" || !integer(result.fixturesCreated) || !integer(result.rounds)))
+      || (result.fixturesCreated !== undefined && !integer(result.fixturesCreated))
+      || (result.rounds !== undefined && !integer(result.rounds))
+      || (result.autoStarted === true && (typeof result.startsAt !== "string" || !integer(result.fixturesCreated) || !integer(result.rounds)))) {
+      throw new Error("SUPABASE_COMPETITION_LIFECYCLE_INVALID_RESPONSE");
+    }
+    return result;
+  }
 }

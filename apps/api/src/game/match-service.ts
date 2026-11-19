@@ -1,4 +1,4 @@
-import { randomInt, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import { Prisma } from "@prisma/client";
 import {
   advanceMatchSegment, applyMatchSubstitutions, calculateStadiumCapacity, resolveMatchCheckpoint,
@@ -272,6 +272,15 @@ export async function updateCompetitionRules(userId: string, competitionId: stri
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 }
 export async function joinLeague(userId: string, competitionId: string, now = new Date()) {
+  const port = getCompetitionCreationPort();
+  if (port) {
+    try { return await port.join(userId, competitionId, now); }
+    catch (error) {
+      const code = error instanceof Error ? error.message : "";
+      if (/^[A-Z][A-Z0-9_]{2,80}$/.test(code)) throw new MatchServiceError(code);
+      throw error;
+    }
+  }
   const club = await getOwnedClub(userId);
   return prisma.$transaction(async (tx) => {
     const competition = await tx.competition.findUnique({ where: { id: competitionId }, include: { entries: true } });
@@ -296,7 +305,7 @@ export async function joinLeague(userId: string, competitionId: string, now = ne
     }
     const slots = entries.map((entry) => entry.clubId);
     for (let index = slots.length - 1; index > 0; index--) {
-      const swapIndex = randomInt(index + 1);
+      const swapIndex = Math.floor(Math.random() * (index + 1));
       [slots[index], slots[swapIndex]] = [slots[swapIndex]!, slots[index]!];
     }
     if (slots.length % 2) slots.push("");
@@ -326,6 +335,15 @@ export async function joinLeague(userId: string, competitionId: string, now = ne
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, timeout: 15_000, maxWait: 10_000 });
 }
 export async function startLeague(userId: string, competitionId: string, now = new Date()) {
+  const port = getCompetitionCreationPort();
+  if (port) {
+    try { return await port.start(userId, competitionId, now); }
+    catch (error) {
+      const code = error instanceof Error ? error.message : "";
+      if (/^[A-Z][A-Z0-9_]{2,80}$/.test(code)) throw new MatchServiceError(code);
+      throw error;
+    }
+  }
   const club = await getOwnedClub(userId);
   return prisma.$transaction(async (tx) => {
     const competition = await tx.competition.findUnique({
@@ -364,7 +382,7 @@ export async function startLeague(userId: string, competitionId: string, now = n
     const teams = competition.entries.map((entry) => entry.clubId);
     if (competition.format === "LEAGUE") {
       for (let index = teams.length - 1; index > 0; index--) {
-        const swapIndex = randomInt(index + 1);
+        const swapIndex = Math.floor(Math.random() * (index + 1));
         [teams[index], teams[swapIndex]] = [teams[swapIndex]!, teams[index]!];
       }
     }
