@@ -44,6 +44,14 @@ export class SupabaseCompetitionCreationRepository implements CompetitionCreatio
     }
     return { competition, replayed: result.replayed };
   }
+  async updateRules(userId: string, competitionId: string, rules: Record<string, boolean | number>, now: Date) {
+    let result: Record<string, unknown>;
+    try { result = await this.client.rpc("update_competition_rules_http", { p_user_id: userId, p_competition_id: competitionId, p_rules: rules, p_now: now.toISOString() }); }
+    catch (error) { if (error instanceof SupabaseHttpError && /^[A-Z][A-Z0-9_]{2,80}$/.test(error.message)) throw new Error(error.message); throw error; }
+    const canonical = (value: unknown) => value && typeof value === "object" ? JSON.stringify(Object.entries(value as Record<string, unknown>).sort(([a], [b]) => a.localeCompare(b))) : "";
+    if (!result || result.competitionId !== competitionId || canonical(result.rules) !== canonical(rules)) throw new Error("SUPABASE_COMPETITION_RULES_INVALID_RESPONSE");
+    return { competitionId, rules: result.rules };
+  }
   async join(userId: string, competitionId: string, now: Date) {
     return this.lifecycleRpc("join_competition_http", {
       p_user_id: userId, p_competition_id: competitionId, p_now: now.toISOString(),

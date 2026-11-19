@@ -51,6 +51,18 @@ BEGIN
     RAISE EXCEPTION 'expected ONLY_CREATOR_CAN_START';
   EXCEPTION WHEN SQLSTATE 'P0001' THEN GET STACKED DIAGNOSTICS v_message = MESSAGE_TEXT; IF v_message <> 'ONLY_CREATOR_CAN_START' THEN RAISE; END IF;
   END;
+  v_result := public.update_competition_rules_http(v_users[1], v_league_id, '{"maxSubstitutions":4,"maxInPlayWindows":2,"injuriesEnabled":true,"injuryDurationDays":6,"redCardSuspensionMatches":2,"yellowCardsToSuspend":4,"yellowCardSuspensionMatches":2,"penaltiesOnDraw":false}'::jsonb, v_now);
+  IF v_result->>'competitionId' <> v_league_id OR v_result->'rules'->>'maxSubstitutions' <> '4' THEN RAISE EXCEPTION 'rules update mismatch: %', v_result; END IF;
+  BEGIN
+    PERFORM public.update_competition_rules_http(v_users[2], v_league_id, v_rules_league, v_now);
+    RAISE EXCEPTION 'expected ONLY_CREATOR_CAN_START';
+  EXCEPTION WHEN SQLSTATE 'P0001' THEN GET STACKED DIAGNOSTICS v_message = MESSAGE_TEXT; IF v_message <> 'ONLY_CREATOR_CAN_START' THEN RAISE; END IF;
+  END;
+  BEGIN
+    PERFORM public.update_competition_rules_http(v_users[1], v_cup_id, v_rules_cup, v_now);
+    RAISE EXCEPTION 'expected COMPETITION_RULES_LOCKED';
+  EXCEPTION WHEN SQLSTATE 'P0001' THEN GET STACKED DIAGNOSTICS v_message = MESSAGE_TEXT; IF v_message <> 'COMPETITION_RULES_LOCKED' THEN RAISE; END IF;
+  END;
 END;
 $test$;
 ROLLBACK;

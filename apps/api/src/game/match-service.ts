@@ -258,8 +258,13 @@ export async function createLeague(userId: string, name: string, maxTeams: numbe
   return { competition, replayed: false };
 }
 export async function updateCompetitionRules(userId: string, competitionId: string, input: MatchRules) {
-  const club = await getOwnedClub(userId);
   const rules = validateMatchRules(input);
+  const port = getCompetitionCreationPort();
+  if (port) {
+    try { return await port.updateRules(userId, competitionId, rules as unknown as Record<string, boolean | number>, new Date()); }
+    catch (error) { const code = error instanceof Error ? error.message : ""; if (/^[A-Z][A-Z0-9_]{2,80}$/.test(code)) throw new MatchServiceError(code); throw error; }
+  }
+  const club = await getOwnedClub(userId);
   return prisma.$transaction(async (tx) => {
     const competition = await tx.competition.findUnique({ where: { id: competitionId } });
     if (!competition) throw new MatchServiceError("COMPETITION_NOT_FOUND");

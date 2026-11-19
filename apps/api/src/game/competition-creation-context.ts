@@ -12,6 +12,7 @@ export interface CompetitionCreationPort {
     rules: Record<string, boolean | number>;
     now: Date;
   }): Promise<unknown>;
+  updateRules(userId: string, competitionId: string, rules: Record<string, boolean | number>, now: Date): Promise<unknown>;
   join(userId: string, competitionId: string, now: Date): Promise<unknown>;
   start(userId: string, competitionId: string, now: Date): Promise<unknown>;
 }

@@ -26,3 +26,16 @@ test("competition lifecycle repository rejects malformed RPC responses", async (
   const repo = new SupabaseCompetitionCreationRepository({ rpc: async () => ({ joined: true }) } as never);
   await assert.rejects(() => repo.join("user-1", "competition-1", now), /SUPABASE_COMPETITION_LIFECYCLE_INVALID_RESPONSE/);
 });
+
+test("competition rules update calls the owner-checked Supabase RPC", async () => {
+  const rules = { maxSubstitutions: 4, maxInPlayWindows: 2, injuriesEnabled: true, injuryDurationDays: 6, redCardSuspensionMatches: 2, yellowCardsToSuspend: 4, yellowCardSuspensionMatches: 2, penaltiesOnDraw: false };
+  let call: unknown;
+  const repo = new SupabaseCompetitionCreationRepository({ rpc: async (name: string, args: unknown) => { call = { name, args }; return { competitionId: "competition-rules-1", rules }; } } as never);
+  const result = await repo.updateRules("user-1", "competition-rules-1", rules, now) as Record<string, unknown>;
+  assert.deepEqual(result, { competitionId: "competition-rules-1", rules });
+  assert.deepEqual(call, { name: "update_competition_rules_http", args: { p_user_id: "user-1", p_competition_id: "competition-rules-1", p_rules: rules, p_now: now.toISOString() } });
+});
+test("competition rules update rejects malformed RPC responses", async () => {
+  const repo = new SupabaseCompetitionCreationRepository({ rpc: async () => ({ competitionId: "wrong", rules: {} }) } as never);
+  await assert.rejects(() => repo.updateRules("user-1", "competition-1", { penaltiesOnDraw: false }, now), /SUPABASE_COMPETITION_RULES_INVALID_RESPONSE/);
+});
