@@ -62,3 +62,17 @@ test("group league RPC business errors remain typed", async () => {
     (error: unknown) => error instanceof GroupMembershipPortError && error.code === "GROUP_MANAGER_REQUIRED",
   );
 });
+
+test("group league SQL exceptions are mapped to typed group service errors", async () => {
+  const client = new SupabaseHttpClient({
+    url: "https://example.supabase.co", serviceRoleKey: "service-role-key-for-group-membership",
+    fetchImpl: async () => new Response(JSON.stringify({ message: "GROUP_MANAGER_REQUIRED", code: "P0001" }), {
+      status: 400, headers: { "content-type": "application/json" },
+    }),
+  });
+  const instance = new SupabaseGroupMembershipRepository(client);
+  await assert.rejects(
+    instance.createLeague({ telegramUserId: "123", telegramGroupId: "-1001234567890", name: "Group League", maxTeams: 8, idempotencyKey: "group-league:1234567890" }),
+    (error: unknown) => error instanceof GroupMembershipPortError && error.code === "GROUP_MANAGER_REQUIRED",
+  );
+});
