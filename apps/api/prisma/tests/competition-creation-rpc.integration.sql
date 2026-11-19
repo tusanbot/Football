@@ -6,6 +6,7 @@ DO $test$
 DECLARE
   v_user text := 'ci-competition-owner';
   v_other_user text := 'ci-competition-other';
+  v_no_club_user text := 'ci-competition-no-club';
   v_club text := 'ci-competition-club';
   v_other_club text := 'ci-competition-other-club';
   v_now timestamptz := '2026-11-19T12:34:56.789Z'::timestamptz;
@@ -17,7 +18,8 @@ DECLARE
 BEGIN
   INSERT INTO public."User" (id, "telegramId", "updatedAt") VALUES
     (v_user, 'ci-competition-owner-tg', v_now AT TIME ZONE 'UTC'),
-    (v_other_user, 'ci-competition-other-tg', v_now AT TIME ZONE 'UTC')
+    (v_other_user, 'ci-competition-other-tg', v_now AT TIME ZONE 'UTC'),
+    (v_no_club_user, 'ci-competition-no-club-tg', v_now AT TIME ZONE 'UTC')
   ON CONFLICT (id) DO NOTHING;
   INSERT INTO public."Club" (id, "ownerId", name, slug, "updatedAt") VALUES
     (v_club, v_user, 'CI Competition Club', 'ci-competition-club', v_now AT TIME ZONE 'UTC'),
@@ -77,7 +79,7 @@ BEGIN
 
   BEGIN
     PERFORM public.create_competition_http(
-      v_user, 'No Club User', 8, 'ci-competition-create-key-03',
+      v_no_club_user, 'No Club User', 8, 'ci-competition-create-key-03',
       'LEAGUE', 1, 2026, v_rules, v_now
     );
     RAISE EXCEPTION 'expected success only for users with clubs';
