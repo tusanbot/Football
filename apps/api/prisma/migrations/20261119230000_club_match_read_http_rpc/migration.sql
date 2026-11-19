@@ -12,26 +12,26 @@ BEGIN
       SELECT jsonb_agg(jsonb_build_object(
         'id', m.id, 'type', m.type::text, 'status', m.status::text, 'round', m.round, 'leg', m.leg,
         'tieId', m."tieId", 'rulesSnapshot', m."rulesSnapshot", 'simulationVersion', m."simulationVersion",
-        'scheduledAt', to_jsonb(m."scheduledAt" AT TIME ZONE 'UTC'), 'homeClubId', m."homeClubId", 'awayClubId', m."awayClubId",
+        'scheduledAt', to_char(m."scheduledAt" AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'), 'homeClubId', m."homeClubId", 'awayClubId', m."awayClubId",
         'homeClub', jsonb_build_object('id', hc.id, 'name', hc.name), 'awayClub', jsonb_build_object('id', ac.id, 'name', ac.name),
         'homeScore', m."homeScore", 'awayScore', m."awayScore", 'attendance', m.attendance,
         'ticketRevenue', m."ticketRevenue"::text, 'homePenalties', m."homePenalties", 'awayPenalties', m."awayPenalties",
         'winnerClubId', m."winnerClubId",
         'runtime', CASE WHEN rt.id IS NULL THEN NULL ELSE jsonb_build_object(
           'status', rt.status::text, 'currentMinute', rt."currentMinute",
-          'nextActionAt', CASE WHEN rt."nextActionAt" IS NULL THEN NULL ELSE to_jsonb(rt."nextActionAt" AT TIME ZONE 'UTC') END,
-          'completedAt', CASE WHEN rt."completedAt" IS NULL THEN NULL ELSE to_jsonb(rt."completedAt" AT TIME ZONE 'UTC') END,
+          'nextActionAt', CASE WHEN rt."nextActionAt" IS NULL THEN NULL ELSE to_char(rt."nextActionAt" AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') END,
+          'completedAt', CASE WHEN rt."completedAt" IS NULL THEN NULL ELSE to_char(rt."completedAt" AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') END,
           'simulationState', rt."simulationState", 'kickoffSnapshot', rt."kickoffSnapshot"
         ) END,
         'checkpoints', COALESCE((
           SELECT jsonb_agg(jsonb_build_object(
             'checkpointKey', cp."checkpointKey", 'kind', cp.kind::text, 'minute', cp.minute, 'status', cp.status::text,
-            'openedAt', to_jsonb(cp."openedAt" AT TIME ZONE 'UTC'),
-            'decisionDeadlineAt', to_jsonb(cp."decisionDeadlineAt" AT TIME ZONE 'UTC'),
-            'nextSegmentAt', to_jsonb(cp."nextSegmentAt" AT TIME ZONE 'UTC'),
-            'resolvedAt', CASE WHEN cp."resolvedAt" IS NULL THEN NULL ELSE to_jsonb(cp."resolvedAt" AT TIME ZONE 'UTC') END,
+            'openedAt', to_char(cp."openedAt" AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),
+            'decisionDeadlineAt', to_char(cp."decisionDeadlineAt" AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),
+            'nextSegmentAt', to_char(cp."nextSegmentAt" AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),
+            'resolvedAt', CASE WHEN cp."resolvedAt" IS NULL THEN NULL ELSE to_char(cp."resolvedAt" AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') END,
             'decisions', COALESCE((SELECT jsonb_agg(jsonb_build_object('clubId', d."clubId",
-              'submittedAt', to_jsonb(d."submittedAt" AT TIME ZONE 'UTC')))
+              'submittedAt', to_char(d."submittedAt" AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')))
               FROM public."MatchTacticalDecision" d WHERE d."checkpointId" = cp.id), '[]'::jsonb)
           ) ORDER BY cp.minute ASC)
           FROM public."MatchTacticalCheckpoint" cp WHERE cp."matchId" = m.id
