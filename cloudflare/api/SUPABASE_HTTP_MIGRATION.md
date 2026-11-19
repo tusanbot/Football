@@ -184,3 +184,24 @@ The hardening PR targets `feat/supabase-http-full-runtime`, not `main`. The CI w
 - [ ] Pass full Prisma-free CI and Bot + Mini App parity tests.
 
 No database, secrets, webhook, DNS, deployment, or production runtime settings were changed by this audit.
+
+## Group leagues: Supabase HTTP migration tranche
+
+The five Telegram-group league operations now have a request-scoped Supabase HTTP path:
+
+- `createGroupLeague` → `create_group_league_http`
+- `joinGroupLeague` → `join_group_league_http`
+- `startGroupLeague` → `start_group_league_http`
+- `getGroupLeagueTable` → `get_group_league_table_http`
+- `listGroupLeagues` → `list_group_leagues_http`
+
+Implementation details:
+- `GroupMembershipPort` exposes all five operations and `SupabaseGroupMembershipRepository` calls the corresponding RPCs.
+- `group-service.ts` uses the port when present; the standard Fastify runtime deliberately retains its Prisma fallback until Node API migration is complete.
+- The Cloudflare Worker already binds `SupabaseGroupMembershipRepository` for the request and registers group routes with `requireMembershipPort: true`; these league routes therefore cannot silently fall back to Prisma in the Worker.
+- The SQL migration `20261119430000_group_league_http_rpcs` enforces account/group suspension, active group status, persisted membership, manager role for creation/start, group-to-competition association, creator ownership, and idempotent creation.
+- Join and start call the existing competition lifecycle RPCs within the same PostgreSQL transaction, preserving capacity checks, unique club entry, lineup validation, fixture generation, and replay behavior.
+- Read RPCs return the existing API response envelope and cap league listing at 30 rows.
+- Repository contract tests cover all five RPC names, arguments, and business-error propagation.
+
+This tranche does not remove Prisma from the Fastify runtime or from unrelated group operations. The migration has been added to the existing Prisma migration directory and will be exercised by CI's current migration pipeline; it has not been applied to any live database. The Node API group paths still use their Prisma fallback when no request-scoped port is installed.
