@@ -14,6 +14,7 @@ import {
   type TrainingIntensity,
 } from "@football/domain";
 import { prisma } from "../db.js";
+import { getPlayerDevelopmentPort } from "./player-development-context.js";
 
 const DAY_MS = 86_400_000;
 const focusValues = new Set<TrainingFocus>(["BALANCED", "GOALKEEPING", "DEFENDING", "PASSING", "PLAYMAKING", "DRIBBLING", "SHOOTING", "PHYSICAL"]);
@@ -41,6 +42,8 @@ function sameTrainingCommand(previous: {
 }
 
 export async function settleClubDailyState(userId: string, now = new Date()) {
+  const port = getPlayerDevelopmentPort();
+  if (port) return port.settle(userId, now);
   const today = utcDay(now);
   try {
     return await prisma.$transaction(async (tx) => {
@@ -200,6 +203,8 @@ export async function settleClubDailyState(userId: string, now = new Date()) {
 }
 
 export async function getClubDevelopment(userId: string, now = new Date()) {
+  const port = getPlayerDevelopmentPort();
+  if (port) return port.get(userId, now);
   await settleClubDailyState(userId, now);
   const club = await prisma.club.findUnique({
     where: { ownerId: userId },
@@ -272,6 +277,8 @@ export async function trainPlayer(
   idempotencyKey: string,
   now = new Date(),
 ) {
+  const port = getPlayerDevelopmentPort();
+  if (port) { try { return await port.train(userId, playerId, focus, intensity, idempotencyKey, now); } catch (error) { if (error instanceof Error) throw new PlayerDevelopmentError(error.message, (error as Error & {details?:Record<string,string>}).details); throw error; } }
   if (!focusValues.has(focus)) throw new PlayerDevelopmentError("INVALID_TRAINING_FOCUS");
   if (!intensityValues.has(intensity)) throw new PlayerDevelopmentError("INVALID_TRAINING_INTENSITY");
   if (!/^[A-Za-z0-9:_-]{12,128}$/.test(idempotencyKey)) throw new PlayerDevelopmentError("INVALID_IDEMPOTENCY_KEY");
@@ -426,6 +433,8 @@ export async function renewPlayerContract(
   idempotencyKey: string,
   now = new Date(),
 ) {
+  const port = getPlayerDevelopmentPort();
+  if (port) { try { return await port.renew(userId, playerId, extensionDays, weeklyWage, idempotencyKey, now); } catch (error) { if (error instanceof Error) throw new PlayerDevelopmentError(error.message, (error as Error & {details?:Record<string,string>}).details); throw error; } }
   if (![90, 180, 365].includes(extensionDays)) throw new PlayerDevelopmentError("INVALID_CONTRACT_LENGTH");
   if (!/^[A-Za-z0-9:_-]{12,128}$/.test(idempotencyKey)) throw new PlayerDevelopmentError("INVALID_IDEMPOTENCY_KEY");
   if (weeklyWage <= 0n || weeklyWage > 1_000_000n) throw new PlayerDevelopmentError("INVALID_WEEKLY_WAGE");
