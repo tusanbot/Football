@@ -131,7 +131,7 @@ export class SupabaseHttpClient {
     let response: Response;
     try {
       response = await this.fetchImpl(url, {
-        method, headers, body: body === undefined ? undefined : JSON.stringify(body), signal,
+        method, headers, ...(body === undefined ? {} : { body: JSON.stringify(body) }), signal,
         // Never forward service-role credentials through an HTTP redirect.
         redirect: "error",
       });
