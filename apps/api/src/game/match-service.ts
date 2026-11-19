@@ -1624,7 +1624,13 @@ async function processClaimedMatchRuntime(
   }
 
   if (state.segment.currentMinute === 90) {
-    await settleClaimedMatchRuntime(runtime as LoadedMatchRuntime, now);
+    if (workerSettlementPort) {
+      await settleClaimedMatchRuntime(runtime as LoadedMatchRuntime, now);
+    } else {
+      // Keep the legacy Prisma runtime path for non-Worker callers and tests.
+      const legacyRuntime = runtime as typeof runtime & { match: { homeClub: { ownerId: string } } };
+      await simulateScheduledMatch(legacyRuntime.match.homeClub.ownerId, runtime.matchId, now);
+    }
     return "SETTLED";
   }
 
