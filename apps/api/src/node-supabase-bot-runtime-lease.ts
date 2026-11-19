@@ -1,5 +1,5 @@
 import type { BotRuntimeLeaseAction, BotRuntimeLeasePort, BotRuntimeLeaseResult } from "./bot-runtime-lease-context.js";
-import { SupabaseHttpClient } from "../node-supabase-http.js";
+import { SupabaseHttpClient } from "./node-supabase-http.js";
 
 export class SupabaseBotRuntimeLeaseRepository implements BotRuntimeLeasePort {
   constructor(private readonly client: SupabaseHttpClient) {}
