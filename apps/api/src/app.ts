@@ -1,6 +1,8 @@
 import Fastify from "fastify";
 import { z } from "zod";
 import { registerTelegramAuthRoutes } from "./auth/routes.js";
+import type { TelegramUserLookupPort } from "./auth/telegram-user-lookup-context.js";
+import { withTelegramUserLookupPort } from "./auth/telegram-user-lookup-context.js";
 import { registerBotAuthRoutes } from "./auth/bot-routes.js";
 import { registerGameRoutes } from "./game/routes.js";
 import { registerClubOperationsRoutes } from "./game/club-operations-routes.js";
@@ -36,7 +38,7 @@ const healthResponse = z.object({
   version: z.string(),
 });
 
-export function buildApp(options: { logger?: boolean; pluginTimeout?: number; groupMembershipPort?: GroupMembershipPort; alliancePort?: AlliancePort; adminAlliancePort?: AdminAlliancePort } = {}) {
+export function buildApp(options: { logger?: boolean; pluginTimeout?: number; groupMembershipPort?: GroupMembershipPort; alliancePort?: AlliancePort; adminAlliancePort?: AdminAlliancePort; telegramUserLookupPort?: TelegramUserLookupPort } = {}) {
   const app = Fastify({
     logger: options.logger ?? process.env.NODE_ENV !== "test",
     pluginTimeout: options.pluginTimeout ?? 10_000,
@@ -54,6 +56,12 @@ export function buildApp(options: { logger?: boolean; pluginTimeout?: number; gr
     if (process.env.NODE_ENV === "production") reply.header("strict-transport-security", "max-age=31536000; includeSubDomains");
     return payload;
   });
+
+  if (options.telegramUserLookupPort) {
+    app.addHook("onRequest", (_request, _reply, done) => {
+      withTelegramUserLookupPort(options.telegramUserLookupPort!, () => done());
+    });
+  }
 
   // Establish a per-request AsyncLocalStorage scope before route hooks/handlers run.
   // The callback-style hook is intentional: done() schedules Fastify's continuation
