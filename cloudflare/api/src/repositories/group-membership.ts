@@ -29,6 +29,21 @@ export class SupabaseGroupMembershipRepository implements GroupMembershipPort {
     raiseBusinessError(value);
     return value;
   }
+  async syncMember(input: { telegramGroupId: string; telegramUserId: string; isMember: boolean; role?: "OWNER" | "ADMIN" | "MEMBER" }): Promise<unknown> {
+    const value = ensureObject(await this.client.rpc("sync_telegram_group_member_http", {
+      p_telegram_group_id: input.telegramGroupId, p_telegram_user_id: input.telegramUserId,
+      p_is_member: input.isMember, p_role: input.role ?? "MEMBER",
+    }));
+    raiseBusinessError(value);
+    return value;
+  }
+  async checkMemberCount(input: { telegramGroupId: string; memberCount: number; botPresent: boolean }): Promise<unknown> {
+    const value = ensureObject(await this.client.rpc("check_telegram_group_members_http", {
+      p_telegram_group_id: input.telegramGroupId, p_member_count: input.memberCount, p_bot_present: input.botPresent,
+    }));
+    raiseBusinessError(value);
+    return value;
+  }
   async joinGroup(input: GroupJoinInput, now = new Date()): Promise<unknown> {
     const value = ensureObject(await this.client.rpc("join_telegram_group_http", {
       p_telegram_user_id: input.telegramUserId, p_telegram_group_id: input.telegramGroupId,

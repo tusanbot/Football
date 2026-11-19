@@ -134,19 +134,12 @@ export function registerGroupRoutes(app: FastifyInstance, dependencies: { requir
  if(!authenticateSystemBot(request,reply))return;
  const b=z.object({telegramGroupId:groupId,telegramUserId:z.string().regex(/^\d{1,20}$/),isMember:z.boolean(),role:z.enum(["OWNER","ADMIN","MEMBER"]).optional()}).safeParse(request.body);
  if(!b.success)return reply.code(400).send({error:"INVALID_GROUP_MEMBER_UPDATE"});
- const [group,user]=await Promise.all([
-  prisma.telegramGroup.findUnique({where:{telegramId:b.data.telegramGroupId},select:{id:true}}),
-  prisma.user.findUnique({where:{telegramId:b.data.telegramUserId},select:{id:true}}),
- ]);
- if(!group||!user)return{updated:false};
- if(b.data.isMember){
-  await prisma.groupMembership.upsert({where:{groupId_userId:{groupId:group.id,userId:user.id}},create:{groupId:group.id,userId:user.id,role:b.data.role??"MEMBER"},update:{role:b.data.role??"MEMBER"}});
- }else{
-  await prisma.groupMembership.deleteMany({where:{groupId:group.id,userId:user.id}});
- }
- return{updated:true,isMember:b.data.isMember};
+ const port=getGroupMembershipPort();
+ if(!port)return reply.code(503).send({error:"SUPABASE_GROUP_MEMBERSHIP_UNAVAILABLE"});
+ try{return await port.syncMember({telegramGroupId:b.data.telegramGroupId,telegramUserId:b.data.telegramUserId,isMember:b.data.isMember,role:b.data.role??"MEMBER"});}
+ catch(error){return sendGroupError(reply,error);}
  });
- app.post("/v1/groups/system/member-count",async(request,reply)=>{if(!authenticateSystemBot(request,reply))return;const b=z.object({telegramGroupId:groupId,memberCount:z.number().int().min(0).max(1000000),botPresent:z.boolean().optional()}).safeParse(request.body);if(!b.success)return reply.code(400).send({error:"INVALID_GROUP_CHECK"});return checkTelegramGroupMembers(b.data.telegramGroupId,b.data.memberCount,b.data.botPresent??true);});
+ app.post("/v1/groups/system/member-count",async(request,reply)=>{if(!authenticateSystemBot(request,reply))return;const b=z.object({telegramGroupId:groupId,memberCount:z.number().int().min(0).max(1000000),botPresent:z.boolean().optional()}).safeParse(request.body);if(!b.success)return reply.code(400).send({error:"INVALID_GROUP_CHECK"});const port=getGroupMembershipPort();if(!port)return reply.code(503).send({error:"SUPABASE_GROUP_MEMBERSHIP_UNAVAILABLE"});try{return await port.checkMemberCount({telegramGroupId:b.data.telegramGroupId,memberCount:b.data.memberCount,botPresent:b.data.botPresent??true});}catch(e){return sendGroupError(reply,e);}});
 
   app.post("/v1/groups/register", async (request, reply) => {
     const telegramUserId = await authenticateGroupActor(request, reply, requireMembershipPort); if (!telegramUserId) return;
