@@ -4,6 +4,7 @@ import { processDueMatchRuntimes } from "./game/match-service.js";
 import { processDuePromotionOffers } from "./game/league-pyramid-service.js";
 import { prisma } from "./db.js";
 import { NodeSupabaseGroupMembershipRepository } from "./groups/node-supabase-group-membership.js";
+import { NodeSupabaseAllianceRepository } from "./groups/node-supabase-alliance.js";
 import { isValidTelegramBotToken, parseAdminTelegramIds, parseCorsOrigins } from "./runtime-config.js";
 const required = ["DATABASE_URL", "TELEGRAM_BOT_TOKEN", "BOT_API_SECRET", "CORS_ORIGIN", "GAME_ADMIN_TELEGRAM_IDS"] as const;
 const missing = required.filter((key) => !process.env[key]?.trim());
@@ -24,7 +25,10 @@ if (hasSupabaseUrl !== hasSupabaseKey) throw new Error("SUPABASE_URL and SUPABAS
 const groupMembershipPort = hasSupabaseUrl
   ? new NodeSupabaseGroupMembershipRepository(process.env.SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
   : undefined;
-const app = buildApp({ ...(groupMembershipPort ? { groupMembershipPort } : {}) });
+const alliancePort = hasSupabaseUrl
+  ? new NodeSupabaseAllianceRepository(process.env.SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
+  : undefined;
+const app = buildApp({ ...(groupMembershipPort ? { groupMembershipPort } : {}), ...(alliancePort ? { alliancePort } : {}) });
 let matchWorker: NodeJS.Timeout | undefined;
 let workerTask: Promise<void> | null = null;
 let shuttingDown = false;
