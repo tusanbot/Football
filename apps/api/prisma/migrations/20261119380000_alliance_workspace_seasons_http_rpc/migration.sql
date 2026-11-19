@@ -112,11 +112,11 @@ BEGIN
   FROM public."GroupPointLedger" l JOIN public."AllianceGroup" ag ON ag."groupId"=l."groupId" JOIN public."TelegramGroup" tg ON tg.id=ag."groupId"
   WHERE ag."allianceId"=a.id AND l."createdAt">=ag."joinedAt" AND l."userId" IS NOT NULL AND l."createdAt">=s."startsAt" AND l."createdAt"<s."endsAt" AND l.source::text IN ('DAILY_ACTIVITY','GAME_ACTIVITY','CHALLENGE_REWARD','LEAGUE_REWARD')
   GROUP BY l."userId",l."groupId",tg.title HAVING sum(l.amount)>=50
- ), overlaps AS (
+ ), overlap_rows AS (
   SELECT "userId",sum(points)::bigint total,count(*)::int n,jsonb_agg(jsonb_build_object('groupId',"groupId",'group',title,'points',points::text) ORDER BY title) groups
   FROM user_groups GROUP BY "userId" HAVING count(*)>=2 AND sum(points)>=100
  )
- SELECT v_flags||coalesce(jsonb_agg(jsonb_build_object('code','CROSS_GROUP_MEMBER_OVERLAP','memberPoints',total::text,'groupCount',n,'groups',groups)),'[]'::jsonb) INTO v_flags FROM overlaps;
+ SELECT v_flags||coalesce(jsonb_agg(jsonb_build_object('code','CROSS_GROUP_MEMBER_OVERLAP','memberPoints',total::text,'groupCount',n,'groups',groups)),'[]'::jsonb) INTO v_flags FROM overlap_rows;
  v_review:=CASE WHEN jsonb_array_length(v_flags)>0 THEN 'FLAGGED' ELSE 'APPROVED' END;
  UPDATE public."AllianceSeason" SET status='COMPLETED',"closedAt"=now(),standings=v_standings,"securityFlags"=v_flags,"reviewStatus"=v_review WHERE id=s.id AND status='ACTIVE';
  GET DIAGNOSTICS v_changed=ROW_COUNT;

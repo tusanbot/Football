@@ -8,6 +8,7 @@ import { getAlliancePort, type AlliancePort } from "./alliance-context.js";
 import { AllianceServiceError, closeAllianceSeason, contributeAllianceTreasury, createAlliance, createAllianceChampionship, getAllianceWorkspace, inviteAllianceGroup, joinAllianceChampionship, respondAllianceInvitation, reviewAllianceSeason, startAllianceChampionship, startAllianceSeason } from "./alliance-service.js";
 
 function sendError(reply: FastifyReply, error: unknown) {
+  if (error instanceof AllianceServiceError && error.code === "ALLIANCE_CHAMPIONSHIP_SUPABASE_PENDING") return reply.code(503).send({ error: error.code });
   if (!(error instanceof AllianceServiceError)) {
     if (typeof error === "object" && error !== null && "code" in error && (error.code === "P2034" || error.code === "P2002")) return reply.code(409).send({ error: "CONCURRENT_MODIFICATION" });
     throw error;
