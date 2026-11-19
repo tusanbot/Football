@@ -18,7 +18,7 @@ class NodeSupabaseStoreRpc {
   private readonly baseUrl: string;
   constructor(url: string, private readonly serviceRoleKey: string, private readonly timeoutMs = 10_000) {
     const parsed = new URL(url);
-    if (parsed.protocol !== "https:" || !/^[a-z0-9-]+\\.supabase\\.co$/i.test(parsed.hostname)
+    if (parsed.protocol !== "https:" || !/^[a-z0-9-]+\.supabase\.co$/i.test(parsed.hostname)
       || parsed.username || parsed.password || parsed.port || parsed.pathname !== "/" || parsed.search || parsed.hash) {
       throw new TypeError("SUPABASE_URL must be a direct HTTPS Supabase project origin");
     }
@@ -72,7 +72,7 @@ export class NodeSupabaseStorePurchaseRepository implements StorePurchasePort {
     }, PURCHASE_ERRORS);
     const row = rows[0];
     if (!row || row.item_key !== input.itemKey || row.purchased_quantity !== input.quantity
-      || typeof row.balance !== "string" || !/^-?\\d+$/.test(row.balance)
+      || typeof row.balance !== "string" || !/^-?\d+$/.test(row.balance)
       || !Number.isInteger(row.inventory) || typeof row.replayed !== "boolean") {
       throw new Error("SUPABASE_STORE_PURCHASE_INVALID_RESPONSE");
     }
