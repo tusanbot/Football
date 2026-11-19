@@ -5,6 +5,35 @@ import { prisma } from "./db.js";
 import { consumeAllianceActionRateLimit } from "./groups/alliance-rate-limit.js";
 import type { PublicClubLogoRepository } from "./node-supabase-public-club-logo.js";
 
+export interface PublicClubHistoryEntry {
+  finalPosition: number | null;
+  league: {
+    id: string; season: number; tier: number; groupNumber: number;
+    competition: { status: string };
+    awards: Array<{ clubId: string; placement: number; awardName: string; awardType: string }>;
+    promotionOffers: Array<{ clubId: string; status: string; targetTier: number; finalPosition: number; resolvedAt: Date | string | null }>;
+  };
+}
+export interface PublicClubRecord {
+  id: string; name: string; level: number; reputation: number; logoMime: string | null;
+  pyramidLeagueEntries: PublicClubHistoryEntry[];
+}
+export interface PublicClubProfile extends PublicClubRecord { slug: string; createdAt: Date | string }
+export interface PublicClubComparison {
+  clubs: Array<{ id: string; name: string; level: number; reputation: number; logoMime: string | null }>;
+  matches: Array<{
+    id: string; scheduledAt: Date | string; completedAt: Date | string | null;
+    homeClubId: string; awayClubId: string; homeScore: number | null; awayScore: number | null; type: string;
+    homeClub: { name: string }; awayClub: { name: string };
+    competition: { name: string; season: number } | null;
+  }>;
+}
+export interface PublicClubReadRepository {
+  list(query: string | null): Promise<PublicClubRecord[]>;
+  profile(clubId: string): Promise<PublicClubProfile | null>;
+  compare(first: string, second: string): Promise<PublicClubComparison | null>;
+}
+
 const MAX_LOGO_BYTES = 512 * 1024;
 const logoBody = z.object({
   mimeType: z.enum(["image/png", "image/jpeg", "image/webp"]),
@@ -17,10 +46,10 @@ function isValidImage(bytes: Buffer, mimeType: string) {
   return bytes.length >= 12 && bytes.toString("ascii", 0, 4) === "RIFF" && bytes.toString("ascii", 8, 12) === "WEBP";
 }
 
-function statsFor(entries: Array<{ finalPosition: number | null; league: { season: number; tier: number; competition: { status: string }; awards: Array<{ clubId: string; placement: number; awardName: string; awardType: string }>; promotionOffers: Array<{ clubId: string; status: string; targetTier: number; finalPosition: number; resolvedAt: Date | null }> } }>, clubId: string) {
+function statsFor(entries: Array<{ finalPosition: number | null; league: { season: number; tier: number; competition: { status: string }; awards: Array<{ clubId: string; placement: number; awardName: string; awardType: string }>; promotionOffers: Array<{ clubId: string; status: string; targetTier: number; finalPosition: number; resolvedAt: Date | string | null }> } }>, clubId: string) {
   const completed = entries.filter((entry) => entry.finalPosition !== null && entry.league.competition.status === "COMPLETED");
   const promotions = completed.flatMap((entry) => entry.league.promotionOffers.filter((offer) => offer.clubId === clubId && offer.status === "ACCEPTED")
-    .map((offer) => ({ season: entry.league.season, tier: entry.league.tier, tierName: tierName(entry.league.tier), position: offer.finalPosition, targetTier: offer.targetTier, movement: "PROMOTION" as const, date: offer.resolvedAt?.toISOString() ?? null })));
+    .map((offer) => ({ season: entry.league.season, tier: entry.league.tier, tierName: tierName(entry.league.tier), position: offer.finalPosition, targetTier: offer.targetTier, movement: "PROMOTION" as const, date: offer.resolvedAt ? new Date(offer.resolvedAt instanceof Date ? offer.resolvedAt.getTime() : offer.resolvedAt).toISOString() : null })));
   const relegations = completed.filter((entry) => entry.league.tier > 1 && entry.finalPosition! >= 7)
     .map((entry) => ({ season: entry.league.season, tier: entry.league.tier, tierName: tierName(entry.league.tier), position: entry.finalPosition!, targetTier: entry.league.tier - 1, movement: "RELEGATION" as const, date: null }));
   const byTier = new Map<number, { tier: number; tierName: string; appearances: number; championships: number; podiums: number; promotions: number; relegations: number }>();
@@ -63,11 +92,11 @@ const completedEntries = {
   orderBy: { joinedAt: "desc" as const },
 };
 
-export function registerPublicClubRoutes(app: FastifyInstance, logoRepository?: PublicClubLogoRepository) {
+export function registerPublicClubRoutes(app: FastifyInstance, logoRepository?: PublicClubLogoRepository, readRepository?: PublicClubReadRepository) {
   app.get("/v1/clubs/public", async (request, reply) => {
     const query = z.object({ q: z.string().trim().max(40).optional(), limit: z.coerce.number().int().min(1).max(100).default(50) }).safeParse(request.query);
     if (!query.success) return reply.code(400).send({ error: "INVALID_CLUB_QUERY" });
-    const clubs = await prisma.club.findMany({
+    const clubs = readRepository ? await readRepository.list(query.data.q ?? null) : await prisma.club.findMany({
       ...(query.data.q ? { where: { name: { contains: query.data.q } } } : {}),
       take: 200,
       select: {
@@ -86,7 +115,7 @@ export function registerPublicClubRoutes(app: FastifyInstance, logoRepository?: 
   app.get("/v1/clubs/:clubId/profile", async (request, reply) => {
     const params = z.object({ clubId: z.string().min(1).max(64) }).safeParse(request.params);
     if (!params.success) return reply.code(400).send({ error: "INVALID_CLUB_ID" });
-    const club = await prisma.club.findUnique({
+    const club = readRepository ? await readRepository.profile(params.data.clubId) : await prisma.club.findUnique({
       where: { id: params.data.clubId },
       include: { pyramidLeagueEntries: completedEntries },
     });
@@ -94,10 +123,10 @@ export function registerPublicClubRoutes(app: FastifyInstance, logoRepository?: 
     const history = statsFor(club.pyramidLeagueEntries, club.id);
     return {
       club: { id: club.id, name: club.name, slug: club.slug, level: club.level, reputation: club.reputation,
-        logoUrl: club.logoMime ? "/v1/clubs/" + club.id + "/logo" : null, createdAt: club.createdAt.toISOString() },
+        logoUrl: club.logoMime ? "/v1/clubs/" + club.id + "/logo" : null, createdAt: new Date(club.createdAt).toISOString() },
       ...history,
       leagues: club.pyramidLeagueEntries.filter((entry) => entry.league.competition.status === "COMPLETED").map((entry) => ({
-        id: entry.leagueId, season: entry.league.season, tier: entry.league.tier,
+        id: "leagueId" in entry ? entry.leagueId : entry.league.id, season: entry.league.season, tier: entry.league.tier,
         tierName: tierName(entry.league.tier), groupNumber: entry.league.groupNumber,
         finalPosition: entry.finalPosition, awards: entry.league.awards.filter((award) => award.clubId === club.id),
       })),
@@ -113,12 +142,14 @@ export function registerPublicClubRoutes(app: FastifyInstance, logoRepository?: 
     if (!query.success || query.data.first === query.data.second) {
       return reply.code(400).send({ error: "INVALID_CLUB_COMPARISON" });
     }
-    const [first, second] = await Promise.all([
+    const comparison = readRepository ? await readRepository.compare(query.data.first, query.data.second) : null;
+    if (readRepository && !comparison) return reply.code(404).send({ error: "CLUB_NOT_FOUND" });
+    const [first, second] = comparison ? comparison.clubs : await Promise.all([
       prisma.club.findUnique({ where: { id: query.data.first }, select: { id: true, name: true, level: true, reputation: true, logoMime: true } }),
       prisma.club.findUnique({ where: { id: query.data.second }, select: { id: true, name: true, level: true, reputation: true, logoMime: true } }),
     ]);
     if (!first || !second) return reply.code(404).send({ error: "CLUB_NOT_FOUND" });
-    const matches = await prisma.footballMatch.findMany({
+    const matches = comparison ? comparison.matches : await prisma.footballMatch.findMany({
       where: {
         status: "COMPLETED",
         OR: [
@@ -163,7 +194,7 @@ export function registerPublicClubRoutes(app: FastifyInstance, logoRepository?: 
       headToHead: {
         totalMatches: matches.length,
         recentMatches: matches.slice(0, 20).map((match) => ({
-          id: match.id, date: (match.completedAt ?? match.scheduledAt).toISOString(),
+          id: match.id, date: new Date(match.completedAt ?? match.scheduledAt).toISOString(),
           type: match.type, homeClub: match.homeClub.name, awayClub: match.awayClub.name,
           homeScore: match.homeScore, awayScore: match.awayScore,
           competition: match.competition?.name ?? null, season: match.competition?.season ?? null,
