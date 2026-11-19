@@ -1,3 +1,17 @@
+CREATE OR REPLACE FUNCTION public.ensure_club_coach_http(p_user_id TEXT)
+RETURNS JSONB LANGUAGE plpgsql SECURITY INVOKER SET search_path=public AS $$
+DECLARE c "Club"%ROWTYPE;k "Coach"%ROWTYPE;
+BEGIN
+ SELECT * INTO c FROM public."Club" WHERE "ownerId"=p_user_id FOR UPDATE;
+ IF NOT FOUND THEN RETURN jsonb_build_object('error','CLUB_NOT_FOUND');END IF;
+ INSERT INTO public."Coach"(id,"clubId",name,level,"trainingSkill","recoverySkill","medicalSkill","weeklySalary","createdAt","updatedAt")
+ VALUES(gen_random_uuid()::text,c.id,'Academy Coach',1,35,30,25,100,now(),now()) ON CONFLICT ("clubId") DO NOTHING;
+ SELECT * INTO k FROM public."Coach" WHERE "clubId"=c.id;
+ RETURN jsonb_build_object('id',k.id,'name',k.name,'level',k.level,'trainingSkill',k."trainingSkill",'recoverySkill',k."recoverySkill",'medicalSkill',k."medicalSkill",'weeklySalary',k."weeklySalary"::text);
+END $$;
+REVOKE ALL ON FUNCTION public.ensure_club_coach_http(TEXT) FROM PUBLIC,anon,authenticated;
+GRANT EXECUTE ON FUNCTION public.ensure_club_coach_http(TEXT) TO service_role;
+
 CREATE OR REPLACE FUNCTION public.settle_player_daily_state_http(p_user_id TEXT,p_club_id TEXT,p_expected_last_tick TIMESTAMPTZ,p_game_date DATE,p_elapsed_days INTEGER,p_updates JSONB,p_payroll JSONB,p_lineup_changed BOOLEAN,p_now TIMESTAMPTZ)
 RETURNS JSONB LANGUAGE plpgsql SECURITY INVOKER SET search_path=public AS $$
 DECLARE c "Club"%ROWTYPE;u JSONB;w "Wallet"%ROWTYPE;paid BIGINT;pdate DATE;

@@ -204,7 +204,7 @@ export async function settleClubDailyState(userId: string, now = new Date()) {
 
 export async function getClubDevelopment(userId: string, now = new Date()) {
   const port = getPlayerDevelopmentPort();
-  if (port) return port.get(userId, now);
+  if (port) { try { return await port.get(userId, now); } catch (error) { if (error instanceof Error) throw new PlayerDevelopmentError(error.message, (error as Error & {details?:Record<string,string>}).details); throw error; } }
   await settleClubDailyState(userId, now);
   const club = await prisma.club.findUnique({
     where: { ownerId: userId },
