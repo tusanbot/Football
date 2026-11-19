@@ -203,5 +203,6 @@ Implementation details:
 - Join and start call the existing competition lifecycle RPCs within the same PostgreSQL transaction, preserving capacity checks, unique club entry, lineup validation, fixture generation, and replay behavior.
 - Read RPCs return the existing API response envelope and cap league listing at 30 rows.
 - Repository contract tests cover all five RPC names, arguments, and business-error propagation.
+- An ephemeral PostgreSQL integration test now covers group-scoped creation/replay/conflict, manager-only creation, member joins, capacity-triggered atomic auto-start, fixture count, start replay, standings, and suspended-group rejection. CI runs this test immediately after the group membership RPC integration test.
 
 This tranche does not remove Prisma from the Fastify runtime or from unrelated group operations. The migration has been added to the existing Prisma migration directory and will be exercised by CI's current migration pipeline; it has not been applied to any live database. The Node API group paths still use their Prisma fallback when no request-scoped port is installed.
