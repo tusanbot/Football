@@ -131,9 +131,9 @@ BEGIN
     OR p_competition_id IS NULL OR btrim(p_competition_id)='' THEN
     RAISE EXCEPTION USING MESSAGE='INVALID_COMPETITION', ERRCODE='22023';
   END IF;
-  SELECT * INTO v_user FROM public."User" WHERE "telegramId"=p_telegram_user_id FOR SHARE;
+  SELECT * INTO v_user FROM public."User" WHERE "telegramId"=p_telegram_user_id;
   IF NOT FOUND THEN RAISE EXCEPTION USING MESSAGE='ACCOUNT_NOT_FOUND', ERRCODE='P0001'; END IF;
-  SELECT * INTO v_group FROM public."TelegramGroup" WHERE "telegramId"=p_telegram_group_id FOR SHARE;
+  SELECT * INTO v_group FROM public."TelegramGroup" WHERE "telegramId"=p_telegram_group_id;
   IF NOT FOUND THEN RAISE EXCEPTION USING MESSAGE='GROUP_NOT_REGISTERED', ERRCODE='P0001'; END IF;
   IF v_user."isSuspended" THEN RAISE EXCEPTION USING MESSAGE='ACCOUNT_SUSPENDED', ERRCODE='P0001'; END IF;
   IF v_group."isSuspended" THEN RAISE EXCEPTION USING MESSAGE='GROUP_SUSPENDED', ERRCODE='P0001'; END IF;
@@ -170,9 +170,9 @@ BEGIN
     OR p_telegram_group_id IS NULL OR p_telegram_group_id !~ '^-?[0-9]{1,20}$' THEN
     RAISE EXCEPTION USING MESSAGE='INVALID_GROUP_ACTOR_LOOKUP', ERRCODE='22023';
   END IF;
-  SELECT * INTO v_user FROM public."User" WHERE "telegramId"=p_telegram_user_id FOR SHARE;
+  SELECT * INTO v_user FROM public."User" WHERE "telegramId"=p_telegram_user_id;
   IF NOT FOUND THEN RAISE EXCEPTION USING MESSAGE='ACCOUNT_NOT_FOUND', ERRCODE='P0001'; END IF;
-  SELECT * INTO v_group FROM public."TelegramGroup" WHERE "telegramId"=p_telegram_group_id FOR SHARE;
+  SELECT * INTO v_group FROM public."TelegramGroup" WHERE "telegramId"=p_telegram_group_id;
   IF NOT FOUND THEN RAISE EXCEPTION USING MESSAGE='GROUP_NOT_REGISTERED', ERRCODE='P0001'; END IF;
   IF v_group."isSuspended" THEN RAISE EXCEPTION USING MESSAGE='GROUP_SUSPENDED', ERRCODE='P0001'; END IF;
   IF NOT v_group."isActive" THEN RAISE EXCEPTION USING MESSAGE='GROUP_INACTIVE', ERRCODE='P0001'; END IF;
