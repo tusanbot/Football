@@ -10,7 +10,7 @@ export class NodeSupabaseClubEconomyRepository implements ClubEconomySettlementP
     });
     if (!result || typeof result !== "object" || !Number.isInteger(result.elapsedDays) || result.elapsedDays < 0
       || ![result.sponsorIncome, result.operatingCost, result.paid, result.arrears].every((value) =>
-        typeof value === "string" && /^\\d+$/.test(value))) {
+        typeof value === "string" && /^\d+$/.test(value))) {
       throw new Error("SUPABASE_CLUB_ECONOMY_SETTLEMENT_INVALID_RESPONSE");
     }
     return result;
