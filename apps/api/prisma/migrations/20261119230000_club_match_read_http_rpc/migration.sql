@@ -59,9 +59,10 @@ BEGIN
     'competitions', COALESCE((
       SELECT jsonb_agg(jsonb_build_object('id', c.id, 'name', c.name, 'season', c.season,
         'format', c.format::text, 'cupLegs', c."cupLegs", 'status', c.status::text) ORDER BY c."createdAt" DESC)
-      FROM (SELECT DISTINCT ce."competitionId" AS competition_id FROM public."CompetitionEntry" ce
-        WHERE ce."clubId" = v_club_id ORDER BY ce."competitionId" LIMIT 20) selected
-      JOIN public."Competition" c ON c.id = selected.competition_id
+      FROM (SELECT c0.id FROM public."Competition" c0
+        JOIN public."CompetitionEntry" ce ON ce."competitionId" = c0.id
+        WHERE ce."clubId" = v_club_id ORDER BY c0."createdAt" DESC LIMIT 20) selected
+      JOIN public."Competition" c ON c.id = selected.id
     ), '[]'::jsonb)
   ) INTO v_result;
   RETURN v_result;

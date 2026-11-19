@@ -30,9 +30,11 @@ import { withMatchRuntimeLeasePort } from "../../../apps/api/src/game/match-runt
 import { withMatchOpponentPort } from "../../../apps/api/src/game/match-opponents-context.js";
 import { withFriendlyMatchCreationPort } from "../../../apps/api/src/game/friendly-match-creation-context.js";
 import { withCompetitionCreationPort } from "../../../apps/api/src/game/competition-creation-context.js";
+import { withClubMatchReadPort } from "../../../apps/api/src/game/club-match-read-context.js";
 import { SupabaseMatchOpponentRepository } from "./repositories/match-opponents.js";
 import { SupabaseFriendlyMatchCreationRepository } from "./repositories/friendly-match-creation.js";
 import { SupabaseCompetitionCreationRepository } from "./repositories/competition-creation.js";
+import { SupabaseClubMatchReadRepository } from "./repositories/club-match-read.js";
 import { withMatchRuntimeAdvancePort } from "../../../apps/api/src/game/match-runtime-advance-context.js";
 import { withMatchRuntimeCheckpointPort } from "../../../apps/api/src/game/match-runtime-checkpoint-context.js";
 import { withMatchRuntimeSettlementPort } from "../../../apps/api/src/game/match-runtime-settlement-context.js";
@@ -170,11 +172,13 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
       const matchOpponents = supabaseClient ? new SupabaseMatchOpponentRepository(supabaseClient) : undefined;
       const friendlyMatchCreation = supabaseClient ? new SupabaseFriendlyMatchCreationRepository(supabaseClient) : undefined;
       const competitionCreation = supabaseClient ? new SupabaseCompetitionCreationRepository(supabaseClient) : undefined;
+      const clubMatchRead = supabaseClient ? new SupabaseClubMatchReadRepository(supabaseClient) : undefined;
       const matchRuntimeSettlement = supabaseClient ? new SupabaseMatchRuntimeSettlementRepository(supabaseClient) : undefined;
       const router = createWorkersApiRouter({ publicPlayerRecords, seasonAwards, specialPlayers });
       const handle = async (): Promise<Response> => await router.fetch(request);
       const withCompetitionCreation = competitionCreation ? () => withCompetitionCreationPort(competitionCreation, handle) : handle;
-      const withFriendlyMatchCreation = friendlyMatchCreation ? () => withFriendlyMatchCreationPort(friendlyMatchCreation, withCompetitionCreation) : withCompetitionCreation;
+      const withClubMatchRead = clubMatchRead ? () => withClubMatchReadPort(clubMatchRead, withCompetitionCreation) : withCompetitionCreation;
+      const withFriendlyMatchCreation = friendlyMatchCreation ? () => withFriendlyMatchCreationPort(friendlyMatchCreation, withClubMatchRead) : withClubMatchRead;
       const withMatchOpponents = matchOpponents ? () => withMatchOpponentPort(matchOpponents, withFriendlyMatchCreation) : withFriendlyMatchCreation;
       const withDashboard = gameDashboard ? () => withGameDashboardPort(gameDashboard, withMatchOpponents) : withMatchOpponents;
       const withTelegramUserLookup = telegramUserLookup ? () => withTelegramUserLookupPort(telegramUserLookup, withDashboard) : withDashboard;

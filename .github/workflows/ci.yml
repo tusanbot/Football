@@ -76,6 +76,10 @@ jobs:
         run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f apps/api/prisma/tests/competition-lifecycle-rpc.integration.sql
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/football_empire
+      - name: Test club match history read RPC
+        run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f apps/api/prisma/tests/club-match-read-rpc.integration.sql
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/football_empire
       - name: Test friendly match creation RPC and legacy lineup parity
         run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f apps/api/prisma/tests/friendly-match-rpc.integration.sql
         env:

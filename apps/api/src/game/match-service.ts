@@ -17,6 +17,7 @@ import { competitionKickoffAfterDays } from "./match-schedule.js";
 import { getMatchOpponentPort } from "./match-opponents-context.js";
 import { getFriendlyMatchCreationPort } from "./friendly-match-creation-context.js";
 import { getCompetitionCreationPort } from "./competition-creation-context.js";
+import { getClubMatchReadPort } from "./club-match-read-context.js";
 
 const DAY_MS = 86_400_000;
 const MATCH_MINUTE_MS = 1_000;
@@ -526,6 +527,55 @@ export async function getLeague(userId: string, competitionId: string) {
   };
 }
 export async function listClubMatches(userId: string) {
+  const clubMatchReadPort = getClubMatchReadPort();
+  if (clubMatchReadPort) {
+    const { clubId, matches, competitions } = await clubMatchReadPort.list(userId);
+    return {
+      matches: matches.map((match) => {
+        const simulation = match.runtime?.simulationState as {
+          segment?: { home?: { side?: MatchSide }; away?: { side?: MatchSide } };
+          substitutions?: { home?: { substitutionsUsed?: number }; away?: { substitutionsUsed?: number } };
+        } | null;
+        const kickoff = match.runtime?.kickoffSnapshot as { home?: MatchSide; away?: MatchSide } | null;
+        const home = simulation?.segment?.home?.side ?? kickoff?.home;
+        const away = simulation?.segment?.away?.side ?? kickoff?.away;
+        return {
+          id: match.id, type: match.type, status: match.status, round: match.round, leg: match.leg, tieId: match.tieId,
+          ...aggregateCupScore(match, matches),
+          rules: validateMatchRules((match.rulesSnapshot as MatchRules | null) ?? defaultMatchRules(match.type)),
+          simulationVersion: match.simulationVersion, scheduledAt: match.scheduledAt,
+          runtime: match.runtime ? {
+            status: match.runtime.status, currentMinute: match.runtime.currentMinute,
+            nextActionAt: match.runtime.nextActionAt, completedAt: match.runtime.completedAt,
+            mySubstitutionsUsed: Number(match.homeClubId === clubId
+              ? simulation?.substitutions?.home?.substitutionsUsed ?? 0
+              : simulation?.substitutions?.away?.substitutionsUsed ?? 0),
+            lineups: home && away ? {
+              home: { formation: home.formation, tactics: home.tactics,
+                players: home.players.map(({ id, name, position, overall }) => ({ id, name, position, overall })),
+                bench: (home.bench ?? []).map(({ id, name, position, overall }) => ({ id, name, position, overall })) },
+              away: { formation: away.formation, tactics: away.tactics,
+                players: away.players.map(({ id, name, position, overall }) => ({ id, name, position, overall })),
+                bench: (away.bench ?? []).map(({ id, name, position, overall }) => ({ id, name, position, overall })) },
+            } : null,
+          } : null,
+          checkpoints: match.checkpoints.map((checkpoint) => ({
+            checkpointKey: checkpoint.checkpointKey, kind: checkpoint.kind, minute: checkpoint.minute,
+            status: checkpoint.status, openedAt: checkpoint.openedAt,
+            decisionDeadlineAt: checkpoint.decisionDeadlineAt, nextSegmentAt: checkpoint.nextSegmentAt,
+            resolvedAt: checkpoint.resolvedAt,
+            homeDecisionSubmitted: checkpoint.decisions.some((decision) => decision.clubId === match.homeClubId),
+            awayDecisionSubmitted: checkpoint.decisions.some((decision) => decision.clubId === match.awayClubId),
+          })),
+          homeClub: match.homeClub, awayClub: match.awayClub, homeScore: match.homeScore, awayScore: match.awayScore,
+          attendance: match.attendance, ticketRevenue: match.ticketRevenue,
+          homePenalties: match.homePenalties, awayPenalties: match.awayPenalties, winnerClubId: match.winnerClubId,
+          events: match.events,
+        };
+      }),
+      competitions,
+    };
+  }
   const club = await getOwnedClub(userId);
   const [matches, competitions] = await Promise.all([
     prisma.footballMatch.findMany({
