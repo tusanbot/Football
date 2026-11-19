@@ -21,7 +21,7 @@ export class SupabaseMatchRuntimeLeaseRepository implements MatchRuntimeLeasePor
     const rows = await this.client.rpc<ScheduleRow[]>("get_match_coordinator_schedule", {});
     if (!Array.isArray(rows) || rows.length !== 1) throw new Error("SUPABASE_MATCH_SCHEDULE_INVALID_RESPONSE");
     const row = rows[0];
-    if (typeof row.has_due_runtime !== "boolean" || typeof row.has_due_fixture !== "boolean"
+    if (!row || typeof row.has_due_runtime !== "boolean" || typeof row.has_due_fixture !== "boolean"
       || typeof row.has_due_notifications !== "boolean" || typeof row.has_pending_tournament_finalization !== "boolean"
       || typeof row.has_pending_promotion_work !== "boolean"
       || (row.next_alarm !== null && (typeof row.next_alarm !== "string" || !Number.isFinite(Date.parse(row.next_alarm))))) {
