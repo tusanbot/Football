@@ -319,7 +319,24 @@ The direct Node Supabase HTTP client is now used by additional server-side repos
 The new Node adapters reuse existing SQL migrations/RPCs; this work does not execute migrations against a live database.
 
 Still not complete:
-- Club operations dashboard reads still use Prisma for the club aggregate, coach, sponsors, academy prospects, finance entries, and cash wallet. Only club-management mutations and daily economy settlement have HTTP paths.
+- Club operations dashboard reads and finance reports now use the Node `ClubManagementPort` over PostgREST plus `get_club_finance_totals_http`; wallet balances use a dedicated Node wallet-read adapter. The operational snapshot is a bounded set of direct table reads, while finance totals are aggregated in SQL.
+- Club profile rename now uses the atomic `rename_club_http` RPC with the active-competition guard; the squad roster endpoint reads the club and players directly through PostgREST. The lineup adapter keeps its shared Cloudflare contract stable by exposing Node-only profile methods as optional runtime extensions.
+- The special-player catalog endpoint now reads active catalog rows through the existing Node special-acquisition repository rather than requiring the route-level Prisma query when that port is configured.
 - Some other route families and administrative workflows still fall back to Prisma when no matching port is present.
 - Node server startup, readiness and shutdown still connect/disconnect Prisma, and `DATABASE_URL` remains mandatory.
 - Other scheduler/background tasks and all Prisma-backed paths have not yet been exhaustively removed or audited. Therefore Prisma/`pg` removal and the no-`DATABASE_URL` runtime gate remain blocked.
+
+
+## Node Fastify club profile, operations dashboard, and special-player catalog follow-up
+
+The Node runtime now also routes these read/write paths through Supabase HTTPS when configured:
+
+- Club operations snapshot: club, coach, sponsors, academy prospects, finance entries, and wallet balance are read via PostgREST.
+- Finance report: totals are calculated by the new `get_club_finance_totals_http` RPC and entries are read through PostgREST.
+- Club rename: the `rename_club_http` RPC serializes the owner row, checks active standard and pyramid competitions, and rejects edits while an active competition exists.
+- Squad roster: owner club lookup and player roster reads use PostgREST; monetary fields remain decimal strings.
+- Special-player catalog: active special-player rows use PostgREST through the Node special-acquisition port.
+
+Contract tests cover the new direct-read and RPC paths. The migrations are committed to the repository and are exercised by CI's ephemeral PostgreSQL migration pipeline only; no live database was changed.
+
+These changes reduce Prisma usage but do not complete its removal. Public club discovery/history, parts of match and competition services, market listing fallback paths, wallet mutation workflows, gift-code fallback, event tournament orchestration, and Node startup/readiness/background worker dependencies remain under audit.
