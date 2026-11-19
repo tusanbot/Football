@@ -27,6 +27,11 @@ export interface GroupMembershipPort {
   joinChallenge(input: { telegramUserId: string; telegramGroupId: string; challengeId: string }): Promise<unknown>;
   completeChallenge(input: { telegramUserId: string; telegramGroupId: string; challengeId: string; winnerTelegramId: string }): Promise<unknown>;
   cancelChallenge(input: { telegramUserId: string; telegramGroupId: string; challengeId: string }): Promise<unknown>;
+  createLeague(input: { telegramUserId: string; telegramGroupId: string; name: string; maxTeams: number; idempotencyKey: string; now?: Date }): Promise<unknown>;
+  joinLeague(input: { telegramUserId: string; telegramGroupId: string; competitionId: string; now?: Date }): Promise<unknown>;
+  startLeague(input: { telegramUserId: string; telegramGroupId: string; competitionId: string; now?: Date }): Promise<unknown>;
+  getLeagueTable(input: { telegramUserId: string; telegramGroupId: string; competitionId: string }): Promise<unknown>;
+  listLeagues(input: { telegramUserId: string; telegramGroupId: string }): Promise<unknown>;
 }
 export class GroupMembershipPortError extends Error {
   constructor(readonly code: string) { super(code); this.name = "GroupMembershipPortError"; }
