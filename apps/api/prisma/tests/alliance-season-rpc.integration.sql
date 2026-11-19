@@ -6,7 +6,7 @@ DECLARE
  v_tb text:=(100000000000+floor(random()*899999999999)::bigint)::text; v_tc text:=(100000000000+floor(random()*899999999999)::bigint)::text; v_td text:=(100000000000+floor(random()*899999999999)::bigint)::text;
  v_ga text:='-100'||(100000000000+floor(random()*899999999999)::bigint)::text;
  v_gb text:='-100'||(100000000000+floor(random()*899999999999)::bigint)::text;
- v_now timestamptz:=clock_timestamp(); r jsonb; aid text; sid text; sid2 text; cid text; clubs text[];
+ v_now timestamptz:=date_trunc('minute',clock_timestamp())+interval '10 seconds'; r jsonb; aid text; sid text; sid2 text; cid text; clubs text[];
 BEGIN
  INSERT INTO public."User"(id,"telegramId","displayName","createdAt","updatedAt","lastActiveAt") VALUES(v_a,v_ta,'Season Founder',v_now,v_now,v_now),(v_b,v_tb,'Season Member',v_now,v_now,v_now);
  INSERT INTO public."User"(id,"telegramId","displayName","createdAt","updatedAt","lastActiveAt") VALUES(v_c,v_tc,'Season Club C',v_now,v_now,v_now),(v_d,v_td,'Season Club D',v_now,v_now,v_now);

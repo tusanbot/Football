@@ -8,11 +8,11 @@ BEGIN
  v_key:=left(p_telegram_user_id||':'||p_telegram_group_id||':'||p_action,240);
  v_now_utc:=(p_now AT TIME ZONE 'UTC')::timestamp(3);
  v_window:=date_trunc('minute',v_now_utc)::timestamp(3);
- INSERT INTO public."AllianceActionThrottle"("key","windowStart","count","updatedAt")
+ INSERT INTO public."AllianceActionThrottle" AS throttle("key","windowStart","count","updatedAt")
  VALUES(v_key,v_window,1,v_now_utc)
  ON CONFLICT("key") DO UPDATE SET
   "windowStart"=EXCLUDED."windowStart",
-  "count"=CASE WHEN public."AllianceActionThrottle"."windowStart"=EXCLUDED."windowStart" THEN public."AllianceActionThrottle"."count"+1 ELSE 1 END,
+  "count"=CASE WHEN throttle."windowStart"=EXCLUDED."windowStart" THEN throttle."count"+1 ELSE 1 END,
   "updatedAt"=EXCLUDED."updatedAt"
  WHERE public."AllianceActionThrottle"."windowStart"<>EXCLUDED."windowStart" OR public."AllianceActionThrottle"."count"<p_limit
  RETURNING true INTO v_allowed;
