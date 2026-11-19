@@ -9,6 +9,8 @@ import { registerPlayerDevelopmentRoutes } from "./players/player-development-ro
 import { registerMatchRoutes } from "./game/match-routes.js";
 import { registerMatchNotificationRoutes } from "./game/match-notification-routes.js";
 import { registerGroupRoutes } from "./groups/group-routes.js";
+import type { GroupMembershipPort } from "./groups/group-membership-context.js";
+import { withGroupMembershipPort } from "./groups/group-membership-context.js";
 import { registerAllianceRoutes } from "./groups/alliance-routes.js";
 import { prisma } from "./db.js";
 import { parseAdminTelegramIds, parseCorsOrigins } from "./runtime-config.js";
@@ -31,7 +33,7 @@ const healthResponse = z.object({
   version: z.string(),
 });
 
-export function buildApp(options: { logger?: boolean; pluginTimeout?: number } = {}) {
+export function buildApp(options: { logger?: boolean; pluginTimeout?: number; groupMembershipPort?: GroupMembershipPort } = {}) {
   const app = Fastify({
     logger: options.logger ?? process.env.NODE_ENV !== "test",
     pluginTimeout: options.pluginTimeout ?? 10_000,
@@ -49,6 +51,15 @@ export function buildApp(options: { logger?: boolean; pluginTimeout?: number } =
     if (process.env.NODE_ENV === "production") reply.header("strict-transport-security", "max-age=31536000; includeSubDomains");
     return payload;
   });
+
+  // Establish a per-request AsyncLocalStorage scope before route hooks/handlers run.
+  // The callback-style hook is intentional: done() schedules Fastify's continuation
+  // from inside the ALS scope, avoiding a global mutable repository singleton.
+  if (options.groupMembershipPort) {
+    app.addHook("onRequest", (_request, _reply, done) => {
+      withGroupMembershipPort(options.groupMembershipPort!, () => done());
+    });
+  }
 
   // Implement CORS with native Fastify hooks instead of @fastify/cors.
   // The plugin lifecycle can stall in the Cloudflare Workers runtime, preventing
@@ -125,7 +136,7 @@ export function buildApp(options: { logger?: boolean; pluginTimeout?: number } =
   registerPlayerDevelopmentRoutes(app);
   registerMatchRoutes(app);
   registerMatchNotificationRoutes(app);
-  registerGroupRoutes(app);
+  registerGroupRoutes(app, { requireMembershipPort: Boolean(options.groupMembershipPort) });
   registerAllianceRoutes(app);
   registerAdminRoutes(app);
   registerAdminLeagueRoutes(app);
