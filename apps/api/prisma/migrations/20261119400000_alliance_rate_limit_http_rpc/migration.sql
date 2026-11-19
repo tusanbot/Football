@@ -14,7 +14,7 @@ BEGIN
   "windowStart"=EXCLUDED."windowStart",
   "count"=CASE WHEN throttle."windowStart"=EXCLUDED."windowStart" THEN throttle."count"+1 ELSE 1 END,
   "updatedAt"=EXCLUDED."updatedAt"
- WHERE public."AllianceActionThrottle"."windowStart"<>EXCLUDED."windowStart" OR public."AllianceActionThrottle"."count"<p_limit
+ WHERE throttle."windowStart"<>EXCLUDED."windowStart" OR throttle."count"<p_limit
  RETURNING true INTO v_allowed;
  RETURN jsonb_build_object('allowed',coalesce(v_allowed,false));
 END $$;
