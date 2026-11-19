@@ -88,7 +88,7 @@ BEGIN
         ORDER BY sum(pmp.goals) DESC LIMIT 20) ranked
     ), '[]'::jsonb)
 )
-  ) INTO v_result;
+  INTO v_result;
   RETURN v_result;
 END;
 $function$;
