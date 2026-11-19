@@ -4,6 +4,7 @@ import { SupabaseHttpClient, SupabaseHttpError } from "../src/node-supabase-http
 import { SupabaseGameDashboardRepository } from "../src/game/node-supabase-game-dashboard.js";
 import { NodeSupabasePublicPlayerRecordRepository } from "../src/players/node-supabase-public-records.js";
 import { NodeSupabasePublicClubLogoRepository } from "../src/node-supabase-public-club-logo.js";
+import { NodeSupabasePublicClubRepository } from "../src/node-supabase-public-clubs.js";
 import { SupabaseEventTournamentSettlementRepository } from "../src/game/node-supabase-event-tournament-settlement.js";
 import { SupabaseClubLineupRepository } from "../src/game/node-supabase-club-lineup.js";
 import { NodeSupabaseWalletReadRepository } from "../src/economy/node-supabase-wallet-read.js";
@@ -194,4 +195,27 @@ test("event tournament finalization and retry queue use Supabase RPCs", async ()
  assert.equal(f.calls[1]!.url.pathname,"/rest/v1/rpc/process_due_event_tournament_finalizations_http");
  assert.deepEqual(JSON.parse(String(f.calls[0]!.init.body)),{p_competition_id:"competition-1",p_now:"2026-11-19T12:00:00.000Z"});
  assert.deepEqual(JSON.parse(String(f.calls[1]!.init.body)),{p_now:"2026-11-19T12:00:00.000Z",p_limit:10});
+});
+
+test("public club discovery, profile and head-to-head reads use Supabase RPCs",async()=>{
+ const history=[{finalPosition:1,league:{id:"league-1",season:4,tier:1,groupNumber:2,competition:{status:"COMPLETED"},awards:[],promotionOffers:[]}}];
+ const f=clientWith((url)=>{
+  if(url.pathname.endsWith("/rpc/get_public_clubs_http"))return {clubs:[{id:"club-1",name:"Tosan",level:3,reputation:90,logoMime:"image/png",pyramidLeagueEntries:history}]};
+  if(url.pathname.endsWith("/rpc/get_public_club_profile_http"))return {id:"club-1",name:"Tosan",slug:"tosan",level:3,reputation:90,logoMime:null,createdAt:"2026-01-01T00:00:00.000Z",pyramidLeagueEntries:history};
+  if(url.pathname.endsWith("/rpc/compare_public_clubs_http"))return {clubs:[{id:"club-1",name:"Tosan",level:3,reputation:90,logoMime:null},{id:"club-2",name:"Rival",level:2,reputation:60,logoMime:null}],matches:[]};
+  throw new Error("Unexpected Supabase RPC "+url.pathname);
+ });
+ const repo=new NodeSupabasePublicClubRepository(f.client);
+ const clubs=await repo.list("Tosan");
+ assert.equal(clubs[0]!.pyramidLeagueEntries[0]!.league.id,"league-1");
+ const profile=await repo.profile("club-1");
+ assert.equal(profile?.slug,"tosan");
+ const comparison=await repo.compare("club-1","club-2");
+ assert.equal(comparison?.clubs.length,2);
+ assert.deepEqual(f.calls.map(x=>x.url.pathname),[
+  "/rest/v1/rpc/get_public_clubs_http",
+  "/rest/v1/rpc/get_public_club_profile_http",
+  "/rest/v1/rpc/compare_public_clubs_http",
+ ]);
+ assert.deepEqual(JSON.parse(String(f.calls[0]!.init.body)),{p_query:"Tosan",p_limit:100});
 });
