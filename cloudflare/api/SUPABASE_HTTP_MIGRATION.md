@@ -286,3 +286,20 @@ Important remaining limitations:
 - Other wallet callers only use the HTTP adapter where they call `applyWalletEntry`; surrounding multi-step workflows may still perform Prisma reads/writes.
 - Store snapshot migration covers the snapshot read only; store catalogue definitions remain application code and special acquisition/pack purchase remain separate operations.
 - The Node server still requires `DATABASE_URL` and runs Prisma-backed background workers/readiness. Prisma removal is not complete.
+
+
+## Node Fastify player development and club economy tranche
+
+The Node Fastify server now constructs a direct HTTPS Supabase client and wires two additional request-scoped ports:
+
+- `PlayerDevelopmentPort` uses the existing player-development HTTP RPCs for daily player state, age progression, injuries/recovery, contract expiry, weekly payroll, training, and contract renewal. The repository preserves the existing domain calculations and sends expected-state values to the atomic SQL RPCs.
+- `ClubEconomySettlementPort` calls `settle_club_economy` through direct PostgREST RPC and validates decimal-string monetary values.
+- The Node player-development repository is wired through Fastify AsyncLocalStorage. Consequently, market listing and purchase flows that call `settleClubDailyState` now use the Supabase-backed settlement path when the Node server is configured with Supabase credentials.
+- Club operations that call `settleClubEconomy` now use the Supabase RPC path when configured.
+
+The SQL RPCs are existing migrations; this tranche does not apply migrations to any live database.
+
+Remaining limitations:
+- Club operations other than the daily economy settlement still include Prisma-backed reads and mutations (sponsors, facilities, coaches, academy prospects, finance history, and upgrades).
+- Player-development repository reads still use PostgREST table access for the club, players, coach, wallet, training logs, renewals, and payroll history. These are direct Supabase HTTP calls, but the surrounding workflows are not yet all atomic end-to-end.
+- Node server startup/readiness and other background workers still require Prisma and `DATABASE_URL`. Full Prisma/pg removal remains incomplete.
