@@ -81,6 +81,8 @@ export async function joinTelegramGroup(input: { telegramUserId: string; telegra
 }
 
 export async function awardDailyGroupActivity(input: { telegramUserId: string; telegramGroupId: string }) {
+  const port = getGroupMembershipPort();
+  if (port) { try { return await port.awardActivity({ ...input, activityType: "DAILY_ACTIVITY" }); } catch (error) { if (error instanceof GroupMembershipPortError) throw new GroupServiceError(error.code); throw error; } }
   return prisma.$transaction(async (tx) => {
     const user = await requireClubOwner(tx, input.telegramUserId);
     const group = await tx.telegramGroup.findUnique({ where: { telegramId: input.telegramGroupId }, select: { id: true, isActive: true, points: true, memberships: { where: { userId: user.id }, select: { id: true } } } });
@@ -159,6 +161,8 @@ async function earnedGroupPointsToday(tx: Prisma.TransactionClient, groupId: str
  return result._sum.amount ?? 0n;
 }
 export async function recordGroupGameActivity(i:{telegramUserId:string;telegramGroupId:string;activityType:GroupActivityType;referenceId:string}) {
+ const port = getGroupMembershipPort();
+ if (port) { try { return await port.awardActivity(i); } catch (error) { if (error instanceof GroupMembershipPortError) throw new GroupServiceError(error.code); throw error; } }
  if(!Object.hasOwn(GROUP_ACTIVITY_POINTS,i.activityType)||!i.referenceId||i.referenceId.length>80||!/^[A-Za-z0-9:_-]+$/.test(i.referenceId))throw new GroupServiceError("INVALID_GROUP_ACTIVITY");
  return prisma.$transaction(async tx=>{
   const {user,group}=await groupMember(tx,i.telegramUserId,i.telegramGroupId);
@@ -176,7 +180,9 @@ export async function recordGroupGameActivity(i:{telegramUserId:string;telegramG
   return {awarded:true,replayed:false,award:award.toString(),points:updated.points.toString(),dailyCap};
  },{isolationLevel:Prisma.TransactionIsolationLevel.Serializable});
 }
-export async function listMyTelegramGroups(userId:string) {
+export async function listMyTelegramGroups(userId:string, telegramUserId?: string) {
+ const port = getGroupMembershipPort();
+ if (port && telegramUserId) { try { return await port.listMyGroups(telegramUserId); } catch (error) { if (error instanceof GroupMembershipPortError) throw new GroupServiceError(error.code); throw error; } }
  const rows=await prisma.groupMembership.findMany({where:{userId},include:{group:{select:{telegramId:true,title:true,memberCount:true,isActive:true,points:true,lastMemberCountCheckAt:true}}},orderBy:{joinedAt:"desc"}});
  return {groups:rows.map(r=>({telegramGroupId:r.group.telegramId,title:r.group.title,role:r.role,memberCount:r.group.memberCount,isActive:r.group.isActive,points:r.group.points.toString(),lastMemberCountCheckAt:r.group.lastMemberCountCheckAt?.toISOString()??null}))};
 }
@@ -217,6 +223,8 @@ export async function listGroupLeagues(telegramUserId:string,telegramGroupId:str
 }
 
 export async function getTelegramGroupSummary(telegramUserId: string, telegramGroupId: string) {
+  const port = getGroupMembershipPort();
+  if (port) { try { return await port.getGroupSummary(telegramUserId, telegramGroupId); } catch (error) { if (error instanceof GroupMembershipPortError) throw new GroupServiceError(error.code); throw error; } }
   const user = await prisma.user.findUnique({ where: { telegramId: telegramUserId }, select: { id: true } });
   if (!user) throw new GroupServiceError("ACCOUNT_NOT_FOUND");
   const group = await prisma.telegramGroup.findUnique({

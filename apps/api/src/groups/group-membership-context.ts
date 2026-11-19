@@ -17,6 +17,9 @@ export interface GroupMembershipPort {
   joinGroup(input: GroupJoinInput, now?: Date): Promise<unknown>;
   syncMember(input: { telegramGroupId: string; telegramUserId: string; isMember: boolean; role?: "OWNER" | "ADMIN" | "MEMBER" }): Promise<unknown>;
   checkMemberCount(input: { telegramGroupId: string; memberCount: number; botPresent: boolean }): Promise<unknown>;
+  awardActivity(input: { telegramUserId: string; telegramGroupId: string; activityType: string; referenceId?: string }): Promise<unknown>;
+  listMyGroups(telegramUserId: string): Promise<unknown>;
+  getGroupSummary(telegramUserId: string, telegramGroupId: string): Promise<unknown>;
 }
 export class GroupMembershipPortError extends Error {
   constructor(readonly code: string) { super(code); this.name = "GroupMembershipPortError"; }
