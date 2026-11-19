@@ -28,6 +28,17 @@ test("club management uses atomic command RPC and academy level read",async()=>{
  assert.equal(body.p_action,"UPGRADE_FACILITY");assert.equal(body.p_user_id,"user-1");assert.equal(body.p_payload.facility,"STADIUM");
 });
 
+test("special player catalog is read through Supabase PostgREST",async()=>{
+ const f=clientWith((url)=>[{id:"sp1",slug:"legend",fullName:"Legend",nationality:"IR",birthDate:"1970-01-01",positions:["ST"],rarity:"ICON",overall:95,potential:95,attributes:{pace:90},acquisitionMethods:["icon_pack"]}]);
+ const repo=new NodeSupabaseSpecialAcquisitionRepository(f.client);
+ const players=await repo.listActive();
+ assert.equal(players.length,1);
+ assert.equal(f.calls[0]!.url.pathname,"/rest/v1/SpecialPlayer");
+ assert.equal(f.calls[0]!.url.searchParams.get("active"),"eq.true");
+ assert.equal(f.calls[0]!.url.searchParams.get("order"),"rarity.desc,overall.desc");
+ assert.equal(f.calls[0]!.url.searchParams.get("select"),"id,slug,fullName,nationality,birthDate,positions,rarity,overall,potential,attributes,acquisitionMethods");
+});
+
 test("special acquisition validates and maps RPC response and legacy challenge operations",async()=>{
  const f=clientWith((url)=>url.pathname.endsWith("/rpc/acquire_special_player")?[{acquisition_id:"a1",player_id:"p1",method:"epic_pack",special_player:{id:"sp1",fullName:"Legend Player",rarity:"EPIC",overall:90},gold_balance:"750",replayed:false}]
  :url.pathname.endsWith("/rpc/list_legacy_special_challenges")?[{challenges:[]}]:[{result:{acquisitionId:"a2",playerId:"p2",specialPlayer:{id:"sp2",fullName:"Hero",rarity:"ICON",overall:95},replayed:false}}]);
