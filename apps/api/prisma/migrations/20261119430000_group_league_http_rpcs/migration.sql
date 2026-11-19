@@ -200,11 +200,11 @@ REVOKE ALL ON FUNCTION public.list_group_leagues_http(text,text) FROM PUBLIC,ano
 DO $grant$
 BEGIN
   IF EXISTS(SELECT 1 FROM pg_roles WHERE rolname='service_role') THEN
-    GRANT EXECUTE ON FUNCTION public.create_group_league_http(text,text,text,integer,text,timestamptz) TO service_role;
-    GRANT EXECUTE ON FUNCTION public.join_group_league_http(text,text,text,timestamptz) TO service_role;
-    GRANT EXECUTE ON FUNCTION public.start_group_league_http(text,text,text,timestamptz) TO service_role;
-    GRANT EXECUTE ON FUNCTION public.get_group_league_table_http(text,text,text) TO service_role;
-    GRANT EXECUTE ON FUNCTION public.list_group_leagues_http(text,text) TO service_role;
+    EXECUTE 'GRANT EXECUTE ON FUNCTION public.create_group_league_http(text,text,text,integer,text,timestamptz) TO service_role';
+    EXECUTE 'GRANT EXECUTE ON FUNCTION public.join_group_league_http(text,text,text,timestamptz) TO service_role';
+    EXECUTE 'GRANT EXECUTE ON FUNCTION public.start_group_league_http(text,text,text,timestamptz) TO service_role';
+    EXECUTE 'GRANT EXECUTE ON FUNCTION public.get_group_league_table_http(text,text,text) TO service_role';
+    EXECUTE 'GRANT EXECUTE ON FUNCTION public.list_group_leagues_http(text,text) TO service_role';
   END IF;
 END;
 $grant$;
