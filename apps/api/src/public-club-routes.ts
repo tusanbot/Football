@@ -76,6 +76,7 @@ function statsFor(entries: Array<{ finalPosition: number | null; league: { seaso
     movements: [...promotions, ...relegations].sort((a, b) => b.season - a.season || a.tier - b.tier),
   };
 }
+function toIso(value: Date | string) { return value instanceof Date ? value.toISOString() : new Date(value).toISOString(); }
 function tierName(tier: number) { return ["", "سطح اول", "سطح دوم", "سطح سوم", "سطح چهارم", "سطح پنجم", "سطح ششم", "سطح هفتم"][tier] ?? "سطح " + tier; }
 
 const completedEntries = {
@@ -123,7 +124,7 @@ export function registerPublicClubRoutes(app: FastifyInstance, logoRepository?: 
     const history = statsFor(club.pyramidLeagueEntries, club.id);
     return {
       club: { id: club.id, name: club.name, slug: club.slug, level: club.level, reputation: club.reputation,
-        logoUrl: club.logoMime ? "/v1/clubs/" + club.id + "/logo" : null, createdAt: new Date(club.createdAt).toISOString() },
+        logoUrl: club.logoMime ? "/v1/clubs/" + club.id + "/logo" : null, createdAt: toIso(club.createdAt) },
       ...history,
       leagues: club.pyramidLeagueEntries.filter((entry) => entry.league.competition.status === "COMPLETED").map((entry) => ({
         id: "leagueId" in entry ? entry.leagueId : entry.league.id, season: entry.league.season, tier: entry.league.tier,
@@ -194,7 +195,7 @@ export function registerPublicClubRoutes(app: FastifyInstance, logoRepository?: 
       headToHead: {
         totalMatches: matches.length,
         recentMatches: matches.slice(0, 20).map((match) => ({
-          id: match.id, date: new Date(match.completedAt ?? match.scheduledAt).toISOString(),
+          id: match.id, date: toIso(match.completedAt ?? match.scheduledAt),
           type: match.type, homeClub: match.homeClub.name, awayClub: match.awayClub.name,
           homeScore: match.homeScore, awayScore: match.awayScore,
           competition: match.competition?.name ?? null, season: match.competition?.season ?? null,
