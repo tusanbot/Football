@@ -72,6 +72,8 @@ import { SupabasePlayerDevelopmentRepository } from "./repositories/player-devel
 import { SupabaseClubEconomySettlementRepository } from "./repositories/club-economy-settlement.js";
 import { SupabaseClubTicketPriceRepository } from "./repositories/club-ticket-price.js";
 import { SupabaseBotRuntimeLeaseRepository } from "./repositories/bot-runtime-lease.js";
+import { withGroupMembershipPort } from "../../../apps/api/src/groups/group-membership-context.js";
+import { SupabaseGroupMembershipRepository } from "./repositories/group-membership.js";
 
 interface MatchCoordinatorNamespace { idFromName(name: string): unknown; get(id: unknown): { fetch(input: string, init?: RequestInit): Promise<Response> }; }
 interface MatchCoordinatorState { storage: { setAlarm(scheduledTime: number): Promise<void>; deleteAlarm(): Promise<void>; }; }
@@ -189,7 +191,8 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
       const eventTournamentSettlement = supabaseClient ? new SupabaseEventTournamentSettlementRepository(supabaseClient) : undefined;
       const matchRuntimeSettlement = supabaseClient ? new SupabaseMatchRuntimeSettlementRepository(supabaseClient) : undefined;
       const botRuntimeLease = supabaseClient ? new SupabaseBotRuntimeLeaseRepository(supabaseClient) : undefined;
-       const router = createWorkersApiRouter({ publicPlayerRecords, seasonAwards, specialPlayers, botRuntimeLease });
+       const groupMembership = supabaseClient ? new SupabaseGroupMembershipRepository(supabaseClient) : undefined;
+       const router = createWorkersApiRouter({ publicPlayerRecords, seasonAwards, specialPlayers, botRuntimeLease, groupMembership });
       const handle = async (): Promise<Response> => await router.fetch(request);
       const withCompetitionCreation = competitionCreation ? () => withCompetitionCreationPort(competitionCreation, handle) : handle;
       const withClubMatchRead = clubMatchRead ? () => withClubMatchReadPort(clubMatchRead, withCompetitionCreation) : withCompetitionCreation;

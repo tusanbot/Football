@@ -1,6 +1,7 @@
 import { Prisma, type GroupRole } from "@prisma/client";
 import { prisma } from "../db.js";
 import { joinLeague, startLeague } from "../game/match-service.js";
+import { getGroupMembershipPort, GroupMembershipPortError } from "./group-membership-context.js";
 
 export class GroupServiceError extends Error {
   constructor(readonly code: string) { super(code); this.name = "GroupServiceError"; }
@@ -23,6 +24,11 @@ async function requireClubOwner(tx: Prisma.TransactionClient, telegramId: string
 }
 
 export async function registerTelegramGroup(input: { telegramUserId: string; telegramGroupId: string; title: string; role: Extract<GroupRole, "OWNER" | "ADMIN">; memberCount: number }) {
+  const port = getGroupMembershipPort();
+  if (port) {
+    try { return await port.registerGroup(input); }
+    catch (error) { if (error instanceof GroupMembershipPortError) throw new GroupServiceError(error.code); throw error; }
+  }
   return prisma.$transaction(async (tx) => {
     const minimumMembers = await getIntegerSetting(tx, "groups.minimumMembers", MIN_TELEGRAM_MEMBERS, 5, 1000);
     if (input.memberCount < minimumMembers) throw new GroupServiceError("GROUP_MINIMUM_MEMBERS_REQUIRED");
@@ -47,6 +53,11 @@ export async function registerTelegramGroup(input: { telegramUserId: string; tel
 }
 
 export async function joinTelegramGroup(input: { telegramUserId: string; telegramGroupId: string; memberCount: number }) {
+  const port = getGroupMembershipPort();
+  if (port) {
+    try { return await port.joinGroup(input); }
+    catch (error) { if (error instanceof GroupMembershipPortError) throw new GroupServiceError(error.code); throw error; }
+  }
   const minimumSetting = await prisma.gameSetting.findUnique({ where: { key: "groups.minimumMembers" }, select: { value: true } });
   const minimumMembers = settingInteger(minimumSetting?.value, MIN_TELEGRAM_MEMBERS, 5, 1000);
   if (input.memberCount < minimumMembers) {

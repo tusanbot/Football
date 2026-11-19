@@ -5,6 +5,7 @@ import { awardDailyGroupActivity, getTelegramGroupSummary, GroupServiceError, jo
 import { requireTelegramUser } from "../auth/require-telegram-user.js";
 import { prisma } from "../db.js";
 import { TelegramGroupAuthorizationError, verifyTelegramGroupActor } from "./telegram-group-authorization.js";
+import { getGroupMembershipPort } from "./group-membership-context.js";
 
 async function authenticateBot(request: FastifyRequest, reply: FastifyReply): Promise<string | null> {
   const expected = process.env.BOT_API_SECRET;
@@ -16,12 +17,14 @@ async function authenticateBot(request: FastifyRequest, reply: FastifyReply): Pr
   if (a.length !== b.length || !timingSafeEqual(a, b) || typeof telegramId !== "string" || !/^\d{1,20}$/.test(telegramId)) {
     reply.code(401).send({ error: "UNAUTHENTICATED_BOT_REQUEST" }); return null;
   }
-  const account = await prisma.user.findUnique({ where: { telegramId }, select: { isSuspended: true } });
+  const groupPort = getGroupMembershipPort();
+  const actorStatus = groupPort ? await groupPort.getActorStatus(telegramId, (request.params as { telegramGroupId?: string }).telegramGroupId ?? (request.body as { telegramGroupId?: string } | null)?.telegramGroupId) : null;
+  const account = actorStatus ? { isSuspended: actorStatus.userSuspended } : await prisma.user.findUnique({ where: { telegramId }, select: { isSuspended: true } });
   if (account?.isSuspended) { reply.code(403).send({ error: "PLAYER_ACCOUNT_SUSPENDED" }); return null; }
   const rawGroupId = (request.params as { telegramGroupId?: string }).telegramGroupId
     ?? (request.body as { telegramGroupId?: string } | null)?.telegramGroupId;
   if (rawGroupId) {
-    const group = await prisma.telegramGroup.findUnique({ where: { telegramId: rawGroupId }, select: { isSuspended: true } });
+    const group = actorStatus ? { isSuspended: actorStatus.groupSuspended } : await prisma.telegramGroup.findUnique({ where: { telegramId: rawGroupId }, select: { isSuspended: true } });
     if (group?.isSuspended) { reply.code(403).send({ error: "TELEGRAM_GROUP_SUSPENDED" }); return null; }
   }
   return telegramId;
@@ -48,7 +51,10 @@ async function authenticateGroupActor(request: FastifyRequest, reply: FastifyRep
   if (expected && typeof received === "string" && typeof telegramId === "string") {
     const a = Buffer.from(received), b = Buffer.from(expected);
     if (a.length === b.length && timingSafeEqual(a, b) && /^\d{1,20}$/.test(telegramId)) {
-      const user = await prisma.user.findUnique({ where: { telegramId }, select: { isSuspended: true } });
+      const groupPort = getGroupMembershipPort();
+      const statusGroupId = (request.params as { telegramGroupId?: string }).telegramGroupId ?? (request.body as { telegramGroupId?: string } | null)?.telegramGroupId;
+      const actorStatus = groupPort ? await groupPort.getActorStatus(telegramId, statusGroupId) : null;
+      const user = actorStatus ? { isSuspended: actorStatus.userSuspended } : await prisma.user.findUnique({ where: { telegramId }, select: { isSuspended: true } });
       if (user?.isSuspended) { reply.code(403).send({ error: "PLAYER_ACCOUNT_SUSPENDED" }); return null; }
       const groupId = (request.params as { telegramGroupId?: string }).telegramGroupId
         ?? (request.body as { telegramGroupId?: string } | null)?.telegramGroupId;
@@ -66,7 +72,7 @@ async function authenticateGroupActor(request: FastifyRequest, reply: FastifyRep
             throw error;
           }
         }
-        const group = await prisma.telegramGroup.findUnique({ where: { telegramId: groupId }, select: { isSuspended: true } });
+        const group = actorStatus ? { isSuspended: actorStatus.groupSuspended } : await prisma.telegramGroup.findUnique({ where: { telegramId: groupId }, select: { isSuspended: true } });
         if (group?.isSuspended) { reply.code(403).send({ error: "TELEGRAM_GROUP_SUSPENDED" }); return null; }
       }
       // The Bot secret authenticates the transport; sensitive group actions still
@@ -92,7 +98,9 @@ async function authenticateGroupActor(request: FastifyRequest, reply: FastifyRep
       }
       throw error;
     }
-    const group = await prisma.telegramGroup.findUnique({ where: { telegramId: groupId }, select: { isSuspended: true } });
+    const groupPort = getGroupMembershipPort();
+    const actorStatus = groupPort ? await groupPort.getActorStatus(user.telegramId, groupId) : null;
+    const group = actorStatus ? { isSuspended: actorStatus.groupSuspended } : await prisma.telegramGroup.findUnique({ where: { telegramId: groupId }, select: { isSuspended: true } });
     if (group?.isSuspended) { reply.code(403).send({ error: "TELEGRAM_GROUP_SUSPENDED" }); return null; }
   }
   return user.telegramId;
