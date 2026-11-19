@@ -209,6 +209,10 @@ This tranche does not remove Prisma from the Fastify runtime or from unrelated g
 
 
 
+## Node Fastify Telegram identity lookup
+
+The Node Fastify runtime now scopes a server-only `resolve_telegram_user` PostgREST adapter per request when Supabase credentials are configured. This removes the Prisma user lookup/activity-touch fallback from authenticated Node API requests in that mode, including the superadmin action path. Missing or suspended accounts remain unauthenticated; the service-role key is never sent to clients.
+
 ## Node Fastify admin alliance-season RPC tranche
 
 The Node Fastify admin actions for starting, closing, and reviewing alliance seasons now use dedicated Supabase PostgREST RPCs when the Node server has its Supabase service-role credentials configured:
