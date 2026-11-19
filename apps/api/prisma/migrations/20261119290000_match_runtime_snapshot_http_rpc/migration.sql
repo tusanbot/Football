@@ -79,7 +79,24 @@ BEGIN
   END IF;
 
   RETURN to_jsonb(v_runtime) || jsonb_build_object(
-    'match', to_jsonb(v_match) || jsonb_build_object('homeClub', v_home, 'awayClub', v_away)
+    'match', to_jsonb(v_match) || jsonb_build_object(
+      'homeClub', v_home,
+      'awayClub', v_away,
+      'competition', CASE WHEN v_match."competitionId" IS NULL THEN NULL ELSE (
+        SELECT jsonb_build_object('format', c.format::text, 'rules', c.rules, 'cupLegs', c."cupLegs")
+        FROM public."Competition" c WHERE c.id = v_match."competitionId"
+      ) END,
+      'firstLeg', CASE WHEN v_match."tieId" IS NULL OR v_match.leg <> 2 THEN NULL ELSE (
+        SELECT jsonb_build_object(
+          'homeClubId', f."homeClubId", 'awayClubId', f."awayClubId",
+          'homeScore', f."homeScore", 'awayScore', f."awayScore"
+        )
+        FROM public."FootballMatch" f
+        WHERE f."competitionId" = v_match."competitionId" AND f."tieId" = v_match."tieId"
+          AND f.leg = 1 AND f.status::text = 'COMPLETED'
+        ORDER BY f."scheduledAt" DESC, f.id LIMIT 1
+      ) END
+    )
   );
 END;
 $function$;

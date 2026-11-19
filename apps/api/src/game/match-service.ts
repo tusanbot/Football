@@ -1397,7 +1397,131 @@ type LoadedMatchRuntime = Prisma.MatchRuntimeGetPayload<{
     homeClub: { include: typeof matchClubInclude };
     awayClub: { include: typeof matchClubInclude };
   } } };
-}>;
+}> & {
+  match: {
+    competition: { format: string; rules: Prisma.JsonValue | null; cupLegs: number } | null;
+    firstLeg: { homeClubId: string; awayClubId: string; homeScore: number | null; awayScore: number | null } | null;
+  };
+};
+
+async function settleClaimedMatchRuntime(runtime: LoadedMatchRuntime, now: Date) {
+  const settlementPort = getMatchRuntimeSettlementPort();
+  if (!settlementPort) throw new MatchServiceError("WORKER_MATCH_RUNTIME_SETTLEMENT_REPOSITORY_REQUIRED");
+  if (!runtime.leaseToken || runtime.status !== "RUNNING" || runtime.currentMinute !== 90
+    || runtime.match.status !== "IN_PROGRESS") {
+    throw new MatchServiceError("MATCH_RUNTIME_NOT_READY_FOR_SETTLEMENT");
+  }
+  const state = restoreRuntimeState(runtime.simulationState);
+  if (!state || state.segment.currentMinute !== 90) {
+    throw new MatchServiceError("MATCH_RUNTIME_FINAL_STATE_MISSING");
+  }
+  const kickoffSnapshot = runtime.kickoffSnapshot as unknown as { home?: MatchSide; away?: MatchSide } | null;
+  if (!kickoffSnapshot?.home || !kickoffSnapshot.away) {
+    throw new MatchServiceError("MATCH_KICKOFF_SNAPSHOT_MISSING");
+  }
+  const homeSide = { ...kickoffSnapshot.home, ticketPrice: BigInt(String(kickoffSnapshot.home.ticketPrice)) };
+  const awaySide = { ...kickoffSnapshot.away, ticketPrice: BigInt(String(kickoffSnapshot.away.ticketPrice)) };
+  const match = runtime.match;
+  const competition = match.competition;
+  const matchRules = validateMatchRules(match.rulesSnapshot ?? competition?.rules ?? defaultMatchRules(match.type));
+  const generated = simulateFootballMatch({ seed: match.seed, home: homeSide, away: awaySide, rules: matchRules });
+  const runtimeEvents = state.segment.events;
+  const runtimePlayerStats = new Map((state.segment.playerStats ?? []).map((item) => [item.playerId, item]));
+  const performances = generated.performances.map((line) => {
+    const stats = runtimePlayerStats.get(line.playerId);
+    const goals = runtimeEvents.filter((event) => event.type === "GOAL" && event.playerId === line.playerId).length;
+    const assists = runtimeEvents.filter((event) => event.type === "GOAL" && event.relatedPlayerId === line.playerId).length;
+    const yellowCards = runtimeEvents.filter((event) => event.type === "YELLOW_CARD" && event.playerId === line.playerId).length;
+    const redCards = runtimeEvents.filter((event) => event.type === "RED_CARD" && event.playerId === line.playerId).length;
+    const injuries = runtimeEvents.filter((event) => event.type === "INJURY" && event.playerId === line.playerId).length;
+    const minutesPlayed = stats?.minutesPlayed ?? 0;
+    const shots = Math.max(goals, stats?.shots ?? 0);
+    const passes = stats?.passes ?? 0;
+    const tackles = stats?.tackles ?? 0;
+    const fitnessLoss = stats?.fitnessLoss ?? 0;
+    const rating = Math.max(3, Math.min(10,
+      6 + goals * 0.9 + assists * 0.45 + shots * 0.08 + tackles * 0.06
+      + passes / 100 * 0.2 - yellowCards * 0.35 - redCards * 1.25 - injuries * 0.65));
+    return { ...line, minutesPlayed, goals, assists, yellowCards, redCards, rating, shots, passes, tackles, fitnessLoss };
+  });
+  const result = {
+    ...generated,
+    homeScore: state.segment.home.score,
+    awayScore: state.segment.away.score,
+    events: runtimeEvents,
+    homeExpectedGoals: state.segment.home.expectedGoals,
+    awayExpectedGoals: state.segment.away.expectedGoals,
+    performances,
+  };
+  const isTwoLegCup = competition?.format === "CUP" && competition.cupLegs === 2 && !!match.tieId;
+  let aggregateHomeScore = result.homeScore;
+  let aggregateAwayScore = result.awayScore;
+  if (isTwoLegCup && match.leg === 1) {
+    aggregateHomeScore = 0;
+    aggregateAwayScore = 0;
+  } else if (isTwoLegCup && match.leg === 2) {
+    const firstLeg = match.firstLeg;
+    if (!firstLeg || firstLeg.homeScore === null || firstLeg.awayScore === null) {
+      throw new MatchServiceError("CUP_FIRST_LEG_NOT_COMPLETED");
+    }
+    if (firstLeg.homeClubId !== match.awayClubId || firstLeg.awayClubId !== match.homeClubId) {
+      throw new MatchServiceError("CUP_LEG_TEAM_ORDER_INVALID");
+    }
+    aggregateHomeScore += firstLeg.awayScore;
+    aggregateAwayScore += firstLeg.homeScore;
+  }
+  const decidingTie = !isTwoLegCup || match.leg === 2;
+  const penalties = decidingTie && matchRules.penaltiesOnDraw && aggregateHomeScore === aggregateAwayScore
+    ? simulatePenaltyShootout({ seed: match.seed, home: homeSide, away: awaySide })
+    : null;
+  const winnerClubId = !decidingTie ? null
+    : aggregateHomeScore > aggregateAwayScore ? match.homeClubId
+      : aggregateAwayScore > aggregateHomeScore ? match.awayClubId
+        : penalties ? (penalties.winner === "HOME" ? match.homeClubId : match.awayClubId) : null;
+  const homeReward = winnerClubId ? (winnerClubId === match.homeClubId ? 250n : 100n) : 150n;
+  const awayReward = winnerClubId ? (winnerClubId === match.awayClubId ? 250n : 100n) : 150n;
+  const settlement = await settlementPort.settle({
+    matchId: match.id, runtimeId: runtime.id, leaseToken: runtime.leaseToken,
+    now: now.toISOString(),
+    result: jsonSafe({
+      homeScore: result.homeScore, awayScore: result.awayScore,
+      homePenalties: penalties?.homePenalties ?? null, awayPenalties: penalties?.awayPenalties ?? null,
+      winnerClubId, attendance: result.attendance, ticketRevenue: result.ticketRevenue.toString(),
+      homeExpectedGoals: result.homeExpectedGoals, awayExpectedGoals: result.awayExpectedGoals,
+      events: result.events.map((event) => ({
+        sequence: event.sequence, minute: event.minute, type: event.type, teamId: event.teamId,
+        playerId: event.playerId, relatedPlayerId: event.relatedPlayerId ?? null, detail: event.detail,
+      })),
+      performances: result.performances,
+      injuredPlayerIds: result.events.filter((event) => event.type === "INJURY").map((event) => event.playerId),
+      yellowCardPlayerIds: result.events.filter((event) => event.type === "YELLOW_CARD").map((event) => event.playerId),
+      redCardPlayerIds: result.events.filter((event) => event.type === "RED_CARD").map((event) => event.playerId),
+      forfeit: false, competitionId: match.competitionId, competitionFormat: competition?.format ?? null,
+      round: match.round,
+    }),
+    injuryDurationDays: matchRules.injuryDurationDays,
+    redCardSuspensionMatches: matchRules.redCardSuspensionMatches,
+    yellowCardsToSuspend: matchRules.yellowCardsToSuspend,
+    yellowCardSuspensionMatches: matchRules.yellowCardSuspensionMatches,
+    homeReward: homeReward.toString(), awayReward: awayReward.toString(),
+  });
+  if (settlement.competitionId && settlement.round !== null) {
+    const advancementPort = getCompetitionAdvancementPort();
+    if (!advancementPort) throw new MatchServiceError("WORKER_COMPETITION_ADVANCEMENT_REPOSITORY_REQUIRED");
+    const advancement = await advancementPort.advance({
+      competitionId: settlement.competitionId, round: settlement.round, now: now.toISOString(),
+    });
+    if (advancement.completed && advancement.format === "LEAGUE") {
+      const pyramidPort = getPyramidLeagueSettlementPort();
+      if (!pyramidPort) throw new MatchServiceError("WORKER_PYRAMID_SETTLEMENT_REPOSITORY_REQUIRED");
+      await pyramidPort.finalize(settlement.competitionId, now.toISOString());
+    }
+    const eventTournamentPort = getEventTournamentSettlementPort();
+    if (!eventTournamentPort) throw new MatchServiceError("WORKER_EVENT_TOURNAMENT_REPOSITORY_REQUIRED");
+    await eventTournamentPort.finalize(settlement.competitionId, now.toISOString());
+  }
+  return settlement;
+}
 
 async function processClaimedMatchRuntime(
   runtimeId: string,
@@ -1500,7 +1624,7 @@ async function processClaimedMatchRuntime(
   }
 
   if (state.segment.currentMinute === 90) {
-    await simulateScheduledMatch(runtime.match.homeClub.ownerId, runtime.matchId, now);
+    await settleClaimedMatchRuntime(runtime, now);
     return "SETTLED";
   }
 
