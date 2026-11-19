@@ -8,7 +8,20 @@ import {
   simulateScheduledMatch, startLeague, submitMatchCheckpointDecision, claimDueMatchRuntimes,
   releaseMatchRuntimeLease, processDueMatchRuntimes, updateCompetitionRules,
 } from "../src/game/match-service.js";
+import { roundCompetitionKickoffToTehranHour } from "../src/game/match-schedule.js";
 import { acceptFriendlyChallenge, createFriendlyChallenge } from "../src/game/league-pyramid-service.js";
+
+
+test("competition kickoffs round up to the next Tehran-local whole hour", () => {
+  const cases = [
+    ["2026-11-18T15:17:42.000Z", "2026-11-18T15:30:00.000Z"], // 18:47 -> 19:00 Tehran
+    ["2026-11-18T15:30:00.000Z", "2026-11-18T15:30:00.000Z"], // exactly 19:00 Tehran
+    ["2026-11-18T20:45:00.000Z", "2026-11-18T21:30:00.000Z"], // 00:15 -> 01:00 next day
+  ] as const;
+  for (const [input, expected] of cases) {
+    assert.equal(roundCompetitionKickoffToTehranHour(new Date(input)).toISOString(), expected);
+  }
+});
 
 const positions = ["GK","RB","CB","CB","LB","CDM","CM","CAM","RW","ST","LW"] as const;
 const squadPositions = [...positions, "GK", "CB", "RB", "LB", "CM", "ST", "RW"] as const;

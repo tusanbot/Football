@@ -42,24 +42,14 @@ test("readiness fails closed and reports missing runtime configuration", async (
   assert.equal(response.status, 503);
   const body = await response.json() as { status: string; missing: string[] };
   assert.equal(body.status, "not_ready");
-  assert.ok(body.missing.includes("DATABASE_URL"));
+  assert.ok(body.missing.includes("SUPABASE_URL"));
+  assert.ok(body.missing.includes("SUPABASE_SERVICE_ROLE_KEY"));
   assert.ok(body.missing.includes("TELEGRAM_BOT_TOKEN"));
   assert.ok(body.missing.includes("BOT_API_SECRET"));
   assert.ok(body.missing.includes("CORS_ORIGIN"));
   assert.ok(body.missing.includes("GAME_ADMIN_TELEGRAM_IDS"));
 });
 
-
-test("production readiness rejects direct or session-pooled database URLs", async () => {
-  const response = await worker.fetch(new Request("https://api.example.test/ready"), {
-    ...configuredEnv,
-    ENVIRONMENT: "staging",
-    DATABASE_URL: "postgresql://postgres:postgres@db.example.test:5432/football_empire",
-  }, context);
-  assert.equal(response.status, 503);
-  const body = await response.json() as { missing: string[] };
-  assert.ok(body.missing.includes("DATABASE_URL_MUST_USE_SUPABASE_TRANSACTION_POOLER"));
-});
 
 test("pilot analytics endpoint rejects requests without the Bot/API secret", async () => {
   const response = await worker.fetch(new Request("https://api.example.test/internal/pilot/events", {
@@ -79,15 +69,30 @@ test("pilot analytics endpoint validates event payloads before database access",
   assert.equal(response.status, 400);
 });
 
-test("pilot analytics endpoint persists an authenticated pseudonymous event", async () => {
-  const response = await worker.fetch(new Request("https://api.example.test/internal/pilot/events", {
-    method: "POST",
-    headers: { "content-type": "application/json", "x-football-bot-secret": configuredEnv.BOT_API_SECRET },
-    body: JSON.stringify({ eventName: "bot_start", userKey: "a".repeat(32), actionKey: "start", chatType: "private", source: "bot" }),
-  }), configuredEnv, context);
-  assert.equal(response.status, 202);
-  assert.deepEqual(await response.json(), { accepted: true });
-  await Promise.all(pending.splice(0));
+test("pilot analytics endpoint persists an authenticated pseudonymous event through Supabase HTTPS", async () => {
+  const originalFetch = globalThis.fetch;
+  let requestUrl: URL | undefined;
+  globalThis.fetch = async (input) => {
+    requestUrl = new URL(String(input));
+    return new Response("[]", { status: 200, headers: { "content-type": "application/json" } });
+  };
+  try {
+    const response = await worker.fetch(new Request("https://api.example.test/internal/pilot/events", {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-football-bot-secret": configuredEnv.BOT_API_SECRET },
+      body: JSON.stringify({ eventName: "bot_start", userKey: "a".repeat(32), actionKey: "start", chatType: "private", source: "bot" }),
+    }), {
+      ...configuredEnv,
+      SUPABASE_URL: "https://example-project.supabase.co",
+      SUPABASE_SERVICE_ROLE_KEY: "service-role-key-that-is-long-enough-for-tests",
+    }, context);
+    assert.equal(response.status, 202);
+    assert.deepEqual(await response.json(), { accepted: true });
+    assert.equal(requestUrl?.pathname, "/rest/v1/PilotAnalyticsEvent");
+  } finally {
+    globalThis.fetch = originalFetch;
+    await Promise.all(pending.splice(0));
+  }
 });
 
 test("the Worker dispatches Fetch requests through the shared API route handlers", async () => {
@@ -96,15 +101,36 @@ test("the Worker dispatches Fetch requests through the shared API route handlers
   await Promise.all(pending.splice(0));
 });
 
-test("readiness executes a real PostgreSQL query through the Worker Prisma adapter", async () => {
-  const response = await worker.fetch(new Request("https://api.example.test/ready"), configuredEnv, context);
-  assert.equal(response.status, 200);
-  const body = await response.json() as { status: string; service: string };
-  assert.equal(body.status, "ready");
-  assert.equal(body.service, "football-empire-api");
-  await Promise.all(pending.splice(0));
+test("readiness checks schema through Supabase HTTPS without DATABASE_URL or Prisma", async () => {
+  const originalFetch = globalThis.fetch;
+  let requestedUrl: URL | undefined;
+  let requestedHeaders: Headers | undefined;
+  globalThis.fetch = async (input, init) => {
+    requestedUrl = new URL(String(input));
+    requestedHeaders = new Headers(init?.headers);
+    return new Response("true", { status: 200, headers: { "content-type": "application/json" } });
+  };
+  try {
+    const response = await worker.fetch(new Request("https://api.example.test/ready"), {
+      ...configuredEnv,
+      DATABASE_URL: undefined,
+      SUPABASE_URL: "https://example-project.supabase.co",
+      SUPABASE_SERVICE_ROLE_KEY: "service-role-key-that-is-long-enough-for-tests",
+    }, context);
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), {
+      status: "ready",
+      service: "football-empire-cloudflare-api",
+      database: "connected",
+      database_transport: "supabase_https",
+      schema: "current",
+    });
+    assert.equal(requestedUrl?.pathname, "/rest/v1/rpc/football_runtime_readiness");
+    assert.equal(requestedHeaders?.get("authorization"), "Bearer service-role-key-that-is-long-enough-for-tests");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });
-
 test("Telegram auth route retains the shared API request validation", async () => {
   const response = await worker.fetch(new Request("https://api.example.test/v1/auth/telegram", {
     method: "POST",

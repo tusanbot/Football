@@ -1,7 +1,10 @@
 import { Prisma, type PlayerPosition, type WalletAsset } from "@prisma/client";
 import { prisma } from "./db.js";
+import { getEventTournamentSettlementPort } from "./event-tournament-settlement-context.js";
 
 export async function finalizeEventTournamentFromCompetition(competitionId: string, now = new Date()) {
+  const settlementPort=getEventTournamentSettlementPort();
+  if(settlementPort)return settlementPort.finalize(competitionId,now.toISOString());
   const tournament = await prisma.eventTournament.findUnique({
     where: { competitionId },
     include: { prizes: true, participants: { select: { id: true, userId: true, clubId: true, prizeSettledAt: true } } },
@@ -184,6 +187,8 @@ export async function finalizeEventTournamentFromCompetition(competitionId: stri
 
 /** Retry completed competitions whose tournament prize settlement was interrupted. */
 export async function processDueEventTournamentFinalizations(now = new Date(), limit = 1) {
+  const settlementPort=getEventTournamentSettlementPort();
+  if(settlementPort)return settlementPort.processDue(now.toISOString(),limit);
   const candidates = await prisma.eventTournament.findMany({
     where: { status: "ACTIVE", competition: { is: { status: "COMPLETED" } } },
     orderBy: { updatedAt: "asc" },

@@ -2,6 +2,8 @@ import { randomBytes } from "node:crypto";
 import { Prisma } from "@prisma/client";
 import { calculateLeaguePlayerValue, leagueTier, rankLeagueTeams } from "@football/domain";
 import { prisma } from "../db.js";
+import { getPyramidLeagueSettlementPort } from "./pyramid-league-settlement-context.js";
+import { competitionKickoffAfterDays } from "./match-schedule.js";
 
 const DAY_MS = 86_400_000;
 
@@ -50,7 +52,7 @@ async function createLeagueForEight(tx: Prisma.TransactionClient, tier: number, 
     data: {
       idempotencyKey, name: `${level.name} · گروه ${groupNumber}`, season,
       format: "LEAGUE", status: "ACTIVE", maxTeams: 8, createdByClubId: (await tx.club.findUniqueOrThrow({ where: { id: applications[0]!.clubId }, select: { id: true } })).id,
-      rules: LEAGUE_RULES, startsAt: new Date(now.getTime() + DAY_MS),
+      rules: LEAGUE_RULES, startsAt: competitionKickoffAfterDays(now, 1),
       entries: { create: applications.map((application) => ({ clubId: application.clubId })) },
     },
   });
@@ -82,7 +84,7 @@ async function createLeagueForEight(tx: Prisma.TransactionClient, tier: number, 
       const key = `${idempotencyKey}:r${round + 1}:${homeClubId}:${awayClubId}`;
       fixtures.push({
         idempotencyKey: key, type: "LEAGUE", competitionId: competition.id, round: round + 1,
-        homeClubId, awayClubId, scheduledAt: new Date(now.getTime() + DAY_MS + round * DAY_MS),
+        homeClubId, awayClubId, scheduledAt: new Date(competitionKickoffAfterDays(now, 1).getTime() + round * DAY_MS),
         seed: key, rulesSnapshot: LEAGUE_RULES as unknown as Prisma.InputJsonValue,
       });
     }
@@ -290,6 +292,8 @@ async function adjustPlayerValues(tx: Prisma.TransactionClient, clubId: string, 
 }
 
 export async function respondToPromotion(userId: string, offerId: string, accept: boolean, now = new Date()) {
+  const settlementPort=getPyramidLeagueSettlementPort();
+  if(settlementPort)return settlementPort.respond(userId,offerId,accept,now.toISOString());
   const club = await ownedClub(userId);
   return withSerializableRetry(() => prisma.$transaction(async (tx) => {
     const offer = await tx.leaguePromotionOffer.findUnique({
@@ -354,6 +358,8 @@ export async function respondToPromotion(userId: string, offerId: string, accept
 }
 
 export async function processPyramidLeagueCompletion(competitionId: string, now = new Date()) {
+  const settlementPort=getPyramidLeagueSettlementPort();
+  if(settlementPort)return settlementPort.finalize(competitionId,now.toISOString());
   return withSerializableRetry(() => prisma.$transaction(async (tx) => {
     const league = await tx.pyramidLeague.findUnique({
       where: { competitionId },
@@ -634,6 +640,8 @@ export async function markLeagueNoticesRead(userId: string) {
 
 
 export async function processDuePromotionOffers(now = new Date(), limit = 50) {
+  const settlementPort=getPyramidLeagueSettlementPort();
+  if(settlementPort)return settlementPort.processDue(now.toISOString(),limit);
   const pendingLeagues = await prisma.pyramidLeague.findMany({
     where: { promotionProcessedAt: null, competition: { status: "COMPLETED" } },
     orderBy: { createdAt: "asc" }, take: limit, select: { competitionId: true },

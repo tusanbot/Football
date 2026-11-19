@@ -3,6 +3,7 @@ import { z } from "zod";
 import { requireTelegramUser } from "../auth/require-telegram-user.js";
 import { prisma } from "../db.js";
 import { buyMarketListing, cancelMarketListing, createMarketListing, getOpenMarketListings, MarketError } from "./market-service.js";
+import { getMarketListingPort } from "./market-listing-context.js";
 import {
   acquireSpecialPlayer, getSpecialPackOffers, SpecialAcquisitionError,
   listLegacyChallenges, claimLegacyChallenge, LegacyChallengeError,
@@ -36,7 +37,9 @@ function sendMarketError(reply: FastifyReply, error: unknown) {
   throw error;
 }
 
-export function registerPlayerMarketRoutes(app: FastifyInstance) {
+export interface SpecialPlayerCatalogRepository { listActive(): Promise<unknown[]>; }
+
+export function registerPlayerMarketRoutes(app: FastifyInstance, specialPlayers?: SpecialPlayerCatalogRepository) {
   app.get("/v1/players/special/challenges", async (request, reply) => {
     const user = await requireTelegramUser(request);
     if (!user) return reply.code(401).send({ error: "UNAUTHENTICATED" });
@@ -56,7 +59,9 @@ export function registerPlayerMarketRoutes(app: FastifyInstance) {
   app.get("/v1/players/special", async (request, reply) => {
     const user = await requireTelegramUser(request);
     if (!user) return reply.code(401).send({ error: "UNAUTHENTICATED" });
-    const players = await prisma.specialPlayer.findMany({ where: { active: true }, orderBy: [{ rarity: "desc" }, { overall: "desc" }], select: { id: true, slug: true, fullName: true, nationality: true, birthDate: true, positions: true, rarity: true, overall: true, potential: true, attributes: true, acquisitionMethods: true } });
+    const players = specialPlayers
+      ? await specialPlayers.listActive()
+      : await prisma.specialPlayer.findMany({ where: { active: true }, orderBy: [{ rarity: "desc" }, { overall: "desc" }], select: { id: true, slug: true, fullName: true, nationality: true, birthDate: true, positions: true, rarity: true, overall: true, potential: true, attributes: true, acquisitionMethods: true } });
     return { players, packOffers: getSpecialPackOffers() };
   });
   app.post("/v1/players/special/acquire", async (request, reply) => {
@@ -74,6 +79,8 @@ export function registerPlayerMarketRoutes(app: FastifyInstance) {
   app.get("/v1/market/my-listings", async (request, reply) => {
     const user = await requireTelegramUser(request);
     if (!user) return reply.code(401).send({ error: "UNAUTHENTICATED" });
+    const listingPort = getMarketListingPort();
+    if (listingPort) return { listings: await listingPort.listMine(user.id) };
     const club = await prisma.club.findUnique({ where: { ownerId: user.id }, select: { id: true } });
     if (!club) return reply.code(404).send({ error: "CLUB_NOT_FOUND" });
     const listings = await prisma.playerMarketListing.findMany({

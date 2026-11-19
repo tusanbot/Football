@@ -1,6 +1,7 @@
 import { randomInt } from "node:crypto";
 import { Prisma, type PlayerPosition, type SpecialRarity } from "@prisma/client";
 import { prisma } from "../db.js";
+import { getSpecialAcquisitionPort } from "./special-acquisition-context.js";
 
 const PACKS = {
   epic_pack: { rarity: "EPIC", price: 250, maxCopies: 10 },
@@ -32,6 +33,15 @@ export async function acquireSpecialPlayer(userId: string, method: SpecialPackMe
   }
   const pack = PACKS[method];
   if (!pack) throw new SpecialAcquisitionError("INVALID_ACQUISITION_METHOD");
+  const acquisitionPort = getSpecialAcquisitionPort();
+  if (acquisitionPort) {
+    try { return await acquisitionPort.acquire({ userId, method, idempotencyKey }); }
+    catch (error) {
+      const code = error && typeof error === "object" && "code" in error ? String(error.code) : error instanceof Error ? error.message : "";
+      if (code) throw new SpecialAcquisitionError(code);
+      throw error;
+    }
+  }
 
   const execute = () => prisma.$transaction(async (tx) => {
     const previous = await tx.specialPlayerAcquisition.findUnique({
@@ -263,6 +273,11 @@ function legacyAcquisitionKey(userId: string, slug: string) {
 }
 
 export async function listLegacyChallenges(userId: string) {
+  const acquisitionPort = getSpecialAcquisitionPort();
+  if (acquisitionPort) {
+    try { return await acquisitionPort.listLegacyChallenges(userId); }
+    catch (error) { throw new LegacyChallengeError(error instanceof Error ? error.message : "LEGACY_CHALLENGES_UNAVAILABLE"); }
+  }
   const club = await prisma.club.findUnique({ where: { ownerId: userId }, select: { id: true } });
   if (!club) throw new LegacyChallengeError("CLUB_NOT_FOUND");
   const challenges = await Promise.all(LEGACY_CHALLENGES.map(async (challenge) => {
@@ -287,6 +302,11 @@ export async function listLegacyChallenges(userId: string) {
 }
 
 export async function claimLegacyChallenge(userId: string, slug: string) {
+  const acquisitionPort = getSpecialAcquisitionPort();
+  if (acquisitionPort) {
+    try { return await acquisitionPort.claimLegacyChallenge(userId, slug); }
+    catch (error) { throw new LegacyChallengeError(error instanceof Error ? error.message : "LEGACY_CHALLENGE_CLAIM_FAILED"); }
+  }
   const challenge = LEGACY_CHALLENGES.find((item) => item.slug === slug);
   if (!challenge) throw new LegacyChallengeError("LEGACY_CHALLENGE_NOT_FOUND");
   const idempotencyKey = legacyAcquisitionKey(userId, slug);

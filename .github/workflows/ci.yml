@@ -52,7 +52,7 @@ jobs:
           DIRECT_URL: postgresql://postgres:postgres@localhost:5432/football_empire
       - name: Prepare Supabase API roles for security migration tests
         run: |
-          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "DO \$\$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'anon') THEN CREATE ROLE anon NOLOGIN; END IF; IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'authenticated') THEN CREATE ROLE authenticated NOLOGIN; END IF; END \$\$;"
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "DO \$\$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'anon') THEN CREATE ROLE anon NOLOGIN; END IF; IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'authenticated') THEN CREATE ROLE authenticated NOLOGIN; END IF; IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'service_role') THEN CREATE ROLE service_role NOLOGIN BYPASSRLS; END IF; END \$\$;"
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/football_empire
       - name: Apply migrations to ephemeral PostgreSQL
@@ -62,6 +62,66 @@ jobs:
           DIRECT_URL: postgresql://postgres:postgres@localhost:5432/football_empire
       - name: Verify public schema security
         run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f apps/api/prisma/security-check.sql
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/football_empire
+      - name: Test wallet RPC transaction and idempotency
+        run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f apps/api/prisma/tests/economy-rpc.integration.sql
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/football_empire
+      - name: Test competition creation RPC and idempotency
+        run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f apps/api/prisma/tests/competition-creation-rpc.integration.sql
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/football_empire
+      - name: Test competition read, join and start RPC lifecycle
+        run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f apps/api/prisma/tests/competition-lifecycle-rpc.integration.sql
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/football_empire
+      - name: Test club match history read RPC
+        run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f apps/api/prisma/tests/club-match-read-rpc.integration.sql
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/football_empire
+      - name: Test competition advancement and idempotency
+        run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f apps/api/prisma/tests/competition-advancement-rpc.integration.sql
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/football_empire
+      - name: Test pyramid league settlement and promotion idempotency
+        run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f apps/api/prisma/tests/pyramid-league-settlement-rpc.integration.sql
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/football_empire
+      - name: Test match runtime snapshot RPC and access controls
+        run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f apps/api/prisma/tests/match-runtime-snapshot-rpc.integration.sql
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/football_empire
+      - name: Test event tournament prize settlement and idempotency
+        run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f apps/api/prisma/tests/event-tournament-settlement-rpc.integration.sql
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/football_empire
+      - name: Test friendly match creation RPC and legacy lineup parity
+        run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f apps/api/prisma/tests/friendly-match-rpc.integration.sql
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/football_empire
+      - name: Test invalid match runtime forfeit settlement and idempotency
+        run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f apps/api/prisma/tests/match-runtime-forfeit-rpc.integration.sql
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/football_empire
+      - name: Test Bot runtime lease RPC concurrency and ownership
+        run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f apps/api/prisma/tests/bot-runtime-lease-rpc.integration.sql
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/football_empire
+      - name: Test Telegram group registration and membership RPC
+        run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f apps/api/prisma/tests/group-membership-rpc.integration.sql
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/football_empire
+      - name: Test alliance creation, invitations and treasury RPC
+        run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f apps/api/prisma/tests/alliance-core-rpc.integration.sql
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/football_empire
+      - name: Test alliance workspace and season lifecycle RPC
+        run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f apps/api/prisma/tests/alliance-season-rpc.integration.sql
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/football_empire
+      - name: Test multi-alliance competition invitations, season isolation and scoring
+        run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f apps/api/prisma/tests/multi-alliance-competition-rpc.integration.sql
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/football_empire
       - name: Seed special-player catalog in ephemeral PostgreSQL

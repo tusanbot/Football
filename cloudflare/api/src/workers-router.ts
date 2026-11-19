@@ -26,7 +26,7 @@ import { registerTelegramAuthRoutes } from "../../../apps/api/src/auth/routes.js
 import { registerBotAuthRoutes } from "../../../apps/api/src/auth/bot-routes.js";
 import { registerGameRoutes } from "../../../apps/api/src/game/routes.js";
 import { registerClubOperationsRoutes } from "../../../apps/api/src/game/club-operations-routes.js";
-import { registerPlayerMarketRoutes } from "../../../apps/api/src/players/market-routes.js";
+import { registerPlayerMarketRoutes, type SpecialPlayerCatalogRepository } from "../../../apps/api/src/players/market-routes.js";
 import { registerPlayerDevelopmentRoutes } from "../../../apps/api/src/players/player-development-routes.js";
 import { registerMatchRoutes } from "../../../apps/api/src/game/match-routes.js";
 import { registerMatchNotificationRoutes } from "../../../apps/api/src/game/match-notification-routes.js";
@@ -39,6 +39,9 @@ import { registerTelegramMessageDeletionRoutes } from "../../../apps/api/src/tel
 import { registerLeagueNoticeRoutes } from "../../../apps/api/src/league-notice-routes.js";
 import { registerAdminGroupBroadcastRoutes } from "../../../apps/api/src/admin-group-broadcast-routes.js";
 import { registerBotRuntimeRoutes } from "../../../apps/api/src/bot-runtime-routes.js";
+import type { BotRuntimeLeasePort } from "../../../apps/api/src/bot-runtime-lease-context.js";
+import type { GroupMembershipPort } from "../../../apps/api/src/groups/group-membership-context.js";
+import type { AlliancePort } from "../../../apps/api/src/groups/alliance-context.js";
 import { registerPublicClubRoutes } from "../../../apps/api/src/public-club-routes.js";
 import { registerPublicPlayerRecordRoutes, type PublicPlayerRecordRepository } from "../../../apps/api/src/players/public-record-routes.js";
 import { registerSeasonAwardRoutes, type SeasonAwardRepository } from "../../../apps/api/src/game/season-award-routes.js";
@@ -81,26 +84,26 @@ function queryObject(url: URL): Record<string, string | string[]> {
   return query;
 }
 
-export function createWorkersApiRouter(dependencies: { publicPlayerRecords?: PublicPlayerRecordRepository; seasonAwards?: SeasonAwardRepository } = {}) {
+export function createWorkersApiRouter(dependencies: { publicPlayerRecords?: PublicPlayerRecordRepository; seasonAwards?: SeasonAwardRepository; specialPlayers?: SpecialPlayerCatalogRepository; botRuntimeLease?: BotRuntimeLeasePort; groupMembership?: GroupMembershipPort; alliance?: AlliancePort } = {}) {
   const registry = new RouteRegistry();
   const registrar = registry as unknown as Parameters<typeof registerTelegramAuthRoutes>[0];
   registerTelegramAuthRoutes(registrar);
   registerBotAuthRoutes(registrar);
   registerGameRoutes(registrar);
   registerClubOperationsRoutes(registrar);
-  registerPlayerMarketRoutes(registrar);
+  registerPlayerMarketRoutes(registrar, dependencies.specialPlayers);
   registerPlayerDevelopmentRoutes(registrar);
   registerMatchRoutes(registrar);
   registerMatchNotificationRoutes(registrar);
-  registerGroupRoutes(registrar);
-  registerAllianceRoutes(registrar);
+  registerGroupRoutes(registrar, { requireMembershipPort: true });
+  registerAllianceRoutes(registrar, { requirePort: true, port: dependencies.alliance });
   registerAdminRoutes(registrar);
   registerAdminLeagueRoutes(registrar);
   registerGiftCodeRoutes(registrar);
   registerTelegramMessageDeletionRoutes(registrar);
   registerLeagueNoticeRoutes(registrar);
   registerAdminGroupBroadcastRoutes(registrar);
-  registerBotRuntimeRoutes(registrar);
+  registerBotRuntimeRoutes(registrar, { leasePort: dependencies.botRuntimeLease, requireLeasePort: true });
   registerPublicClubRoutes(registrar);
   registerPublicPlayerRecordRoutes(registrar, dependencies.publicPlayerRecords);
   registerSeasonAwardRoutes(registrar, dependencies.seasonAwards);

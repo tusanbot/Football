@@ -4,6 +4,7 @@ import { prisma } from "./db.js";
 import { requireTelegramUser } from "./auth/require-telegram-user.js";
 import { TelegramGroupAuthorizationError, verifyTelegramGroupActor } from "./groups/telegram-group-authorization.js";
 import { consumeAllianceActionRateLimit } from "./groups/alliance-rate-limit.js";
+import { getGiftCodeRedemptionPort } from "./gift-code-redemption-context.js";
 
 export function registerGiftCodeRoutes(app: FastifyInstance) {
   app.post("/v1/gift-codes/redeem", async (req: FastifyRequest, reply: FastifyReply) => {
@@ -17,11 +18,24 @@ export function registerGiftCodeRoutes(app: FastifyInstance) {
     }).strict().safeParse(req.body);
     if (!body.success) return reply.code(400).send({ error: "INVALID_GIFT_CODE" });
 
-    if (!await consumeAllianceActionRateLimit({ telegramUserId: user.telegramId, telegramGroupId: "global", action: "gift-code-redeem", limit: 5 })) {
-      return reply.code(429).send({ error: "GIFT_CODE_RATE_LIMITED", retryAfterSeconds: 60 });
-    }
+    const redemptionPort = getGiftCodeRedemptionPort();
+    const rateLimitAllowed = redemptionPort
+      ? await redemptionPort.consumeRateLimit({ telegramUserId: user.telegramId, limit: 5 })
+      : await consumeAllianceActionRateLimit({ telegramUserId: user.telegramId, telegramGroupId: "global", action: "gift-code-redeem", limit: 5 });
+    if (!rateLimitAllowed) return reply.code(429).send({ error: "GIFT_CODE_RATE_LIMITED", retryAfterSeconds: 60 });
     const code = body.data.code.toUpperCase();
     try {
+      if (redemptionPort) {
+        const rewardType = await redemptionPort.getRewardType(code);
+        if (rewardType === "GROUP_POINTS") {
+          if (!body.data.telegramGroupId) throw new Error("GIFT_CODE_GROUP_REQUIRED");
+          await verifyTelegramGroupActor({ telegramGroupId: body.data.telegramGroupId, telegramUserId: user.telegramId });
+        }
+        return await redemptionPort.redeem({
+          userId: user.id, code, idempotencyKey: body.data.idempotencyKey,
+          telegramGroupId: body.data.telegramGroupId ?? null,
+        });
+      }
       const priorRedemption = await prisma.giftCodeRedemption.findUnique({
         where: { idempotencyKey: body.data.idempotencyKey },
         include: { giftCode: { select: { code: true } }, group: { select: { telegramId: true } } },
@@ -37,8 +51,6 @@ export function registerGiftCodeRoutes(app: FastifyInstance) {
           replayed: true,
         };
       }
-      // Do network membership verification before opening the financial transaction.
-      // The transaction re-checks persisted group membership and group state.
       const preflightGift = await prisma.giftCode.findUnique({ where: { code }, select: { rewardType: true } });
       if (preflightGift?.rewardType === "GROUP_POINTS") {
         if (!body.data.telegramGroupId) throw new Error("GIFT_CODE_GROUP_REQUIRED");

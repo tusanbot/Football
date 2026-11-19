@@ -1,0 +1,9 @@
+import { AsyncLocalStorage } from "node:async_hooks";
+export interface PyramidLeagueSettlementPort {
+ finalize(competitionId:string,now:string):Promise<{processed:boolean;replayed?:boolean;leagueId?:string;champion?:string;runnerUp?:string;thirdPlace?:string}>;
+ respond(userId:string,offerId:string,accept:boolean,now:string):Promise<Record<string,unknown>>;
+ processDue(now:string,limit:number):Promise<{completedLeagues:number;processed:number;accepted:number}>;
+}
+const scope=new AsyncLocalStorage<PyramidLeagueSettlementPort>();
+export function withPyramidLeagueSettlementPort<T>(port:PyramidLeagueSettlementPort,operation:()=>Promise<T>):Promise<T>{return scope.run(port,operation);}
+export function getPyramidLeagueSettlementPort():PyramidLeagueSettlementPort|undefined{return scope.getStore();}

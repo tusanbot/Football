@@ -13,6 +13,9 @@ import {
 } from "@football/domain";
 import { prisma } from "../db.js";
 import { settleClubDailyState } from "../players/player-development-service.js";
+import { getClubTicketPricePort } from "./club-ticket-price-context.js";
+import { getClubEconomySettlementPort } from "./club-economy-settlement-context.js";
+import { getClubManagementPort } from "./club-management-context.js";
 
 const DAY_MS = 86_400_000;
 const POSITIONS = ["GK", "RB", "LB", "CB", "CDM", "CM", "CAM", "RW", "LW", "ST"] as const;
@@ -105,6 +108,16 @@ async function creditCash(
 }
 
 export async function settleClubEconomy(userId: string, now = new Date()) {
+  const httpPort = getClubEconomySettlementPort();
+  if (httpPort) {
+    try { return await httpPort.settle(userId, now); }
+    catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      const code = ["CLUB_NOT_FOUND", "WALLET_NOT_FOUND", "CONCURRENT_MODIFICATION"].find((candidate) => message.includes(candidate));
+      if (code) throw new ClubOperationsError(code);
+      throw error;
+    }
+  }
   const today = utcDay(now);
   try {
     return await prisma.$transaction(async (tx) => {
@@ -261,6 +274,9 @@ export async function upgradeClubFacility(
   assertKey(idempotencyKey);
   await settleClubDailyState(userId, now);
   await settleClubEconomy(userId, now);
+  const httpPort = getClubManagementPort();
+  if (httpPort) return httpPort.execute("UPGRADE_FACILITY", userId, idempotencyKey, { facility }, now);
+
   const reason = `CLUB_FACILITY_UPGRADE:${facility}`;
   return prisma.$transaction(async (tx) => {
     const club = await tx.club.findUnique({ where: { ownerId: userId } });
@@ -286,6 +302,20 @@ export async function scoutAcademy(userId: string, idempotencyKey: string, now =
   assertKey(idempotencyKey);
   await settleClubDailyState(userId, now);
   await settleClubEconomy(userId, now);
+  const httpPort = getClubManagementPort();
+  if (httpPort) {
+    const academyLevel = await httpPort.getAcademyLevel(userId);
+    const prospects = Array.from({ length: 3 }, () => {
+      const age = randomInt(16, 19);
+      const overall = randomInt(34, 53) + Math.min(8, academyLevel);
+      const potential = Math.min(92, overall + randomInt(12, 31) + academyLevel);
+      const position = randomItem(POSITIONS);
+      return { id: randomUUID(), firstName: randomItem(FIRST_NAMES), lastName: randomItem(LAST_NAMES),
+        nationality: randomItem(NATIONALITIES), age, position, overall, potential, attributes: prospectAttributes(position, overall) };
+    });
+    return httpPort.execute("SCOUT_ACADEMY", userId, idempotencyKey, { prospects }, now);
+  }
+
   const reason = "ACADEMY_SCOUTING";
   return prisma.$transaction(async (tx) => {
     const club = await tx.club.findUnique({ where: { ownerId: userId } });
@@ -336,6 +366,9 @@ export async function recruitAcademyProspect(userId: string, prospectId: string,
   assertKey(idempotencyKey);
   await settleClubDailyState(userId, now);
   await settleClubEconomy(userId, now);
+  const httpPort = getClubManagementPort();
+  if (httpPort) return httpPort.execute("RECRUIT_PROSPECT", userId, idempotencyKey, { prospectId }, now);
+
   const reason = `ACADEMY_PROSPECT_RECRUITMENT:${prospectId}`;
   return prisma.$transaction(async (tx) => {
     const club = await tx.club.findUnique({ where: { ownerId: userId } });
@@ -371,6 +404,9 @@ export async function upgradeClubCoach(userId: string, idempotencyKey: string, n
   assertKey(idempotencyKey);
   await settleClubDailyState(userId, now);
   await settleClubEconomy(userId, now);
+  const httpPort = getClubManagementPort();
+  if (httpPort) return httpPort.execute("UPGRADE_COACH", userId, idempotencyKey, {}, now);
+
   const reason = "COACH_UPGRADE";
   return prisma.$transaction(async (tx) => {
     const club = await tx.club.findUnique({ where: { ownerId: userId }, include: { coach: true } });
@@ -399,6 +435,17 @@ export async function hireClubCoach(userId: string, candidateId: string, idempot
   assertKey(idempotencyKey);
   await settleClubDailyState(userId, now);
   await settleClubEconomy(userId, now);
+  const httpPort = getClubManagementPort();
+  if (httpPort) {
+    const candidate = COACH_CANDIDATES.find((item) => item.id === candidateId);
+    if (!candidate) throw new ClubOperationsError("COACH_CANDIDATE_NOT_FOUND");
+    return httpPort.execute("HIRE_COACH", userId, idempotencyKey, {
+      candidateId, name: candidate.name, signingFee: candidate.signingFee.toString(),
+      weeklySalary: candidate.weeklySalary.toString(), trainingSkill: candidate.trainingSkill,
+      recoverySkill: candidate.recoverySkill, medicalSkill: candidate.medicalSkill,
+    }, now);
+  }
+
   const candidate = COACH_CANDIDATES.find((item) => item.id === candidateId);
   if (!candidate) throw new ClubOperationsError("COACH_CANDIDATE_NOT_FOUND");
   const reason = `COACH_HIRING:${candidateId}`;
@@ -421,6 +468,18 @@ export async function signClubSponsor(userId: string, offerId: string, idempoten
   assertKey(idempotencyKey);
   await settleClubDailyState(userId, now);
   await settleClubEconomy(userId, now);
+  const httpPort = getClubManagementPort();
+  if (httpPort) {
+    const offer = getSponsorOffers(10_000, 10_000).find((item) => item.id === offerId);
+    if (!offer) throw new ClubOperationsError("SPONSOR_OFFER_LOCKED");
+    return httpPort.execute("SIGN_SPONSOR", userId, idempotencyKey, {
+      offerId, partnerName: offer.partnerName, tier: offer.tier,
+      minimumLevel: offer.minimumLevel, minimumReputation: offer.minimumReputation,
+      dailyIncome: offer.dailyIncome.toString(), signingBonus: offer.signingBonus.toString(),
+      durationDays: offer.durationDays,
+    }, now);
+  }
+
   const reason = `SPONSOR_CONTRACT_SIGNING:${offerId}`;
   return prisma.$transaction(async (tx) => {
     const club = await tx.club.findUnique({ where: { ownerId: userId }, include: { sponsors: { where: { status: "ACTIVE" } } } });
@@ -447,6 +506,16 @@ export async function updateStadiumTicketPrice(
   userId: string, ticketPrice: bigint, expectedTicketPrice: bigint,
 ) {
   if (ticketPrice < 10n || ticketPrice > 500n) throw new ClubOperationsError("INVALID_TICKET_PRICE");
+  const httpPort = getClubTicketPricePort();
+  if (httpPort) {
+    try { return await httpPort.update(userId, ticketPrice, expectedTicketPrice); }
+    catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      const code = ["CLUB_NOT_FOUND", "TICKET_PRICE_CONFLICT", "INVALID_TICKET_PRICE"].find((candidate) => message.includes(candidate));
+      if (code) throw new ClubOperationsError(code);
+      throw error;
+    }
+  }
   const club = await prisma.club.findUnique({ where: { ownerId: userId }, select: { id: true, ticketPrice: true } });
   if (!club) throw new ClubOperationsError("CLUB_NOT_FOUND");
   if (club.ticketPrice === ticketPrice) {

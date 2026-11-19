@@ -1,6 +1,9 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "../db.js";
 import { getStoreItem, STORE_CATALOG } from "./catalog.js";
+import { getStorePurchasePort } from "./store-purchase-context.js";
+import { getStoreItemUsePort } from "./store-item-use-context.js";
+import { getStoreSnapshotPort } from "./store-snapshot-context.js";
 import { getOpenMarketListings } from "../players/market-service.js";
 import { getSpecialPackOffers } from "../players/special-acquisition-service.js";
 
@@ -14,6 +17,18 @@ export class StoreError extends Error {
 const validKey = /^[A-Za-z0-9:_-]{8,80}$/;
 
 export async function getStoreSnapshot(userId: string) {
+  const snapshotPort = getStoreSnapshotPort();
+  if (snapshotPort) {
+    const [snapshot, listings] = await Promise.all([snapshotPort.get(userId), getOpenMarketListings()]);
+    return {
+      items: STORE_CATALOG.map(({ effect: _effect, ...item }) => item),
+      wallets: snapshot.wallets,
+      inventory: snapshot.inventory,
+      playerListings: listings,
+      specialPlayers: snapshot.specialPlayers,
+      packOffers: getSpecialPackOffers(),
+    };
+  }
   const [wallets, inventory, listings, specialPlayers] = await Promise.all([
     prisma.wallet.findMany({ where: { userId }, select: { asset: true, balance: true } }),
     prisma.storeInventoryItem.findMany({ where: { userId, quantity: { gt: 0 } }, orderBy: { updatedAt: "desc" }, select: { itemKey: true, quantity: true, updatedAt: true } }),
@@ -37,6 +52,16 @@ export async function purchaseStoreItem(userId: string, itemKey: string, quantit
   if (!Number.isInteger(quantity) || quantity < 1 || quantity > item.maxPerPurchase) throw new StoreError("INVALID_QUANTITY");
   const total = BigInt(item.price) * BigInt(quantity);
   const ledgerKey = "store-purchase:" + idempotencyKey;
+  const purchasePort = getStorePurchasePort();
+  if (purchasePort) {
+    try {
+      return await purchasePort.purchase({ userId, itemKey, asset: item.asset, unitPrice: item.price, quantity, idempotencyKey });
+    } catch (error) {
+      const code = error && typeof error === "object" && "code" in error ? String(error.code) : "";
+      if (code) throw new StoreError(code);
+      throw error;
+    }
+  }
 
   try {
     return await prisma.$transaction(async (tx) => {
@@ -103,6 +128,16 @@ export async function useStoreItem(userId: string, itemKey: string, playerId: st
   if (!validKey.test(idempotencyKey)) throw new StoreError("INVALID_IDEMPOTENCY_KEY");
   const item = getStoreItem(itemKey);
   if (!item) throw new StoreError("STORE_ITEM_NOT_FOUND");
+  const usePort = getStoreItemUsePort();
+  if (usePort) {
+    try {
+      return await usePort.use({ userId, itemKey, playerId, fitnessDelta: item.effect.fitness ?? 0, moraleDelta: item.effect.morale ?? 0, idempotencyKey });
+    } catch (error) {
+      const code = error && typeof error === "object" && "code" in error ? String(error.code) : "";
+      if (code) throw new StoreError(code);
+      throw error;
+    }
+  }
 
   try {
     return await prisma.$transaction(async (tx) => {

@@ -1,12 +1,81 @@
-import { createPrismaClient, prisma, withPrismaClient } from "../../../apps/api/src/db.js";
+import { createPrismaClient, withPrismaClient } from "../../../apps/api/src/db.js";
+import { withWalletEntryPort } from "../../../apps/api/src/economy/wallet-entry-context.js";
+import { withStorePurchasePort } from "../../../apps/api/src/store/store-purchase-context.js";
+import { withStoreSnapshotPort } from "../../../apps/api/src/store/store-snapshot-context.js";
+import { withStoreItemUsePort } from "../../../apps/api/src/store/store-item-use-context.js";
+import { withMarketPurchasePort } from "../../../apps/api/src/players/market-purchase-context.js";
+import { withGiftCodeRedemptionPort } from "../../../apps/api/src/gift-code-redemption-context.js";
+import { withSpecialAcquisitionPort } from "../../../apps/api/src/players/special-acquisition-context.js";
+import { withMarketListingPort } from "../../../apps/api/src/players/market-listing-context.js";
 import { processDueMatchRuntimes } from "../../../apps/api/src/game/match-service.js";
 import { processDueEventTournamentFinalizations } from "../../../apps/api/src/event-tournament-service.js";
 import { processDuePromotionOffers } from "../../../apps/api/src/game/league-pyramid-service.js";
 import { isValidTelegramBotToken, parseAdminTelegramIds, parseCorsOrigins } from "../../../apps/api/src/runtime-config.js";
 import { createWorkersApiRouter } from "./workers-router.js";
 import { SupabaseHttpClient } from "./supabase-http.js";
+import { SupabasePilotAnalyticsRepository } from "./repositories/pilot-analytics.js";
+import { SupabaseRuntimeReadinessRepository } from "./repositories/runtime-readiness.js";
 import { SupabasePublicPlayerRecordRepository } from "./repositories/public-player-records.js";
 import { SupabaseSeasonAwardRepository } from "./repositories/season-awards.js";
+import { SupabaseWalletEntryRepository } from "./repositories/wallet-entry.js";
+import { SupabaseStorePurchaseRepository } from "./repositories/store-purchase.js";
+import { SupabaseStoreSnapshotRepository } from "./repositories/store-snapshot.js";
+import { SupabaseStoreItemUseRepository } from "./repositories/store-item-use.js";
+import { SupabaseMarketPurchaseRepository } from "./repositories/market-purchase.js";
+import { SupabaseGiftCodeRedemptionRepository } from "./repositories/gift-code-redemption.js";
+import { SupabaseSpecialAcquisitionRepository } from "./repositories/special-acquisition.js";
+import { SupabaseMarketListingRepository } from "./repositories/market-listing.js";
+import { SupabaseSpecialPlayerCatalogRepository } from "./repositories/special-player-catalog.js";
+import { withMatchRuntimeLeasePort } from "../../../apps/api/src/game/match-runtime-lease-context.js";
+import { withMatchRuntimeSnapshotPort } from "../../../apps/api/src/game/match-runtime-snapshot-context.js";
+import { SupabaseMatchRuntimeSnapshotRepository } from "./repositories/match-runtime-snapshot.js";
+import { withMatchOpponentPort } from "../../../apps/api/src/game/match-opponents-context.js";
+import { withFriendlyMatchCreationPort } from "../../../apps/api/src/game/friendly-match-creation-context.js";
+import { withCompetitionCreationPort } from "../../../apps/api/src/game/competition-creation-context.js";
+import { withClubMatchReadPort } from "../../../apps/api/src/game/club-match-read-context.js";
+import { withCompetitionAdvancementPort } from "../../../apps/api/src/game/competition-advancement-context.js";
+import { SupabaseMatchOpponentRepository } from "./repositories/match-opponents.js";
+import { SupabaseFriendlyMatchCreationRepository } from "./repositories/friendly-match-creation.js";
+import { SupabaseCompetitionCreationRepository } from "./repositories/competition-creation.js";
+import { SupabaseClubMatchReadRepository } from "./repositories/club-match-read.js";
+import { SupabaseCompetitionAdvancementRepository } from "./repositories/competition-advancement.js";
+import { withPyramidLeagueSettlementPort } from "../../../apps/api/src/game/pyramid-league-settlement-context.js";
+import { SupabasePyramidLeagueSettlementRepository } from "./repositories/pyramid-league-settlement.js";
+import { withEventTournamentSettlementPort } from "../../../apps/api/src/event-tournament-settlement-context.js";
+import { SupabaseEventTournamentSettlementRepository } from "./repositories/event-tournament-settlement.js";
+import { withMatchRuntimeAdvancePort } from "../../../apps/api/src/game/match-runtime-advance-context.js";
+import { withMatchRuntimeCheckpointPort } from "../../../apps/api/src/game/match-runtime-checkpoint-context.js";
+import { withMatchRuntimeSettlementPort } from "../../../apps/api/src/game/match-runtime-settlement-context.js";
+import { withMatchRuntimeEnqueuePort } from "../../../apps/api/src/game/match-runtime-enqueue-context.js";
+import { withMatchRuntimeForfeitPort } from "../../../apps/api/src/game/match-runtime-forfeit-context.js";
+import { SupabaseMatchRuntimeEnqueueRepository } from "./repositories/match-runtime-enqueue.js";
+import { SupabaseMatchRuntimeForfeitRepository } from "./repositories/match-runtime-forfeit.js";
+import { SupabaseMatchRuntimeAdvanceRepository } from "./repositories/match-runtime-advance.js";
+import { SupabaseMatchRuntimeCheckpointRepository } from "./repositories/match-runtime-checkpoint.js";
+import { SupabaseMatchRuntimeSettlementRepository } from "./repositories/match-runtime-settlement.js";
+import { SupabaseMatchRuntimeLeaseRepository } from "./repositories/match-runtime-lease.js";
+import { SupabaseMatchNotificationRepository, type MatchNotificationRow, type MatchNotificationPerformance } from "./repositories/match-notifications.js";
+import { withGameDashboardPort } from "../../../apps/api/src/game/game-dashboard-context.js";
+import { SupabaseGameDashboardRepository } from "./repositories/game-dashboard.js";
+import { withTelegramUserLookupPort } from "../../../apps/api/src/auth/telegram-user-lookup-context.js";
+import { SupabaseTelegramUserLookupRepository } from "./repositories/telegram-user-lookup.js";
+import { withTelegramAccountProvisioningPort } from "../../../apps/api/src/auth/account-provisioning-context.js";
+import { SupabaseTelegramAccountProvisioningRepository } from "./repositories/telegram-account-provisioning.js";
+import { withClubTicketPricePort } from "../../../apps/api/src/game/club-ticket-price-context.js";
+import { withClubEconomySettlementPort } from "../../../apps/api/src/game/club-economy-settlement-context.js";
+import { withClubManagementPort } from "../../../apps/api/src/game/club-management-context.js";
+import { SupabaseClubManagementRepository } from "./repositories/club-management.js";
+import { withClubLineupPort } from "../../../apps/api/src/game/club-lineup-context.js";
+import { SupabaseClubLineupRepository } from "./repositories/club-lineup.js";
+import { withPlayerDevelopmentPort } from "../../../apps/api/src/players/player-development-context.js";
+import { SupabasePlayerDevelopmentRepository } from "./repositories/player-development.js";
+import { SupabaseClubEconomySettlementRepository } from "./repositories/club-economy-settlement.js";
+import { SupabaseClubTicketPriceRepository } from "./repositories/club-ticket-price.js";
+import { SupabaseBotRuntimeLeaseRepository } from "./repositories/bot-runtime-lease.js";
+import { withGroupMembershipPort } from "../../../apps/api/src/groups/group-membership-context.js";
+import { withAlliancePort } from "../../../apps/api/src/groups/alliance-context.js";
+import { SupabaseAllianceRepository } from "./repositories/alliance.js";
+import { SupabaseGroupMembershipRepository } from "./repositories/group-membership.js";
 
 interface MatchCoordinatorNamespace { idFromName(name: string): unknown; get(id: unknown): { fetch(input: string, init?: RequestInit): Promise<Response> }; }
 interface MatchCoordinatorState { storage: { setAlarm(scheduledTime: number): Promise<void>; deleteAlarm(): Promise<void>; }; }
@@ -96,8 +165,68 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
         ? new SupabaseHttpClient({ url: env.SUPABASE_URL, serviceRoleKey: env.SUPABASE_SERVICE_ROLE_KEY })
         : undefined;
       const publicPlayerRecords = supabaseClient ? new SupabasePublicPlayerRecordRepository(supabaseClient) : undefined;
+      const gameDashboard = supabaseClient ? new SupabaseGameDashboardRepository(supabaseClient) : undefined;
+      const telegramUserLookup = supabaseClient ? new SupabaseTelegramUserLookupRepository(supabaseClient) : undefined;
+      const telegramAccountProvisioning = supabaseClient ? new SupabaseTelegramAccountProvisioningRepository(supabaseClient) : undefined;
+      const clubTicketPrice = supabaseClient ? new SupabaseClubTicketPriceRepository(supabaseClient) : undefined;
+      const clubEconomySettlement = supabaseClient ? new SupabaseClubEconomySettlementRepository(supabaseClient) : undefined;
+      const clubManagement = supabaseClient ? new SupabaseClubManagementRepository(supabaseClient) : undefined;
+      const clubLineup = supabaseClient ? new SupabaseClubLineupRepository(supabaseClient) : undefined;
+      const playerDevelopment = supabaseClient ? new SupabasePlayerDevelopmentRepository(supabaseClient) : undefined;
       const seasonAwards = supabaseClient ? new SupabaseSeasonAwardRepository(supabaseClient) : undefined;
-      return createWorkersApiRouter({ publicPlayerRecords, seasonAwards }).fetch(request);
+      const walletEntry = supabaseClient ? new SupabaseWalletEntryRepository(supabaseClient) : undefined;
+      const storePurchase = supabaseClient ? new SupabaseStorePurchaseRepository(supabaseClient) : undefined;
+      const storeSnapshot = supabaseClient ? new SupabaseStoreSnapshotRepository(supabaseClient) : undefined;
+      const storeItemUse = supabaseClient ? new SupabaseStoreItemUseRepository(supabaseClient) : undefined;
+      const marketPurchase = supabaseClient ? new SupabaseMarketPurchaseRepository(supabaseClient) : undefined;
+      const giftCodeRedemption = supabaseClient ? new SupabaseGiftCodeRedemptionRepository(supabaseClient) : undefined;
+      const specialAcquisition = supabaseClient ? new SupabaseSpecialAcquisitionRepository(supabaseClient) : undefined;
+      const marketListing = supabaseClient ? new SupabaseMarketListingRepository(supabaseClient) : undefined;
+      const specialPlayers = supabaseClient ? new SupabaseSpecialPlayerCatalogRepository(supabaseClient) : undefined;
+      const matchRuntimeCheckpoint = supabaseClient ? new SupabaseMatchRuntimeCheckpointRepository(supabaseClient) : undefined;
+      const matchOpponents = supabaseClient ? new SupabaseMatchOpponentRepository(supabaseClient) : undefined;
+      const friendlyMatchCreation = supabaseClient ? new SupabaseFriendlyMatchCreationRepository(supabaseClient) : undefined;
+      const competitionCreation = supabaseClient ? new SupabaseCompetitionCreationRepository(supabaseClient) : undefined;
+      const clubMatchRead = supabaseClient ? new SupabaseClubMatchReadRepository(supabaseClient) : undefined;
+      const competitionAdvancement = supabaseClient ? new SupabaseCompetitionAdvancementRepository(supabaseClient) : undefined;
+      const pyramidLeagueSettlement = supabaseClient ? new SupabasePyramidLeagueSettlementRepository(supabaseClient) : undefined;
+      const eventTournamentSettlement = supabaseClient ? new SupabaseEventTournamentSettlementRepository(supabaseClient) : undefined;
+      const matchRuntimeSettlement = supabaseClient ? new SupabaseMatchRuntimeSettlementRepository(supabaseClient) : undefined;
+      const botRuntimeLease = supabaseClient ? new SupabaseBotRuntimeLeaseRepository(supabaseClient) : undefined;
+       const groupMembership = supabaseClient ? new SupabaseGroupMembershipRepository(supabaseClient) : undefined;
+        const alliance = supabaseClient ? new SupabaseAllianceRepository(supabaseClient) : undefined;
+       const router = createWorkersApiRouter({ publicPlayerRecords, seasonAwards, specialPlayers, botRuntimeLease, groupMembership, alliance });
+      const handle = async (): Promise<Response> => await router.fetch(request);
+      const withGroupMembership = groupMembership ? () => withGroupMembershipPort(groupMembership, handle) : handle;
+       const withAlliance = alliance ? () => withAlliancePort(alliance, withGroupMembership) : withGroupMembership;
+      const withCompetitionCreation = competitionCreation ? () => withCompetitionCreationPort(competitionCreation, withAlliance) : withAlliance;
+      const withClubMatchRead = clubMatchRead ? () => withClubMatchReadPort(clubMatchRead, withCompetitionCreation) : withCompetitionCreation;
+      const withCompetitionAdvancement = competitionAdvancement ? () => withCompetitionAdvancementPort(competitionAdvancement, withClubMatchRead) : withClubMatchRead;
+      const withPyramidSettlement = pyramidLeagueSettlement ? () => withPyramidLeagueSettlementPort(pyramidLeagueSettlement, withCompetitionAdvancement) : withCompetitionAdvancement;
+      const withEventTournamentSettlement = eventTournamentSettlement ? () => withEventTournamentSettlementPort(eventTournamentSettlement, withPyramidSettlement) : withPyramidSettlement;
+      const withFriendlyMatchCreation = friendlyMatchCreation ? () => withFriendlyMatchCreationPort(friendlyMatchCreation, withEventTournamentSettlement) : withEventTournamentSettlement;
+      const withMatchOpponents = matchOpponents ? () => withMatchOpponentPort(matchOpponents, withFriendlyMatchCreation) : withFriendlyMatchCreation;
+      const withDashboard = gameDashboard ? () => withGameDashboardPort(gameDashboard, withMatchOpponents) : withMatchOpponents;
+      const withTelegramUserLookup = telegramUserLookup ? () => withTelegramUserLookupPort(telegramUserLookup, withDashboard) : withDashboard;
+      const withTelegramAccountProvisioning = telegramAccountProvisioning
+        ? () => withTelegramAccountProvisioningPort(telegramAccountProvisioning, withTelegramUserLookup) : withTelegramUserLookup;
+      const withClubTicketPrice = clubTicketPrice ? () => withClubTicketPricePort(clubTicketPrice, withTelegramAccountProvisioning) : withTelegramAccountProvisioning;
+      const withClubEconomy = clubEconomySettlement ? () => withClubEconomySettlementPort(clubEconomySettlement, withClubTicketPrice) : withClubTicketPrice;
+      const withClubOperations = clubManagement ? () => withClubManagementPort(clubManagement, withClubEconomy) : withClubEconomy;
+      const withLineup = clubLineup ? () => withClubLineupPort(clubLineup, withClubOperations) : withClubOperations;
+      const withPlayerDevelopment = playerDevelopment ? () => withPlayerDevelopmentPort(playerDevelopment, withLineup) : withLineup;
+      const withCheckpoint = matchRuntimeCheckpoint
+        ? () => withMatchRuntimeCheckpointPort(matchRuntimeCheckpoint, withPlayerDevelopment) : withPlayerDevelopment;
+      const withSettlement = matchRuntimeSettlement
+        ? () => withMatchRuntimeSettlementPort(matchRuntimeSettlement, withCheckpoint) : withCheckpoint;
+      const withWallet = walletEntry ? () => withWalletEntryPort(walletEntry, withSettlement) : withSettlement;
+      const withStorePurchase = storePurchase ? () => withStorePurchasePort(storePurchase, withWallet) : withWallet;
+      const withMarketPurchase = marketPurchase ? () => withMarketPurchasePort(marketPurchase, withStorePurchase) : withStorePurchase;
+      const withGiftCodeRedemption = giftCodeRedemption ? () => withGiftCodeRedemptionPort(giftCodeRedemption, withMarketPurchase) : withMarketPurchase;
+      const withSpecialAcquisition = specialAcquisition ? () => withSpecialAcquisitionPort(specialAcquisition, withGiftCodeRedemption) : withGiftCodeRedemption;
+      const withMarketListing = marketListing ? () => withMarketListingPort(marketListing, withSpecialAcquisition) : withSpecialAcquisition;
+      const withStoreRead = storeSnapshot ? () => withStoreSnapshotPort(storeSnapshot, withMarketListing) : withMarketListing;
+      return storeItemUse ? withStoreItemUsePort(storeItemUse, withStoreRead) : withStoreRead();
     });
     cleanupScheduled = true;
     ctx.waitUntil(client.$disconnect().catch((error: unknown) => console.error("Prisma request client cleanup failed", error)));
@@ -130,90 +259,45 @@ export class MatchCoordinator {
     let nextAlarm: number | null = null;
     try {
       await withPrismaClient(client, async () => {
+        const supabase = this.env.SUPABASE_URL && this.env.SUPABASE_SERVICE_ROLE_KEY
+          ? new SupabaseHttpClient({ url: this.env.SUPABASE_URL, serviceRoleKey: this.env.SUPABASE_SERVICE_ROLE_KEY })
+          : undefined;
+        const matchRuntimeLease = supabase ? new SupabaseMatchRuntimeLeaseRepository(supabase) : undefined;
+        const matchRuntimeSnapshot = supabase ? new SupabaseMatchRuntimeSnapshotRepository(supabase) : undefined;
+        const matchRuntimeEnqueue = supabase ? new SupabaseMatchRuntimeEnqueueRepository(supabase) : undefined;
+        const matchRuntimeForfeit = supabase ? new SupabaseMatchRuntimeForfeitRepository(supabase) : undefined;
+        const matchRuntimeAdvance = supabase ? new SupabaseMatchRuntimeAdvanceRepository(supabase) : undefined;
+        const matchRuntimeCheckpoint = supabase ? new SupabaseMatchRuntimeCheckpointRepository(supabase) : undefined;
+        const matchRuntimeSettlement = supabase ? new SupabaseMatchRuntimeSettlementRepository(supabase) : undefined;
+        const competitionAdvancement = supabase ? new SupabaseCompetitionAdvancementRepository(supabase) : undefined;
+        const pyramidLeagueSettlement = supabase ? new SupabasePyramidLeagueSettlementRepository(supabase) : undefined;
+        const eventTournamentSettlement = supabase ? new SupabaseEventTournamentSettlementRepository(supabase) : undefined;
+        const matchNotifications = supabase ? new SupabaseMatchNotificationRepository(supabase) : undefined;
         const now = new Date();
         // One indexed scheduler statement replaces six independent findFirst queries.
         // Its flags also let us skip queue scans and workers that have no due work.
-        const scheduleRows = await prisma.$queryRaw<Array<{
-          nextAlarm: Date | null; hasDueRuntime: boolean; hasDueFixture: boolean;
-          hasDueNotifications: boolean; hasPendingTournamentFinalization: boolean;
-          hasPendingPromotionWork: boolean;
-        }>>`
-          WITH clock AS (SELECT NOW() AS now),
-          candidates AS (
-            SELECT GREATEST(COALESCE(runtime."nextActionAt", clock.now + INTERVAL '10 seconds'),
-                COALESCE(runtime."leaseExpiresAt", '-infinity'::timestamptz)) AS candidate_at,
-              (runtime."nextActionAt" <= clock.now
-                AND (runtime."leaseExpiresAt" IS NULL OR runtime."leaseExpiresAt" <= clock.now)) AS due_runtime,
-              FALSE AS due_fixture, FALSE AS due_notifications, FALSE AS pending_tournament, FALSE AS pending_promotion
-            FROM "MatchRuntime" runtime CROSS JOIN clock
-            WHERE runtime."status"::text IN ('QUEUED', 'RUNNING', 'AWAITING_CHECKPOINT')
-            UNION ALL
-            SELECT fixture."scheduledAt", FALSE, FALSE, FALSE, FALSE, FALSE
-            FROM "FootballMatch" fixture CROSS JOIN clock
-            WHERE fixture."status"::text = 'SCHEDULED' AND fixture."scheduledAt" > clock.now
-              AND NOT EXISTS (SELECT 1 FROM "MatchRuntime" runtime WHERE runtime."matchId" = fixture."id")
-            UNION ALL
-            SELECT clock.now + INTERVAL '5 seconds', FALSE, TRUE, FALSE, FALSE, FALSE
-            FROM "FootballMatch" fixture CROSS JOIN clock
-            WHERE fixture."status"::text = 'SCHEDULED' AND fixture."scheduledAt" <= clock.now
-              AND NOT EXISTS (SELECT 1 FROM "MatchRuntime" runtime WHERE runtime."matchId" = fixture."id")
-            UNION ALL
-            SELECT GREATEST(clock.now + INTERVAL '1 second', notice."availableAt",
-                COALESCE(notice."lockedUntil", '-infinity'::timestamptz)),
-              FALSE, FALSE,
-              (notice."availableAt" <= clock.now
-                AND (notice."lockedUntil" IS NULL OR notice."lockedUntil" < clock.now - INTERVAL '30 seconds')),
-              FALSE, FALSE
-            FROM "MatchLifecycleNotification" notice CROSS JOIN clock
-            WHERE notice."status" = 'PENDING'
-            UNION ALL
-            SELECT GREATEST(clock.now + INTERVAL '1 second', notice."availableAt",
-                COALESCE(notice."lockedUntil", '-infinity'::timestamptz)),
-              FALSE, FALSE,
-              (notice."availableAt" <= clock.now
-                AND (notice."lockedUntil" IS NULL OR notice."lockedUntil" < clock.now - INTERVAL '30 seconds')),
-              FALSE, FALSE
-            FROM "MatchResultNotification" notice
-            JOIN "FootballMatch" fixture ON fixture."id" = notice."matchId"
-            CROSS JOIN clock
-            WHERE notice."status" = 'PENDING' AND fixture."status"::text = 'COMPLETED'
-            UNION ALL
-            SELECT clock.now + INTERVAL '10 seconds', FALSE, FALSE, FALSE, TRUE, FALSE
-            FROM "EventTournament" tournament
-            JOIN "Competition" competition ON competition."id" = tournament."competitionId"
-            CROSS JOIN clock
-            WHERE tournament."status"::text = 'ACTIVE' AND competition."status"::text = 'COMPLETED'
-            UNION ALL
-            SELECT clock.now + INTERVAL '10 seconds', FALSE, FALSE, FALSE, FALSE, TRUE
-            FROM "PyramidLeague" league
-            JOIN "Competition" competition ON competition."id" = league."competitionId"
-            CROSS JOIN clock
-            WHERE league."promotionProcessedAt" IS NULL AND competition."status"::text = 'COMPLETED'
-            UNION ALL
-            SELECT offer."expiresAt", FALSE, FALSE, FALSE, FALSE, (offer."expiresAt" <= clock.now)
-            FROM "LeaguePromotionOffer" offer CROSS JOIN clock
-            WHERE offer."status"::text = 'PENDING'
-          )
-          SELECT MIN(candidate_at) AS "nextAlarm",
-            COALESCE(BOOL_OR(due_runtime), FALSE) AS "hasDueRuntime",
-            COALESCE(BOOL_OR(due_fixture), FALSE) AS "hasDueFixture",
-            COALESCE(BOOL_OR(due_notifications), FALSE) AS "hasDueNotifications",
-            COALESCE(BOOL_OR(pending_tournament), FALSE) AS "hasPendingTournamentFinalization",
-            COALESCE(BOOL_OR(pending_promotion), FALSE) AS "hasPendingPromotionWork"
-          FROM candidates
-        `;
-        const schedule = scheduleRows[0];
-        if (!schedule) throw new Error("MATCH_COORDINATOR_SCHEDULE_UNAVAILABLE");
-        const matchWork = await processDueMatchRuntimes("cloudflare-match-coordinator", now, 10, {
-          enqueue: schedule.hasDueFixture,
-          claim: schedule.hasDueRuntime || schedule.hasDueFixture,
-        });
+        if (!matchRuntimeLease || !matchRuntimeSnapshot || !matchRuntimeEnqueue || !matchRuntimeForfeit || !matchRuntimeAdvance || !matchRuntimeCheckpoint || !matchRuntimeSettlement || !competitionAdvancement || !pyramidLeagueSettlement || !eventTournamentSettlement) throw new Error("SUPABASE_MATCH_RUNTIME_REPOSITORY_UNAVAILABLE");
+        const schedule = await matchRuntimeLease.getSchedule();
+        const runMatchWork = () => withMatchRuntimeSnapshotPort(matchRuntimeSnapshot, () => withEventTournamentSettlementPort(eventTournamentSettlement, () => withPyramidLeagueSettlementPort(pyramidLeagueSettlement, () => withCompetitionAdvancementPort(competitionAdvancement, () =>
+          withMatchRuntimeEnqueuePort(matchRuntimeEnqueue, () =>
+            withMatchRuntimeForfeitPort(matchRuntimeForfeit, () =>
+            withMatchRuntimeAdvancePort(matchRuntimeAdvance, () =>
+              withMatchRuntimeCheckpointPort(matchRuntimeCheckpoint, () =>
+                withMatchRuntimeSettlementPort(matchRuntimeSettlement, () =>
+                processDueMatchRuntimes("cloudflare-match-coordinator", now, 10, {
+                  enqueue: schedule.hasDueFixture,
+                  claim: schedule.hasDueRuntime || schedule.hasDueFixture,
+                }))))))))));
+        const matchWork = await withMatchRuntimeLeasePort(matchRuntimeLease, runMatchWork);
         const tournamentFinalizations = schedule.hasPendingTournamentFinalization
-          ? await processDueEventTournamentFinalizations(now, 1)
+          ? await withEventTournamentSettlementPort(eventTournamentSettlement, () => processDueEventTournamentFinalizations(now, 1))
           : { candidates: 0, finalized: 0, failed: 0 };
-        if (schedule.hasDueNotifications) await deliverDueMatchLifecycle(this.env);
+        if (schedule.hasDueNotifications) {
+          if (!matchNotifications) throw new Error("SUPABASE_MATCH_NOTIFICATION_REPOSITORY_UNAVAILABLE");
+          await deliverDueMatchLifecycle(this.env, matchNotifications);
+        }
         if (schedule.hasPendingPromotionWork) {
-          const promotions = await processDuePromotionOffers(now, 50);
+          const promotions = await withPyramidLeagueSettlementPort(pyramidLeagueSettlement, () => processDuePromotionOffers(now, 50));
           if (promotions.completedLeagues || promotions.accepted) console.info("Pyramid promotion work completed", promotions);
         }
         if (matchWork.failed) console.warn("Match runtime work failed", matchWork);
@@ -257,82 +341,61 @@ function describeRuntimeError(error: unknown): Record<string, unknown> {
 }
 
 function escapeTelegramHtml(value: unknown): string { return String(value ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
-async function deliverDueMatchLifecycle(env: Env): Promise<void> {
+async function deliverDueMatchLifecycle(env: Env, repository: SupabaseMatchNotificationRepository): Promise<void> {
   const token = env.TELEGRAM_BOT_TOKEN ?? "";
   if (!token) return;
-  const now = new Date();
-  const claimToken = crypto.randomUUID();
-  const candidates = await prisma.matchLifecycleNotification.findMany({
-    where: { status: "PENDING", availableAt: { lte: now }, OR: [{ lockedUntil: null }, { lockedUntil: { lt: new Date(now.getTime() - 30_000) } }] },
-    select: { id: true }, orderBy: { availableAt: "asc" }, take: 50,
-  });
-  if (candidates.length) await prisma.matchLifecycleNotification.updateMany({
-    where: { id: { in: candidates.map((row) => row.id) }, status: "PENDING", availableAt: { lte: now },
-      OR: [{ lockedUntil: null }, { lockedUntil: { lt: new Date(now.getTime() - 30_000) } }] },
-    data: { claimToken, lockedUntil: new Date(now.getTime() + 30_000), attempts: { increment: 1 } },
-  });
-  const rows = candidates.length ? await prisma.matchLifecycleNotification.findMany({
-    where: { claimToken }, include: { match: { select: { homeClub: { select: { name: true } }, awayClub: { select: { name: true } } } } },
-    orderBy: { availableAt: "asc" },
-  }) : [];
+  const rows = await repository.claimDue(50, 30);
   for (const row of rows) {
-    const home = escapeTelegramHtml(row.match.homeClub.name);
-    const away = escapeTelegramHtml(row.match.awayClub.name);
-    const score = "\n<b>" + home + "</b> " + row.homeScore + " : " + row.awayScore + " <b>" + away + "</b>";
-    const payload = row.payload && typeof row.payload === "object" ? row.payload as Record<string, unknown> : {};
-    const message = row.kind === "KICKOFF" ? "⚽ <b>سوت آغاز مسابقه</b>" + score
-      : row.kind === "HALF_TIME" ? "⏸ <b>پایان نیمه اول</b> · دقیقه ۴۵" + score
-      : "⚽ <b>گل!</b> · دقیقه " + row.minute + "\n" + escapeTelegramHtml(payload.teamName ?? "تیم") + " · " + escapeTelegramHtml(payload.scorerName ?? "بازیکن") + score;
+    let delivered = false;
+    let errorCode = "TELEGRAM_SEND_FAILED";
     try {
-      const response = await fetch("https://api.telegram.org/bot" + token + "/sendMessage", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ chat_id: row.telegramChatId, text: message, parse_mode: "HTML" }) });
-      const body = await response.json() as { ok?: boolean };
-      const delivered = response.ok && body.ok === true;
-      await prisma.matchLifecycleNotification.updateMany({ where: { id: row.id, status: "PENDING", claimToken }, data: delivered ? { status: "DELIVERED", deliveredAt: new Date(), claimToken: null, lockedUntil: null } : { availableAt: new Date(Date.now() + 15_000), claimToken: null, lockedUntil: null, lastError: "TELEGRAM_SEND_FAILED" } });
+      const message = row.type === "LIFECYCLE" ? formatLifecycleNotification(row) : formatResultNotification(row);
+      const response = await fetch("https://api.telegram.org/bot" + token + "/sendMessage", {
+        method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ chat_id: row.telegramChatId, text: message, parse_mode: "HTML" }),
+      });
+      const body = await response.json() as { ok?: boolean; description?: string };
+      delivered = response.ok && body.ok === true;
+      if (!delivered && body.description) errorCode = body.description.slice(0, 500);
     } catch (error) {
-      await prisma.matchLifecycleNotification.updateMany({ where: { id: row.id, status: "PENDING", claimToken }, data: { availableAt: new Date(Date.now() + 15_000), claimToken: null, lockedUntil: null, lastError: error instanceof Error ? error.message.slice(0, 500) : "TELEGRAM_SEND_FAILED" } });
+      errorCode = error instanceof Error ? error.message.slice(0, 500) : errorCode;
     }
-  }
-  const resultClaimToken = crypto.randomUUID();
-  const resultCandidates = await prisma.matchResultNotification.findMany({
-    where: { status: "PENDING", availableAt: { lte: now }, OR: [{ lockedUntil: null }, { lockedUntil: { lt: new Date(now.getTime() - 30_000) } }], match: { status: "COMPLETED" } },
-    select: { id: true }, orderBy: { createdAt: "asc" }, take: 50,
-  });
-  if (resultCandidates.length) await prisma.matchResultNotification.updateMany({
-    where: { id: { in: resultCandidates.map((row) => row.id) }, status: "PENDING", availableAt: { lte: now },
-      OR: [{ lockedUntil: null }, { lockedUntil: { lt: new Date(now.getTime() - 30_000) } }] },
-    data: { claimToken: resultClaimToken, lockedUntil: new Date(now.getTime() + 30_000), attempts: { increment: 1 } },
-  });
-  const results = resultCandidates.length ? await prisma.matchResultNotification.findMany({
-    where: { claimToken: resultClaimToken }, include: { match: { include: { homeClub: { select: { id: true, name: true } }, awayClub: { select: { id: true, name: true } }, performances: { include: { player: { select: { firstName: true, lastName: true } } } } } } },
-    orderBy: { createdAt: "asc" },
-  }) : [];
-  for (const row of results) {
-    const match = row.match;
-    const homeStats = match.performances.filter((line) => line.clubId === match.homeClub.id);
-    const awayStats = match.performances.filter((line) => line.clubId === match.awayClub.id);
-    const sum = (items: typeof match.performances, key: "shots" | "passes" | "tackles") => items.reduce((total, item) => total + item[key], 0);
-    const scorers = match.performances.filter((line) => line.goals > 0).sort((a, b) => b.goals - a.goals).map((line) => escapeTelegramHtml(line.player.firstName + " " + line.player.lastName) + " · " + line.goals + " گل").join("\n");
-    const message = "🏁 <b>پایان مسابقه</b>\n<b>" + escapeTelegramHtml(match.homeClub.name) + "</b> " + match.homeScore + " : " + match.awayScore + " <b>" + escapeTelegramHtml(match.awayClub.name) + "</b>"
-      + "\n\n📊 <b>آمار مسابقه</b>"
-      + "\nشوت‌ها: " + sum(homeStats, "shots") + " - " + sum(awayStats, "shots")
-      + "\nپاس‌ها: " + sum(homeStats, "passes") + " - " + sum(awayStats, "passes")
-      + "\nتکل‌ها: " + sum(homeStats, "tackles") + " - " + sum(awayStats, "tackles")
-      + (scorers ? "\n\n⚽ <b>گلزنان</b>\n" + scorers : "\n\n⚽ بدون گل");
-    try {
-      const response = await fetch("https://api.telegram.org/bot" + token + "/sendMessage", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ chat_id: row.telegramChatId, text: message, parse_mode: "HTML" }) });
-      const body = await response.json() as { ok?: boolean };
-      const delivered = response.ok && body.ok === true;
-      await prisma.matchResultNotification.updateMany({ where: { id: row.id, status: "PENDING", claimToken }, data: delivered ? { status: "DELIVERED", deliveredAt: new Date(), claimToken: null, lockedUntil: null } : { availableAt: new Date(Date.now() + 15_000), claimToken: null, lockedUntil: null, lastError: "TELEGRAM_SEND_FAILED" } });
-    } catch (error) {
-      await prisma.matchResultNotification.updateMany({ where: { id: row.id, status: "PENDING", claimToken }, data: { availableAt: new Date(Date.now() + 15_000), claimToken: null, lockedUntil: null, lastError: error instanceof Error ? error.message.slice(0, 500) : "TELEGRAM_SEND_FAILED" } });
-    }
+    await repository.complete(row.type, row.id, row.claimToken, delivered, delivered ? null : errorCode, 15);
   }
 }
+function formatLifecycleNotification(row: MatchNotificationRow): string {
+  const home = escapeTelegramHtml(row.homeClubName ?? "میزبان");
+  const away = escapeTelegramHtml(row.awayClubName ?? "میهمان");
+  const score = "\n<b>" + home + "</b> " + (row.homeScore ?? 0) + " : " + (row.awayScore ?? 0) + " <b>" + away + "</b>";
+  const payload = row.payload && typeof row.payload === "object" ? row.payload : {};
+  return row.kind === "KICKOFF" ? "⚽ <b>سوت آغاز مسابقه</b>" + score
+    : row.kind === "HALF_TIME" ? "⏸ <b>پایان نیمه اول</b> · دقیقه ۴۵" + score
+    : "⚽ <b>گل!</b> · دقیقه " + row.minute + "\n" + escapeTelegramHtml(payload.teamName ?? "تیم") + " · " + escapeTelegramHtml(payload.scorerName ?? "بازیکن") + score;
+}
+function formatResultNotification(row: MatchNotificationRow): string {
+  const performances = row.performances ?? [];
+  const home = performances.filter((line) => line.clubId === row.homeClubId);
+  const away = performances.filter((line) => line.clubId === row.awayClubId);
+  const sum = (items: MatchNotificationPerformance[], key: "shots" | "passes" | "tackles") => items.reduce((total, item) => total + item[key], 0);
+  const scorers = performances.filter((line) => line.goals > 0).sort((a, b) => b.goals - a.goals)
+    .map((line) => escapeTelegramHtml(line.playerName) + " · " + line.goals + " گل").join("\n");
+  return "🏁 <b>پایان مسابقه</b>\n<b>" + escapeTelegramHtml(row.homeClubName ?? "میزبان") + "</b> " + (row.homeScore ?? 0)
+    + " : " + (row.awayScore ?? 0) + " <b>" + escapeTelegramHtml(row.awayClubName ?? "میهمان") + "</b>"
+    + "\n\n📊 <b>آمار مسابقه</b>"
+    + "\nشوت‌ها: " + sum(home, "shots") + " - " + sum(away, "shots")
+    + "\nپاس‌ها: " + sum(home, "passes") + " - " + sum(away, "passes")
+    + "\nتکل‌ها: " + sum(home, "tackles") + " - " + sum(away, "tackles")
+    + (scorers ? "\n\n⚽ <b>گلزنان</b>\n" + scorers : "\n\n⚽ بدون گل");
+}
+
 async function scheduledJobs(env: Env): Promise<void> {
-  if (env.MATCH_COORDINATOR) {
-    console.info("Scheduled fallback skipped; MatchCoordinator owns match and tournament processing.");
+  if (!env.MATCH_COORDINATOR) {
+    console.error("Scheduled game jobs paused; MATCH_COORDINATOR binding is required.");
     return;
   }
+  console.info("Scheduled fallback skipped; MatchCoordinator owns match and tournament processing.");
+  return;
+  /* Legacy scheduled Prisma path intentionally unreachable; match work must use MatchCoordinator/Supabase. */
   const missing = missingConfig(env);
   if (missing.length) { console.error("Scheduled game jobs skipped; missing configuration:", missing); return; }
   configureEnv(env);
@@ -340,12 +403,19 @@ async function scheduledJobs(env: Env): Promise<void> {
   try {
     await withPrismaClient(client, async () => {
       const now = new Date();
+      const supabase = env.SUPABASE_URL && env.SUPABASE_SERVICE_ROLE_KEY
+        ? new SupabaseHttpClient({ url: env.SUPABASE_URL, serviceRoleKey: env.SUPABASE_SERVICE_ROLE_KEY }) : undefined;
+      const matchNotifications = supabase ? new SupabaseMatchNotificationRepository(supabase) : undefined;
+      const pyramidLeagueSettlement = supabase ? new SupabasePyramidLeagueSettlementRepository(supabase) : undefined;
+      const eventTournamentSettlement = supabase ? new SupabaseEventTournamentSettlementRepository(supabase) : undefined;
       const matches = env.MATCH_COORDINATOR
         ? null
         : await processDueMatchRuntimes("cloudflare-api-scheduled-fallback", now, 10);
-      const tournamentFinalizations = await processDueEventTournamentFinalizations(now, 1);
-      await deliverDueMatchLifecycle(env);
-      const promotions = await processDuePromotionOffers(now, 50);
+      if (!pyramidLeagueSettlement || !eventTournamentSettlement) throw new Error("SUPABASE_TOURNAMENT_SETTLEMENT_REPOSITORY_UNAVAILABLE");
+      const tournamentFinalizations = await withEventTournamentSettlementPort(eventTournamentSettlement, () => processDueEventTournamentFinalizations(now, 1));
+      if (!matchNotifications) throw new Error("SUPABASE_MATCH_NOTIFICATION_REPOSITORY_UNAVAILABLE");
+      await deliverDueMatchLifecycle(env, matchNotifications);
+      const promotions = await withPyramidLeagueSettlementPort(pyramidLeagueSettlement, () => processDuePromotionOffers(now, 50));
       if ((matches && (matches.advanced || matches.settled || matches.failed))
         || tournamentFinalizations.finalized || tournamentFinalizations.failed
         || promotions.accepted || promotions.completedLeagues) {
@@ -375,122 +445,59 @@ export default {
         || (event.actionKey !== undefined && (typeof event.actionKey !== "string" || event.actionKey.length > 64 || !/^[a-z0-9_-]*$/i.test(event.actionKey)))
         || (event.chatType !== undefined && !["private", "group", "supergroup", "channel", "unknown"].includes(String(event.chatType)))
         || !["bot", "miniapp"].includes(String(event.source))) return json({ error: "INVALID_EVENT" }, 400);
-      const client = createPrismaClient(dbUrl(env) ?? undefined, 1);
+      if (!env.SUPABASE_URL || !env.SUPABASE_SERVICE_ROLE_KEY) {
+        return json({ error: "ANALYTICS_UNAVAILABLE" }, 503);
+      }
       try {
-        await withPrismaClient(client, () => prisma.$executeRaw`
-          INSERT INTO "PilotAnalyticsEvent" ("eventName", "userKey", "actionKey", "chatType", "source")
-          VALUES (${event.eventName}, ${event.userKey}, ${typeof event.actionKey === "string" ? event.actionKey : ""}, ${typeof event.chatType === "string" ? event.chatType : "unknown"}, ${String(event.source)})
-        `);
-        ctx.waitUntil(client.$disconnect().catch((error: unknown) => console.error("Pilot analytics cleanup failed", error)));
+        const analytics = new SupabasePilotAnalyticsRepository(
+          new SupabaseHttpClient({ url: env.SUPABASE_URL, serviceRoleKey: env.SUPABASE_SERVICE_ROLE_KEY }),
+        );
+        await analytics.record({
+          eventName: event.eventName,
+          userKey: event.userKey,
+          actionKey: typeof event.actionKey === "string" ? event.actionKey : "",
+          chatType: typeof event.chatType === "string" ? event.chatType : "unknown",
+          source: String(event.source),
+        });
         return json({ accepted: true }, 202);
       } catch (error) {
-        await client.$disconnect().catch(() => undefined);
-        console.error("Pilot analytics persistence failed", error);
+        console.error("Pilot analytics persistence failed", describeRuntimeError(error));
         return json({ error: "ANALYTICS_UNAVAILABLE" }, 503);
       }
     }
     configureEnv(env);
     if (request.method === "OPTIONS") return createWorkersApiRouter().fetch(request);
     if (request.method === "GET" && url.pathname === "/ready") {
-      const missing = missingConfig(env);
+      const missing = missingConfig(env).filter((item) =>
+        !["DATABASE_URL", "DATABASE_URL_INVALID", "DATABASE_URL_MUST_USE_SUPABASE_TRANSACTION_POOLER"].includes(item));
+      if (!env.SUPABASE_URL) missing.push("SUPABASE_URL");
+      if (!env.SUPABASE_SERVICE_ROLE_KEY || env.SUPABASE_SERVICE_ROLE_KEY.length < 32) missing.push("SUPABASE_SERVICE_ROLE_KEY");
       if (missing.length) return json({ status: "not_ready", service: "football-empire-cloudflare-api", missing }, 503);
-      const client = createPrismaClient(dbUrl(env) ?? undefined, 1);
       try {
-        const schemaChecks = await withPrismaClient(client, () => prisma.$queryRaw<Array<{ ready: boolean }>>`
-          SELECT
-            (
-              SELECT count(*) = 10
-              FROM "_prisma_migrations"
-              WHERE migration_name IN (
-                '20261116120000_in_game_store',
-                '20261117100000_lock_down_public_api',
-                '20261117110000_index_foreign_key_columns',
-                '20261117120000_restore_alliance_foreign_keys',
-                '20261117180000_event_tournaments',
-                '20261117200000_match_lifecycle_notifications',
-                '20261117210000_league_round_notice_dedupe',
-                '20261117220000_event_tournament_competitions',
-                '20261117230000_event_tournament_default_capacity',
-                '20261117240000_event_tournament_fk_indexes'
-              )
-                AND finished_at IS NOT NULL
-                AND rolled_back_at IS NULL
-            )
-            AND to_regclass('"PyramidLeague"') IS NOT NULL
-            AND to_regclass('"LeaguePromotionOffer"') IS NOT NULL
-            AND to_regclass('"EventTournament"') IS NOT NULL
-            AND to_regclass('"EventTournamentParticipant"') IS NOT NULL
-            AND to_regclass('"EventTournamentPrize"') IS NOT NULL
-            AND to_regclass('"EventTournamentPrizeAward"') IS NOT NULL
-            AND to_regclass('"MatchLifecycleNotification"') IS NOT NULL
-            AND EXISTS (
-              SELECT 1 FROM information_schema.columns
-              WHERE table_schema = 'public'
-                AND table_name = 'LeagueNotice'
-                AND column_name = 'dedupeKey'
-            )
-            AND (SELECT count(*) >= 15 FROM "SpecialPlayer" WHERE active = true)
-            AND EXISTS (
-              SELECT 1 FROM pg_roles
-              WHERE rolname = current_user
-                AND (rolsuper OR rolbypassrls)
-            )
-            AND NOT EXISTS (
-              SELECT 1
-              FROM pg_class c
-              JOIN pg_namespace n ON n.oid = c.relnamespace
-              WHERE n.nspname = 'public'
-                AND c.relkind IN ('r', 'p')
-                AND NOT c.relrowsecurity
-            )
-            AND NOT EXISTS (
-              SELECT 1
-              FROM information_schema.role_table_grants
-              WHERE table_schema = 'public'
-                AND grantee IN ('anon', 'authenticated')
-            )
-            AND NOT EXISTS (
-              SELECT 1
-              FROM pg_class c
-              JOIN pg_namespace n ON n.oid = c.relnamespace
-              WHERE n.nspname = 'public'
-                AND c.relkind = 'S'
-                AND (
-                  has_sequence_privilege('anon', c.oid, 'USAGE')
-                  OR has_sequence_privilege('anon', c.oid, 'SELECT')
-                  OR has_sequence_privilege('anon', c.oid, 'UPDATE')
-                  OR has_sequence_privilege('authenticated', c.oid, 'USAGE')
-                  OR has_sequence_privilege('authenticated', c.oid, 'SELECT')
-                  OR has_sequence_privilege('authenticated', c.oid, 'UPDATE')
-                )
-            )
-            AND NOT EXISTS (
-              SELECT 1
-              FROM pg_proc p
-              JOIN pg_namespace n ON n.oid = p.pronamespace
-              WHERE n.nspname = 'public'
-                AND (
-                  has_function_privilege('anon', p.oid, 'EXECUTE')
-                  OR has_function_privilege('authenticated', p.oid, 'EXECUTE')
-                )
-            ) AS ready
-        `);
-        if (!schemaChecks[0]?.ready) {
-          ctx.waitUntil(client.$disconnect().catch((error: unknown) => console.error("Prisma readiness cleanup failed", error)));
+        const supabase = new SupabaseHttpClient({
+          url: env.SUPABASE_URL!,
+          serviceRoleKey: env.SUPABASE_SERVICE_ROLE_KEY!,
+        });
+        const schemaReady = await new SupabaseRuntimeReadinessRepository(supabase).check();
+        if (!schemaReady) {
           return json({
             status: "not_ready",
-            service: "football-empire-api",
+            service: "football-empire-cloudflare-api",
             database: "connected",
+            database_transport: "supabase_https",
             missing: ["DATABASE_SCHEMA_MIGRATIONS"],
           }, 503);
         }
-        ctx.waitUntil(client.$disconnect().catch((error: unknown) => console.error("Prisma readiness cleanup failed", error)));
-        return json({ status: "ready", service: "football-empire-api", database: "connected", schema: "current" });
+        return json({
+          status: "ready",
+          service: "football-empire-cloudflare-api",
+          database: "connected",
+          database_transport: "supabase_https",
+          schema: "current",
+        });
       } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        console.error("Cloudflare API readiness database check failed", describeRuntimeError(error));
-        await client.$disconnect().catch(() => undefined);
-        return json({ status: "not_ready", service: "football-empire-cloudflare-api", missing: ["DATABASE_CONNECTION"] }, 503);
+        console.error("Cloudflare API Supabase readiness check failed", describeRuntimeError(error));
+        return json({ status: "not_ready", service: "football-empire-cloudflare-api", missing: ["SUPABASE_DATABASE_CHECK"] }, 503);
       }
     }
     const response = await handleApi(request, env, ctx);

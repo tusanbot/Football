@@ -1,4 +1,7 @@
+import { randomInt } from "node:crypto";
 import { Prisma } from "@prisma/client";
+import { generateStarterSquad } from "@football/domain";
+import { getTelegramAccountProvisioningPort } from "./account-provisioning-context.js";
 import { prisma } from "../db.js";
 import { ensureStarterSquad } from "../players/player-service.js";
 
@@ -15,6 +18,13 @@ export interface TelegramAccountIdentity {
  */
 export async function provisionTelegramAccount(identity: TelegramAccountIdentity) {
   const { telegramId, displayName, username = null, firstName } = identity;
+  const httpProvisioning = getTelegramAccountProvisioningPort();
+  if (httpProvisioning) {
+    return httpProvisioning.provision({
+      telegramId, username, displayName, firstName,
+      starterPlayers: generateStarterSquad(randomInt),
+    });
+  }
 
   try {
     return await prisma.$transaction(async (tx) => {

@@ -1,6 +1,7 @@
 import { Prisma, type WalletAsset, type LedgerDirection } from "@prisma/client";
 import { assertIdempotencyKey, calculateNextBalance } from "@football/domain";
 import { prisma } from "../db.js";
+import { getWalletEntryPort } from "./wallet-entry-context.js";
 
 export class WalletOperationError extends Error {
   constructor(
@@ -25,12 +26,26 @@ export interface WalletEntryInput {
 
 /**
  * The ledger row and wallet balance are committed together.
- * Call this only from trusted server-side game commands, never directly from a client.
+ * Cloudflare requests provide an RPC port so this command executes in one PostgreSQL transaction.
  */
 export async function applyWalletEntry(input: WalletEntryInput) {
   try {
     try { assertIdempotencyKey(input.idempotencyKey); }
     catch (error) { throw new WalletOperationError(error instanceof Error ? error.message : "Invalid idempotency key", "INVALID_AMOUNT"); }
+
+    const walletPort = getWalletEntryPort();
+    if (walletPort) {
+      try {
+        return await walletPort.applyWalletEntry(input);
+      } catch (error) {
+        const code = error && typeof error === "object" && "code" in error ? String(error.code) : "";
+        if (["INVALID_AMOUNT", "INSUFFICIENT_FUNDS", "IDEMPOTENCY_CONFLICT", "WALLET_NOT_FOUND", "CONCURRENT_MODIFICATION"].includes(code)) {
+          throw new WalletOperationError(error instanceof Error ? error.message : code, code as WalletOperationError["code"]);
+        }
+        throw error;
+      }
+    }
+
     const result = await prisma.$transaction(async (tx) => {
       const previous = await tx.ledgerTransaction.findUnique({
         where: { idempotencyKey: input.idempotencyKey },

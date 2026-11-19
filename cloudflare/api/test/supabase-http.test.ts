@@ -25,6 +25,7 @@ test("Supabase client sends authenticated HTTPS PostgREST requests", async () =>
   assert.equal(headers.get("apikey"), config.serviceRoleKey);
   assert.equal(headers.get("authorization"), "Bearer " + config.serviceRoleKey);
   assert.equal(captured?.init.method, "GET");
+  assert.equal(captured?.init.redirect, "error");
 });
 
 test("RPC calls use PostgREST RPC endpoint and JSON arguments", async () => {
@@ -66,8 +67,24 @@ test("client rejects non-HTTPS, non-Supabase and credential-bearing URLs", () =>
     "http://example-project.supabase.co",
     "https://supabase.co",
     "https://example-project.supabase.co.attacker.invalid",
+    "https://nested.example-project.supabase.co",
+    "https://example-project.supabase.co:8443",
+    "https://example-project.supabase.co/proxy",
     "https://user:pass@example-project.supabase.co",
   ]) assert.throws(() => new SupabaseHttpClient({ ...config, url }));
+});
+
+test("client preserves quoted Prisma-style table names for PostgREST resources", async () => {
+  let requestedPath = "";
+  const client = new SupabaseHttpClient({
+    ...config,
+    fetchImpl: async (input) => {
+      requestedPath = new URL(String(input)).pathname;
+      return new Response("[]", { status: 200 });
+    },
+  });
+  await client.insert("PilotAnalyticsEvent", { eventName: "bot_start" });
+  assert.equal(requestedPath, "/rest/v1/PilotAnalyticsEvent");
 });
 
 test("client rejects unsafe identifiers and malformed configuration", async () => {

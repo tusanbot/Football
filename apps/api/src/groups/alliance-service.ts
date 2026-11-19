@@ -2,6 +2,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "../db.js";
 import { MatchServiceError, startLeague } from "../game/match-service.js";
 import { buildAllianceSeasonStandings, type AllianceSeasonLedgerEntry, type AllianceSeasonGroupInput } from "./alliance-security.js";
+import { getAlliancePort } from "./alliance-context.js";
 
 const ALLIANCE_DEFAULT_SEASON_DAYS = 30;
 async function getAllianceSeasonDuration(tx: Prisma.TransactionClient) {
@@ -49,6 +50,7 @@ async function payAllianceSeasonPrize(tx: Prisma.TransactionClient, allianceId: 
 }
 
 export async function createAlliance(i: { telegramUserId: string; telegramGroupId: string; name: string; description?: string; idempotencyKey: string }) {
+  const port=getAlliancePort(); if(port) return port.createAlliance(i);
   return prisma.$transaction(async tx => {
     const { group } = await manager(tx, i.telegramUserId, i.telegramGroupId);
     const old = await tx.alliance.findUnique({ where: { slug: i.idempotencyKey } });
@@ -68,6 +70,7 @@ export async function createAlliance(i: { telegramUserId: string; telegramGroupI
 }
 
 export async function inviteAllianceGroup(i: { telegramUserId: string; telegramGroupId: string; targetTelegramGroupId: string }) {
+  const port=getAlliancePort(); if(port) return port.inviteAllianceGroup(i);
   return prisma.$transaction(async tx => {
     const { group } = await manager(tx, i.telegramUserId, i.telegramGroupId);
     const membership = await tx.allianceGroup.findUnique({ where: { groupId: group.id }, include: { alliance: true } });
@@ -89,6 +92,7 @@ export async function inviteAllianceGroup(i: { telegramUserId: string; telegramG
 
 
 export async function contributeAllianceTreasury(i: { telegramUserId: string; telegramGroupId: string; amount: bigint; idempotencyKey: string }) {
+  const port=getAlliancePort(); if(port) return port.contributeAllianceTreasury({...i,amount:i.amount.toString()});
   if (i.amount <= 0n || i.amount > 1000000000n) throw new AllianceServiceError("INVALID_CONTRIBUTION_AMOUNT");
   return prisma.$transaction(async tx => {
     const { user, group } = await manager(tx, i.telegramUserId, i.telegramGroupId);
@@ -114,6 +118,7 @@ export async function contributeAllianceTreasury(i: { telegramUserId: string; te
 }
 
 export async function respondAllianceInvitation(i: { telegramUserId: string; telegramGroupId: string; invitationId: string; accept: boolean }) {
+  const port=getAlliancePort(); if(port) return port.respondAllianceInvitation(i);
   return prisma.$transaction(async tx => {
     const { group } = await manager(tx, i.telegramUserId, i.telegramGroupId);
     const invitation = await tx.allianceInvitation.findFirst({ where: { id: i.invitationId, groupId: group.id }, include: { alliance: true } });
@@ -132,6 +137,7 @@ export async function respondAllianceInvitation(i: { telegramUserId: string; tel
 }
 
 export async function getAllianceWorkspace(telegramUserId: string, telegramGroupId: string) {
+  const port=getAlliancePort(); if(port) return port.getAllianceWorkspace({telegramUserId,telegramGroupId,isReviewer:allianceReviewers().has(telegramUserId)});
   const { group } = await prisma.$transaction(tx => manager(tx, telegramUserId, telegramGroupId, false));
   const membership = await prisma.allianceGroup.findUnique({ where: { groupId: group.id }, include: { alliance: true } });
   if (!membership) {
@@ -184,6 +190,7 @@ export async function getAllianceWorkspace(telegramUserId: string, telegramGroup
 }
 
 export async function createAllianceChampionship(i: { telegramUserId: string; telegramGroupId: string; name: string; maxTeams: number; idempotencyKey: string }) {
+  const port=getAlliancePort(); if(port) return port.createAllianceChampionship(i);
   return prisma.$transaction(async tx => {
     const { user, group } = await manager(tx, i.telegramUserId, i.telegramGroupId);
     const membership = await tx.allianceGroup.findUnique({ where: { groupId: group.id }, include: { alliance: true } });
@@ -196,13 +203,14 @@ export async function createAllianceChampionship(i: { telegramUserId: string; te
     }
     const season = await tx.allianceSeason.findFirst({ where: { allianceId: membership.allianceId, status: "ACTIVE" }, orderBy: { number: "desc" } });
     if (!season) throw new AllianceServiceError("SEASON_REVIEW_REQUIRED");
-    const competition = await tx.competition.create({ data: { idempotencyKey: i.idempotencyKey, name: i.name, season: season?.number ?? 1, format: "LEAGUE", maxTeams: i.maxTeams, createdByClubId: clubId, allianceId: membership.allianceId, ...(season ? { allianceSeasonId: season.id } : {}), entries: { create: { clubId } } } });
+    const competition = await tx.competition.create({ data: { idempotencyKey: i.idempotencyKey, name: i.name, season: season?.number ?? 1, format: "LEAGUE", maxTeams: i.maxTeams, createdByClubId: clubId, allianceId: membership.allianceId, ...(season ? { allianceSeasonId: season.id } : {}), entries: { create: { clubId, allianceGroupId: membership.id } } } });
     await audit(tx, { allianceId: membership.allianceId, actorTelegramId: i.telegramUserId, groupTelegramId: group.telegramId, action: "CHAMPIONSHIP_CREATED", metadata: { competitionId: competition.id, name: competition.name, maxTeams: competition.maxTeams } });
     return { competition, replayed: false };
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 }
 
 export async function joinAllianceChampionship(i: { telegramUserId: string; telegramGroupId: string; competitionId: string }) {
+  const port=getAlliancePort(); if(port) return port.joinAllianceChampionship(i);
   return prisma.$transaction(async tx => {
     const { user, group } = await manager(tx, i.telegramUserId, i.telegramGroupId, false);
     const membership = await tx.allianceGroup.findUnique({ where: { groupId: group.id } });
@@ -212,13 +220,14 @@ export async function joinAllianceChampionship(i: { telegramUserId: string; tele
     if (c.status !== "REGISTRATION") throw new AllianceServiceError("COMPETITION_NOT_OPEN");
     if (c.entries.some(e => e.clubId === user.club!.id)) return { joined: true, replayed: true, teams: c.entries.length };
     if (c.entries.length >= c.maxTeams) throw new AllianceServiceError("COMPETITION_FULL");
-    await tx.competitionEntry.create({ data: { competitionId: c.id, clubId: user.club!.id } });
+    await tx.competitionEntry.create({ data: { competitionId: c.id, clubId: user.club!.id, allianceGroupId: membership.id } });
     await audit(tx, { allianceId: membership.allianceId, actorTelegramId: i.telegramUserId, groupTelegramId: group.telegramId, action: "CHAMPIONSHIP_JOINED", metadata: { competitionId: c.id, clubId: user.club!.id } });
     return { joined: true, replayed: false, teams: c.entries.length + 1 };
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 }
 
 export async function startAllianceChampionship(i: { telegramUserId: string; telegramGroupId: string; competitionId: string }) {
+  const port=getAlliancePort(); if(port) return port.startAllianceChampionship({...i,now:new Date().toISOString()});
   const { user, group } = await prisma.$transaction(tx => manager(tx, i.telegramUserId, i.telegramGroupId));
   const membership = await prisma.allianceGroup.findUnique({ where: { groupId: group.id } });
   if (!membership) throw new AllianceServiceError("ALLIANCE_NOT_FOUND");
@@ -233,6 +242,7 @@ export async function startAllianceChampionship(i: { telegramUserId: string; tel
 }
 
 export async function startAllianceSeason(i: { telegramUserId: string; telegramGroupId: string; durationDays?: number }) {
+  const port=getAlliancePort(); if(port) return port.startAllianceSeason(i);
   return prisma.$transaction(async tx => {
     const durationDays = i.durationDays ?? await getAllianceSeasonDuration(tx);
     if (!Number.isInteger(durationDays) || durationDays < 7 || durationDays > 90) throw new AllianceServiceError("INVALID_SEASON_DURATION");
@@ -251,6 +261,7 @@ export async function startAllianceSeason(i: { telegramUserId: string; telegramG
 }
 
 export async function closeAllianceSeason(i: { telegramUserId: string; telegramGroupId: string }) {
+  const port=getAlliancePort(); if(port) return port.closeAllianceSeason(i);
   const result = await prisma.$transaction(async tx => {
     const { group } = await manager(tx, i.telegramUserId, i.telegramGroupId);
     const membership = await tx.allianceGroup.findUnique({ where: { groupId: group.id } });
@@ -310,6 +321,7 @@ export async function closeAllianceSeason(i: { telegramUserId: string; telegramG
 }
 
 export async function reviewAllianceSeason(i: { telegramUserId: string; telegramGroupId: string; seasonId: string; decision: "APPROVE" | "REJECT" }) {
+  const port=getAlliancePort(); if(port) return port.reviewAllianceSeason({...i,isReviewer:allianceReviewers().has(i.telegramUserId)});
   return prisma.$transaction(async tx => {
     const { user, group } = await manager(tx, i.telegramUserId, i.telegramGroupId);
     const membership = await tx.allianceGroup.findUnique({ where: { groupId: group.id } });
@@ -450,3 +462,11 @@ export async function adminStartAllianceSeasonInTransaction(
   });
   return { season, replayed: false };
 }
+
+
+// Cross-alliance lifecycle is intentionally RPC-only; all ownership checks and writes run in one database transaction.
+export async function createCrossAllianceCompetition(i:{telegramUserId:string;telegramGroupId:string;name:string;maxTeams:number;idempotencyKey:string}){const port=getAlliancePort();if(!port)throw new AllianceServiceError("SUPABASE_ALLIANCE_PORT_REQUIRED");return port.createCrossAllianceCompetition(i);}
+export async function inviteCrossAllianceCompetition(i:{telegramUserId:string;telegramGroupId:string;competitionId:string;targetAllianceSlug:string}){const port=getAlliancePort();if(!port)throw new AllianceServiceError("SUPABASE_ALLIANCE_PORT_REQUIRED");return port.inviteCrossAllianceCompetition(i);}
+export async function respondCrossAllianceCompetitionInvitation(i:{telegramUserId:string;telegramGroupId:string;competitionId:string;accept:boolean}){const port=getAlliancePort();if(!port)throw new AllianceServiceError("SUPABASE_ALLIANCE_PORT_REQUIRED");return port.respondCrossAllianceCompetitionInvitation(i);}
+export async function joinCrossAllianceCompetition(i:{telegramUserId:string;telegramGroupId:string;competitionId:string}){const port=getAlliancePort();if(!port)throw new AllianceServiceError("SUPABASE_ALLIANCE_PORT_REQUIRED");return port.joinCrossAllianceCompetition(i);}
+export async function startCrossAllianceCompetition(i:{telegramUserId:string;telegramGroupId:string;competitionId:string}){const port=getAlliancePort();if(!port)throw new AllianceServiceError("SUPABASE_ALLIANCE_PORT_REQUIRED");return port.startCrossAllianceCompetition({...i,now:new Date().toISOString()});}

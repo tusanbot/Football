@@ -24,7 +24,7 @@ export class SupabaseHttpError extends Error {
   }
 }
 
-const IDENTIFIER = /^[a-z][a-z0-9_]*$/;
+const IDENTIFIER = /^[A-Za-z][A-Za-z0-9_]*$/;
 
 function validateIdentifier(value: string, label: string): string {
   if (!IDENTIFIER.test(value)) throw new TypeError(label + " must be a lowercase SQL identifier");
@@ -35,10 +35,16 @@ function normalizeBaseUrl(value: string): URL {
   let parsed: URL;
   try { parsed = new URL(value); }
   catch { throw new TypeError("SUPABASE_URL must be a valid HTTPS URL"); }
-  if (parsed.protocol !== "https:" || !parsed.hostname.endsWith(".supabase.co") || parsed.username || parsed.password) {
-    throw new TypeError("SUPABASE_URL must use an HTTPS Supabase project host");
+  // Accept only a direct Supabase project origin. Reject nested subdomains, custom
+  // ports, and path prefixes so credentials can never be sent to an unexpected host
+  // or an API mounted beneath an untrusted base path.
+  if (parsed.protocol !== "https:" || !/^[a-z0-9-]+\.supabase\.co$/i.test(parsed.hostname)
+    || parsed.username || parsed.password || (parsed.port && parsed.port !== "443")) {
+    throw new TypeError("SUPABASE_URL must use a direct HTTPS Supabase project host");
   }
-  if (parsed.search || parsed.hash) throw new TypeError("SUPABASE_URL must not contain query parameters or a fragment");
+  if ((parsed.pathname !== "" && parsed.pathname !== "/") || parsed.search || parsed.hash) {
+    throw new TypeError("SUPABASE_URL must be a project origin without a path, query, or fragment");
+  }
   parsed.pathname = parsed.pathname.replace(/\/$/, "");
   return parsed;
 }
@@ -126,6 +132,8 @@ export class SupabaseHttpClient {
     try {
       response = await this.fetchImpl(url, {
         method, headers, body: body === undefined ? undefined : JSON.stringify(body), signal,
+        // Never forward service-role credentials through an HTTP redirect.
+        redirect: "error",
       });
     } catch (error) {
       const message = error instanceof Error && error.name === "TimeoutError"
