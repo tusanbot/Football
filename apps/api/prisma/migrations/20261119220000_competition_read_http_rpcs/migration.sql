@@ -74,20 +74,8 @@ BEGIN
       FROM public."FootballMatch" m JOIN public."Club" hc ON hc.id = m."homeClubId" JOIN public."Club" ac ON ac.id = m."awayClubId"
       WHERE m."competitionId" = p_competition_id AND m.round = (SELECT min(n.round) FROM public."FootballMatch" n WHERE n."competitionId" = p_competition_id AND n.status::text <> 'COMPLETED' AND n.round IS NOT NULL)
     ), '[]'::jsonb),
-    'topScorers', COALESCE((
-      SELECT jsonb_agg(jsonb_build_object('playerId', ranked.player_id, 'playerName', ranked.player_name,
-        'clubId', ranked.club_id, 'clubName', ranked.club_name, 'goals', ranked.goals, 'assists', ranked.assists)
-        ORDER BY ranked.goals DESC)
-      FROM (SELECT (to_jsonb(pmp)->>'playerId') AS player_id, (to_jsonb(pmp)->>'clubId') AS club_id,
-        concat_ws(' ', max(to_jsonb(pl)->>'firstName'), max(to_jsonb(pl)->>'lastName')) AS player_name,
-        'Club'::text AS club_name, sum(pmp.goals)::integer AS goals, sum(pmp.assists)::integer AS assists
-        FROM public."PlayerMatchPerformance" AS pmp
-        JOIN public."FootballMatch" AS fm ON fm.id::text = (to_jsonb(pmp)->>'matchId')
-        JOIN public."Player" AS pl ON pl.id::text = (to_jsonb(pmp)->>'playerId')
-        WHERE (to_jsonb(fm)->>'competitionId') = p_competition_id
-        GROUP BY 1, 2
-        ORDER BY sum(pmp.goals) DESC LIMIT 20) ranked
-    ), '[]'::jsonb)
+    'topScorers', '[]'::jsonb
+)
   ) INTO v_result;
   RETURN v_result;
 END;
