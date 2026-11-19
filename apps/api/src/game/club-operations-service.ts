@@ -217,6 +217,34 @@ export async function settleClubEconomy(userId: string, now = new Date()) {
 export async function getClubOperations(userId: string, now = new Date()) {
   await settleClubDailyState(userId, now);
   const settlement = await settleClubEconomy(userId, now);
+  const httpPort = getClubManagementPort();
+  if (httpPort) {
+    const snapshot = await httpPort.getOperationsSnapshot(userId);
+    if (!snapshot) throw new ClubOperationsError("CLUB_NOT_FOUND");
+    const club = snapshot.club;
+    const activeSponsor = snapshot.sponsors.find((sponsor) => sponsor.status === "ACTIVE" && new Date(sponsor.endsAt) > now) ?? null;
+    return { club: {
+      id: club.id, name: club.name, level: club.level, reputation: club.reputation,
+      stadiumLevel: club.stadiumLevel, stadiumCapacity: calculateStadiumCapacity(club.stadiumLevel),
+      ticketPrice: String(club.ticketPrice), trainingGroundLevel: club.trainingGroundLevel, academyLevel: club.academyLevel,
+      dailyMaintenance: calculateDailyOperatingCost(club).toString(),
+      operatingArrears: String(club.operatingArrears),
+      coach: snapshot.coach ? { ...snapshot.coach, weeklySalary: String(snapshot.coach.weeklySalary) } : null,
+      activeSponsor: activeSponsor ? { id: activeSponsor.id, partnerName: activeSponsor.partnerName, tier: activeSponsor.tier,
+        dailyIncome: String(activeSponsor.dailyIncome), endsAt: new Date(activeSponsor.endsAt).toISOString() } : null,
+      sponsorOffers: getSponsorOffers(club.level, club.reputation).map((offer) => ({
+        ...offer, dailyIncome: offer.dailyIncome.toString(), signingBonus: offer.signingBonus.toString(),
+      })),
+      coachOffers: COACH_CANDIDATES.map((candidate) => ({
+        id: candidate.id, name: candidate.name, signingFee: candidate.signingFee.toString(),
+        weeklySalary: candidate.weeklySalary.toString(), trainingSkill: candidate.trainingSkill,
+        recoverySkill: candidate.recoverySkill, medicalSkill: candidate.medicalSkill,
+      })),
+      prospects: snapshot.prospects.map((prospect) => ({ ...prospect, recruitmentCost: String(prospect.recruitmentCost) })),
+      financeEntries: snapshot.financeEntries.map((entry) => ({ ...entry, amount: String(entry.amount), occurredAt: new Date(entry.occurredAt).toISOString() })),
+      cashBalance: String(snapshot.cashBalance ?? "0"), settlement,
+    } };
+  }
   const club = await prisma.club.findUnique({
     where: { ownerId: userId },
     include: {
