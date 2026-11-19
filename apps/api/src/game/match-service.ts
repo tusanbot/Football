@@ -14,6 +14,7 @@ import { getMatchRuntimeAdvancePort } from "./match-runtime-advance-context.js";
 import { getMatchRuntimeCheckpointPort } from "./match-runtime-checkpoint-context.js";
 import { getMatchRuntimeSettlementPort } from "./match-runtime-settlement-context.js";
 import { competitionKickoffAfterDays } from "./match-schedule.js";
+import { getMatchOpponentPort } from "./match-opponents-context.js";
 
 const DAY_MS = 86_400_000;
 const MATCH_MINUTE_MS = 1_000;
@@ -133,6 +134,8 @@ async function creditMatchCash(
   });
 }
 export async function listMatchOpponents(userId: string, search?: string) {
+  const port = getMatchOpponentPort();
+  if (port) return port.list(userId, search);
   const own = await getOwnedClub(userId);
   const query = search?.trim().slice(0, 80);
   const clubs = await prisma.club.findMany({
