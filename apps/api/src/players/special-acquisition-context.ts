@@ -28,6 +28,7 @@ export interface LegacyChallengeClaimResult {
   replayed: boolean;
 }
 export interface SpecialAcquisitionPort {
+  listActive(): Promise<unknown[]>;
   acquire(input: SpecialAcquisitionCommand): Promise<SpecialAcquisitionResult>;
   listLegacyChallenges(userId: string): Promise<{ challenges: LegacyChallengeView[] }>;
   claimLegacyChallenge(userId: string, slug: string): Promise<LegacyChallengeClaimResult>;
