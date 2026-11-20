@@ -85,8 +85,42 @@ export function buildApp(options: { logger?: boolean; pluginTimeout?: number; gr
   // Production HTTP routes must use direct-HTTPS Supabase repositories for the
   // match runtime and Telegram onboarding. Prisma compatibility remains isolated
   // to non-production migration tests and service families not yet migrated.
-  if ((process.env.NODE_ENV === "production" || process.env.ENVIRONMENT === "production") && (!options.matchPorts || !options.supabaseHttpClient || !options.pyramidLeagueSettlementPort || !options.accountProvisioningPort)) {
-    throw new Error("SUPABASE_MATCH_PORTS_REQUIRED: production API must use direct Supabase HTTP repositories and a Supabase readiness client.");
+  if (process.env.NODE_ENV === "production" || process.env.ENVIRONMENT === "production") {
+    const requiredRepositories: Array<[string, unknown]> = [
+      ["SUPABASE_HTTP_CLIENT", options.supabaseHttpClient],
+      ["TELEGRAM_USER_LOOKUP", options.telegramUserLookupPort],
+      ["TELEGRAM_ACCOUNT_PROVISIONING", options.accountProvisioningPort],
+      ["GROUP_MEMBERSHIP", options.groupMembershipPort],
+      ["ACTION_RATE_LIMIT", options.actionRateLimitPort],
+      ["ALLIANCE", options.alliancePort],
+      ["ADMIN_ALLIANCE", options.adminAlliancePort],
+      ["WALLET_ENTRY", options.walletEntryPort],
+      ["WALLET_READ", options.walletReadPort],
+      ["MARKET_LISTING", options.marketListingPort],
+      ["MARKET_PURCHASE", options.marketPurchasePort],
+      ["STORE_PURCHASE", options.storePurchasePort],
+      ["STORE_ITEM_USE", options.storeItemUsePort],
+      ["STORE_SNAPSHOT", options.storeSnapshotPort],
+      ["PLAYER_DEVELOPMENT", options.playerDevelopmentPort],
+      ["CLUB_ECONOMY_SETTLEMENT", options.clubEconomySettlementPort],
+      ["CLUB_MANAGEMENT", options.clubManagementPort],
+      ["CLUB_LINEUP", options.clubLineupPort],
+      ["SPECIAL_ACQUISITION", options.specialAcquisitionPort],
+      ["GIFT_CODE_REDEMPTION", options.giftCodeRedemptionPort],
+      ["BOT_RUNTIME_LEASE", options.botRuntimeLeasePort],
+      ["MATCH_RUNTIME", options.matchPorts],
+      ["GAME_DASHBOARD", options.gameDashboardPort],
+      ["PUBLIC_PLAYER_RECORDS", options.publicPlayerRecordRepository],
+      ["PUBLIC_CLUB_LOGO", options.publicClubLogoRepository],
+      ["PUBLIC_CLUB_READ", options.publicClubReadRepository],
+      ["EVENT_TOURNAMENT_READ", options.eventTournamentReadPort],
+      ["EVENT_TOURNAMENT_SETTLEMENT", options.eventTournamentSettlementPort],
+      ["PYRAMID_LEAGUE_SETTLEMENT", options.pyramidLeagueSettlementPort],
+    ];
+    const missingRepositories = requiredRepositories.filter(([, repository]) => !repository).map(([name]) => name);
+    if (missingRepositories.length) {
+      throw new Error("SUPABASE_RUNTIME_REPOSITORIES_REQUIRED: " + missingRepositories.join(", "));
+    }
   }
   const app = Fastify({
     logger: options.logger ?? process.env.NODE_ENV !== "test",
