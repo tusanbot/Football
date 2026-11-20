@@ -248,7 +248,7 @@ async function pollAdminGroupBroadcastQueue() {
       const completionBody = { claimToken: delivery.claimToken };
       try {
         await apiSystem(completionPath, completionBody);
-      } catch (firstAckError) {
+      } catch {
         // Sending succeeded. Retry only the idempotent acknowledgement; never
         // mark a possibly delivered Telegram message as a send failure.
         try {
@@ -445,7 +445,7 @@ async function pollMatchLifecycleNotifications() {
       }
       try {
         await acknowledge(true);
-      } catch (firstAckError) {
+      } catch {
         try {
           await acknowledge(true);
         } catch (secondAckError) {
@@ -500,7 +500,7 @@ async function pollMatchResultNotifications() {
       }
       try {
         await acknowledge(true);
-      } catch (firstAckError) {
+      } catch {
         try {
           await acknowledge(true);
         } catch (secondAckError) {
