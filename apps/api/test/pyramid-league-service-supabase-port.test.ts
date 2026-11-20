@@ -97,3 +97,17 @@ test("friendly challenge lifecycle uses the Supabase request-scoped repository",
  assert.deepEqual(calls[0]?.args, ["user-1", "100", now.toISOString(), null, "challenge-key-0001"]);
  assert.deepEqual(calls[1]?.args, ["user-2", "challenge-token", now.toISOString()]);
 });
+
+test("pyramid league service fails closed in production without its Supabase repository", async () => {
+  const previous = process.env.NODE_ENV;
+  process.env.NODE_ENV = "production";
+  try {
+    await assert.rejects(
+      applyForPyramidLeague("user-1", 1, new Date("2026-11-20T12:34:56.789Z")),
+      (error: unknown) => error instanceof Error && error.message === "PYRAMID_LEAGUE_SUPABASE_REPOSITORY_REQUIRED",
+    );
+  } finally {
+    if (previous === undefined) delete process.env.NODE_ENV;
+    else process.env.NODE_ENV = previous;
+  }
+});
