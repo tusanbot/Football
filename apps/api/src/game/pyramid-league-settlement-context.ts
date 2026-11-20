@@ -6,6 +6,7 @@ export interface PyramidLeagueSettlementPort {
  processDue(now:string,limit:number):Promise<{completedLeagues:number;processed:number;accepted:number}>;
  listLeagues(userId:string):Promise<Record<string,unknown>>;
  getClubHistory(userId:string):Promise<Record<string,unknown>>;
+ getLeagueDetails(userId:string,leagueId:string):Promise<Record<string,unknown>>;
 }
 const scope=new AsyncLocalStorage<PyramidLeagueSettlementPort>();
 export function withPyramidLeagueSettlementPort<T>(port:PyramidLeagueSettlementPort,operation:()=>Promise<T>):Promise<T>{return scope.run(port,operation);}
