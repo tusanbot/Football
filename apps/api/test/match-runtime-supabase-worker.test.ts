@@ -276,7 +276,7 @@ test("match worker resolves a tactical checkpoint from both clubs through one Su
       },
       async submitDecision() { throw new Error("decision submission is not part of worker resolution"); },
       async enqueueLifecycleEvents() { throw new Error("lifecycle enqueue should be included in atomic resolution"); },
-    }, () => processDueMatchRuntimes("checkpoint-worker", checkpointNow, 1, { enqueue: false }))))));
+    }, () => processDueMatchRuntimes("checkpoint-worker", checkpointNow, 1, { enqueue: false })))));
 
     assert.deepEqual(calls, ["first-half", "claim", "snapshot", "checkpoint-read", "checkpoint-resolve", "release"]);
     assert.deepEqual(result, { enqueued: 0, claimed: 1, advanced: 1, waiting: 0, settled: 0, failed: 0 });
