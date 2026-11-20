@@ -42,6 +42,7 @@ REVOKE ALL ON FUNCTION public.consume_alliance_action_rate_limit_http(text, time
 DO $grant$
 BEGIN
   IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'service_role') THEN
+    GRANT SELECT, INSERT, UPDATE ON TABLE public."AllianceActionThrottle" TO service_role;
     GRANT EXECUTE ON FUNCTION public.consume_alliance_action_rate_limit_http(text, timestamptz, timestamptz, integer)
       TO service_role;
   END IF;
