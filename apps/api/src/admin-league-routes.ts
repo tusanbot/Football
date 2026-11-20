@@ -4,6 +4,7 @@ import { prisma } from "./db.js";
 import { requireTelegramUser } from "./auth/require-telegram-user.js";
 import { consumeAllianceActionRateLimit } from "./groups/alliance-rate-limit.js";
 import { parseAdminTelegramIds } from "./runtime-config.js";
+import type { AdminRoleLookupPort } from "./admin-role-context.js";
 
 type Permission = "read" | "competitions";
 const ROLE_PERMISSIONS: Record<string, Permission[]> = {
@@ -13,37 +14,37 @@ const ROLE_PERMISSIONS: Record<string, Permission[]> = {
   moderator: ["read"],
 };
 
-async function roleFor(telegramId: string) {
+async function roleFor(telegramId: string, port?: AdminRoleLookupPort) {
   const superAdmins = parseAdminTelegramIds(process.env.GAME_ADMIN_TELEGRAM_IDS);
   if (superAdmins.includes(telegramId)) return "superadmin";
-  // Database assignments are authoritative, including inactive rows that revoke
-  // an environment-provisioned scoped role. Keep this in sync with admin-routes.
-  const assigned = await prisma.adminRoleAssignment.findUnique({
-    where: { telegramId },
-    select: { role: true, active: true },
-  });
+  let assigned;
+  if (port) assigned = await port.getAssignment(telegramId);
+  else {
+    if (process.env.NODE_ENV === "production" || process.env.ENVIRONMENT === "production") {
+      throw new Error("ADMIN_ROLE_SUPABASE_REPOSITORY_REQUIRED");
+    }
+    assigned = await prisma.adminRoleAssignment.findUnique({
+      where: { telegramId }, select: { role: true, active: true },
+    });
+  }
   if (assigned) {
     return assigned.active && Object.prototype.hasOwnProperty.call(ROLE_PERMISSIONS, assigned.role)
-      ? assigned.role
-      : null;
+      ? assigned.role : null;
   }
   try {
     const roles = JSON.parse(process.env.GAME_ADMIN_ROLE_MAP ?? "{}") as Record<string, string>;
     return roles[telegramId] && Object.prototype.hasOwnProperty.call(ROLE_PERMISSIONS, roles[telegramId]!)
-      ? roles[telegramId]!
-      : null;
-  } catch {
-    return null;
-  }
+      ? roles[telegramId]! : null;
+  } catch { return null; }
 }
 
-async function authorize(request: FastifyRequest, reply: FastifyReply, permission: Permission) {
+async function authorize(request: FastifyRequest, reply: FastifyReply, permission: Permission, port?: AdminRoleLookupPort) {
   const user = await requireTelegramUser(request);
   if (!user) {
     reply.code(401).send({ error: "UNAUTHENTICATED" });
     return null;
   }
-  const role = await roleFor(user.telegramId);
+  const role = await roleFor(user.telegramId, port);
   if (!role || !ROLE_PERMISSIONS[role]?.includes(permission)) {
     reply.code(403).send({ error: "ADMIN_PERMISSION_REQUIRED", permission });
     return null;
@@ -59,7 +60,7 @@ const filters = z.object({
   limit: z.coerce.number().int().min(1).max(100).default(60),
 });
 
-export function registerAdminLeagueRoutes(app: FastifyInstance) {
+export function registerAdminLeagueRoutes(app: FastifyInstance, options: { adminRoleLookupPort?: AdminRoleLookupPort } = {}) {\n  const authorizeAdmin = (request: FastifyRequest, reply: FastifyReply, permission: Permission) => authorize(request, reply, permission, options.adminRoleLookupPort);
   app.get("/v1/admin/pyramid-leagues", async (request, reply) => {
     const actor = await authorize(request, reply, "read");
     if (!actor) return;
