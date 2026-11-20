@@ -62,7 +62,9 @@ test("runtime snapshot validates shape and normalizes dates and ticket balances"
    homeClub:club("home"),awayClub:club("away")}};
  const stub=stubFetch([payload]);
  try{
-  const result=await new SupabaseMatchRuntimeSnapshotRepository(client()).get("runtime-1") as Record<string,any>;
+  const result=await new SupabaseMatchRuntimeSnapshotRepository(client()).get("runtime-1") as {
+   id:string; nextActionAt:Date; match:{scheduledAt:Date;homeClub:{ticketPrice:bigint};awayClub:{players:Array<{injuryUntil:Date}>}};
+  };
   assert.equal(result.id,"runtime-1");
   assert.equal(result.nextActionAt.toISOString(),"2026-11-20T10:05:00.000Z");
   assert.equal(result.match.scheduledAt.toISOString(),"2026-11-20T10:00:00.000Z");
@@ -92,9 +94,9 @@ test("runtime enqueue snapshots valid due fixtures, reports invalid squads and b
   assert.equal(stub.calls[1]!.url,url+"/rest/v1/rpc/enqueue_match_runtime_snapshots");
   const rows=stub.calls[1]!.body.p_rows as Array<Record<string,unknown>>;
   assert.equal(rows.length,1);
-  const kickoff=rows[0]!.kickoff_snapshot as Record<string,any>;
+  const kickoff=rows[0]!.kickoff_snapshot as {home:{players:Array<{position:string}>;ticketPrice:string}};
   assert.equal(kickoff.home.players.length,11);
-  assert.equal(kickoff.home.players[0].position,"GK");
+  assert.equal(kickoff.home.players[0]!.position,"GK");
   assert.equal(typeof kickoff.home.ticketPrice,"string");
  }finally{stub.restore();}
 });
