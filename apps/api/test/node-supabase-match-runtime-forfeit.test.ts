@@ -21,8 +21,8 @@ test("invalid-lineup forfeit uses one RPC that also advances its competition", a
   const payload = {
     settled: true, replayed: false, matchId: "match-1",
     competitionId: "competition-1", round: 2, competitionFormat: "CUP",
-    pyramidFinalization: { processed: false, replayed: true },
-    eventTournamentFinalization: { finalized: false, replayed: true, participants: 0, awards: 0 },
+    pyramidFinalization: null,
+    eventTournamentFinalization: null,
     advancement: {
       competitionId: "competition-1", format: "CUP", completed: false,
       roundComplete: true, nextRound: 3, fixturesCreated: 2, noticesCreated: 0, replayed: false,
