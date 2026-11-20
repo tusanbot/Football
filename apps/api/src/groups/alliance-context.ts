@@ -21,4 +21,10 @@ export interface AlliancePort {
 import { AsyncLocalStorage } from "node:async_hooks";
 const scope = new AsyncLocalStorage<AlliancePort>();
 export function withAlliancePort<T>(port:AlliancePort,operation:()=>Promise<T>):Promise<T>{return scope.run(port,operation);}
-export function getAlliancePort():AlliancePort|undefined{return scope.getStore();}
+export function getAlliancePort(): AlliancePort|undefined {
+  const port = scope.getStore();
+  if (!port && (process.env.NODE_ENV === "production" || process.env.ENVIRONMENT === "production")) {
+    throw new Error("ALLIANCE_SUPABASE_REPOSITORY_REQUIRED");
+  }
+  return port;
+}
