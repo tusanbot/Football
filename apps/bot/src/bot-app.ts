@@ -223,29 +223,47 @@ async function scheduleGroupReplyDeletion(chatId: number, messageId: number) {
 
 
 type LeagueNoticeDelivery = { id: string; telegramId: string; title: string; body: string; kind: string; referenceId: string | null; claimToken: string };
+let adminGroupBroadcastWorkerBusy = false;
 let leagueNoticeWorkerBusy = false;
 async function pollAdminGroupBroadcastQueue() {
-  if (!apiUrl || !botApiSecret) return;
+  if (adminGroupBroadcastWorkerBusy || !apiUrl || !botApiSecret) return;
+  adminGroupBroadcastWorkerBusy = true;
   try {
     const result = await apiSystem<{ deliveries: Array<{ id: string; telegramGroupId: string; message: string; claimToken: string }> }>("/v1/bot/admin-group-broadcasts/claim", { limit: 20 });
     for (const delivery of result.deliveries) {
       try {
         await bot.api.sendMessage(Number(delivery.telegramGroupId), delivery.message);
-        await apiSystem("/v1/bot/admin-group-broadcasts/" + delivery.id + "/complete", { claimToken: delivery.claimToken });
-      } catch (error) {
+      } catch (sendError) {
         try {
           await apiSystem("/v1/bot/admin-group-broadcasts/" + delivery.id + "/fail", {
             claimToken: delivery.claimToken,
-            error: error instanceof Error ? error.message.slice(0, 500) : "Telegram delivery failed",
+            error: sendError instanceof Error ? sendError.message.slice(0, 500) : "Telegram delivery failed",
           });
         } catch (ackError) {
           console.error("Could not reschedule admin group broadcast:", ackError);
+        }
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        continue;
+      }
+      const completionPath = "/v1/bot/admin-group-broadcasts/" + delivery.id + "/complete";
+      const completionBody = { claimToken: delivery.claimToken };
+      try {
+        await apiSystem(completionPath, completionBody);
+      } catch {
+        // Sending succeeded. Retry only the idempotent acknowledgement; never
+        // mark a possibly delivered Telegram message as a send failure.
+        try {
+          await apiSystem(completionPath, completionBody);
+        } catch (secondAckError) {
+          console.error("Could not acknowledge admin group broadcast; lease recovery will retry:", secondAckError);
         }
       }
       await new Promise((resolve) => setTimeout(resolve, 50));
     }
   } catch (error) {
     console.error("Admin group broadcast worker failed:", error);
+  } finally {
+    adminGroupBroadcastWorkerBusy = false;
   }
 }
 
@@ -349,12 +367,12 @@ async function pollMatchCheckpointNotifications() {
   try {
     const result = await apiSystem<{ notifications: Array<{
       checkpointId:string; matchId:string; checkpointKey:string; minute:number; deadlineAt:string;
-      clubName:string; opponentName:string; telegramUserId:string; side:"HOME"|"AWAY"; attempt:number;
+      clubName:string; opponentName:string; telegramUserId:string; side:"HOME"|"AWAY"; attempt:number; claimToken:string;
     }> }>("/v1/bot/match-checkpoints/claim", { limit: 25 });
     for (const notification of result.notifications) {
       const acknowledge = (delivered:boolean, error?:string) => apiSystem(
         "/v1/bot/match-checkpoints/ack",
-        { checkpointId: notification.checkpointId, side: notification.side, delivered, ...(error ? { error } : {}) },
+        { checkpointId: notification.checkpointId, side: notification.side, claimToken: notification.claimToken, delivered, ...(error ? { error } : {}) },
       );
       const telegramId = Number(notification.telegramUserId);
       if (!Number.isSafeInteger(telegramId)) {
@@ -373,12 +391,22 @@ async function pollMatchCheckpointNotifications() {
           + "\nدقیقه " + notification.minute + " · مهلت تا " + new Date(notification.deadlineAt).toLocaleTimeString("fa-IR", { timeZone: "Asia/Tehran" })
           + "\nبرای انتخاب سریع ذهنیت یکی از گزینه‌ها را بزنید. برای سایر تنظیمات از /tactic و برای تعویض از /sub استفاده کنید.",
           { reply_markup: keyboard });
-        await acknowledge(true);
       } catch (sendError) {
         const message = sendError instanceof Error ? sendError.message : "TELEGRAM_SEND_FAILED";
         await acknowledge(false, message.slice(0, 500)).catch((ackError:unknown) =>
           console.warn("Could not persist failed match notification:", ackError instanceof Error ? ackError.message : ackError));
         console.warn("Match checkpoint notification could not be delivered:", message);
+        continue;
+      }
+      try {
+        await acknowledge(true);
+      } catch {
+        try {
+          await acknowledge(true);
+        } catch (ackError) {
+          console.warn("Could not acknowledge delivered match checkpoint notification; lease recovery will retry:",
+            ackError instanceof Error ? ackError.message : ackError);
+        }
       }
     }
   } catch (error) {
@@ -387,7 +415,6 @@ async function pollMatchCheckpointNotifications() {
     matchNotificationWorkerBusy = false;
   }
 }
-
 let matchLifecycleNotificationWorkerBusy = false;
 async function pollMatchLifecycleNotifications() {
   if (matchLifecycleNotificationWorkerBusy || !apiUrl || !botApiSecret) return;
@@ -421,10 +448,20 @@ async function pollMatchLifecycleNotifications() {
       }
       try {
         await bot.api.sendMessage(telegramId, message, { parse_mode: "HTML" });
-        await acknowledge(true);
       } catch (sendError) {
         const detail = sendError instanceof Error ? sendError.message : "TELEGRAM_SEND_FAILED";
         await acknowledge(false, detail.slice(0, 500)).catch(() => undefined);
+        continue;
+      }
+      try {
+        await acknowledge(true);
+      } catch {
+        try {
+          await acknowledge(true);
+        } catch (secondAckError) {
+          console.warn("Could not acknowledge delivered match lifecycle notification; lease recovery will retry:",
+            secondAckError instanceof Error ? secondAckError.message : secondAckError);
+        }
       }
     }
   } catch (error) {
@@ -465,11 +502,21 @@ async function pollMatchResultNotifications() {
         + (match.completedAt ? "\n\nپایان: " + new Date(match.completedAt).toLocaleString("fa-IR", { timeZone: "Asia/Tehran" }) : "");
       try {
         await bot.api.sendMessage(telegramId, message, { parse_mode: "HTML" });
-        await acknowledge(true);
       } catch (sendError) {
         const detail = sendError instanceof Error ? sendError.message : "TELEGRAM_SEND_FAILED";
         await acknowledge(false, detail.slice(0, 500)).catch((ackError: unknown) =>
           console.warn("Could not persist failed match result delivery:", ackError instanceof Error ? ackError.message : ackError));
+        continue;
+      }
+      try {
+        await acknowledge(true);
+      } catch {
+        try {
+          await acknowledge(true);
+        } catch (secondAckError) {
+          console.warn("Could not acknowledge delivered match result notification; lease recovery will retry:",
+            secondAckError instanceof Error ? secondAckError.message : secondAckError);
+        }
       }
     }
   } catch (error) {

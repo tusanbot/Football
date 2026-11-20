@@ -1,10 +1,11 @@
 import type { AlliancePort } from "../../../../apps/api/src/groups/alliance-context.js";
+import type { AdminAlliancePort } from "../../../../apps/api/src/groups/node-supabase-alliance.js";
 import { AllianceServiceError } from "../../../../apps/api/src/groups/alliance-service.js";
 import { SupabaseHttpError } from "../supabase-http.js";
 import { SupabaseHttpClient } from "../supabase-http.js";
 function object(value:unknown):Record<string,unknown>{if(!value||typeof value!=="object"||Array.isArray(value))throw new Error("SUPABASE_ALLIANCE_INVALID_RESPONSE");return value as Record<string,unknown>;}
 function unwrap(value:unknown):unknown{const v=object(value);if(typeof v.error==="string")throw new AllianceServiceError(v.error);return v;}
-export class SupabaseAllianceRepository implements AlliancePort{
+export class SupabaseAllianceRepository implements AlliancePort, AdminAlliancePort{
  constructor(private readonly client:SupabaseHttpClient){}
  private async call(name:string,args:Record<string,unknown>):Promise<unknown>{try{return unwrap(await this.client.rpc(name,args));}catch(error){if(error instanceof SupabaseHttpError && /^[A-Z][A-Z0-9_]{2,80}$/.test(error.message))throw new AllianceServiceError(error.message);throw error;}}
  async createAlliance(i:Parameters<AlliancePort["createAlliance"]>[0]){return await this.call("create_alliance_http",{p_telegram_user_id:i.telegramUserId,p_telegram_group_id:i.telegramGroupId,p_name:i.name,p_description:i.description??"",p_idempotency_key:i.idempotencyKey});}
@@ -24,5 +25,8 @@ export class SupabaseAllianceRepository implements AlliancePort{
  async respondCrossAllianceCompetitionInvitation(i:Parameters<AlliancePort["respondCrossAllianceCompetitionInvitation"]>[0]){return this.call("respond_cross_alliance_competition_invitation_http",{p_telegram_user_id:i.telegramUserId,p_telegram_group_id:i.telegramGroupId,p_competition_id:i.competitionId,p_accept:i.accept});}
  async joinCrossAllianceCompetition(i:Parameters<AlliancePort["joinCrossAllianceCompetition"]>[0]){return this.call("join_cross_alliance_competition_http",{p_telegram_user_id:i.telegramUserId,p_telegram_group_id:i.telegramGroupId,p_competition_id:i.competitionId});}
  async startCrossAllianceCompetition(i:Parameters<AlliancePort["startCrossAllianceCompetition"]>[0]){return this.call("start_cross_alliance_competition_http",{p_telegram_user_id:i.telegramUserId,p_telegram_group_id:i.telegramGroupId,p_competition_id:i.competitionId,p_now:i.now});}
+ async adminStartAllianceSeason(i:Parameters<AdminAlliancePort["adminStartAllianceSeason"]>[0]){return this.call("admin_start_alliance_season_http",{p_actor_telegram_id:i.actorTelegramId,p_alliance_id:i.allianceId,p_duration_days:i.durationDays??null,p_idempotency_key:i.idempotencyKey,p_reason:i.reason??null});}
+ async adminCloseAllianceSeason(i:Parameters<AdminAlliancePort["adminCloseAllianceSeason"]>[0]){return this.call("admin_close_alliance_season_http",{p_actor_telegram_id:i.actorTelegramId,p_season_id:i.seasonId,p_idempotency_key:i.idempotencyKey,p_reason:i.reason??null});}
+ async adminReviewAllianceSeason(i:Parameters<AdminAlliancePort["adminReviewAllianceSeason"]>[0]){return this.call("admin_review_alliance_season_http",{p_actor_telegram_id:i.actorTelegramId,p_season_id:i.seasonId,p_decision:i.decision,p_idempotency_key:i.idempotencyKey,p_reason:i.reason??null});}
  async consumeRateLimit(i:Parameters<AlliancePort["consumeRateLimit"]>[0]){const result=object(await this.call("consume_alliance_action_rate_limit_http",{p_telegram_user_id:i.telegramUserId,p_telegram_group_id:i.telegramGroupId,p_action:i.action,p_limit:i.limit,p_now:i.now}));if(typeof result.allowed!=="boolean")throw new Error("SUPABASE_ALLIANCE_RATE_LIMIT_INVALID_RESPONSE");return result.allowed;}
 }

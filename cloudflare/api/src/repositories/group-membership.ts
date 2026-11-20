@@ -1,6 +1,6 @@
 import type { GroupActorStatus, GroupJoinInput, GroupMembershipPort, GroupRegistrationInput } from "../../../../apps/api/src/groups/group-membership-context.js";
 import { GroupMembershipPortError } from "../../../../apps/api/src/groups/group-membership-context.js";
-import { SupabaseHttpClient } from "../supabase-http.js";
+import { SupabaseHttpClient, SupabaseHttpError } from "../supabase-http.js";
 
 function ensureObject(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("SUPABASE_GROUP_MEMBERSHIP_INVALID_RESPONSE");
@@ -72,9 +72,16 @@ export class SupabaseGroupMembershipRepository implements GroupMembershipPort {
     return value;
   }
   private async groupRpc(name: string, args: Record<string, unknown>): Promise<unknown> {
-    const value = ensureObject(await this.client.rpc(name, args));
-    raiseBusinessError(value);
-    return value;
+    try {
+      const value = ensureObject(await this.client.rpc(name, args));
+      raiseBusinessError(value);
+      return value;
+    } catch (error) {
+      if (error instanceof SupabaseHttpError && /^[A-Z][A-Z0-9_]{2,80}$/.test(error.message)) {
+        throw new GroupMembershipPortError(error.message);
+      }
+      throw error;
+    }
   }
   async listShop(telegramUserId: string, telegramGroupId: string): Promise<unknown> {
     return this.groupRpc("list_group_shop_http", { p_telegram_user_id: telegramUserId, p_telegram_group_id: telegramGroupId });
@@ -93,6 +100,37 @@ export class SupabaseGroupMembershipRepository implements GroupMembershipPort {
   }
   async cancelChallenge(input: { telegramUserId: string; telegramGroupId: string; challengeId: string }): Promise<unknown> {
     return this.groupRpc("cancel_group_challenge_http", { p_telegram_user_id: input.telegramUserId, p_telegram_group_id: input.telegramGroupId, p_challenge_id: input.challengeId });
+  }
+
+  async createLeague(input: { telegramUserId: string; telegramGroupId: string; name: string; maxTeams: number; idempotencyKey: string; now?: Date }): Promise<unknown> {
+    return this.groupRpc("create_group_league_http", {
+      p_telegram_user_id: input.telegramUserId, p_telegram_group_id: input.telegramGroupId,
+      p_name: input.name, p_max_teams: input.maxTeams, p_idempotency_key: input.idempotencyKey,
+      p_now: (input.now ?? new Date()).toISOString(),
+    });
+  }
+  async joinLeague(input: { telegramUserId: string; telegramGroupId: string; competitionId: string; now?: Date }): Promise<unknown> {
+    return this.groupRpc("join_group_league_http", {
+      p_telegram_user_id: input.telegramUserId, p_telegram_group_id: input.telegramGroupId,
+      p_competition_id: input.competitionId, p_now: (input.now ?? new Date()).toISOString(),
+    });
+  }
+  async startLeague(input: { telegramUserId: string; telegramGroupId: string; competitionId: string; now?: Date }): Promise<unknown> {
+    return this.groupRpc("start_group_league_http", {
+      p_telegram_user_id: input.telegramUserId, p_telegram_group_id: input.telegramGroupId,
+      p_competition_id: input.competitionId, p_now: (input.now ?? new Date()).toISOString(),
+    });
+  }
+  async getLeagueTable(input: { telegramUserId: string; telegramGroupId: string; competitionId: string }): Promise<unknown> {
+    return this.groupRpc("get_group_league_table_http", {
+      p_telegram_user_id: input.telegramUserId, p_telegram_group_id: input.telegramGroupId,
+      p_competition_id: input.competitionId,
+    });
+  }
+  async listLeagues(input: { telegramUserId: string; telegramGroupId: string }): Promise<unknown> {
+    return this.groupRpc("list_group_leagues_http", {
+      p_telegram_user_id: input.telegramUserId, p_telegram_group_id: input.telegramGroupId,
+    });
   }
 
   async joinGroup(input: GroupJoinInput, now = new Date()): Promise<unknown> {

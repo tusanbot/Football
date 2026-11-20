@@ -192,3 +192,35 @@ test("Mini App verifies live Telegram manager status for every manager-only grou
   assert.equal(requiresGroupManagerVerification("POST", "/v1/groups/:telegramGroupId/leagues/:competitionId/join"), false);
   assert.equal(requiresGroupManagerVerification("GET", "/v1/groups/:telegramGroupId/shop"), false);
 });
+
+test("Fastify group routes use the injected Supabase membership port", async (t) => {
+  const previous = process.env.BOT_API_SECRET;
+  process.env.BOT_API_SECRET = "group-test-secret";
+  const calls: string[] = [];
+  const port = {
+    getActorStatus: async (userId: string, groupId?: string) => {
+      calls.push("actor:" + userId + ":" + groupId);
+      return { userExists: true, userSuspended: false, groupExists: true, groupSuspended: false };
+    },
+    listLeagues: async (input: { telegramUserId: string; telegramGroupId: string }) => {
+      calls.push("leagues:" + input.telegramUserId + ":" + input.telegramGroupId);
+      return { leagues: [] };
+    },
+  } as unknown as import("../src/groups/group-membership-context.js").GroupMembershipPort;
+  const app = buildApp({ groupMembershipPort: port });
+  await app.ready();
+  t.after(async () => {
+    await app.close();
+    if (previous === undefined) delete process.env.BOT_API_SECRET;
+    else process.env.BOT_API_SECRET = previous;
+  });
+
+  const response = await app.inject({
+    method: "GET",
+    url: "/v1/groups/-100123/leagues",
+    headers: { "x-football-bot-secret": "group-test-secret", "x-telegram-user-id": "12345" },
+  });
+  assert.equal(response.statusCode, 200);
+  assert.deepEqual(response.json(), { leagues: [] });
+  assert.deepEqual(calls, ["actor:12345:-100123", "leagues:12345:-100123"]);
+});

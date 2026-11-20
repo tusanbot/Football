@@ -28,6 +28,7 @@ export interface LegacyChallengeClaimResult {
   replayed: boolean;
 }
 export interface SpecialAcquisitionPort {
+  listActive?(): Promise<unknown[]>;
   acquire(input: SpecialAcquisitionCommand): Promise<SpecialAcquisitionResult>;
   listLegacyChallenges(userId: string): Promise<{ challenges: LegacyChallengeView[] }>;
   claimLegacyChallenge(userId: string, slug: string): Promise<LegacyChallengeClaimResult>;
@@ -41,5 +42,9 @@ export function withSpecialAcquisitionPort<T>(port: SpecialAcquisitionPort, oper
 }
 
 export function getSpecialAcquisitionPort(): SpecialAcquisitionPort | undefined {
-  return specialAcquisitionScope.getStore();
+  const port = specialAcquisitionScope.getStore();
+  if (!port && (process.env.NODE_ENV === "production" || process.env.ENVIRONMENT === "production")) {
+    throw new Error("SPECIAL_ACQUISITION_SUPABASE_REPOSITORY_REQUIRED");
+  }
+  return port;
 }

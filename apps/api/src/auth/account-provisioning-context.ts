@@ -23,5 +23,9 @@ export function withTelegramAccountProvisioningPort<T>(port: TelegramAccountProv
   return scope.run(port, operation);
 }
 export function getTelegramAccountProvisioningPort(): TelegramAccountProvisioningPort | undefined {
-  return scope.getStore();
+  const port = scope.getStore();
+  if (!port && (process.env.NODE_ENV === "production" || process.env.ENVIRONMENT === "production")) {
+    throw new Error("TELEGRAM_ACCOUNT_PROVISIONING_SUPABASE_REPOSITORY_REQUIRED");
+  }
+  return port;
 }

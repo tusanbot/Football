@@ -5,6 +5,7 @@ import { prisma } from "../db.js";
 import { requireTelegramUser } from "../auth/require-telegram-user.js";
 import { getGameDashboardPort } from "./game-dashboard-context.js";
 import { getClubLineupPort } from "./club-lineup-context.js";
+import { getWalletReadPort } from "../economy/wallet-read-context.js";
 
 const clubUpdateSchema = z.object({
   name: z.string().trim().min(2).max(32).regex(/^[\p{L}\p{N} .'-]+$/u),
@@ -71,42 +72,43 @@ export function registerGameRoutes(app: FastifyInstance) {
     if (!user) return reply.code(401).send({ error: "UNAUTHENTICATED" });
     const parsed = clubUpdateSchema.safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ error: "INVALID_CLUB_NAME", details: parsed.error.flatten() });
+    const lineupPort = getClubLineupPort();
+    const clubProfilePort = lineupPort as (typeof lineupPort & {
+      rename?: (userId: string, name: string) => Promise<{ kind: "UPDATED"; club: { id: string; name: string; level: number; reputation: number } } | { kind: "NOT_FOUND" } | { kind: "LOCKED"; activeCompetition: { id: string; name: string } }>;
+      listPlayers?: (userId: string) => Promise<{ players: Array<Record<string, unknown>>; count: number }>;
+    });
+    if (clubProfilePort?.rename) {
+      try {
+        const result = await clubProfilePort.rename(user.id, parsed.data.name);
+        if (result.kind === "NOT_FOUND") return reply.code(404).send({ error: "CLUB_NOT_FOUND" });
+        if (result.kind === "LOCKED") return reply.code(409).send({ error: "CLUB_EDIT_LOCKED_ACTIVE_LEAGUE", activeCompetition: result.activeCompetition });
+        return { club: result.club };
+      } catch (error) {
+        request.log.error({ error }, "Supabase club rename failed");
+        return reply.code(503).send({ error: "CLUB_RENAME_UNAVAILABLE" });
+      }
+    }
     try {
       const result = await prisma.$transaction(async (tx) => {
         const club = await tx.club.findUnique({
           where: { ownerId: user.id },
           select: {
             id: true,
-            competitionEntries: {
-              where: { competition: { status: "ACTIVE" } }, take: 1,
-              select: { competition: { select: { id: true, name: true } } },
-            },
-            pyramidLeagueEntries: {
-              where: { league: { competition: { status: "ACTIVE" } } }, take: 1,
-              select: { league: { select: { competition: { select: { id: true, name: true } } } } },
-            },
+            competitionEntries: { where: { competition: { status: "ACTIVE" } }, take: 1, select: { competition: { select: { id: true, name: true } } } },
+            pyramidLeagueEntries: { where: { league: { competition: { status: "ACTIVE" } } }, take: 1, select: { league: { select: { competition: { select: { id: true, name: true } } } } } },
           },
         });
         if (!club) return { kind: "NOT_FOUND" as const };
-        const activeCompetition = club.competitionEntries[0]?.competition
-          ?? club.pyramidLeagueEntries[0]?.league.competition
-          ?? null;
+        const activeCompetition = club.competitionEntries[0]?.competition ?? club.pyramidLeagueEntries[0]?.league.competition ?? null;
         if (activeCompetition) return { kind: "LOCKED" as const, activeCompetition };
-        const updated = await tx.club.update({
-          where: { id: club.id }, data: { name: parsed.data.name },
-          select: { id: true, name: true, level: true, reputation: true },
-        });
+        const updated = await tx.club.update({ where: { id: club.id }, data: { name: parsed.data.name }, select: { id: true, name: true, level: true, reputation: true } });
         return { kind: "UPDATED" as const, club: updated };
       }, { isolationLevel: "Serializable" });
       if (result.kind === "NOT_FOUND") return reply.code(404).send({ error: "CLUB_NOT_FOUND" });
-      if (result.kind === "LOCKED") return reply.code(409).send({
-        error: "CLUB_EDIT_LOCKED_ACTIVE_LEAGUE", activeCompetition: result.activeCompetition,
-      });
+      if (result.kind === "LOCKED") return reply.code(409).send({ error: "CLUB_EDIT_LOCKED_ACTIVE_LEAGUE", activeCompetition: result.activeCompetition });
       return { club: result.club };
     } catch (error) {
-      if (typeof error === "object" && error !== null && "code" in error && error.code === "P2034") {
-        return reply.code(409).send({ error: "CONCURRENT_MODIFICATION" });
-      }
+      if (typeof error === "object" && error !== null && "code" in error && error.code === "P2034") return reply.code(409).send({ error: "CONCURRENT_MODIFICATION" });
       throw error;
     }
   });
@@ -114,6 +116,11 @@ export function registerGameRoutes(app: FastifyInstance) {
   app.get("/v1/wallet", async (request, reply) => {
     const user = await requireTelegramUser(request);
     if (!user) return reply.code(401).send({ error: "UNAUTHENTICATED" });
+    const walletReadPort = getWalletReadPort();
+    if (walletReadPort) {
+      try { return { wallets: await walletReadPort.list(user.id) }; }
+      catch (error) { request.log.error({ error }, "Supabase wallet read failed"); return reply.code(503).send({ error: "WALLET_UNAVAILABLE" }); }
+    }
     const wallets = await prisma.wallet.findMany({ where: { userId: user.id }, select: { asset: true, balance: true, version: true, updatedAt: true }, orderBy: { asset: "asc" } });
     return { wallets: wallets.map((wallet) => ({ asset: wallet.asset, balance: wallet.balance.toString(), version: wallet.version, updatedAt: wallet.updatedAt.toISOString() })) };
   });
@@ -250,6 +257,16 @@ export function registerGameRoutes(app: FastifyInstance) {
   app.get("/v1/club/players", async (request, reply) => {
     const user = await requireTelegramUser(request);
     if (!user) return reply.code(401).send({ error: "UNAUTHENTICATED" });
+    const lineupPort = getClubLineupPort();
+    const clubProfilePort = lineupPort as (typeof lineupPort & { listPlayers?: (userId: string) => Promise<{ players: Array<Record<string, unknown>>; count: number }> });
+    if (clubProfilePort?.listPlayers) {
+      try { return await clubProfilePort.listPlayers(user.id); }
+      catch (error) {
+        if (error instanceof Error && error.message === "CLUB_NOT_FOUND") return reply.code(404).send({ error: "CLUB_NOT_FOUND" });
+        request.log.error({ error }, "Supabase club player list failed");
+        return reply.code(503).send({ error: "CLUB_PLAYERS_UNAVAILABLE" });
+      }
+    }
     const club = await prisma.club.findUnique({ where: { ownerId: user.id }, select: { id: true } });
     if (!club) return reply.code(404).send({ error: "CLUB_NOT_FOUND" });
     const players = await prisma.player.findMany({

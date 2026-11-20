@@ -30,3 +30,49 @@ test("group actor status validates all authorization flags", async () => {
   const { instance } = repository({ userExists: true, userSuspended: false, groupExists: true, groupSuspended: true });
   assert.deepEqual(await instance.getActorStatus("123", "-1001234567890"), { userExists: true, userSuspended: false, groupExists: true, groupSuspended: true });
 });
+
+test("group league lifecycle uses group-scoped Supabase RPCs", async () => {
+  const { instance, calls } = repository({ ok: true });
+  const now = new Date("2026-11-19T12:30:00.000Z");
+  await instance.createLeague({ telegramUserId: "123", telegramGroupId: "-1001234567890", name: "Group League", maxTeams: 8, idempotencyKey: "group-league:1234567890", now });
+  await instance.joinLeague({ telegramUserId: "123", telegramGroupId: "-1001234567890", competitionId: "competition_1", now });
+  await instance.startLeague({ telegramUserId: "123", telegramGroupId: "-1001234567890", competitionId: "competition_1", now });
+  await instance.getLeagueTable({ telegramUserId: "123", telegramGroupId: "-1001234567890", competitionId: "competition_1" });
+  await instance.listLeagues({ telegramUserId: "123", telegramGroupId: "-1001234567890" });
+  assert.deepEqual(calls.map(call => new URL(call.url).pathname.split("/").at(-1)), [
+    "create_group_league_http", "join_group_league_http", "start_group_league_http",
+    "get_group_league_table_http", "list_group_leagues_http",
+  ]);
+  assert.deepEqual(calls[0]!.body, {
+    p_telegram_user_id: "123", p_telegram_group_id: "-1001234567890", p_name: "Group League",
+    p_max_teams: 8, p_idempotency_key: "group-league:1234567890", p_now: now.toISOString(),
+  });
+  assert.deepEqual(calls[1]!.body, {
+    p_telegram_user_id: "123", p_telegram_group_id: "-1001234567890",
+    p_competition_id: "competition_1", p_now: now.toISOString(),
+  });
+  assert.deepEqual(calls[3]!.body, {
+    p_telegram_user_id: "123", p_telegram_group_id: "-1001234567890", p_competition_id: "competition_1",
+  });
+});
+test("group league RPC business errors remain typed", async () => {
+  const { instance } = repository({ error: "GROUP_MANAGER_REQUIRED" });
+  await assert.rejects(
+    instance.createLeague({ telegramUserId: "123", telegramGroupId: "-1001234567890", name: "Group League", maxTeams: 8, idempotencyKey: "group-league:1234567890" }),
+    (error: unknown) => error instanceof GroupMembershipPortError && error.code === "GROUP_MANAGER_REQUIRED",
+  );
+});
+
+test("group league SQL exceptions are mapped to typed group service errors", async () => {
+  const client = new SupabaseHttpClient({
+    url: "https://example.supabase.co", serviceRoleKey: "service-role-key-for-group-membership",
+    fetchImpl: async () => new Response(JSON.stringify({ message: "GROUP_MANAGER_REQUIRED", code: "P0001" }), {
+      status: 400, headers: { "content-type": "application/json" },
+    }),
+  });
+  const instance = new SupabaseGroupMembershipRepository(client);
+  await assert.rejects(
+    instance.createLeague({ telegramUserId: "123", telegramGroupId: "-1001234567890", name: "Group League", maxTeams: 8, idempotencyKey: "group-league:1234567890" }),
+    (error: unknown) => error instanceof GroupMembershipPortError && error.code === "GROUP_MANAGER_REQUIRED",
+  );
+});

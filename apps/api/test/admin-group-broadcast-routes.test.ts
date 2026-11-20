@@ -1,11 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { buildApp } from "../src/app.js";
+import type { AdminGroupBroadcastPort } from "../src/admin-group-broadcast-routes.js";
+function fakePort():AdminGroupBroadcastPort{return {claim:async()=>[],complete:async()=>true,fail:async()=>({rescheduled:true,attempts:1})};}
 
 test("admin group broadcast worker endpoints reject requests without the Bot secret", async (t) => {
   const previous = process.env.BOT_API_SECRET;
   process.env.BOT_API_SECRET = "test-admin-group-broadcast-secret";
-  const app = buildApp();
+  const app = buildApp({logger:false,adminGroupBroadcastPort:fakePort()});
   await app.ready();
   t.after(async () => {
     await app.close();
@@ -21,7 +23,7 @@ test("admin group broadcast worker endpoints reject requests without the Bot sec
 });
 
 test("readiness reports missing production configuration without exposing secrets", async (t) => {
-  const keys = ["DATABASE_URL", "TELEGRAM_BOT_TOKEN", "BOT_API_SECRET", "CORS_ORIGIN", "GAME_ADMIN_TELEGRAM_IDS"] as const;
+  const keys = ["TELEGRAM_BOT_TOKEN", "BOT_API_SECRET", "CORS_ORIGIN", "GAME_ADMIN_TELEGRAM_IDS"] as const;
   const previous = new Map(keys.map((key) => [key, process.env[key]]));
   for (const key of keys) delete process.env[key];
   const app = buildApp();
@@ -38,6 +40,6 @@ test("readiness reports missing production configuration without exposing secret
   assert.equal(response.statusCode, 503);
   const body = response.json() as { status: string; missing: string[] };
   assert.equal(body.status, "not_ready");
-  assert.deepEqual(body.missing, ["DATABASE_URL", "TELEGRAM_BOT_TOKEN", "BOT_API_SECRET", "CORS_ORIGIN", "GAME_ADMIN_TELEGRAM_IDS"]);
+  assert.deepEqual(body.missing, ["TELEGRAM_BOT_TOKEN", "BOT_API_SECRET", "CORS_ORIGIN", "GAME_ADMIN_TELEGRAM_IDS"]);
   assert.equal(JSON.stringify(body).includes("secret"), false);
 });

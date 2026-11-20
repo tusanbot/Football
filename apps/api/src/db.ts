@@ -53,6 +53,9 @@ export function createPgPoolConfig(connectionString: string, maxConnections = 10
 }
 
 export function createPrismaClient(connectionString = process.env.DATABASE_URL, maxConnections = 10): PrismaClient {
+  if (process.env.NODE_ENV === "production" || process.env.ENVIRONMENT === "production") {
+    throw new Error("PRISMA_RUNTIME_DISABLED_SUPABASE_HTTP_REQUIRED");
+  }
   if (!connectionString) throw new Error("DATABASE_URL is required.");
   if (!/^postgres(?:ql)?:\/\//i.test(connectionString)) throw new Error("The database connection must use PostgreSQL.");
   const pool = new Pool(createPgPoolConfig(connectionString, maxConnections));
@@ -83,6 +86,12 @@ export function releaseWorkerPrismaRequest(requestId: string): void {
 }
 
 function currentPrisma(): PrismaClient {
+  // Production API and Worker runtimes are Supabase HTTP-only. Check before
+  // consulting AsyncLocalStorage so a legacy scoped Prisma client cannot bypass
+  // the production prohibition.
+  if (process.env.NODE_ENV === "production" || process.env.ENVIRONMENT === "production") {
+    throw new Error("PRISMA_RUNTIME_DISABLED_SUPABASE_HTTP_REQUIRED");
+  }
   const scoped = requestPrisma.getStore();
   if (scoped) return scoped;
   if (requestScopeRequired) throw new Error("Prisma access outside the Worker request context is blocked.");

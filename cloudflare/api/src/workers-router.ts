@@ -37,12 +37,28 @@ import { registerAdminLeagueRoutes } from "../../../apps/api/src/admin-league-ro
 import { registerGiftCodeRoutes } from "../../../apps/api/src/gift-code-routes.js";
 import { registerTelegramMessageDeletionRoutes } from "../../../apps/api/src/telegram-message-deletion-routes.js";
 import { registerLeagueNoticeRoutes } from "../../../apps/api/src/league-notice-routes.js";
-import { registerAdminGroupBroadcastRoutes } from "../../../apps/api/src/admin-group-broadcast-routes.js";
+import { registerAdminGroupBroadcastRoutes, type AdminGroupBroadcastPort } from "../../../apps/api/src/admin-group-broadcast-routes.js";
+import type { AdminSeasonAwardActionPort } from "../../../apps/api/src/node-supabase-admin-season-awards.js";
+import type { AdminBroadcastCreatePort } from "../../../apps/api/src/node-supabase-admin-broadcast-create.js";
 import { registerBotRuntimeRoutes } from "../../../apps/api/src/bot-runtime-routes.js";
 import type { BotRuntimeLeasePort } from "../../../apps/api/src/bot-runtime-lease-context.js";
 import type { GroupMembershipPort } from "../../../apps/api/src/groups/group-membership-context.js";
+import type { AdminRoleLookupPort } from "../../../apps/api/src/admin-role-context.js";
+import type { AdminConfigurationPort } from "../../../apps/api/src/node-supabase-admin-configuration.js";
+import type { AdminConsoleReadPort } from "../../../apps/api/src/node-supabase-admin-console-read.js";
+import type { AdminBroadcastRetryPort } from "../../../apps/api/src/node-supabase-admin-broadcast-management.js";
+import type { AdminFinancialAdjustmentPort } from "../../../apps/api/src/node-supabase-admin-financial-adjustments.js";
+import type { AdminModerationActionPort } from "../../../apps/api/src/node-supabase-admin-moderation-actions.js";
+import type { AdminCatalogActionPort } from "../../../apps/api/src/node-supabase-admin-catalog-actions.js";
+import type { AdminEntityUpdatePort } from "../../../apps/api/src/node-supabase-admin-entity-update.js";
+import type { AdminPyramidLeagueActionsPort } from "../../../apps/api/src/node-supabase-admin-pyramid-league-actions.js";
+import type { AdminPyramidLeagueReadPort } from "../../../apps/api/src/node-supabase-admin-pyramid-league-read.js";
+import type { AdminPyramidLeagueReportsPort } from "../../../apps/api/src/node-supabase-admin-pyramid-league-reports.js";
+import type { AdminAlliancePort } from "../../../apps/api/src/groups/node-supabase-alliance.js";
 import type { AlliancePort } from "../../../apps/api/src/groups/alliance-context.js";
 import { registerPublicClubRoutes } from "../../../apps/api/src/public-club-routes.js";
+import type { PublicClubLogoRepository } from "../../../apps/api/src/node-supabase-public-club-logo.js";
+import type { PublicClubReadRepository } from "../../../apps/api/src/public-club-routes.js";
 import { registerPublicPlayerRecordRoutes, type PublicPlayerRecordRepository } from "../../../apps/api/src/players/public-record-routes.js";
 import { registerSeasonAwardRoutes, type SeasonAwardRepository } from "../../../apps/api/src/game/season-award-routes.js";
 import { registerStoreRoutes } from "../../../apps/api/src/store/store-routes.js";
@@ -84,7 +100,7 @@ function queryObject(url: URL): Record<string, string | string[]> {
   return query;
 }
 
-export function createWorkersApiRouter(dependencies: { publicPlayerRecords?: PublicPlayerRecordRepository; seasonAwards?: SeasonAwardRepository; specialPlayers?: SpecialPlayerCatalogRepository; botRuntimeLease?: BotRuntimeLeasePort; groupMembership?: GroupMembershipPort; alliance?: AlliancePort } = {}) {
+export function createWorkersApiRouter(dependencies: { publicPlayerRecords?: PublicPlayerRecordRepository; seasonAwards?: SeasonAwardRepository; publicClubRead?: PublicClubReadRepository; publicClubLogo?: PublicClubLogoRepository; specialPlayers?: SpecialPlayerCatalogRepository; botRuntimeLease?: BotRuntimeLeasePort; groupMembership?: GroupMembershipPort; alliance?: AlliancePort; adminFinancialAdjustmentPort?: AdminFinancialAdjustmentPort; adminRoleLookupPort?: AdminRoleLookupPort; adminConfigurationPort?: AdminConfigurationPort; adminConsoleReadPort?: AdminConsoleReadPort; adminBroadcastRetryPort?: AdminBroadcastRetryPort; adminModerationActionPort?: AdminModerationActionPort; adminCatalogActionPort?: AdminCatalogActionPort; adminEntityUpdatePort?: AdminEntityUpdatePort; adminAlliancePort?: AdminAlliancePort; adminPyramidLeagueActionsPort?: AdminPyramidLeagueActionsPort; adminPyramidLeagueReadPort?: AdminPyramidLeagueReadPort; adminPyramidLeagueReportsPort?: AdminPyramidLeagueReportsPort; adminGroupBroadcastPort?: AdminGroupBroadcastPort; adminSeasonAwardActionPort?: AdminSeasonAwardActionPort; adminBroadcastCreatePort?: AdminBroadcastCreatePort } = {}) {
   const registry = new RouteRegistry();
   const registrar = registry as unknown as Parameters<typeof registerTelegramAuthRoutes>[0];
   registerTelegramAuthRoutes(registrar);
@@ -97,14 +113,14 @@ export function createWorkersApiRouter(dependencies: { publicPlayerRecords?: Pub
   registerMatchNotificationRoutes(registrar);
   registerGroupRoutes(registrar, { requireMembershipPort: true });
   registerAllianceRoutes(registrar, { requirePort: true, port: dependencies.alliance });
-  registerAdminRoutes(registrar);
-  registerAdminLeagueRoutes(registrar);
+  registerAdminRoutes(registrar, { adminAlliancePort: dependencies.adminAlliancePort, adminFinancialAdjustmentPort: dependencies.adminFinancialAdjustmentPort, adminRoleLookupPort: dependencies.adminRoleLookupPort, adminConfigurationPort: dependencies.adminConfigurationPort, adminConsoleReadPort: dependencies.adminConsoleReadPort, adminBroadcastRetryPort: dependencies.adminBroadcastRetryPort, adminModerationActionPort: dependencies.adminModerationActionPort, adminCatalogActionPort: dependencies.adminCatalogActionPort, adminEntityUpdatePort: dependencies.adminEntityUpdatePort, adminSeasonAwardActionPort: dependencies.adminSeasonAwardActionPort, adminBroadcastCreatePort: dependencies.adminBroadcastCreatePort });
+  registerAdminLeagueRoutes(registrar, { adminAlliancePort: dependencies.adminAlliancePort, adminRoleLookupPort: dependencies.adminRoleLookupPort, adminPyramidLeagueActionsPort: dependencies.adminPyramidLeagueActionsPort, adminPyramidLeagueReadPort: dependencies.adminPyramidLeagueReadPort, adminPyramidLeagueReportsPort: dependencies.adminPyramidLeagueReportsPort });
   registerGiftCodeRoutes(registrar);
   registerTelegramMessageDeletionRoutes(registrar);
   registerLeagueNoticeRoutes(registrar);
-  registerAdminGroupBroadcastRoutes(registrar);
+  registerAdminGroupBroadcastRoutes(registrar, dependencies.adminGroupBroadcastPort);
   registerBotRuntimeRoutes(registrar, { leasePort: dependencies.botRuntimeLease, requireLeasePort: true });
-  registerPublicClubRoutes(registrar);
+  registerPublicClubRoutes(registrar, dependencies.publicClubLogo, dependencies.publicClubRead);
   registerPublicPlayerRecordRoutes(registrar, dependencies.publicPlayerRecords);
   registerSeasonAwardRoutes(registrar, dependencies.seasonAwards);
   registerStoreRoutes(registrar);

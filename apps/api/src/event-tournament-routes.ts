@@ -1,13 +1,10 @@
-import { randomInt } from "node:crypto";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
-import { Prisma, type PlayerPosition, type WalletAsset } from "@prisma/client";
-import { defaultMatchRules } from "@football/domain";
 import { z } from "zod";
-import { prisma } from "./db.js";
 import { requireTelegramUser } from "./auth/require-telegram-user.js";
 import { parseAdminTelegramIds } from "./runtime-config.js";
 import { consumeAllianceActionRateLimit } from "./groups/alliance-rate-limit.js";
 import { getStoreItem } from "./store/catalog.js";
+import { getEventTournamentReadPort } from "./event-tournament-read-context.js";
 
 type Permission = "read" | "competitions";
 const ROLE_PERMISSIONS: Record<string, Permission[]> = {
@@ -23,7 +20,16 @@ async function authorize(request: FastifyRequest, reply: FastifyReply, permissio
   const superAdmins = parseAdminTelegramIds(process.env.GAME_ADMIN_TELEGRAM_IDS);
   let role: string | null = superAdmins.includes(user.telegramId) ? "superadmin" : null;
   if (!role) {
-    const assigned = await prisma.adminRoleAssignment.findUnique({ where: { telegramId: user.telegramId }, select: { role: true, active: true } });
+    const port = getEventTournamentReadPort();
+    let assigned: { role: string; active: boolean } | null = null;
+    if (port) {
+      try { assigned = await port.getAdminRole(user.telegramId); }
+      catch (error) {
+        request.log.error({ error }, "Supabase tournament admin role lookup failed");
+        reply.code(503).send({ error: "ADMIN_ROLE_LOOKUP_UNAVAILABLE" });
+        return null;
+      }
+    }
     if (assigned) role = assigned.active && Object.prototype.hasOwnProperty.call(ROLE_PERMISSIONS, assigned.role) ? assigned.role : null;
     else {
       try {
@@ -79,26 +85,9 @@ export function registerEventTournamentRoutes(app: FastifyInstance) {
   app.get("/v1/event-tournaments", async (request, reply) => {
     const actor = await requireTelegramUser(request);
     if (!actor) return reply.code(401).send({ error: "UNAUTHENTICATED" });
-    const tournaments = await prisma.eventTournament.findMany({
-      where: { status: { in: ["REGISTRATION", "ACTIVE", "COMPLETED"] } },
-      orderBy: [{ status: "asc" }, { startsAt: "desc" }],
-      take: 40,
-      include: {
-        _count: { select: { participants: true } },
-        prizes: { orderBy: [{ placement: "asc" }, { type: "asc" }] },
-        participants: { where: { userId: actor.id }, select: { id: true, placement: true, joinedAt: true } },
-      },
-    });
-    return { tournaments: tournaments.map((item) => ({
-      id: item.id, title: item.title, description: item.description, status: item.status, competitionId: item.competitionId,
-      entryFeeAsset: item.entryFeeAsset, entryFeeAmount: item.entryFeeAmount.toString(),
-      maxParticipants: item.maxParticipants, participantCount: item._count.participants,
-      registrationEndsAt: item.registrationEndsAt.toISOString(), startsAt: item.startsAt.toISOString(),
-      endsAt: item.endsAt?.toISOString() ?? null,
-      prizes: item.prizes.map((prize) => ({ placement: prize.placement, type: prize.type, amount: prize.amount.toString(), itemKey: prize.itemKey, specialPlayerId: prize.specialPlayerId })),
-      joined: item.participants.length > 0, participantId: item.participants[0]?.id ?? null,
-      placement: item.participants[0]?.placement ?? null,
-    })) };
+    const port = getEventTournamentReadPort();
+    if (!port) return reply.code(503).send({ error: "SUPABASE_EVENT_TOURNAMENT_READ_UNAVAILABLE" });
+    return { tournaments: await port.listForUser(actor.id) };
   });
 
   app.post("/v1/event-tournaments/:id/join", async (request, reply) => {
@@ -109,96 +98,30 @@ export function registerEventTournamentRoutes(app: FastifyInstance) {
     if (!await consumeAllianceActionRateLimit({ telegramUserId: actor.telegramId, telegramGroupId: "event-tournament", action: "event-tournament-join", limit: 8 })) {
       return reply.code(429).send({ error: "TOURNAMENT_JOIN_RATE_LIMITED", retryAfterSeconds: 60 });
     }
+    const port = getEventTournamentReadPort();
+    if (!port) return reply.code(503).send({ error: "SUPABASE_EVENT_TOURNAMENT_JOIN_UNAVAILABLE" });
     try {
-      const result = await prisma.$transaction(async (tx) => {
-        const existing = await tx.eventTournamentParticipant.findUnique({ where: { tournamentId_userId: { tournamentId: params.data.id, userId: actor.id } } });
-        if (existing) return { participantId: existing.id, replayed: true, autoStarted: false };
-        const tournament = await tx.eventTournament.findUnique({ where: { id: params.data.id } });
-        if (!tournament) throw new Error("TOURNAMENT_NOT_FOUND");
-        const now = new Date();
-        if (tournament.status !== "REGISTRATION" || tournament.registrationEndsAt <= now || tournament.startsAt <= now) throw new Error("TOURNAMENT_REGISTRATION_CLOSED");
-        const count = await tx.eventTournamentParticipant.count({ where: { tournamentId: tournament.id } });
-        if (count >= tournament.maxParticipants) throw new Error("TOURNAMENT_FULL");
-        const club = await tx.club.findUnique({ where: { ownerId: actor.id }, select: { id: true } });
-        if (!club) throw new Error("CLUB_NOT_FOUND");
-        if (tournament.entryFeeAmount > 0n && tournament.entryFeeAsset) {
-          const asset = tournament.entryFeeAsset as WalletAsset;
-          const wallet = await tx.wallet.findUnique({ where: { userId_asset: { userId: actor.id, asset } }, select: { id: true, balance: true, version: true } });
-          if (!wallet || wallet.balance < tournament.entryFeeAmount) throw new Error("INSUFFICIENT_FUNDS");
-          const updated = await tx.wallet.updateMany({ where: { id: wallet.id, balance: wallet.balance, version: wallet.version }, data: { balance: { decrement: tournament.entryFeeAmount }, version: { increment: 1 } } });
-          if (updated.count !== 1) throw new Error("CONCURRENT_MODIFICATION");
-          await tx.ledgerTransaction.create({ data: {
-            idempotencyKey: "event-tournament-entry:" + tournament.id + ":" + actor.id,
-            userId: actor.id, asset, direction: "DEBIT", amount: tournament.entryFeeAmount,
-            reason: "EVENT_TOURNAMENT_ENTRY", referenceType: "event-tournament", referenceId: tournament.id,
-          } });
-        }
-        const participant = await tx.eventTournamentParticipant.create({ data: { tournamentId: tournament.id, userId: actor.id, clubId: club.id } });
-        const participantCount = count + 1;
-        if (participantCount < tournament.maxParticipants) return { participantId: participant.id, replayed: false, autoStarted: false, participantCount, requiredParticipants: tournament.maxParticipants };
-        const participants = await tx.eventTournamentParticipant.findMany({
-          where: { tournamentId: tournament.id }, orderBy: [{ joinedAt: "asc" }, { id: "asc" }],
-          include: { club: { select: { id: true, players: { where: { status: "ACTIVE" }, select: { id: true, position: true } } } } },
-        });
-        if (participants.length !== tournament.maxParticipants) throw new Error("TOURNAMENT_CAPACITY_CHANGED");
-        if (participants.some((item) => item.club.players.length < 11 || !item.club.players.some((player) => player.position === "GK"))) throw new Error("ALL_TEAMS_NEED_VALID_LINEUPS");
-        const slots = participants.map((item) => item.clubId);
-        for (let index = slots.length - 1; index > 0; index--) {
-          const swapIndex = randomInt(index + 1);
-          [slots[index], slots[swapIndex]] = [slots[swapIndex]!, slots[index]!];
-        }
-        if (slots.length % 2) slots.push("");
-        const rounds = slots.length - 1;
-        const kickoffAt = new Date(now.getTime() + 86_400_000);
-        const competition = await tx.competition.create({
-          data: {
-            idempotencyKey: "event-tournament-competition:" + tournament.id,
-            name: tournament.title, season: now.getUTCFullYear(), format: "LEAGUE", status: "ACTIVE",
-            maxTeams: participants.length, createdByClubId: participants[0]!.clubId,
-            rules: defaultMatchRules("LEAGUE") as unknown as Prisma.InputJsonValue, startsAt: kickoffAt,
-            entries: { create: participants.map((item) => ({ clubId: item.clubId })) },
-          },
-        });
-        const fixtures: Array<{ idempotencyKey: string; type: "LEAGUE"; competitionId: string; round: number; homeClubId: string; awayClubId: string; scheduledAt: Date; seed: string; rulesSnapshot: Prisma.InputJsonValue }> = [];
-        for (let round = 0; round < rounds; round++) {
-          for (let index = 0; index < slots.length / 2; index++) {
-            const first = slots[index]!, second = slots[slots.length - 1 - index]!;
-            if (!first || !second) continue;
-            const swap = (round + index) % 2 === 1;
-            const homeClubId = swap ? second : first, awayClubId = swap ? first : second;
-            const idempotencyKey = "event-tournament:" + tournament.id + ":r" + (round + 1) + ":" + homeClubId + ":" + awayClubId;
-            fixtures.push({ idempotencyKey, type: "LEAGUE", competitionId: competition.id, round: round + 1, homeClubId, awayClubId, scheduledAt: new Date(kickoffAt.getTime() + round * 86_400_000), seed: idempotencyKey, rulesSnapshot: defaultMatchRules("LEAGUE") as unknown as Prisma.InputJsonValue });
-          }
-          const fixed = slots[0]!, rotating = slots.slice(1);
-          rotating.unshift(rotating.pop()!);
-          slots.splice(0, slots.length, fixed, ...rotating);
-        }
-        await tx.footballMatch.createMany({ data: fixtures });
-        await tx.eventTournament.update({ where: { id: tournament.id }, data: { status: "ACTIVE", competitionId: competition.id, startsAt: kickoffAt } });
-        return { participantId: participant.id, replayed: false, autoStarted: true, participantCount, fixturesCreated: fixtures.length, rounds, startsAt: kickoffAt.toISOString(), competitionId: competition.id };
-      }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, timeout: 20_000, maxWait: 10_000 });
+      const result = await port.join({
+        telegramUserId: actor.telegramId, tournamentId: params.data.id, now: new Date().toISOString(),
+      });
       return { joined: true, ...result };
     } catch (error) {
       const code = error instanceof Error ? error.message : "TOURNAMENT_JOIN_FAILED";
-      const status = code === "TOURNAMENT_NOT_FOUND" ? 404 : code === "INSUFFICIENT_FUNDS" ? 409 : ["TOURNAMENT_FULL", "TOURNAMENT_REGISTRATION_CLOSED", "ALL_TEAMS_NEED_VALID_LINEUPS"].includes(code) ? 409 : 400;
+      const notFound = ["TOURNAMENT_NOT_FOUND", "ACCOUNT_NOT_FOUND"];
+      const conflicts = ["INSUFFICIENT_FUNDS", "TOURNAMENT_FULL", "TOURNAMENT_REGISTRATION_CLOSED",
+        "ALL_TEAMS_NEED_VALID_LINEUPS", "TOURNAMENT_CAPACITY_CHANGED", "TOURNAMENT_CLUB_ALREADY_REGISTERED",
+        "CONCURRENT_MODIFICATION", "IDEMPOTENCY_CONFLICT"];
+      const status = notFound.includes(code) ? 404 : conflicts.includes(code) ? 409 : 400;
       return reply.code(status).send({ error: code });
     }
   });
+
   app.get("/v1/admin/event-tournaments", async (request, reply) => {
     const actor = await authorize(request, reply, "read");
     if (!actor) return;
-    const tournaments = await prisma.eventTournament.findMany({
-      take: 50, orderBy: { createdAt: "desc" },
-      include: { _count: { select: { participants: true } }, prizes: { orderBy: [{ placement: "asc" }, { type: "asc" }] } },
-    });
-    return { tournaments: tournaments.map((item) => ({
-      id: item.id, title: item.title, description: item.description, status: item.status,
-      entryFeeAsset: item.entryFeeAsset, entryFeeAmount: item.entryFeeAmount.toString(),
-      maxParticipants: item.maxParticipants, participantCount: item._count.participants,
-      registrationEndsAt: item.registrationEndsAt.toISOString(), startsAt: item.startsAt.toISOString(),
-      endsAt: item.endsAt?.toISOString() ?? null,
-      prizes: item.prizes.map((prize) => ({ id: prize.id, placement: prize.placement, type: prize.type, amount: prize.amount.toString(), itemKey: prize.itemKey, specialPlayerId: prize.specialPlayerId })),
-    })) };
+    const port = getEventTournamentReadPort();
+    if (!port) return reply.code(503).send({ error: "SUPABASE_EVENT_TOURNAMENT_READ_UNAVAILABLE" });
+    return { tournaments: await port.listForAdmin() };
   });
 
   app.get("/v1/admin/event-tournaments/:id/participants", async (request, reply) => {
@@ -206,11 +129,9 @@ export function registerEventTournamentRoutes(app: FastifyInstance) {
     if (!actor) return;
     const params = idParams.safeParse(request.params);
     if (!params.success) return reply.code(400).send({ error: "INVALID_TOURNAMENT_ID" });
-    const participants = await prisma.eventTournamentParticipant.findMany({
-      where: { tournamentId: params.data.id }, orderBy: [{ score: "desc" }, { joinedAt: "asc" }],
-      include: { user: { select: { telegramId: true, username: true, displayName: true } }, club: { select: { name: true } } },
-    });
-    return { participants: participants.map((item) => ({ id: item.id, telegramId: item.user.telegramId, displayName: item.user.displayName, username: item.user.username, clubName: item.club.name, score: item.score, placement: item.placement, joinedAt: item.joinedAt.toISOString() })) };
+    const port = getEventTournamentReadPort();
+    if (!port) return reply.code(503).send({ error: "SUPABASE_EVENT_TOURNAMENT_READ_UNAVAILABLE" });
+    return { participants: await port.listParticipants(params.data.id) };
   });
 
   app.post("/v1/admin/event-tournaments", async (request, reply) => {
@@ -219,42 +140,38 @@ export function registerEventTournamentRoutes(app: FastifyInstance) {
     const parsed = createSchema.safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ error: "INVALID_TOURNAMENT", issues: parsed.error.issues.map((issue) => ({ path: issue.path, message: issue.message })) });
     const value = parsed.data;
+    if (value.prizes.some((prize) => prize.type === "STORE_ITEM" && (!prize.itemKey || !getStoreItem(prize.itemKey))))
+      return reply.code(409).send({ error: "STORE_ITEM_NOT_AVAILABLE" });
+    const port = getEventTournamentReadPort();
+    if (!port) return reply.code(503).send({ error: "SUPABASE_EVENT_TOURNAMENT_CREATE_UNAVAILABLE" });
     try {
-      const result = await prisma.$transaction(async (tx) => {
-        for (const prize of value.prizes) {
-          if (prize.type === "STORE_ITEM" && (!prize.itemKey || !getStoreItem(prize.itemKey))) throw new Error("STORE_ITEM_NOT_AVAILABLE");
-          if (prize.type === "SPECIAL_PLAYER") {
-            if (!prize.specialPlayerId) throw new Error("SPECIAL_PLAYER_NOT_AVAILABLE");
-            const special = await tx.specialPlayer.findUnique({ where: { id: prize.specialPlayerId }, select: { id: true, active: true } });
-            if (!special?.active) throw new Error("SPECIAL_PLAYER_NOT_AVAILABLE");
-          }
-        }
-        const tournament = await tx.eventTournament.create({
-          data: {
-            idempotencyKey: "event-tournament-create:" + value.idempotencyKey,
-            title: value.title, description: value.description,
-            entryFeeAsset: value.entryFeeAsset ?? null, entryFeeAmount: BigInt(value.entryFeeAmount),
-            maxParticipants: value.maxParticipants, registrationEndsAt: new Date(value.registrationEndsAt),
-            startsAt: new Date(value.startsAt), endsAt: value.endsAt ? new Date(value.endsAt) : null,
-            createdByTelegramId: actor.telegramId,
-            prizes: { create: value.prizes.map((prize) => ({
-              placement: prize.placement, type: prize.type, amount: BigInt(prize.amount ?? "0"),
-              itemKey: prize.itemKey ?? null, specialPlayerId: prize.specialPlayerId ?? null,
-            })) },
-          },
-          include: { prizes: true },
-        });
-        await tx.adminAuditLog.create({ data: {
-          actorTelegramId: actor.telegramId, action: "create-event-tournament", targetType: "event-tournament",
-          targetId: tournament.id, idempotencyKey: "event-tournament-audit:" + value.idempotencyKey,
-          metadata: { title: value.title, prizeCount: value.prizes.length },
-        } });
-        return tournament;
-      }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
-      return reply.code(201).send({ tournament: { id: result.id, title: result.title, status: result.status, participantCount: 0 } });
+      const result = await port.create({
+        telegramUserId: actor.telegramId,
+        idempotencyKey: value.idempotencyKey,
+        title: value.title,
+        description: value.description,
+        entryFeeAsset: value.entryFeeAsset ?? null,
+        entryFeeAmount: value.entryFeeAmount,
+        maxParticipants: value.maxParticipants,
+        registrationEndsAt: value.registrationEndsAt,
+        startsAt: value.startsAt,
+        endsAt: value.endsAt ?? null,
+        prizes: value.prizes.map((prize) => ({
+          placement: prize.placement, type: prize.type, amount: prize.amount ?? "0",
+          itemKey: prize.itemKey ?? null, specialPlayerId: prize.specialPlayerId ?? null,
+        })),
+      });
+      const tournament = result.tournament;
+      return reply.code(result.replayed ? 200 : 201).send({
+        tournament: { id: tournament.id, title: tournament.title, status: tournament.status, participantCount: 0 },
+        replayed: result.replayed,
+      });
     } catch (error) {
-      if (error instanceof Error && ["SPECIAL_PLAYER_NOT_AVAILABLE", "STORE_ITEM_NOT_AVAILABLE"].includes(error.message)) return reply.code(409).send({ error: error.message });
-      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") return reply.code(409).send({ error: "DUPLICATE_OR_IDEMPOTENCY_CONFLICT" });
+      const code = error instanceof Error ? error.message : "TOURNAMENT_CREATE_FAILED";
+      if (["SPECIAL_PLAYER_NOT_AVAILABLE", "STORE_ITEM_NOT_AVAILABLE", "IDEMPOTENCY_CONFLICT"].includes(code))
+        return reply.code(409).send({ error: code });
+      if (["INVALID_EVENT_TOURNAMENT", "INVALID_TOURNAMENT_PRIZE", "INVALID_TOURNAMENT_PRIZE_AMOUNT"].includes(code))
+        return reply.code(400).send({ error: code });
       throw error;
     }
   });

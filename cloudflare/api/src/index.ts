@@ -1,4 +1,3 @@
-import { createPrismaClient, withPrismaClient } from "../../../apps/api/src/db.js";
 import { withWalletEntryPort } from "../../../apps/api/src/economy/wallet-entry-context.js";
 import { withStorePurchasePort } from "../../../apps/api/src/store/store-purchase-context.js";
 import { withStoreSnapshotPort } from "../../../apps/api/src/store/store-snapshot-context.js";
@@ -16,6 +15,7 @@ import { SupabaseHttpClient } from "./supabase-http.js";
 import { SupabasePilotAnalyticsRepository } from "./repositories/pilot-analytics.js";
 import { SupabaseRuntimeReadinessRepository } from "./repositories/runtime-readiness.js";
 import { SupabasePublicPlayerRecordRepository } from "./repositories/public-player-records.js";
+import { SupabasePublicClubRepository, SupabasePublicClubLogoRepository } from "./repositories/public-clubs.js";
 import { SupabaseSeasonAwardRepository } from "./repositories/season-awards.js";
 import { SupabaseWalletEntryRepository } from "./repositories/wallet-entry.js";
 import { SupabaseStorePurchaseRepository } from "./repositories/store-purchase.js";
@@ -73,14 +73,30 @@ import { SupabaseClubEconomySettlementRepository } from "./repositories/club-eco
 import { SupabaseClubTicketPriceRepository } from "./repositories/club-ticket-price.js";
 import { SupabaseBotRuntimeLeaseRepository } from "./repositories/bot-runtime-lease.js";
 import { withGroupMembershipPort } from "../../../apps/api/src/groups/group-membership-context.js";
+import { withActionRateLimitPort } from "../../../apps/api/src/groups/action-rate-limit-context.js";
+import { SupabaseActionRateLimitRepository } from "./repositories/action-rate-limit.js";
 import { withAlliancePort } from "../../../apps/api/src/groups/alliance-context.js";
 import { SupabaseAllianceRepository } from "./repositories/alliance.js";
 import { SupabaseGroupMembershipRepository } from "./repositories/group-membership.js";
+import { SupabaseAdminFinancialAdjustmentsRepository } from "./repositories/admin-financial-adjustments.js";
+import { SupabaseAdminRoleLookupRepository } from "./repositories/admin-role-lookup.js";
+import { SupabaseAdminConfigurationRepository } from "./repositories/admin-configuration.js";
+import { SupabaseAdminConsoleReadRepository } from "./repositories/admin-console-read.js";
+import { SupabaseAdminBroadcastManagementRepository } from "./repositories/admin-broadcast-management.js";
+import { SupabaseAdminModerationActionsRepository } from "./repositories/admin-moderation-actions.js";
+import { SupabaseAdminCatalogActionsRepository } from "./repositories/admin-catalog-actions.js";
+import { SupabaseAdminEntityUpdateRepository } from "./repositories/admin-entity-update.js";
+import { SupabaseAdminSeasonAwardActionsRepository } from "./repositories/admin-season-awards.js";
+import { SupabaseAdminBroadcastCreateRepository } from "./repositories/admin-broadcast-create.js";
+import { SupabaseAdminGroupBroadcastRepository } from "./repositories/admin-group-broadcast.js";
+import { SupabaseAdminPyramidLeagueActionsRepository } from "./repositories/admin-pyramid-league-actions.js";
+import { SupabaseAdminPyramidLeagueReadRepository } from "./repositories/admin-pyramid-league-read.js";
+import { SupabaseAdminPyramidLeagueReportsRepository } from "./repositories/admin-pyramid-league-reports.js";
 
 interface MatchCoordinatorNamespace { idFromName(name: string): unknown; get(id: unknown): { fetch(input: string, init?: RequestInit): Promise<Response> }; }
 interface MatchCoordinatorState { storage: { setAlarm(scheduledTime: number): Promise<void>; deleteAlarm(): Promise<void>; }; }
 interface Env {
-  MATCH_COORDINATOR?: MatchCoordinatorNamespace; DATABASE_URL?: string;
+  MATCH_COORDINATOR?: MatchCoordinatorNamespace;
   SUPABASE_URL?: string; SUPABASE_SERVICE_ROLE_KEY?: string;
   TELEGRAM_BOT_TOKEN?: string; BOT_API_SECRET?: string; CORS_ORIGIN?: string; GAME_ADMIN_TELEGRAM_IDS?: string;
   ALLIANCE_REVIEWER_TELEGRAM_IDS?: string; GAME_ADMIN_ROLE_MAP?: string; ENVIRONMENT?: string;
@@ -89,20 +105,10 @@ interface ExecutionContext { waitUntil(promise: Promise<unknown>): void }
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), {
   status, headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store", "x-content-type-options": "nosniff" },
 });
-function dbUrl(env: Env): string | null { return env.DATABASE_URL ?? null; }
 function missingConfig(env: Env): string[] {
   const missing: string[] = [];
-  const database = dbUrl(env);
-  if (!database) missing.push("DATABASE_URL");
-  else if (!/^postgres(?:ql)?:\/\//i.test(database)) missing.push("DATABASE_URL_INVALID");
-  else if (env.ENVIRONMENT !== "development") {
-    try {
-      const parsed = new URL(database);
-      if (!(parsed.hostname.endsWith(".pooler.supabase.com") && parsed.port === "6543")) {
-        missing.push("DATABASE_URL_MUST_USE_SUPABASE_TRANSACTION_POOLER");
-      }
-    } catch { missing.push("DATABASE_URL_INVALID"); }
-  }
+  if (!env.SUPABASE_URL?.trim()) missing.push("SUPABASE_URL");
+  if (!env.SUPABASE_SERVICE_ROLE_KEY?.trim()) missing.push("SUPABASE_SERVICE_ROLE_KEY");
   if (!isValidTelegramBotToken(env.TELEGRAM_BOT_TOKEN ?? "")) missing.push("TELEGRAM_BOT_TOKEN");
   if (!env.BOT_API_SECRET || env.BOT_API_SECRET.length < 32 || /^(replace-with|change-me|your-)/i.test(env.BOT_API_SECRET)) missing.push("BOT_API_SECRET");
   if (!parseAdminTelegramIds(env.GAME_ADMIN_TELEGRAM_IDS).length) missing.push("GAME_ADMIN_TELEGRAM_IDS");
@@ -119,7 +125,8 @@ function missingConfig(env: Env): string[] {
 }
 function configureEnv(env: Env): void {
   process.env.ENVIRONMENT = env.ENVIRONMENT ?? "production";
-  process.env.DATABASE_URL = dbUrl(env) ?? "";
+  process.env.SUPABASE_URL = env.SUPABASE_URL ?? "";
+  process.env.SUPABASE_SERVICE_ROLE_KEY = env.SUPABASE_SERVICE_ROLE_KEY ?? "";
   process.env.TELEGRAM_BOT_TOKEN = env.TELEGRAM_BOT_TOKEN ?? "";
   process.env.BOT_API_SECRET = env.BOT_API_SECRET ?? "";
   process.env.CORS_ORIGIN = env.CORS_ORIGIN ?? "";
@@ -152,19 +159,18 @@ function constantTimeSecretEqual(left: string, right: string): boolean {
 }
 
 
-async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+async function handleApi(request: Request, env: Env, _ctx: ExecutionContext): Promise<Response> {
   const missing = missingConfig(env);
   if (missing.length) return json({ status: "not_ready", service: "football-empire-cloudflare-api", missing }, 503);
-  let client: ReturnType<typeof createPrismaClient>;
-  try { client = createPrismaClient(dbUrl(env) ?? undefined, 1); }
-  catch { return json({ status: "not_ready", service: "football-empire-cloudflare-api", missing: ["DATABASE_CONFIGURATION"] }, 503); }
-  let cleanupScheduled = false;
+  configureEnv(env);
   try {
-    const response = await withPrismaClient(client, () => {
+    const response = await (() => {
       const supabaseClient = env.SUPABASE_URL && env.SUPABASE_SERVICE_ROLE_KEY
         ? new SupabaseHttpClient({ url: env.SUPABASE_URL, serviceRoleKey: env.SUPABASE_SERVICE_ROLE_KEY })
         : undefined;
       const publicPlayerRecords = supabaseClient ? new SupabasePublicPlayerRecordRepository(supabaseClient) : undefined;
+      const publicClubRead = supabaseClient ? new SupabasePublicClubRepository(supabaseClient) : undefined;
+      const publicClubLogo = supabaseClient ? new SupabasePublicClubLogoRepository(supabaseClient) : undefined;
       const gameDashboard = supabaseClient ? new SupabaseGameDashboardRepository(supabaseClient) : undefined;
       const telegramUserLookup = supabaseClient ? new SupabaseTelegramUserLookupRepository(supabaseClient) : undefined;
       const telegramAccountProvisioning = supabaseClient ? new SupabaseTelegramAccountProvisioningRepository(supabaseClient) : undefined;
@@ -173,6 +179,7 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
       const clubManagement = supabaseClient ? new SupabaseClubManagementRepository(supabaseClient) : undefined;
       const clubLineup = supabaseClient ? new SupabaseClubLineupRepository(supabaseClient) : undefined;
       const playerDevelopment = supabaseClient ? new SupabasePlayerDevelopmentRepository(supabaseClient) : undefined;
+      const actionRateLimit = supabaseClient ? new SupabaseActionRateLimitRepository(supabaseClient) : undefined;
       const seasonAwards = supabaseClient ? new SupabaseSeasonAwardRepository(supabaseClient) : undefined;
       const walletEntry = supabaseClient ? new SupabaseWalletEntryRepository(supabaseClient) : undefined;
       const storePurchase = supabaseClient ? new SupabaseStorePurchaseRepository(supabaseClient) : undefined;
@@ -194,11 +201,26 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
       const matchRuntimeSettlement = supabaseClient ? new SupabaseMatchRuntimeSettlementRepository(supabaseClient) : undefined;
       const botRuntimeLease = supabaseClient ? new SupabaseBotRuntimeLeaseRepository(supabaseClient) : undefined;
        const groupMembership = supabaseClient ? new SupabaseGroupMembershipRepository(supabaseClient) : undefined;
+      const adminFinancialAdjustment = supabaseClient ? new SupabaseAdminFinancialAdjustmentsRepository(supabaseClient) : undefined;
+      const adminRoleLookup = supabaseClient ? new SupabaseAdminRoleLookupRepository(supabaseClient) : undefined;
+      const adminConfiguration = supabaseClient ? new SupabaseAdminConfigurationRepository(supabaseClient) : undefined;
+       const adminConsoleRead = supabaseClient ? new SupabaseAdminConsoleReadRepository(supabaseClient) : undefined;
+       const adminBroadcastRetry = supabaseClient ? new SupabaseAdminBroadcastManagementRepository(supabaseClient) : undefined;
+       const adminModerationActions = supabaseClient ? new SupabaseAdminModerationActionsRepository(supabaseClient) : undefined;
+       const adminCatalogActions = supabaseClient ? new SupabaseAdminCatalogActionsRepository(supabaseClient) : undefined;
+        const adminEntityUpdates = supabaseClient ? new SupabaseAdminEntityUpdateRepository(supabaseClient) : undefined;
+       const adminSeasonAwardActions = supabaseClient ? new SupabaseAdminSeasonAwardActionsRepository(supabaseClient) : undefined;
+       const adminBroadcastCreate = supabaseClient ? new SupabaseAdminBroadcastCreateRepository(supabaseClient) : undefined;
+       const adminGroupBroadcast = supabaseClient ? new SupabaseAdminGroupBroadcastRepository(supabaseClient) : undefined;
+       const adminPyramidLeagueActions = supabaseClient ? new SupabaseAdminPyramidLeagueActionsRepository(supabaseClient) : undefined;
+       const adminPyramidLeagueRead = supabaseClient ? new SupabaseAdminPyramidLeagueReadRepository(supabaseClient) : undefined;
+       const adminPyramidLeagueReports = supabaseClient ? new SupabaseAdminPyramidLeagueReportsRepository(supabaseClient) : undefined;
         const alliance = supabaseClient ? new SupabaseAllianceRepository(supabaseClient) : undefined;
-       const router = createWorkersApiRouter({ publicPlayerRecords, seasonAwards, specialPlayers, botRuntimeLease, groupMembership, alliance });
+       const router = createWorkersApiRouter({ publicPlayerRecords, publicClubRead, publicClubLogo, seasonAwards, specialPlayers, botRuntimeLease, groupMembership, alliance, adminFinancialAdjustmentPort: adminFinancialAdjustment, adminRoleLookupPort: adminRoleLookup, adminConfigurationPort: adminConfiguration, adminConsoleReadPort: adminConsoleRead, adminBroadcastRetryPort: adminBroadcastRetry, adminModerationActionPort: adminModerationActions, adminCatalogActionPort: adminCatalogActions, adminEntityUpdatePort: adminEntityUpdates, adminSeasonAwardActionPort: adminSeasonAwardActions, adminBroadcastCreatePort: adminBroadcastCreate, adminGroupBroadcastPort: adminGroupBroadcast, adminAlliancePort: alliance, adminPyramidLeagueActionsPort: adminPyramidLeagueActions, adminPyramidLeagueReadPort: adminPyramidLeagueRead, adminPyramidLeagueReportsPort: adminPyramidLeagueReports });
       const handle = async (): Promise<Response> => await router.fetch(request);
       const withGroupMembership = groupMembership ? () => withGroupMembershipPort(groupMembership, handle) : handle;
-       const withAlliance = alliance ? () => withAlliancePort(alliance, withGroupMembership) : withGroupMembership;
+      const withActionRateLimit = actionRateLimit ? () => withActionRateLimitPort(actionRateLimit, withGroupMembership) : withGroupMembership;
+       const withAlliance = alliance ? () => withAlliancePort(alliance, withActionRateLimit) : withActionRateLimit;
       const withCompetitionCreation = competitionCreation ? () => withCompetitionCreationPort(competitionCreation, withAlliance) : withAlliance;
       const withClubMatchRead = clubMatchRead ? () => withClubMatchReadPort(clubMatchRead, withCompetitionCreation) : withCompetitionCreation;
       const withCompetitionAdvancement = competitionAdvancement ? () => withCompetitionAdvancementPort(competitionAdvancement, withClubMatchRead) : withClubMatchRead;
@@ -227,15 +249,11 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
       const withMarketListing = marketListing ? () => withMarketListingPort(marketListing, withSpecialAcquisition) : withSpecialAcquisition;
       const withStoreRead = storeSnapshot ? () => withStoreSnapshotPort(storeSnapshot, withMarketListing) : withMarketListing;
       return storeItemUse ? withStoreItemUsePort(storeItemUse, withStoreRead) : withStoreRead();
-    });
-    cleanupScheduled = true;
-    ctx.waitUntil(client.$disconnect().catch((error: unknown) => console.error("Prisma request client cleanup failed", error)));
+    })();
     return response;
   } catch (error) {
     console.error("Cloudflare API request failed", describeRuntimeError(error));
     return json({ error: "INTERNAL_SERVER_ERROR" }, 500);
-  } finally {
-    if (!cleanupScheduled) await client.$disconnect().catch(() => undefined);
   }
 }
 export class MatchCoordinator {
@@ -255,10 +273,10 @@ export class MatchCoordinator {
       await this.state.storage.deleteAlarm();
       return;
     }
-    const client = createPrismaClient(dbUrl(this.env) ?? undefined, 1);
+    configureEnv(this.env);
     let nextAlarm: number | null = null;
     try {
-      await withPrismaClient(client, async () => {
+      await (async () => {
         const supabase = this.env.SUPABASE_URL && this.env.SUPABASE_SERVICE_ROLE_KEY
           ? new SupabaseHttpClient({ url: this.env.SUPABASE_URL, serviceRoleKey: this.env.SUPABASE_SERVICE_ROLE_KEY })
           : undefined;
@@ -303,7 +321,7 @@ export class MatchCoordinator {
         if (matchWork.failed) console.warn("Match runtime work failed", matchWork);
         if (tournamentFinalizations.failed) console.error("Tournament finalization retries remain pending", tournamentFinalizations);
         nextAlarm = schedule.nextAlarm?.getTime() ?? null;
-      });
+      })();
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       const quotaLimited = /Usage limit for account exceeded/i.test(message);
@@ -312,8 +330,6 @@ export class MatchCoordinator {
         const now = new Date();
         nextAlarm = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1, 0, 0, 5);
       } else nextAlarm = Date.now() + 60_000;
-    } finally {
-      await client.$disconnect();
     }
     if (nextAlarm === null) await this.state.storage.deleteAlarm();
     else await this.state.storage.setAlarm(Math.max(Date.now() + 1_000, nextAlarm));
@@ -394,41 +410,13 @@ async function scheduledJobs(env: Env): Promise<void> {
     return;
   }
   console.info("Scheduled fallback skipped; MatchCoordinator owns match and tournament processing.");
-  return;
-  /* Legacy scheduled Prisma path intentionally unreachable; match work must use MatchCoordinator/Supabase. */
-  const missing = missingConfig(env);
-  if (missing.length) { console.error("Scheduled game jobs skipped; missing configuration:", missing); return; }
-  configureEnv(env);
-  const client = createPrismaClient(dbUrl(env) ?? undefined, 1);
-  try {
-    await withPrismaClient(client, async () => {
-      const now = new Date();
-      const supabase = env.SUPABASE_URL && env.SUPABASE_SERVICE_ROLE_KEY
-        ? new SupabaseHttpClient({ url: env.SUPABASE_URL, serviceRoleKey: env.SUPABASE_SERVICE_ROLE_KEY }) : undefined;
-      const matchNotifications = supabase ? new SupabaseMatchNotificationRepository(supabase) : undefined;
-      const pyramidLeagueSettlement = supabase ? new SupabasePyramidLeagueSettlementRepository(supabase) : undefined;
-      const eventTournamentSettlement = supabase ? new SupabaseEventTournamentSettlementRepository(supabase) : undefined;
-      const matches = env.MATCH_COORDINATOR
-        ? null
-        : await processDueMatchRuntimes("cloudflare-api-scheduled-fallback", now, 10);
-      if (!pyramidLeagueSettlement || !eventTournamentSettlement) throw new Error("SUPABASE_TOURNAMENT_SETTLEMENT_REPOSITORY_UNAVAILABLE");
-      const tournamentFinalizations = await withEventTournamentSettlementPort(eventTournamentSettlement, () => processDueEventTournamentFinalizations(now, 1));
-      if (!matchNotifications) throw new Error("SUPABASE_MATCH_NOTIFICATION_REPOSITORY_UNAVAILABLE");
-      await deliverDueMatchLifecycle(env, matchNotifications);
-      const promotions = await withPyramidLeagueSettlementPort(pyramidLeagueSettlement, () => processDuePromotionOffers(now, 50));
-      if ((matches && (matches.advanced || matches.settled || matches.failed))
-        || tournamentFinalizations.finalized || tournamentFinalizations.failed
-        || promotions.accepted || promotions.completedLeagues) {
-        console.info("Cloudflare scheduled game tick", { matches, tournamentFinalizations, promotions });
-      }
-    });
-  } finally { await client.$disconnect(); }
 }
+
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
     if (request.method === "GET" && url.pathname === "/health") {
-      return json({ status: "ok", service: "football-empire-cloudflare-api", mode: "hono-prisma-runtime", build: "2026-11-16-hono-router-1" });
+      return json({ status: "ok", service: "football-empire-cloudflare-api", mode: "supabase-http-runtime", build: "2026-11-16-hono-router-1" });
     }
     if (url.pathname === "/internal/pilot/events") {
       if (request.method !== "POST") return json({ error: "METHOD_NOT_ALLOWED" }, 405);
@@ -468,8 +456,9 @@ export default {
     configureEnv(env);
     if (request.method === "OPTIONS") return createWorkersApiRouter().fetch(request);
     if (request.method === "GET" && url.pathname === "/ready") {
-      const missing = missingConfig(env).filter((item) =>
-        !["DATABASE_URL", "DATABASE_URL_INVALID", "DATABASE_URL_MUST_USE_SUPABASE_TRANSACTION_POOLER"].includes(item));
+      // The Worker API uses Supabase HTTPS/PostgREST only. Readiness verifies
+      // the deployed RPC schema and does not depend on PostgreSQL connection URLs.
+      const missing = missingConfig(env);
       if (!env.SUPABASE_URL) missing.push("SUPABASE_URL");
       if (!env.SUPABASE_SERVICE_ROLE_KEY || env.SUPABASE_SERVICE_ROLE_KEY.length < 32) missing.push("SUPABASE_SERVICE_ROLE_KEY");
       if (missing.length) return json({ status: "not_ready", service: "football-empire-cloudflare-api", missing }, 503);

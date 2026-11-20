@@ -730,6 +730,9 @@ model MatchResultNotification {
   claimToken     String?
   lastError      String?
   deliveredAt    DateTime?
+  deadLetteredAt DateTime?
+  completedClaimToken String?
+  completedDelivered Boolean?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
   match          FootballMatch @relation(fields: [matchId], references: [id], onDelete: Cascade)
@@ -756,6 +759,9 @@ model MatchLifecycleNotification {
   claimToken String?
   lastError String?
   deliveredAt DateTime?
+  deadLetteredAt DateTime?
+  completedClaimToken String?
+  completedDelivered Boolean?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   match FootballMatch @relation(fields: [matchId], references: [id], onDelete: Cascade)
@@ -806,6 +812,14 @@ model MatchTacticalCheckpoint {
   awayBotNotificationAttempts Int @default(0)
   homeBotNotificationLastError String?
   awayBotNotificationLastError String?
+  homeBotNotificationClaimToken String?
+  awayBotNotificationClaimToken String?
+  homeBotNotificationCompletedClaimToken String?
+  awayBotNotificationCompletedClaimToken String?
+  homeBotNotificationCompletedDelivered Boolean?
+  awayBotNotificationCompletedDelivered Boolean?
+  homeBotNotificationDeadLetteredAt DateTime?
+  awayBotNotificationDeadLetteredAt DateTime?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   match FootballMatch @relation(fields: [matchId], references: [id], onDelete: Cascade)

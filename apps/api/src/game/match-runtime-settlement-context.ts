@@ -1,4 +1,5 @@
 import { AsyncLocalStorage } from "node:async_hooks";
+import type { CompetitionAdvancementResult } from "./competition-advancement-context.js";
 
 export interface MatchRuntimeSettlementCommand {
   matchId: string;
@@ -28,6 +29,9 @@ export interface MatchRuntimeSettlementResult {
   attendance: number;
   ticketRevenue: string;
   events: Array<Record<string, unknown>>;
+  advancement: CompetitionAdvancementResult | null;
+  pyramidFinalization: Record<string, unknown> | null;
+  eventTournamentFinalization: Record<string, unknown> | null;
 }
 export interface MatchRuntimeSettlementPort {
   settle(input: MatchRuntimeSettlementCommand): Promise<MatchRuntimeSettlementResult>;
@@ -37,5 +41,9 @@ export function withMatchRuntimeSettlementPort<T>(port: MatchRuntimeSettlementPo
   return scope.run(port, operation);
 }
 export function getMatchRuntimeSettlementPort(): MatchRuntimeSettlementPort | undefined {
-  return scope.getStore();
+  const port = scope.getStore();
+  if (!port && (process.env.NODE_ENV === "production" || process.env.ENVIRONMENT === "production")) {
+    throw new Error("MATCH_RUNTIME_SETTLEMENT_SUPABASE_REPOSITORY_REQUIRED");
+  }
+  return port;
 }

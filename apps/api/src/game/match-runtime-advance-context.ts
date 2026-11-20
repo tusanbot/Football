@@ -21,5 +21,9 @@ export function withMatchRuntimeAdvancePort<T>(port: MatchRuntimeAdvancePort, op
   return scope.run(port, operation);
 }
 export function getMatchRuntimeAdvancePort(): MatchRuntimeAdvancePort | undefined {
-  return scope.getStore();
+  const port = scope.getStore();
+  if (!port && (process.env.NODE_ENV === "production" || process.env.ENVIRONMENT === "production")) {
+    throw new Error("MATCH_RUNTIME_ADVANCE_SUPABASE_REPOSITORY_REQUIRED");
+  }
+  return port;
 }

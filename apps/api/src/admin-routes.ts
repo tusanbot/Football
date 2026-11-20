@@ -4,138 +4,236 @@ import {prisma} from "./db.js";
 import {requireTelegramUser} from "./auth/require-telegram-user.js";
 import {consumeAllianceActionRateLimit} from "./groups/alliance-rate-limit.js";
 import {parseAdminTelegramIds} from "./runtime-config.js";
+import type { AdminRoleAssignment, AdminRoleLookupPort } from "./admin-role-context.js";
+import type { AdminConfigurationPort } from "./node-supabase-admin-configuration.js";
 import {adminCloseAllianceSeasonInTransaction,adminReviewAllianceSeasonInTransaction,adminStartAllianceSeasonInTransaction} from "./groups/alliance-service.js";
+import type { AdminAlliancePort } from "./groups/node-supabase-alliance.js";
+import type { AdminConsoleReadPort, AdminResourceListName } from "./node-supabase-admin-console-read.js";
+import type { AdminModerationActionPort } from "./node-supabase-admin-moderation-actions.js";
+import type { AdminCatalogActionPort } from "./node-supabase-admin-catalog-actions.js";
+import type { AdminEntityUpdatePort } from "./node-supabase-admin-entity-update.js";
+import type { AdminFinancialAdjustmentPort } from "./node-supabase-admin-financial-adjustments.js";
+import type { AdminBroadcastRetryPort } from "./node-supabase-admin-broadcast-management.js";
+import type { AdminSeasonAwardActionPort } from "./node-supabase-admin-season-awards.js";
+import type { AdminBroadcastCreatePort } from "./node-supabase-admin-broadcast-create.js";
 type AdminPermission="read"|"players"|"clubs"|"matches"|"competitions"|"economy"|"groups"|"moderation"|"gifts";
 const ROLE_PERMISSIONS:Record<string,AdminPermission[]>={superadmin:["read","players","clubs","matches","competitions","economy","groups","moderation","gifts"],football:["read","players","clubs","matches","competitions"],economy:["read","economy","gifts"],moderator:["read","groups","moderation"]};
-async function adminRoleFor(telegramId:string){const superAdmins=parseAdminTelegramIds(process.env.GAME_ADMIN_TELEGRAM_IDS);if(superAdmins.includes(telegramId))return "superadmin";const assigned=await prisma.adminRoleAssignment.findUnique({where:{telegramId},select:{role:true,active:true}});if(assigned)return assigned.active&&Object.prototype.hasOwnProperty.call(ROLE_PERMISSIONS,assigned.role)?assigned.role:null;try{const map=JSON.parse(process.env.GAME_ADMIN_ROLE_MAP??"{}") as Record<string,string>;const role=map[telegramId];return role&&Object.prototype.hasOwnProperty.call(ROLE_PERMISSIONS,role)?role:null;}catch{return null;}}
-async function authorize(req:FastifyRequest,reply:FastifyReply,permission:AdminPermission="read"){const u=await requireTelegramUser(req);if(!u){reply.code(401).send({error:"UNAUTHENTICATED"});return null;}const role=await adminRoleFor(u.telegramId);if(!role||!ROLE_PERMISSIONS[role]?.includes(permission)){reply.code(403).send({error:"ADMIN_PERMISSION_REQUIRED",permission});return null;}return {...u,adminRole:role};}
+async function adminRoleFor(telegramId:string,port?:AdminRoleLookupPort){const superAdmins=parseAdminTelegramIds(process.env.GAME_ADMIN_TELEGRAM_IDS);if(superAdmins.includes(telegramId))return "superadmin";let assigned: AdminRoleAssignment | null;if(port)assigned=await port.getAssignment(telegramId);else{if(process.env.NODE_ENV==="production"||process.env.ENVIRONMENT==="production")throw new Error("ADMIN_ROLE_SUPABASE_REPOSITORY_REQUIRED");assigned=await prisma.adminRoleAssignment.findUnique({where:{telegramId},select:{role:true,active:true}});}if(assigned)return assigned.active&&Object.prototype.hasOwnProperty.call(ROLE_PERMISSIONS,assigned.role)?assigned.role:null;try{const map=JSON.parse(process.env.GAME_ADMIN_ROLE_MAP??"{}") as Record<string,string>;const role=map[telegramId];return role&&Object.prototype.hasOwnProperty.call(ROLE_PERMISSIONS,role)?role:null;}catch{return null;}}
+async function authorize(req:FastifyRequest,reply:FastifyReply,permission:AdminPermission="read",port?:AdminRoleLookupPort){const u=await requireTelegramUser(req);if(!u){reply.code(401).send({error:"UNAUTHENTICATED"});return null;}const role=await adminRoleFor(u.telegramId,port);if(!role||!ROLE_PERMISSIONS[role]?.includes(permission)){reply.code(403).send({error:"ADMIN_PERMISSION_REQUIRED",permission});return null;}return {...u,adminRole:role};}
 const querySchema=z.object({q:z.string().trim().max(100).optional(),season:z.coerce.number().int().min(2020).max(2200).optional(),limit:z.coerce.number().int().min(1).max(100).default(40)});
 export function assertManualCompetitionStatus(status:string){if(status==="COMPLETED")throw new Error("COMPETITION_COMPLETION_AUTOMATIC_ONLY");if(status==="ACTIVE")throw new Error("COMPETITION_ACTIVATION_AUTOMATIC_ONLY");if(status!=="CANCELLED")throw new Error("COMPETITION_STATUS_MANUAL_CANCELLATION_ONLY");}
-export function registerAdminRoutes(app:FastifyInstance){
-app.get("/v1/admin/overview",async(req,reply)=>{if(!await authorize(req,reply))return;const [users,clubs,players,groups,challenges,leagues,items,giftCodes,flags,alliances,matches,walletTransactions,groupTransactions]=await Promise.all([prisma.user.count(),prisma.club.count(),prisma.player.count(),prisma.telegramGroup.count(),prisma.groupChallenge.count(),prisma.competition.count(),prisma.groupRewardItem.count(),prisma.giftCode.count(),prisma.allianceSeason.count({where:{reviewStatus:"FLAGGED"}}),prisma.alliance.count(),prisma.footballMatch.count(),prisma.ledgerTransaction.count(),prisma.groupPointLedger.count()]);return{counts:{users,clubs,players,groups,challenges,leagues,items,giftCodes,flags,alliances,matches,walletTransactions,groupTransactions}};});
-app.get("/v1/admin/group-targets",async(req,reply)=>{const actor=await authorize(req,reply);if(!actor)return;if(actor.adminRole!=="superadmin")return reply.code(403).send({error:"SUPERADMIN_REQUIRED"});const groups=await prisma.telegramGroup.findMany({where:{isActive:true,isSuspended:false},select:{telegramId:true,title:true},orderBy:{createdAt:"asc"},take:5000});return{groups};});
+export function registerAdminRoutes(app:FastifyInstance,options:{adminAlliancePort?:AdminAlliancePort;adminRoleLookupPort?:AdminRoleLookupPort;adminConfigurationPort?:AdminConfigurationPort;adminConsoleReadPort?:AdminConsoleReadPort;adminModerationActionPort?:AdminModerationActionPort;adminCatalogActionPort?:AdminCatalogActionPort;adminEntityUpdatePort?:AdminEntityUpdatePort;adminFinancialAdjustmentPort?:AdminFinancialAdjustmentPort;adminBroadcastRetryPort?:AdminBroadcastRetryPort;adminSeasonAwardActionPort?:AdminSeasonAwardActionPort;adminBroadcastCreatePort?:AdminBroadcastCreatePort}={}){
+const authorizeAdmin=(req:FastifyRequest,reply:FastifyReply,permission:AdminPermission="read")=>authorize(req,reply,permission,options.adminRoleLookupPort);
+app.get("/v1/admin/overview",async(req,reply)=>{if(!await authorizeAdmin(req,reply))return;if(!options.adminConsoleReadPort)throw new Error("ADMIN_CONSOLE_SUPABASE_REPOSITORY_REQUIRED");return options.adminConsoleReadPort.overview();});
+app.get("/v1/admin/group-targets",async(req,reply)=>{const actor=await authorizeAdmin(req,reply);if(!actor)return;if(actor.adminRole!=="superadmin")return reply.code(403).send({error:"SUPERADMIN_REQUIRED"});if(!options.adminConsoleReadPort)throw new Error("ADMIN_CONSOLE_SUPABASE_REPOSITORY_REQUIRED");return options.adminConsoleReadPort.groupTargets();});
 app.post("/v1/admin/group-broadcasts/:id/retry-failed",async(req,reply)=>{
-const actor=await authorize(req,reply,"moderation");if(!actor)return;
+const actor=await authorizeAdmin(req,reply,"moderation");if(!actor)return;
 if(actor.adminRole!=="superadmin")return reply.code(403).send({error:"SUPERADMIN_REQUIRED"});
-if(!await consumeAllianceActionRateLimit({telegramUserId:actor.telegramId,telegramGroupId:"global",action:"admin-group-broadcast-retry",limit:10}))return reply.code(429).send({error:"ADMIN_RATE_LIMITED",retryAfterSeconds:60});
+if(!options.adminAlliancePort)throw new Error("ADMIN_ALLIANCE_SUPABASE_REPOSITORY_REQUIRED");
+if(!await options.adminAlliancePort.consumeRateLimit({telegramUserId:actor.telegramId,telegramGroupId:"global",action:"admin-group-broadcast-retry",limit:10,now:new Date().toISOString()}))return reply.code(429).send({error:"ADMIN_RATE_LIMITED",retryAfterSeconds:60});
 const params=z.object({id:z.string().min(1).max(128)}).safeParse(req.params);
 const body=z.object({idempotencyKey:z.string().min(12).max(128)}).safeParse(req.body);
 if(!params.success||!body.success)return reply.code(400).send({error:"INVALID_BROADCAST_RETRY"});
-try{
-const result=await prisma.$transaction(async tx=>{
-const updated=await tx.adminGroupBroadcastDelivery.updateMany({where:{broadcastId:params.data.id,deliveredAt:null,deliveryAttempts:{gte:8}},data:{deliveryAttempts:0,availableAt:new Date(),deliveryClaimToken:null,deliveryLockedUntil:null,deliveryLastError:null}});
-if(!updated.count)throw new Error("NO_FAILED_DELIVERIES");
-await tx.adminAuditLog.create({data:{actorTelegramId:actor.telegramId,action:"retry-group-broadcast",targetType:"group-broadcast",targetId:params.data.id,idempotencyKey:"admin-group-broadcast-retry:"+body.data.idempotencyKey,metadata:{retried:updated.count}}});
-return{retried:updated.count};
-});
-return result;
-}catch(error){
-if(error instanceof Error&&error.message==="NO_FAILED_DELIVERIES")return reply.code(409).send({error:error.message});
-if(typeof error==="object"&&error!==null&&"code"in error&&error.code==="P2002")return reply.code(409).send({error:"DUPLICATE_OR_IDEMPOTENCY_CONFLICT"});
-throw error;
-}
+if(!options.adminBroadcastRetryPort)throw new Error("ADMIN_BROADCAST_SUPABASE_REPOSITORY_REQUIRED");
+try{return await options.adminBroadcastRetryPort.retry("groups",params.data.id,actor.telegramId,body.data.idempotencyKey);}
+catch(error){const code=error instanceof Error?error.message:"ADMIN_BROADCAST_RETRY_FAILED";if(code.includes("NO_FAILED_DELIVERIES"))return reply.code(409).send({error:"NO_FAILED_DELIVERIES"});if(code.includes("IDEMPOTENCY_KEY_REUSED"))return reply.code(409).send({error:"DUPLICATE_OR_IDEMPOTENCY_CONFLICT"});throw error;}
 });
 app.post("/v1/admin/user-broadcasts/:id/retry-failed",async(req,reply)=>{
-const actor=await authorize(req,reply,"moderation");if(!actor)return;
+const actor=await authorizeAdmin(req,reply,"moderation");if(!actor)return;
 if(actor.adminRole!=="superadmin")return reply.code(403).send({error:"SUPERADMIN_REQUIRED"});
-if(!await consumeAllianceActionRateLimit({telegramUserId:actor.telegramId,telegramGroupId:"global",action:"admin-user-broadcast-retry",limit:10}))return reply.code(429).send({error:"ADMIN_RATE_LIMITED",retryAfterSeconds:60});
+if(!options.adminAlliancePort)throw new Error("ADMIN_ALLIANCE_SUPABASE_REPOSITORY_REQUIRED");
+if(!await options.adminAlliancePort.consumeRateLimit({telegramUserId:actor.telegramId,telegramGroupId:"global",action:"admin-user-broadcast-retry",limit:10,now:new Date().toISOString()}))return reply.code(429).send({error:"ADMIN_RATE_LIMITED",retryAfterSeconds:60});
 const params=z.object({id:z.string().min(12).max(128)}).safeParse(req.params);
 const body=z.object({idempotencyKey:z.string().min(12).max(128)}).safeParse(req.body);
 if(!params.success||!body.success)return reply.code(400).send({error:"INVALID_BROADCAST_RETRY"});
-try{
-const result=await prisma.$transaction(async tx=>{
-const updated=await tx.leagueNotice.updateMany({where:{referenceId:params.data.id,kind:"ADMIN_BROADCAST",deliveredAt:null,readAt:null,deliveryAttempts:{gte:8}},data:{deliveryAttempts:0,deliveryClaimToken:null,deliveryLockedUntil:null,deliveryLastError:null}});
-if(!updated.count)throw new Error("NO_FAILED_DELIVERIES");
-await tx.adminAuditLog.create({data:{actorTelegramId:actor.telegramId,action:"retry-user-broadcast",targetType:"user-broadcast",targetId:params.data.id,idempotencyKey:"admin-user-broadcast-retry:"+body.data.idempotencyKey,metadata:{retried:updated.count}}});
-return{retried:updated.count};
-});
-return result;
-}catch(error){
-if(error instanceof Error&&error.message==="NO_FAILED_DELIVERIES")return reply.code(409).send({error:error.message});
-if(typeof error==="object"&&error!==null&&"code"in error&&error.code==="P2002")return reply.code(409).send({error:"DUPLICATE_OR_IDEMPOTENCY_CONFLICT"});
-throw error;
-}
+if(!options.adminBroadcastRetryPort)throw new Error("ADMIN_BROADCAST_SUPABASE_REPOSITORY_REQUIRED");
+try{return await options.adminBroadcastRetryPort.retry("users",params.data.id,actor.telegramId,body.data.idempotencyKey);}
+catch(error){const code=error instanceof Error?error.message:"ADMIN_BROADCAST_RETRY_FAILED";if(code.includes("NO_FAILED_DELIVERIES"))return reply.code(409).send({error:"NO_FAILED_DELIVERIES"});if(code.includes("IDEMPOTENCY_KEY_REUSED"))return reply.code(409).send({error:"DUPLICATE_OR_IDEMPOTENCY_CONFLICT"});throw error;}
 });
 app.get("/v1/admin/group-broadcasts",async(req,reply)=>{
-const actor=await authorize(req,reply,"moderation");if(!actor)return;
+const actor=await authorizeAdmin(req,reply,"moderation");if(!actor)return;
 if(actor.adminRole!=="superadmin")return reply.code(403).send({error:"SUPERADMIN_REQUIRED"});
 const q=z.object({limit:z.coerce.number().int().min(1).max(100).default(40)}).safeParse(req.query);
 if(!q.success)return reply.code(400).send({error:"INVALID_QUERY"});
-const [broadcasts,userAudits]=await Promise.all([
-prisma.adminGroupBroadcast.findMany({take:q.data.limit,orderBy:{createdAt:"desc"},include:{deliveries:{select:{deliveredAt:true,deliveryAttempts:true,deliveryLastError:true}}}}),
-prisma.adminAuditLog.findMany({where:{action:"broadcast",targetType:"broadcast"},take:q.data.limit,orderBy:{createdAt:"desc"},select:{targetId:true,createdAt:true,actorTelegramId:true}}),
-]);
-const refs=userAudits.map(x=>x.targetId).filter((x):x is string=>Boolean(x));
-const [userTotals,userDelivered,userFailed]=refs.length?await Promise.all([
-prisma.leagueNotice.groupBy({by:["referenceId"],where:{kind:"ADMIN_BROADCAST",referenceId:{in:refs}},_count:{_all:true}}),
-prisma.leagueNotice.groupBy({by:["referenceId"],where:{kind:"ADMIN_BROADCAST",referenceId:{in:refs},OR:[{deliveredAt:{not:null}},{readAt:{not:null}}]},_count:{_all:true}}),
-prisma.leagueNotice.groupBy({by:["referenceId"],where:{kind:"ADMIN_BROADCAST",referenceId:{in:refs},deliveredAt:null,deliveryAttempts:{gte:8}},_count:{_all:true}}),
-]):[[],[],[]];
-const totalMap=new Map(userTotals.map(x=>[x.referenceId??"",x._count._all]));
-const deliveredMap=new Map(userDelivered.map(x=>[x.referenceId??"",x._count._all]));
-const failedMap=new Map(userFailed.map(x=>[x.referenceId??"",x._count._all]));
-const groupRows=broadcasts.map(b=>({id:b.id,kind:"groups",name:"ارسال گروهی به گروه‌ها",createdByTelegramId:b.createdByTelegramId,createdAt:b.createdAt.toISOString(),total:b.deliveries.length,delivered:b.deliveries.filter(d=>d.deliveredAt!==null&&d.deliveryLastError!=="SKIPPED_GROUP_INACTIVE").length,skipped:b.deliveries.filter(d=>d.deliveryLastError==="SKIPPED_GROUP_INACTIVE").length,failed:b.deliveries.filter(d=>d.deliveryAttempts>=8&&d.deliveredAt===null).length,pending:b.deliveries.filter(d=>d.deliveredAt===null&&d.deliveryAttempts<8).length}));
-const userRows=userAudits.map(a=>{const total=totalMap.get(a.targetId)??0,delivered=deliveredMap.get(a.targetId)??0,failed=failedMap.get(a.targetId)??0;return{id:a.targetId,kind:"users",name:"ارسال خصوصی به کاربران",createdByTelegramId:a.actorTelegramId,createdAt:a.createdAt.toISOString(),total,delivered,skipped:0,failed,pending:Math.max(0,total-delivered-failed)};});
-return [...groupRows,...userRows].sort((a,b)=>b.createdAt.localeCompare(a.createdAt)).slice(0,q.data.limit);
+if(!options.adminConsoleReadPort)throw new Error("ADMIN_CONSOLE_SUPABASE_REPOSITORY_REQUIRED");
+return options.adminConsoleReadPort.broadcasts(q.data.limit);
 });
-app.get("/v1/admin/roles",async(req,reply)=>{const actor=await authorize(req,reply);if(!actor)return;if(actor.adminRole!=="superadmin")return reply.code(403).send({error:"SUPERADMIN_REQUIRED"});return prisma.adminRoleAssignment.findMany({orderBy:{updatedAt:"desc"}});});
-app.get("/v1/admin/settings",async(req,reply)=>{const actor=await authorize(req,reply);if(!actor)return;if(actor.adminRole!=="superadmin")return reply.code(403).send({error:"SUPERADMIN_REQUIRED"});return prisma.gameSetting.findMany({orderBy:{key:"asc"}});});
-app.get("/v1/admin/finance-summary",async(req,reply)=>{
-if(!await authorize(req,reply,"economy"))return;
-const q=z.object({days:z.coerce.number().int().min(1).max(365).default(30)}).safeParse(req.query);
-if(!q.success)return reply.code(400).send({error:"INVALID_QUERY"});
-const from=new Date(Date.now()-q.data.days*86400000);
-const [wallet,clubFinance,groupPoints,walletBalances,allWalletLedger,groupTreasury,allGroupLedger,arrears]=await Promise.all([
-prisma.ledgerTransaction.groupBy({by:["asset","direction"],where:{createdAt:{gte:from}},_sum:{amount:true},_count:{_all:true}}),
-prisma.clubFinanceEntry.groupBy({by:["category","direction"],where:{occurredAt:{gte:from}},_sum:{amount:true},_count:{_all:true}}),
-prisma.groupPointLedger.groupBy({by:["source"],where:{createdAt:{gte:from}},_sum:{amount:true},_count:{_all:true}}),
-prisma.wallet.groupBy({by:["asset"],_sum:{balance:true}}),
-prisma.ledgerTransaction.groupBy({by:["asset","direction"],_sum:{amount:true}}),
-prisma.telegramGroup.aggregate({_sum:{points:true}}),
-prisma.groupPointLedger.aggregate({_sum:{amount:true}}),
-prisma.club.aggregate({_sum:{operatingArrears:true}}),
-]);
-const assets=["CASH","GOLD"] as const;
-const walletReconciliation=assets.map(asset=>{
-const balance=walletBalances.find(x=>x.asset===asset)?._sum.balance??0n;
-const credits=allWalletLedger.find(x=>x.asset===asset&&x.direction==="CREDIT")?._sum.amount??0n;
-const debits=allWalletLedger.find(x=>x.asset===asset&&x.direction==="DEBIT")?._sum.amount??0n;
-const ledgerNet=credits-debits;
-return{asset,walletBalance:balance.toString(),ledgerNet:ledgerNet.toString(),difference:(balance-ledgerNet).toString()};
+app.get("/v1/admin/roles",async(req,reply)=>{const actor=await authorizeAdmin(req,reply);if(!actor)return;if(actor.adminRole!=="superadmin")return reply.code(403).send({error:"SUPERADMIN_REQUIRED"});if(!options.adminConfigurationPort)throw new Error("ADMIN_CONFIGURATION_SUPABASE_REPOSITORY_REQUIRED");return (await options.adminConfigurationPort.list()).roles;});
+app.get("/v1/admin/settings",async(req,reply)=>{const actor=await authorizeAdmin(req,reply);if(!actor)return;if(actor.adminRole!=="superadmin")return reply.code(403).send({error:"SUPERADMIN_REQUIRED"});if(!options.adminConfigurationPort)throw new Error("ADMIN_CONFIGURATION_SUPABASE_REPOSITORY_REQUIRED");return (await options.adminConfigurationPort.list()).settings;});
+app.get("/v1/admin/finance-summary",async(req,reply)=>{if(!await authorizeAdmin(req,reply,"economy"))return;const q=z.object({days:z.coerce.number().int().min(1).max(365).default(30)}).safeParse(req.query);if(!q.success)return reply.code(400).send({error:"INVALID_QUERY"});if(!options.adminConsoleReadPort)throw new Error("ADMIN_CONSOLE_SUPABASE_REPOSITORY_REQUIRED");return options.adminConsoleReadPort.financeSummary(q.data.days);});
+app.get("/v1/admin/:resource",async(req,reply)=>{const p=z.object({resource:z.enum(["players","clubs","users","groups","challenges","leagues","items","gift-codes","alliances","matches","alliance-seasons","wallet-ledger","group-ledger","audit","season-awards"])}).safeParse(req.params),q=querySchema.safeParse(req.query);if(!p.success||!q.success)return reply.code(400).send({error:"INVALID_QUERY"});const readPermission:Record<string,AdminPermission>={players:"players",clubs:"clubs",matches:"matches",leagues:"competitions","alliance-seasons":"groups",alliances:"groups",groups:"groups",challenges:"groups",users:"moderation",items:"gifts","gift-codes":"gifts","wallet-ledger":"economy","group-ledger":"economy",audit:"moderation","season-awards":"players"};if(!await authorizeAdmin(req,reply,readPermission[p.data.resource]))return;const {limit,q:term,season}=q.data;if(p.data.resource==="wallet-ledger"||p.data.resource==="group-ledger"||p.data.resource==="audit"){if(!options.adminConsoleReadPort)throw new Error("ADMIN_CONSOLE_SUPABASE_REPOSITORY_REQUIRED");return options.adminConsoleReadPort.ledgerEntries(p.data.resource,limit,term);}if(!options.adminConsoleReadPort)throw new Error("ADMIN_CONSOLE_SUPABASE_REPOSITORY_REQUIRED");return options.adminConsoleReadPort.resourceList(p.data.resource as AdminResourceListName,limit,term,season);
 });
-const groupBalance=groupTreasury._sum.points??0n;
-const groupLedgerNet=allGroupLedger._sum.amount??0n;
-const clubIncome=clubFinance.filter(x=>x.direction==="CREDIT").reduce((sum,x)=>sum+(x._sum.amount??0n),0n);
-const clubExpenses=clubFinance.filter(x=>x.direction==="DEBIT").reduce((sum,x)=>sum+(x._sum.amount??0n),0n);
-return{
-days:q.data.days,from:from.toISOString(),
-wallet:wallet.map(x=>({asset:x.asset,direction:x.direction,total:(x._sum.amount??0n).toString(),count:x._count._all})),
-clubFinance:clubFinance.map(x=>({category:x.category,direction:x.direction,total:(x._sum.amount??0n).toString(),count:x._count._all})),
-groupPoints:groupPoints.map(x=>({source:x.source,total:(x._sum.amount??0n).toString(),count:x._count._all})),
-walletReconciliation,
-groupReconciliation:[{treasuryBalance:groupBalance.toString(),ledgerNet:groupLedgerNet.toString(),difference:(groupBalance-groupLedgerNet).toString()}],
-clubFinanceSummary:[{metric:"income",total:clubIncome.toString()},{metric:"expenses",total:clubExpenses.toString()},{metric:"net",total:(clubIncome-clubExpenses).toString()}],
-clubArrearsTotal:(arrears._sum.operatingArrears??0n).toString(),
-};
-});
-app.get("/v1/admin/:resource",async(req,reply)=>{const p=z.object({resource:z.enum(["players","clubs","users","groups","challenges","leagues","items","gift-codes","alliances","matches","alliance-seasons","wallet-ledger","group-ledger","audit","season-awards"])}).safeParse(req.params),q=querySchema.safeParse(req.query);if(!p.success||!q.success)return reply.code(400).send({error:"INVALID_QUERY"});const readPermission:Record<string,AdminPermission>={players:"players",clubs:"clubs",matches:"matches",leagues:"competitions","alliance-seasons":"groups",alliances:"groups",groups:"groups",challenges:"groups",users:"moderation",items:"gifts","gift-codes":"gifts","wallet-ledger":"economy","group-ledger":"economy",audit:"moderation","season-awards":"players"};if(!await authorize(req,reply,readPermission[p.data.resource]))return;const {limit,q:term,season}=q.data;const contains={contains:term??"",mode:"insensitive" as const};switch(p.data.resource){
-case"clubs":return prisma.club.findMany({take:limit,...(term?{where:{OR:[{name:contains},{slug:contains},{owner:{is:{telegramId:{contains:term}}}}]}}:{}),orderBy:{createdAt:"desc"},include:{owner:{select:{telegramId:true,displayName:true}},_count:{select:{players:true,homeMatches:true,awayMatches:true}}}});
-case"alliance-seasons":return prisma.allianceSeason.findMany({take:limit,...(term?{where:{alliance:{is:{name:contains}}}}:{}),orderBy:{createdAt:"desc"},include:{alliance:{select:{name:true,status:true}}}});
-case"season-awards":return prisma.seasonPlayerAward.findMany({take:limit,where:{...(season?{season}:{}),...(term?{OR:[{awardName:contains},{awardType:contains},{player:{is:{OR:[{firstName:contains},{lastName:contains}]}}}]}:{})},orderBy:[{season:"desc"},{awardType:"asc"}],include:{player:{select:{id:true,firstName:true,lastName:true,position:true,club:{select:{name:true}}}}}});
-case"players":return prisma.player.findMany({take:limit,...(term?{where:{OR:[{firstName:contains},{lastName:contains},{club:{is:{name:contains}}}]}}:{}),orderBy:{createdAt:"desc"},include:{club:{select:{id:true,name:true}}}});
-case"users":return prisma.user.findMany({take:limit,...(term?{where:{OR:[{telegramId:{contains:term}},{username:contains},{displayName:contains}]}}:{}),orderBy:{createdAt:"desc"},include:{club:{select:{id:true,name:true,level:true}}}});
-case"groups":return prisma.telegramGroup.findMany({take:limit,...(term?{where:{title:contains}}:{}),orderBy:{createdAt:"desc"},include:{_count:{select:{memberships:true,challenges:true}}}});
-case"challenges":return prisma.groupChallenge.findMany({take:limit,...(term?{where:{OR:[{title:contains},{group:{title:contains}}]}}:{}),orderBy:{createdAt:"desc"},include:{group:{select:{title:true,telegramId:true}},_count:{select:{participants:true}}}});
-case"leagues":return prisma.competition.findMany({take:limit,...(term?{where:{name:contains}}:{}),orderBy:{createdAt:"desc"},include:{_count:{select:{entries:true,matches:true}},pyramidLeague:{select:{id:true}}}});
-case"items":return prisma.groupRewardItem.findMany({take:limit,...(term?{where:{OR:[{name:contains},{slug:contains}]}}:{}),orderBy:{createdAt:"desc"},include:{_count:{select:{grants:true}}}});
-case"gift-codes":return prisma.giftCode.findMany({take:limit,...(term?{where:{code:contains}}:{}),orderBy:{createdAt:"desc"},include:{_count:{select:{redemptions:true}}}});
-case"alliances":return prisma.alliance.findMany({take:limit,...(term?{where:{OR:[{name:contains},{slug:contains}]}}:{}),orderBy:{createdAt:"desc"},include:{_count:{select:{groups:true,seasons:true,competitions:true}},seasons:{orderBy:{number:"desc"},take:3}}});
-case"matches":return prisma.footballMatch.findMany({take:limit,orderBy:{scheduledAt:"desc"},include:{homeClub:{select:{name:true}},awayClub:{select:{name:true}},competition:{select:{name:true}}}});
-case"wallet-ledger":return prisma.ledgerTransaction.findMany({take:limit,orderBy:{createdAt:"desc"},include:{user:{select:{telegramId:true,displayName:true,username:true}}}});
-case"group-ledger":return prisma.groupPointLedger.findMany({take:limit,orderBy:{createdAt:"desc"},include:{group:{select:{title:true,telegramId:true}},user:{select:{telegramId:true,displayName:true}}}});
-case"audit":return prisma.adminAuditLog.findMany({take:limit,orderBy:{createdAt:"desc"}});
-}});
-app.post("/v1/admin/actions",async(req,reply)=>{const actor=await authorize(req,reply);if(!actor)return;if(!await consumeAllianceActionRateLimit({telegramUserId:actor.telegramId,telegramGroupId:"global",action:"admin-actions",limit:20}))return reply.code(429).send({error:"ADMIN_RATE_LIMITED",retryAfterSeconds:60});const parsed=z.object({action:z.enum(["suspend-user","restore-user","suspend-group","restore-group","cancel-challenge","league-status","toggle-item","create-gift-code","toggle-gift-code","player-status","alliance-status","review-alliance-season","adjust-wallet","adjust-group-points","player-update","club-update","match-update","competition-status","item-update","season-status","create-item","set-admin-role","revoke-admin-role","set-game-setting","broadcast-users","broadcast-groups","set-season-player-award","remove-season-player-award","close-alliance-season","start-alliance-season"]),targetId:z.string().optional(),status:z.enum(["DRAFT","REGISTRATION","ACTIVE","COMPLETED","CANCELLED","RETIRED","SUSPENDED","DISSOLVED"]).optional(),active:z.boolean().optional(),amount:z.string().regex(/^-?\d{1,15}$/).optional(),asset:z.enum(["CASH","GOLD","HONOR"]).optional(),review:z.enum(["APPROVED","REJECTED","FLAGGED","PENDING"]).optional(),reason:z.string().max(500).optional(),idempotencyKey:z.string().min(12).max(128),code:z.string().trim().min(4).max(32).regex(/^[A-Za-z0-9_-]+$/).optional(),cashAmount:z.string().regex(/^\d{1,15}$/).optional(),goldAmount:z.string().regex(/^\d{1,15}$/).optional(),maxRedemptions:z.number().int().min(1).max(100000).optional(),perUserLimit:z.number().int().min(1).max(1000).optional(),expiresAt:z.string().datetime().optional(),firstName:z.string().trim().min(1).max(60).optional(),lastName:z.string().trim().min(1).max(60).optional(),age:z.number().int().min(15).max(55).optional(),overall:z.number().int().min(1).max(99).optional(),potential:z.number().int().min(1).max(99).optional(),wage:z.string().regex(/^\d{1,15}$/).optional(),contractDays:z.number().int().min(0).max(3650).optional(),fitness:z.number().int().min(0).max(100).optional(),morale:z.number().int().min(0).max(100).optional(),clubName:z.string().trim().min(2).max(60).optional(),level:z.number().int().min(1).max(100).optional(),reputation:z.number().int().min(0).max(1000000).optional(),stadiumLevel:z.number().int().min(1).max(100).optional(),academyLevel:z.number().int().min(0).max(100).optional(),trainingGroundLevel:z.number().int().min(1).max(100).optional(),ticketPrice:z.string().regex(/^\d{1,15}$/).optional(),scheduledAt:z.string().datetime().optional(),homeScore:z.number().int().min(0).max(99).optional(),awayScore:z.number().int().min(0).max(99).optional(),matchStatus:z.enum(["SCHEDULED","COMPLETED","CANCELLED"]).optional(),rewardType:z.enum(["WALLET","GROUP_POINTS"]).optional(),groupPoints:z.string().regex(/^\d{1,15}$/).optional(),itemName:z.string().trim().min(2).max(80).optional(),itemDescription:z.string().trim().min(2).max(500).optional(),itemCost:z.string().regex(/^\d{1,15}$/).optional(),itemSlug:z.string().trim().min(3).max(48).regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/).optional(),itemScope:z.enum(["PERSONAL","GROUP"]).optional(),seasonStatus:z.enum(["ACTIVE","COMPLETED","CANCELLED"]).optional(),adminTelegramId:z.string().regex(/^\d{1,20}$/).optional(),adminRole:z.enum(["football","economy","moderator"]).optional(),settingKey:z.string().trim().min(2).max(80).regex(/^[a-z0-9._-]+$/).optional(),settingValue:z.union([z.string(),z.number(),z.boolean(),z.record(z.unknown()),z.array(z.unknown())]).optional(),settingDescription:z.string().trim().max(300).optional(),broadcastMessage:z.string().trim().min(2).max(3000).optional(),durationDays:z.number().int().min(7).max(90).optional(),awardSeason:z.number().int().min(2020).max(2200).optional(),awardPlayerId:z.string().min(1).max(128).optional(),awardType:z.enum(["TOP_SCORER","TOP_ASSISTS","PLAYER_OF_SEASON","TEAM_OF_SEASON","FAIR_PLAY","MOST_IMPROVED"]).optional(),awardName:z.string().trim().min(2).max(80).optional(),awardReason:z.string().trim().max(500).optional()}).safeParse(req.body);if(!parsed.success)return reply.code(400).send({error:"INVALID_ADMIN_ACTION"});const x=parsed.data;if(["broadcast-users","broadcast-groups"].includes(x.action)&&!await consumeAllianceActionRateLimit({telegramUserId:actor.telegramId,telegramGroupId:"global",action:"admin-broadcasts",limit:2}))return reply.code(429).send({error:"ADMIN_BROADCAST_RATE_LIMITED",retryAfterSeconds:60});const actionPermission:Record<string,AdminPermission>={"suspend-user":"moderation","restore-user":"moderation","suspend-group":"moderation","restore-group":"moderation","cancel-challenge":"groups","league-status":"competitions","competition-status":"competitions","player-status":"players","player-update":"players","club-update":"clubs","match-update":"matches","alliance-status":"groups","review-alliance-season":"groups","season-status":"groups","adjust-wallet":"economy","adjust-group-points":"economy","create-gift-code":"gifts","toggle-gift-code":"gifts","toggle-item":"gifts","item-update":"gifts","create-item":"gifts","set-admin-role":"moderation","revoke-admin-role":"moderation","set-game-setting":"economy","broadcast-users":"moderation","broadcast-groups":"moderation","set-season-player-award":"players","remove-season-player-award":"players","close-alliance-season":"groups","start-alliance-season":"groups"};const requiredPermission=actionPermission[x.action];if(!requiredPermission||!ROLE_PERMISSIONS[actor.adminRole]?.includes(requiredPermission))return reply.code(403).send({error:"ADMIN_PERMISSION_REQUIRED",permission:requiredPermission??"unknown"});if(["set-admin-role","revoke-admin-role","set-game-setting","broadcast-users","broadcast-groups","close-alliance-season","start-alliance-season","review-alliance-season"].includes(x.action)&&actor.adminRole!=="superadmin")return reply.code(403).send({error:"SUPERADMIN_REQUIRED"});let type="",id=x.targetId??"";let actionResult:Record<string,unknown>={};const seasonAlertRef:{value:{groupTelegramId:string;flags:Array<{code:string;group?:string;sharePercent?:number;groups?:Array<{group:string}>}>}|null}={value:null};
+app.post("/v1/admin/actions",async(req,reply)=>{const actor=await authorizeAdmin(req,reply);if(!actor)return;const adminActionRateAllowed=options.adminAlliancePort?await options.adminAlliancePort.consumeRateLimit({telegramUserId:actor.telegramId,telegramGroupId:"global",action:"admin-actions",limit:20,now:new Date().toISOString()}):await consumeAllianceActionRateLimit({telegramUserId:actor.telegramId,telegramGroupId:"global",action:"admin-actions",limit:20});if(!adminActionRateAllowed)return reply.code(429).send({error:"ADMIN_RATE_LIMITED",retryAfterSeconds:60});const parsed=z.object({action:z.enum(["suspend-user","restore-user","suspend-group","restore-group","cancel-challenge","league-status","toggle-item","create-gift-code","toggle-gift-code","player-status","alliance-status","review-alliance-season","adjust-wallet","adjust-group-points","player-update","club-update","match-update","competition-status","item-update","season-status","create-item","set-admin-role","revoke-admin-role","set-game-setting","broadcast-users","broadcast-groups","set-season-player-award","remove-season-player-award","close-alliance-season","start-alliance-season"]),targetId:z.string().optional(),status:z.enum(["DRAFT","REGISTRATION","ACTIVE","COMPLETED","CANCELLED","RETIRED","SUSPENDED","DISSOLVED"]).optional(),active:z.boolean().optional(),amount:z.string().regex(/^-?\d{1,15}$/).optional(),asset:z.enum(["CASH","GOLD","HONOR"]).optional(),review:z.enum(["APPROVED","REJECTED","FLAGGED","PENDING"]).optional(),reason:z.string().max(500).optional(),idempotencyKey:z.string().min(12).max(128),code:z.string().trim().min(4).max(32).regex(/^[A-Za-z0-9_-]+$/).optional(),cashAmount:z.string().regex(/^\d{1,15}$/).optional(),goldAmount:z.string().regex(/^\d{1,15}$/).optional(),maxRedemptions:z.number().int().min(1).max(100000).optional(),perUserLimit:z.number().int().min(1).max(1000).optional(),expiresAt:z.string().datetime().optional(),firstName:z.string().trim().min(1).max(60).optional(),lastName:z.string().trim().min(1).max(60).optional(),age:z.number().int().min(15).max(55).optional(),overall:z.number().int().min(1).max(99).optional(),potential:z.number().int().min(1).max(99).optional(),wage:z.string().regex(/^\d{1,15}$/).optional(),contractDays:z.number().int().min(0).max(3650).optional(),fitness:z.number().int().min(0).max(100).optional(),morale:z.number().int().min(0).max(100).optional(),clubName:z.string().trim().min(2).max(60).optional(),level:z.number().int().min(1).max(100).optional(),reputation:z.number().int().min(0).max(1000000).optional(),stadiumLevel:z.number().int().min(1).max(100).optional(),academyLevel:z.number().int().min(0).max(100).optional(),trainingGroundLevel:z.number().int().min(1).max(100).optional(),ticketPrice:z.string().regex(/^\d{1,15}$/).optional(),scheduledAt:z.string().datetime().optional(),homeScore:z.number().int().min(0).max(99).optional(),awayScore:z.number().int().min(0).max(99).optional(),matchStatus:z.enum(["SCHEDULED","COMPLETED","CANCELLED"]).optional(),rewardType:z.enum(["WALLET","GROUP_POINTS"]).optional(),groupPoints:z.string().regex(/^\d{1,15}$/).optional(),itemName:z.string().trim().min(2).max(80).optional(),itemDescription:z.string().trim().min(2).max(500).optional(),itemCost:z.string().regex(/^\d{1,15}$/).optional(),itemSlug:z.string().trim().min(3).max(48).regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/).optional(),itemScope:z.enum(["PERSONAL","GROUP"]).optional(),seasonStatus:z.enum(["ACTIVE","COMPLETED","CANCELLED"]).optional(),adminTelegramId:z.string().regex(/^\d{1,20}$/).optional(),adminRole:z.enum(["football","economy","moderator"]).optional(),settingKey:z.string().trim().min(2).max(80).regex(/^[a-z0-9._-]+$/).optional(),settingValue:z.union([z.string(),z.number(),z.boolean(),z.record(z.unknown()),z.array(z.unknown())]).optional(),settingDescription:z.string().trim().max(300).optional(),broadcastMessage:z.string().trim().min(2).max(3000).optional(),durationDays:z.number().int().min(7).max(90).optional(),awardSeason:z.number().int().min(2020).max(2200).optional(),awardPlayerId:z.string().min(1).max(128).optional(),awardType:z.enum(["TOP_SCORER","TOP_ASSISTS","PLAYER_OF_SEASON","TEAM_OF_SEASON","FAIR_PLAY","MOST_IMPROVED"]).optional(),awardName:z.string().trim().min(2).max(80).optional(),awardReason:z.string().trim().max(500).optional()}).safeParse(req.body);if(!parsed.success)return reply.code(400).send({error:"INVALID_ADMIN_ACTION"});const x=parsed.data;if(["broadcast-users","broadcast-groups"].includes(x.action)&&!await consumeAllianceActionRateLimit({telegramUserId:actor.telegramId,telegramGroupId:"global",action:"admin-broadcasts",limit:2}))return reply.code(429).send({error:"ADMIN_BROADCAST_RATE_LIMITED",retryAfterSeconds:60});const actionPermission:Record<string,AdminPermission>={"suspend-user":"moderation","restore-user":"moderation","suspend-group":"moderation","restore-group":"moderation","cancel-challenge":"groups","league-status":"competitions","competition-status":"competitions","player-status":"players","player-update":"players","club-update":"clubs","match-update":"matches","alliance-status":"groups","review-alliance-season":"groups","season-status":"groups","adjust-wallet":"economy","adjust-group-points":"economy","create-gift-code":"gifts","toggle-gift-code":"gifts","toggle-item":"gifts","item-update":"gifts","create-item":"gifts","set-admin-role":"moderation","revoke-admin-role":"moderation","set-game-setting":"economy","broadcast-users":"moderation","broadcast-groups":"moderation","set-season-player-award":"players","remove-season-player-award":"players","close-alliance-season":"groups","start-alliance-season":"groups"};const requiredPermission=actionPermission[x.action];if(!requiredPermission||!ROLE_PERMISSIONS[actor.adminRole]?.includes(requiredPermission))return reply.code(403).send({error:"ADMIN_PERMISSION_REQUIRED",permission:requiredPermission??"unknown"});if(["set-admin-role","revoke-admin-role","set-game-setting","broadcast-users","broadcast-groups","close-alliance-season","start-alliance-season","review-alliance-season"].includes(x.action)&&actor.adminRole!=="superadmin")return reply.code(403).send({error:"SUPERADMIN_REQUIRED"});if(["adjust-wallet","adjust-group-points"].includes(x.action)&&options.adminFinancialAdjustmentPort){
+try{
+ const result=await options.adminFinancialAdjustmentPort.execute({
+  action:x.action as "adjust-wallet"|"adjust-group-points",targetId:x.targetId??"",amount:x.amount!,actorTelegramId:actor.telegramId,
+  idempotencyKey:x.idempotencyKey,reason:x.reason!,...(x.asset?{asset:x.asset}:{})
+ });
+ return {ok:true,targetType:result.targetType,targetId:result.targetId,replayed:result.replay,...(result.balance!==undefined?{balance:result.balance}:{}),...(result.points!==undefined?{points:result.points}:{})};
+}catch(error){
+ const code=error instanceof Error?error.message:"ADMIN_FINANCIAL_ADJUSTMENT_FAILED";
+ if(code.includes("TARGET_NOT_FOUND"))return reply.code(404).send({error:code});
+ if(["INSUFFICIENT_BALANCE","INSUFFICIENT_GROUP_POINTS","IDEMPOTENCY_CONFLICT","IDEMPOTENCY_KEY_REUSED"].some(v=>code.includes(v)))return reply.code(409).send({error:code});
+ if(code.startsWith("INVALID_"))return reply.code(400).send({error:code});
+ throw error;
+}
+}
+if(["adjust-wallet","adjust-group-points"].includes(x.action)&&(process.env.NODE_ENV==="production"||process.env.ENVIRONMENT==="production")&&!options.adminFinancialAdjustmentPort)throw new Error("ADMIN_FINANCIAL_ADJUSTMENT_SUPABASE_REPOSITORY_REQUIRED");
+let type="",id=x.targetId??"";let actionResult:Record<string,unknown>={};const seasonAlertRef:{value:{groupTelegramId:string;flags:Array<{code:string;group?:string;sharePercent?:number;groups?:Array<{group:string}>}>}|null}={value:null};
+if(options.adminAlliancePort&&["review-alliance-season","close-alliance-season","start-alliance-season"].includes(x.action)){
+try{
+let rpcResult:unknown;
+if(x.action==="start-alliance-season"){
+if(!id)throw new Error("TARGET_REQUIRED");
+rpcResult=await options.adminAlliancePort.adminStartAllianceSeason({actorTelegramId:actor.telegramId,allianceId:id,idempotencyKey:x.idempotencyKey,...(x.durationDays!==undefined?{durationDays:x.durationDays}:{}),...(x.reason?{reason:x.reason}:{})});
+const result=rpcResult as {season?:{id?:string;number?:number;startsAt?:string;endsAt?:string};replayed?:boolean};
+if(!result.season?.id)throw new Error("SUPABASE_ADMIN_ALLIANCE_INVALID_RESPONSE");
+id=result.season.id;type="alliance-season";actionResult={seasonNumber:result.season.number,startsAt:result.season.startsAt,endsAt:result.season.endsAt,replayed:result.replayed??false};
+}else if(x.action==="close-alliance-season"){
+if(!id)throw new Error("TARGET_REQUIRED");
+rpcResult=await options.adminAlliancePort.adminCloseAllianceSeason({actorTelegramId:actor.telegramId,seasonId:id,idempotencyKey:x.idempotencyKey,...(x.reason?{reason:x.reason}:{})});
+const result=rpcResult as {reviewStatus?:string;replayed?:boolean;prize?:string;alertGroupTelegramId?:string;securityFlags?:Array<{code:string;group?:string;sharePercent?:number;groups?:Array<{group:string}>}>};
+type="alliance-season";actionResult={reviewStatus:result.reviewStatus,replayed:result.replayed??false,...(result.prize!==undefined?{prize:result.prize}:{})};
+if(!result.replayed&&result.reviewStatus==="FLAGGED"&&result.alertGroupTelegramId&&Array.isArray(result.securityFlags))seasonAlertRef.value={groupTelegramId:result.alertGroupTelegramId,flags:result.securityFlags};
+}else{
+if(!id||!x.review||!["APPROVED","REJECTED"].includes(x.review))throw new Error("INVALID_REVIEW");
+rpcResult=await options.adminAlliancePort.adminReviewAllianceSeason({actorTelegramId:actor.telegramId,seasonId:id,decision:x.review==="APPROVED"?"APPROVE":"REJECT",idempotencyKey:x.idempotencyKey,...(x.reason?{reason:x.reason}:{})});
+const result=rpcResult as {reviewStatus?:string;prize?:string;replayed?:boolean};
+type="alliance-season";actionResult={reviewStatus:result.reviewStatus,prize:result.prize??"0",replayed:result.replayed??false};
+}
+const seasonAlert=seasonAlertRef.value;
+if(seasonAlert&&process.env.TELEGRAM_BOT_TOKEN){
+const alert=["هشدار امنیتی Football Empire","جایزه فصل اتحاد به دلیل الگوی مشکوک مسدود شد.",...seasonAlert.flags.map(flag=>flag.code==="SINGLE_MEMBER_CONCENTRATION"?"تمرکز امتیاز در "+(flag.group??"گروه نامشخص")+": "+(flag.sharePercent??0)+"%":"هم‌پوشانی امتیاز بین گروه‌ها: "+(flag.groups??[]).map(group=>group.group).join("، "))].join(String.fromCharCode(10));
+try{await fetch("https://api.telegram.org/bot"+process.env.TELEGRAM_BOT_TOKEN+"/sendMessage",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({chat_id:seasonAlert.groupTelegramId,text:alert}),signal:AbortSignal.timeout(5000)});}catch(error){req.log.warn({error},"Could not deliver admin alliance season security alert");}
+}
+return{ok:true,targetType:type,targetId:id,...actionResult};
+}catch(error){
+const code=error instanceof Error?error.message:"ADMIN_ALLIANCE_RPC_FAILED";
+if(["SEASON_NOT_ENDED","NO_ACTIVE_SEASON","SEASON_NOT_FLAGGED","ALLIANCE_FOUNDER_REQUIRED","SEASON_ALREADY_SETTLED","SEASON_ALREADY_ACTIVE","SEASON_REVIEW_REQUIRED","ALLIANCE_INACTIVE","DUPLICATE_OR_IDEMPOTENCY_CONFLICT","IDEMPOTENCY_CONFLICT"].includes(code))return reply.code(409).send({error:code});
+if(["SEASON_NOT_FOUND","ALLIANCE_NOT_FOUND","ACCOUNT_NOT_FOUND"].includes(code))return reply.code(404).send({error:code});
+if(code.startsWith("INVALID_"))return reply.code(400).send({error:code});
+throw error;
+}
+}
+if(["toggle-item","toggle-gift-code","create-item","item-update","create-gift-code"].includes(x.action)&&options.adminCatalogActionPort){
+ try{
+  if((["toggle-item","toggle-gift-code","item-update"].includes(x.action)&&!id)
+   ||(["toggle-item","toggle-gift-code"].includes(x.action)&&x.active===undefined))return reply.code(400).send({error:"INVALID_ADMIN_CATALOG_ACTION"});
+  const result=await options.adminCatalogActionPort.execute({
+   action:x.action as import("./node-supabase-admin-catalog-actions.js").AdminCatalogAction,
+   ...(id?{targetId:id}:{}),...(x.active!==undefined?{active:x.active}:{}),actorTelegramId:actor.telegramId,idempotencyKey:x.idempotencyKey,
+   ...(x.itemSlug?{itemSlug:x.itemSlug}:{}),...(x.itemName?{itemName:x.itemName}:{}),...(x.itemDescription?{itemDescription:x.itemDescription}:{}),
+   ...(x.itemCost!==undefined?{itemCost:x.itemCost}:{}),...(x.itemScope?{itemScope:x.itemScope}:{}),
+   ...(x.code?{code:x.code}:{}),...(x.rewardType?{rewardType:x.rewardType}:{}),
+   ...(x.cashAmount!==undefined?{cashAmount:x.cashAmount}:{}),...(x.goldAmount!==undefined?{goldAmount:x.goldAmount}:{}),
+   ...(x.groupPoints!==undefined?{groupPoints:x.groupPoints}:{}),...(x.maxRedemptions!==undefined?{maxRedemptions:x.maxRedemptions}:{}),
+   ...(x.perUserLimit!==undefined?{perUserLimit:x.perUserLimit}:{}),...(x.expiresAt?{expiresAt:x.expiresAt}:{})
+  });
+  return {ok:true,targetType:result.targetType,targetId:result.targetId,replayed:result.replay};
+ }catch(error){
+  const code=error instanceof Error?error.message:"ADMIN_CATALOG_ACTION_FAILED";
+  if(code.includes("TARGET_NOT_FOUND"))return reply.code(404).send({error:code});
+  if(code.includes("IDEMPOTENCY_KEY_REUSED")||code.includes("unique constraint")||code.includes("duplicate key"))return reply.code(409).send({error:code});
+  if(code.startsWith("INVALID_"))return reply.code(400).send({error:code});
+  throw error;
+ }
+}
+if(["toggle-item","toggle-gift-code","create-item","item-update","create-gift-code"].includes(x.action)&&(process.env.NODE_ENV==="production"||process.env.ENVIRONMENT==="production")&&!options.adminCatalogActionPort)throw new Error("ADMIN_CATALOG_SUPABASE_REPOSITORY_REQUIRED");
+if(["player-update","club-update","match-update","player-status","alliance-status","season-status"].includes(x.action)&&options.adminEntityUpdatePort){
+ try{
+  if(!id)return reply.code(400).send({error:"INVALID_ADMIN_ENTITY_ACTION"});
+  const payload:Record<string,string|number>={};
+  const fields:Record<string,string[]>={
+   "player-update":["firstName","lastName","age","overall","potential","wage","contractDays","fitness","morale"],
+   "club-update":["clubName","level","reputation","stadiumLevel","academyLevel","trainingGroundLevel","ticketPrice"],
+   "match-update":["scheduledAt","homeScore","awayScore","matchStatus"],
+  };
+  if(x.action==="player-status")payload.status=x.status!;
+  else if(x.action==="alliance-status")payload.status=x.status!;
+  else if(x.action==="season-status")payload.status=x.seasonStatus!;
+  else for(const key of fields[x.action]??[]){const value=(x as unknown as Record<string,unknown>)[key];if(value!==undefined)payload[key]=value as string|number;}
+  const result=await options.adminEntityUpdatePort.execute({
+   action:x.action as import("./node-supabase-admin-entity-update.js").AdminEntityUpdateAction,
+   targetId:id,actorTelegramId:actor.telegramId,idempotencyKey:x.idempotencyKey,payload,
+   ...(x.reason?{reason:x.reason}:{})
+  });
+  return {ok:true,targetType:result.targetType,targetId:result.targetId,replayed:result.replay};
+ }catch(error){
+  const code=error instanceof Error?error.message:"ADMIN_ENTITY_UPDATE_FAILED";
+  if(code.includes("TARGET_NOT_FOUND"))return reply.code(404).send({error:code});
+  if(["IDEMPOTENCY_KEY_REUSED","MATCH_ALREADY_STARTED","MATCH_COMPLETION_AUTOMATIC_ONLY","ALLIANCE_SEASON_ALREADY_SETTLED"].some(v=>code.includes(v)))return reply.code(409).send({error:code});
+  if(code.startsWith("INVALID_"))return reply.code(400).send({error:code});
+  throw error;
+ }
+}
+if(["player-update","club-update","match-update","player-status","alliance-status","season-status"].includes(x.action)&&(process.env.NODE_ENV==="production"||process.env.ENVIRONMENT==="production")&&!options.adminEntityUpdatePort)throw new Error("ADMIN_ENTITY_UPDATE_SUPABASE_REPOSITORY_REQUIRED");
+if(["suspend-user","restore-user","suspend-group","restore-group","cancel-challenge","league-status","competition-status"].includes(x.action)&&options.adminModerationActionPort){
+try{
+ const result=await options.adminModerationActionPort.execute({action:x.action as import("./node-supabase-admin-moderation-actions.js").AdminModerationAction,targetId:id,actorTelegramId:actor.telegramId,idempotencyKey:x.idempotencyKey,...(x.reason?{reason:x.reason}:{})});
+ return {ok:true,targetType:result.targetType,targetId:result.targetId,replayed:result.replay};
+}catch(error){
+ const code=error instanceof Error?error.message:"ADMIN_MODERATION_ACTION_FAILED";
+ if(code.includes("TARGET_NOT_FOUND"))return reply.code(404).send({error:code});
+ if(["IDEMPOTENCY_KEY_REUSED","CHALLENGE_ALREADY_SETTLED","PYRAMID_LEAGUE_STATUS_MANAGED_AUTOMATICALLY"].some(v=>code.includes(v)))return reply.code(409).send({error:code});
+ if(code.startsWith("INVALID_"))return reply.code(400).send({error:code});
+ throw error;
+}
+}
+if(["suspend-user","restore-user","suspend-group","restore-group","cancel-challenge","league-status","competition-status"].includes(x.action)&&(process.env.NODE_ENV==="production"||process.env.ENVIRONMENT==="production")&&!options.adminModerationActionPort)throw new Error("ADMIN_MODERATION_SUPABASE_REPOSITORY_REQUIRED");
+if(["set-admin-role","revoke-admin-role","set-game-setting"].includes(x.action)&&options.adminConfigurationPort){
+try{
+ const result=await options.adminConfigurationPort.execute({
+  action:x.action as "set-admin-role"|"revoke-admin-role"|"set-game-setting",
+  actorTelegramId:actor.telegramId,idempotencyKey:x.idempotencyKey,
+  ...(x.adminTelegramId?{adminTelegramId:x.adminTelegramId}:{}),
+  ...(x.adminRole?{adminRole:x.adminRole}:{}),
+  ...(x.settingKey?{settingKey:x.settingKey}:{}),
+  ...(x.settingValue!==undefined?{settingValue:x.settingValue}:{}),
+  ...(x.settingDescription!==undefined?{settingDescription:x.settingDescription}:{}),
+ });
+ return {ok:true,targetType:result.targetType,targetId:result.targetId,replayed:result.replay};
+}catch(error){
+ const message=error instanceof Error?error.message:"ADMIN_CONFIGURATION_ACTION_FAILED";
+ if(message.includes("ADMIN_ROLE_NOT_FOUND"))return reply.code(404).send({error:message});
+ if(["INVALID_ADMIN_ROLE","INVALID_SETTING","INVALID_ADMIN_CONFIGURATION_ACTION"].some(code=>message.includes(code)))return reply.code(400).send({error:message});
+ if(message.includes("IDEMPOTENCY_KEY_REUSED"))return reply.code(409).send({error:message});
+ throw error;
+}
+}
+if((x.action==="set-admin-role"||x.action==="revoke-admin-role"||x.action==="set-game-setting")&&(process.env.NODE_ENV==="production"||process.env.ENVIRONMENT==="production")){
+ throw new Error("ADMIN_CONFIGURATION_SUPABASE_REPOSITORY_REQUIRED");
+}
+if(["set-season-player-award","remove-season-player-award"].includes(x.action)&&options.adminSeasonAwardActionPort){
+ try{
+  const result=await options.adminSeasonAwardActionPort.execute({
+   action:x.action as import("./node-supabase-admin-season-awards.js").AdminSeasonAwardAction,
+   actorTelegramId:actor.telegramId,idempotencyKey:x.idempotencyKey,
+   ...(x.action==="set-season-player-award"?{...(x.awardSeason!==undefined?{season:x.awardSeason}:{}),...(x.awardPlayerId?{playerId:x.awardPlayerId}:{}),...(x.awardType?{awardType:x.awardType}:{}),...(x.awardName?{awardName:x.awardName}:{}),...(x.awardReason!==undefined?{reason:x.awardReason}:{})}:{...(id?{targetId:id}:{}),...(x.reason!==undefined?{reason:x.reason}:{})})
+  });
+  return {ok:true,targetType:result.targetType,targetId:result.targetId,replayed:result.replay};
+ }catch(error){
+  const code=error instanceof Error?error.message:"ADMIN_SEASON_AWARD_ACTION_FAILED";
+  if(code.includes("TARGET_NOT_FOUND"))return reply.code(404).send({error:code});
+  if(code.includes("IDEMPOTENCY_KEY_REUSED"))return reply.code(409).send({error:code});
+  if(code.startsWith("INVALID_"))return reply.code(400).send({error:code});
+  throw error;
+ }
+}
+if(["set-season-player-award","remove-season-player-award"].includes(x.action)&&(process.env.NODE_ENV==="production"||process.env.ENVIRONMENT==="production")&&!options.adminSeasonAwardActionPort)throw new Error("ADMIN_SEASON_AWARD_SUPABASE_REPOSITORY_REQUIRED");
+if(["broadcast-users","broadcast-groups"].includes(x.action)&&options.adminBroadcastCreatePort){
+ try{
+  if(!x.broadcastMessage)return reply.code(400).send({error:"INVALID_ADMIN_BROADCAST"});
+  const result=await options.adminBroadcastCreatePort.create(x.action==="broadcast-users"?"users":"groups",x.broadcastMessage,actor.telegramId,x.idempotencyKey);
+  return {ok:true,targetType:result.kind==="users"?"broadcast":"group-broadcast",targetId:result.targetId,replayed:result.replay,recipients:result.recipients};
+ }catch(error){
+  const code=error instanceof Error?error.message:"ADMIN_BROADCAST_CREATE_FAILED";
+  if(code.includes("NO_BROADCAST_RECIPIENTS"))return reply.code(409).send({error:code});
+  if(code.includes("IDEMPOTENCY_KEY_REUSED"))return reply.code(409).send({error:code});
+  if(code.startsWith("INVALID_"))return reply.code(400).send({error:code});
+  throw error;
+ }
+}
+if(["broadcast-users","broadcast-groups"].includes(x.action)&&(process.env.NODE_ENV==="production"||process.env.ENVIRONMENT==="production")&&!options.adminBroadcastCreatePort)throw new Error("ADMIN_BROADCAST_CREATE_SUPABASE_REPOSITORY_REQUIRED");
 try{await prisma.$transaction(async tx=>{switch(x.action){
 case"suspend-user":case"restore-user":if(!id)throw new Error("TARGET_REQUIRED");type="user";await tx.user.update({where:{id},data:{isSuspended:x.action==="suspend-user",suspendedAt:x.action==="suspend-user"?new Date():null,suspensionReason:x.action==="suspend-user"?(x.reason??"Administrative action"):null}});break;
 case"suspend-group":case"restore-group":if(!id)throw new Error("TARGET_REQUIRED");type="group";await tx.telegramGroup.update({where:{id},data:{isSuspended:x.action==="suspend-group",isActive:false,suspendedAt:x.action==="suspend-group"?new Date():null,suspensionReason:x.action==="suspend-group"?(x.reason??"Administrative action"):null}});break;

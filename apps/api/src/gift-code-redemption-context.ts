@@ -27,5 +27,9 @@ export function withGiftCodeRedemptionPort<T>(port: GiftCodeRedemptionPort, oper
 }
 
 export function getGiftCodeRedemptionPort(): GiftCodeRedemptionPort | undefined {
-  return giftCodeRedemptionScope.getStore();
+  const port = giftCodeRedemptionScope.getStore();
+  if (!port && (process.env.NODE_ENV === "production" || process.env.ENVIRONMENT === "production")) {
+    throw new Error("GIFT_CODE_REDEMPTION_SUPABASE_REPOSITORY_REQUIRED");
+  }
+  return port;
 }

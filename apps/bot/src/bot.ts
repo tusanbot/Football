@@ -14,7 +14,14 @@ const { bot, runBackgroundJobs, setBotTelegramId } = createBotApp({
   token, apiUrl, botApiSecret: apiSecret, ...(webAppUrl ? { webAppUrl } : {}), environment: process.env.NODE_ENV ?? "development",
 });
 const apiReadiness = await fetch(new URL("/ready", apiUrl), { signal: AbortSignal.timeout(15_000) });
-if (!apiReadiness.ok) throw new Error("Football Empire API is not ready (HTTP " + apiReadiness.status + ").");
+if (!apiReadiness.ok) {
+  const readiness = await apiReadiness.json().catch(() => null) as { missing?: unknown } | null;
+  const missing = Array.isArray(readiness?.missing)
+    ? readiness.missing.filter((item): item is string => typeof item === "string").join(", ")
+    : "";
+  throw new Error("Football Empire API is not ready (HTTP " + apiReadiness.status
+    + (missing ? "; missing: " + missing : "") + ").");
+}
 bot.catch((error) => console.error("Telegram bot error:", error));
 const identity = await bot.api.getMe();
 setBotTelegramId(identity.id);

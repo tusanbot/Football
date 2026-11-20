@@ -1,7 +1,7 @@
-import { randomUUID, timingSafeEqual } from "node:crypto";
+import { timingSafeEqual } from "node:crypto";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
-import { prisma } from "./db.js";
+import { getPyramidLeagueSettlementPort } from "./game/pyramid-league-settlement-context.js";
 
 function authenticateSystemBot(request: FastifyRequest, reply: FastifyReply) {
   const expected = process.env.BOT_API_SECRET;
@@ -21,31 +21,9 @@ export function registerLeagueNoticeRoutes(app: FastifyInstance) {
     if (!authenticateSystemBot(request, reply)) return;
     const parsed = claimSchema.safeParse(request.body ?? {});
     if (!parsed.success) return reply.code(400).send({ error: "INVALID_LEAGUE_NOTICE_CLAIM" });
-    const notices = await prisma.$transaction(async (tx) => {
-      const due = await tx.$queryRaw<Array<{ id: string; userId: string; telegramId: string; title: string; body: string; kind: string; referenceId: string | null }>>`
-        SELECT n."id", n."userId", u."telegramId", n."title", n."body", n."kind", n."referenceId"
-        FROM "LeagueNotice" n
-        INNER JOIN "User" u ON u."id" = n."userId"
-        WHERE n."deliveredAt" IS NULL
-          AND n."readAt" IS NULL
-          AND n."deliveryAttempts" < 8
-          AND (n."deliveryLockedUntil" IS NULL OR n."deliveryLockedUntil" <= NOW())
-        ORDER BY n."createdAt" ASC
-        FOR UPDATE OF n SKIP LOCKED
-        LIMIT ${parsed.data.limit}
-      `;
-      const claimed = [];
-      for (const notice of due) {
-        const claimToken = randomUUID();
-        await tx.leagueNotice.update({
-          where: { id: notice.id },
-          data: { deliveryClaimToken: claimToken, deliveryLockedUntil: new Date(Date.now() + 60_000), deliveryAttempts: { increment: 1 } },
-        });
-        claimed.push({ id: notice.id, telegramId: notice.telegramId, title: notice.title, body: notice.body, kind: notice.kind, referenceId: notice.referenceId, claimToken });
-      }
-      return claimed;
-    });
-    return { notices };
+    const port = getPyramidLeagueSettlementPort();
+    if (!port) return reply.code(503).send({ error: "SUPABASE_PYRAMID_NOTICE_REPOSITORY_UNAVAILABLE" });
+    return port.claimNotices(parsed.data.limit, new Date().toISOString());
   });
 
   app.post("/v1/bot/league-notices/:id/complete", async (request, reply) => {
@@ -53,12 +31,11 @@ export function registerLeagueNoticeRoutes(app: FastifyInstance) {
     const params = paramsSchema.safeParse(request.params);
     const body = tokenSchema.safeParse(request.body);
     if (!params.success || !body.success) return reply.code(400).send({ error: "INVALID_LEAGUE_NOTICE_COMPLETION" });
-    const result = await prisma.leagueNotice.updateMany({
-      where: { id: params.data.id, deliveryClaimToken: body.data.claimToken, deliveredAt: null },
-      data: { deliveredAt: new Date(), deliveryClaimToken: null, deliveryLockedUntil: null, deliveryLastError: null },
-    });
-    if (result.count !== 1) return reply.code(409).send({ error: "LEAGUE_NOTICE_CLAIM_NOT_OWNED" });
-    return { completed: true };
+    const port = getPyramidLeagueSettlementPort();
+    if (!port) return reply.code(503).send({ error: "SUPABASE_PYRAMID_NOTICE_REPOSITORY_UNAVAILABLE" });
+    const result = await port.completeNotice(params.data.id, body.data.claimToken, new Date().toISOString());
+    if (!result.completed) return reply.code(409).send({ error: "LEAGUE_NOTICE_CLAIM_NOT_OWNED" });
+    return result;
   });
 
   app.post("/v1/bot/league-notices/:id/fail", async (request, reply) => {
@@ -66,17 +43,10 @@ export function registerLeagueNoticeRoutes(app: FastifyInstance) {
     const params = paramsSchema.safeParse(request.params);
     const body = tokenSchema.extend({ error: z.string().trim().min(1).max(500) }).safeParse(request.body);
     if (!params.success || !body.success) return reply.code(400).send({ error: "INVALID_LEAGUE_NOTICE_FAILURE" });
-    const notice = await prisma.leagueNotice.findFirst({
-      where: { id: params.data.id, deliveryClaimToken: body.data.claimToken, deliveredAt: null },
-      select: { deliveryAttempts: true },
-    });
-    if (!notice) return reply.code(409).send({ error: "LEAGUE_NOTICE_CLAIM_NOT_OWNED" });
-    const delay = Math.min(15_000 * 2 ** Math.max(0, notice.deliveryAttempts - 1), 60 * 60 * 1000);
-    const result = await prisma.leagueNotice.updateMany({
-      where: { id: params.data.id, deliveryClaimToken: body.data.claimToken, deliveredAt: null },
-      data: { deliveryClaimToken: null, deliveryLockedUntil: notice.deliveryAttempts >= 8 ? new Date("9999-12-31T00:00:00.000Z") : new Date(Date.now() + delay), deliveryLastError: body.data.error },
-    });
-    if (result.count !== 1) return reply.code(409).send({ error: "LEAGUE_NOTICE_CLAIM_NOT_OWNED" });
-    return { rescheduled: notice.deliveryAttempts < 8, attempts: notice.deliveryAttempts };
+    const port = getPyramidLeagueSettlementPort();
+    if (!port) return reply.code(503).send({ error: "SUPABASE_PYRAMID_NOTICE_REPOSITORY_UNAVAILABLE" });
+    const result = await port.failNotice(params.data.id, body.data.claimToken, body.data.error, new Date().toISOString());
+    if (!result.owned) return reply.code(409).send({ error: "LEAGUE_NOTICE_CLAIM_NOT_OWNED" });
+    return { rescheduled: result.rescheduled, attempts: result.attempts };
   });
 }

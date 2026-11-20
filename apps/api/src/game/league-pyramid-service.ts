@@ -108,6 +108,8 @@ async function assignQueueIfReady(tx: Prisma.TransactionClient, tier: number, se
 }
 
 export async function applyForPyramidLeague(userId: string, tier: number, now = new Date()) {
+  const settlementPort = getPyramidLeagueSettlementPort();
+  if (settlementPort) return settlementPort.apply(userId, tier, now.toISOString());
   const club = await ownedClub(userId);
   leagueTier(tier);
   if (tier !== 1) throw new PyramidLeagueError("DIRECT_TIER_ENTRY_NOT_ALLOWED");
@@ -131,6 +133,8 @@ export async function applyForPyramidLeague(userId: string, tier: number, now = 
 }
 
 export async function listPyramidLeagues(userId: string) {
+  const port = getPyramidLeagueSettlementPort();
+  if (port) return port.listLeagues(userId);
   const club = await ownedClub(userId);
   const season = new Date().getUTCFullYear() + 1;
   const [leagues, applications, currentEntry, promotionOffers, historyLeagues] = await Promise.all([
@@ -173,6 +177,8 @@ export async function listPyramidLeagues(userId: string) {
 }
 
 export async function getPyramidLeagueClubHistory(userId: string) {
+  const port = getPyramidLeagueSettlementPort();
+  if (port) return port.getClubHistory(userId);
   const club = await ownedClub(userId);
   const entries = await prisma.pyramidLeagueEntry.findMany({
     where: { clubId: club.id, league: { competition: { status: "COMPLETED" } } },
@@ -236,6 +242,8 @@ export async function getPyramidLeagueClubHistory(userId: string) {
 }
 
 export async function getPyramidLeagueDetails(userId: string, leagueId: string) {
+  const port = getPyramidLeagueSettlementPort();
+  if (port) return port.getLeagueDetails(userId, leagueId);
   await ownedClub(userId);
   const league = await prisma.pyramidLeague.findUnique({
     where: { id: leagueId },
@@ -409,6 +417,8 @@ export async function processPyramidLeagueCompletion(competitionId: string, now 
 }
 
 export async function listLeagueNotices(userId: string) {
+  const port = getPyramidLeagueSettlementPort();
+  if (port) return port.listNotices(userId);
   const notices = await prisma.leagueNotice.findMany({ where: { userId, readAt: null }, select: { id: true, kind: true, title: true, body: true, referenceId: true, createdAt: true }, orderBy: { createdAt: "desc" }, take: 20 });
   return { notices };
 }
@@ -418,6 +428,8 @@ export async function createFriendlyChallenge(
 ) {
   if (!/^[A-Za-z0-9:_-]{12,128}$/.test(idempotencyKey)) throw new PyramidLeagueError("INVALID_IDEMPOTENCY_KEY");
   if (goldCost <= 0n) throw new PyramidLeagueError("INVALID_CHALLENGE_PRICE");
+  const port = getPyramidLeagueSettlementPort();
+  if (port) return port.createFriendlyChallenge(userId, goldCost.toString(), now.toISOString(), groupTelegramId ?? null, idempotencyKey);
   const club = await ownedClub(userId);
   const day = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
   try {
@@ -536,6 +548,8 @@ export async function createFriendlyChallenge(
   }
 }
 export async function acceptFriendlyChallenge(userId: string, token: string, now = new Date()) {
+  const port = getPyramidLeagueSettlementPort();
+  if (port) return port.acceptFriendlyChallenge(userId, token, now.toISOString());
   const opponent = await ownedClub(userId);
   return prisma.$transaction(async (tx) => {
     const challenge = await tx.friendlyChallenge.findUnique({
@@ -602,6 +616,8 @@ export async function acceptFriendlyChallenge(userId: string, token: string, now
 }
 export async function grantPurchasedChallengeCredits(userId: string, quantity: number, now = new Date()) {
   if (!Number.isInteger(quantity) || quantity < 1 || quantity > 100) throw new PyramidLeagueError("INVALID_CHALLENGE_CREDIT_QUANTITY");
+  const port = getPyramidLeagueSettlementPort();
+  if (port) return port.grantPurchasedChallengeCredits(userId, quantity, now.toISOString());
   const day = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
   return prisma.challengeDailyUsage.upsert({
     where: { userId_usageDate: { userId, usageDate: day } },
@@ -612,6 +628,8 @@ export async function grantPurchasedChallengeCredits(userId: string, quantity: n
 
 
 export async function getFriendlyChallengeInfo(token: string) {
+  const port = getPyramidLeagueSettlementPort();
+  if (port) return port.getFriendlyChallengeInfo(token, new Date().toISOString());
   const challenge = await prisma.friendlyChallenge.findUnique({
     where: { token }, include: {
       creator: { select: { telegramId: true } },
@@ -634,12 +652,14 @@ export async function getFriendlyChallengeInfo(token: string) {
 }
 
 export async function markLeagueNoticesRead(userId: string) {
+  const port = getPyramidLeagueSettlementPort();
+  if (port) return port.markNoticesRead(userId, new Date().toISOString());
   const result = await prisma.leagueNotice.updateMany({ where: { userId, readAt: null }, data: { readAt: new Date() } });
   return { markedRead: result.count };
 }
 
 
-export async function processDuePromotionOffers(now = new Date(), limit = 50) {
+export async function processDuePromotionOffers(now = new Date(), limit = 50): Promise<{completedLeagues:number;processed:number;accepted:number;failed:number}> {
   const settlementPort=getPyramidLeagueSettlementPort();
   if(settlementPort)return settlementPort.processDue(now.toISOString(),limit);
   const pendingLeagues = await prisma.pyramidLeague.findMany({
@@ -647,11 +667,13 @@ export async function processDuePromotionOffers(now = new Date(), limit = 50) {
     orderBy: { createdAt: "asc" }, take: limit, select: { competitionId: true },
   });
   let completedLeagues = 0;
+  let failed = 0;
   for (const pending of pendingLeagues) {
     try {
       const result = await processPyramidLeagueCompletion(pending.competitionId, now);
       if (result.processed) completedLeagues += 1;
     } catch (error) {
+      failed += 1;
       console.warn("Could not finalize pyramid league:", pending.competitionId, error);
     }
   }
@@ -662,7 +684,8 @@ export async function processDuePromotionOffers(now = new Date(), limit = 50) {
   });
   let accepted = 0;
   for (const item of due) {
-    const didAccept = await prisma.$transaction(async (tx) => {
+    try {
+      const didAccept = await prisma.$transaction(async (tx) => {
       const offer = await tx.leaguePromotionOffer.findUnique({
         where: { id: item.id },
         include: { league: true, club: { select: { id: true, ownerId: true } } },
@@ -684,7 +707,11 @@ export async function processDuePromotionOffers(now = new Date(), limit = 50) {
       await assignQueueIfReady(tx, offer.targetTier, season, now);
       return true;
     }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
-    if (didAccept) accepted += 1;
+      if (didAccept) accepted += 1;
+    } catch (error) {
+      failed += 1;
+      console.warn("Could not process expired pyramid promotion offer:", item.id, error);
+    }
   }
-  return { completedLeagues, processed: due.length, accepted };
+  return { completedLeagues, processed: due.length, accepted, failed };
 }

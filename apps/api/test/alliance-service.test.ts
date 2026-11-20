@@ -4,6 +4,7 @@ import test from "node:test";
 import { prisma } from "../src/db.js";
 import { AllianceServiceError, adminCloseAllianceSeasonInTransaction, adminReviewAllianceSeasonInTransaction, adminStartAllianceSeasonInTransaction, closeAllianceSeason, reviewAllianceSeason, startAllianceSeason } from "../src/groups/alliance-service.js";
 import { consumeAllianceActionRateLimit } from "../src/groups/alliance-rate-limit.js";
+import { withActionRateLimitPort } from "../src/groups/action-rate-limit-context.js";
 
 test("alliance season close enforces its end date, calculates seasonal net points and holds suspicious payouts for authorized review", async t => {
   if (!process.env.DATABASE_URL) {
@@ -122,13 +123,22 @@ test("alliance season close enforces its end date, calculates seasonal net point
   }
 });
 
-test("alliance action limits persist and reset at the next minute boundary",async t=>{
- if(!process.env.DATABASE_URL){t.skip("DATABASE_URL is only configured in ephemeral PostgreSQL CI.");return;}
- const id="alliance-rate-"+randomUUID(),now=new Date("2026-11-14T12:00:00.000Z");
- try{
-  assert.equal(await consumeAllianceActionRateLimit({telegramUserId:id,telegramGroupId:"-100123",action:"invite",limit:2,now}),true);
-  assert.equal(await consumeAllianceActionRateLimit({telegramUserId:id,telegramGroupId:"-100123",action:"invite",limit:2,now}),true);
-  assert.equal(await consumeAllianceActionRateLimit({telegramUserId:id,telegramGroupId:"-100123",action:"invite",limit:2,now}),false);
-  assert.equal(await consumeAllianceActionRateLimit({telegramUserId:id,telegramGroupId:"-100123",action:"invite",limit:2,now:new Date(now.getTime()+60000)}),true);
- }finally{await prisma.allianceActionThrottle.deleteMany({where:{key:{startsWith:id}}});}
+test("alliance action limits persist and reset at the next minute boundary", async () => {
+ const counts = new Map<string, number>();
+ const port = {
+  async consume(input: { key: string; windowStart: string; limit: number }) {
+   const key = input.key + ":" + input.windowStart;
+   const count = counts.get(key) ?? 0;
+   if (count >= input.limit) return false;
+   counts.set(key, count + 1);
+   return true;
+  },
+ };
+ await withActionRateLimitPort(port, async () => {
+  const id = "alliance-rate-" + randomUUID(), now = new Date("2026-11-14T12:00:00.000Z");
+  assert.equal(await consumeAllianceActionRateLimit({ telegramUserId: id, telegramGroupId: "-100123", action: "invite", limit: 2, now }), true);
+  assert.equal(await consumeAllianceActionRateLimit({ telegramUserId: id, telegramGroupId: "-100123", action: "invite", limit: 2, now }), true);
+  assert.equal(await consumeAllianceActionRateLimit({ telegramUserId: id, telegramGroupId: "-100123", action: "invite", limit: 2, now }), false);
+  assert.equal(await consumeAllianceActionRateLimit({ telegramUserId: id, telegramGroupId: "-100123", action: "invite", limit: 2, now: new Date(now.getTime() + 60_000) }), true);
+ });
 });

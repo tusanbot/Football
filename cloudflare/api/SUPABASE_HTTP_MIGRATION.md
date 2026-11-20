@@ -122,3 +122,307 @@ The migration is `20261118150000_gift_code_redemption_rpc`. The route's prelimin
 `acquire_special_player` serializes idempotency keys, locks the selected special-player card and gold wallet, rechecks copy limits and per-club uniqueness, debits gold, creates the player and acquisition record, and inserts the ledger debit in one transaction. The selected player and exact gold balance are returned. The function is `SECURITY INVOKER`, uses a fixed search path, and is restricted to `service_role`.
 
 The migration is `20261118160000_special_player_acquisition_rpc`. Legacy challenge claims, special-player offers, and other special-player read paths remain on Prisma.
+
+## Runtime removal gate (current status)
+
+The Supabase HTTPS repositories are still injected into a compatibility runtime; they do not yet replace every Prisma-backed route. The Worker entry point still creates a Prisma client, the Fastify API still imports Prisma, and the API package still carries Prisma/PostgreSQL driver dependencies. The Worker readiness endpoint must therefore continue requiring `DATABASE_URL` while any route or scheduler path can fall back to Prisma. Bot startup checks this endpoint and reports the missing configuration instead of starting against a partially available API.
+
+Do not remove `DATABASE_URL`, Prisma packages, Prisma schema/type generation, or the historical migration runner until all of the following are verified:
+
+1. Every route registered by `workers-router.ts` and every Fastify route has a Supabase HTTP repository or a deliberately retired endpoint.
+2. Every scheduler, Durable Object, background job, bot runtime lease, and admin/group operation uses only Supabase HTTP/RPC.
+3. No production runtime module imports `@prisma/client`, `pg`, `@prisma/adapter-pg`, or `src/db.ts`.
+4. SQL migrations have an independent, deterministic runner and a migration ledger that preserves the already-applied database history.
+5. CI validates SQL migrations, RPC grants/RLS, route parity, idempotency, concurrency, and Bot/Mini App end-to-end behavior without generating Prisma Client or invoking `prisma migrate`.
+
+The current branch is a compatibility hardening step, not the completion of this gate. Keep the existing database configuration until the remaining route families are migrated and tested.
+
+## Route-family audit: remaining Prisma blockers (2026-11-19)
+
+This audit was performed against `feat/supabase-http-runtime-hardening` after PR #10's readiness hardening. It distinguishes a Worker route being gated on an HTTP port from the shared Fastify service having no Prisma implementation: the latter is still required by the Node API and is not removable merely because the Worker injects a port.
+
+### Confirmed remaining group and authorization paths
+
+- `apps/api/src/groups/group-routes.ts` imports `prisma` and uses it in both Bot-secret and Mini App actor authorization when the group-membership port does not supply actor status. The Cloudflare router requests the membership port, but this does not remove the Fastify fallback.
+- `apps/api/src/groups/group-service.ts` imports Prisma and retains compatibility fallbacks for group registration/join, activity points, summaries/workspaces, shop/reward operations, challenges, and group leagues. `GroupMembershipPort` now exposes all five group-league operations as well as the existing membership, workspace, shop, reward, and challenge methods. The Node repository implements that full port, but the Prisma fallback remains when the Node server starts without Supabase credentials.
+- Group-league operations now have dedicated HTTP RPCs and are wired in both Worker and Node Fastify when the corresponding port is configured. Their Prisma implementations remain only as a transitional compatibility fallback.
+- `apps/api/src/groups/alliance-service.ts` retains Prisma implementations as a transitional fallback. Node Fastify now wires both public alliance operations and the three superadmin season actions through dedicated Supabase HTTP ports/RPCs when credentials are configured.
+- Group route authorization also calls Telegram's live administrator verification. Keep that external authorization check, and move persisted user/group suspension and membership reads behind a repository/RPC rather than bypassing them.
+
+### Confirmed application-wide blockers
+
+- `apps/api/src/server.ts` imports Prisma, requires `DATABASE_URL`, connects and probes PostgreSQL on startup, and runs match/promotion schedulers through Prisma-backed services.
+- `apps/api/src/db.ts` imports `@prisma/client`, `@prisma/adapter-pg`, and `pg`; it owns the Prisma client, PostgreSQL pool, and request-scoped Prisma compatibility layer.
+- `apps/api/package.json` still declares `@prisma/client`, `prisma`, `@prisma/adapter-pg`, and `pg`; its database scripts still call Prisma.
+- The root `package.json` still exposes Prisma-backed generate/migrate scripts.
+- `.github/workflows/ci.yml` still generates Prisma Client, validates Prisma schema, runs `prisma migrate deploy`, and uses Prisma seed/verification commands. This remains a transitional CI pipeline, not a Prisma-free migration pipeline.
+- `cloudflare/api/src/index.ts` still imports `createPrismaClient` and `withPrismaClient`. The Worker therefore still has a PostgreSQL/Prisma compatibility path for routes, background jobs, and schedulers without complete repository coverage.
+
+### Next migration tranches (required before package removal)
+
+1. **Group leagues:** add a request-scoped group-league port; implement create/join/start/list/table repository methods and narrowly scoped SQL RPCs. Reuse the existing competition lifecycle semantics and ensure group membership, creator ownership, capacity, idempotency, and standings are checked atomically. Add SQL integration tests and Bot/Mini App route parity tests.
+2. **Group authorization and remaining group service methods:** enumerate every exported group-service operation against the existing GroupMembershipPort; implement missing methods and remove the Worker's need for any Prisma fallback. Preserve Telegram administrator verification and suspension checks.
+3. **Node API parity:** migrate the standard Fastify runtime to Supabase HTTP repositories, or retire that runtime explicitly. A Worker-only implementation is insufficient while `apps/api/src/server.ts` remains a supported runtime.
+4. **Schedulers and background work:** move due-match, promotion, tournament finalization, and every other scheduled operation to HTTP repositories/RPCs; verify lease ownership, retries, idempotency, and durable scheduling before removing PostgreSQL access.
+5. **Remaining route families:** audit auth/account provisioning, club and player CRUD, market listing lifecycle, admin/admin-league, gift codes, notifications, Telegram message deletion, store snapshots/item use, bot runtime, public club, records, season awards, and any routes registered in `workers-router.ts`. For each, record the concrete HTTP repository/RPC and parity tests.
+6. **Independent SQL migration lifecycle:** move SQL files out of Prisma's migration directory only with a migration ledger/bootstrap process that recognizes already-applied migrations. Do not re-run historical SQL against an existing database.
+7. **Removal gate:** only after both Node and Worker runtimes, all jobs, and CI are Prisma-free should Prisma schema/client/driver packages and `DATABASE_URL` / `DIRECT_URL` be removed.
+
+### CI trigger correction
+
+The hardening PR targets `feat/supabase-http-full-runtime`, not `main`. The CI workflow's pull-request trigger now includes that base branch so this PR can receive the existing transitional validation pipeline. This does **not** make CI Prisma-free; the workflow deliberately still exercises the legacy Prisma migration path until the independent SQL runner and full route migration are complete.
+
+### Status after this audit
+
+- [x] Correctly identify the group-league methods absent from the HTTP port.
+- [x] Identify the remaining Node API, Worker, package, script, and CI Prisma dependencies.
+- [x] Enable the current PR base branch in the CI pull-request trigger.
+- [x] Implement group-league RPCs and repository wiring.
+- [ ] Complete all remaining route and scheduler migrations.
+- [ ] Introduce and validate an independent SQL migration runner/ledger.
+- [ ] Remove Prisma packages and PostgreSQL wire-protocol dependencies.
+- [ ] Pass full Prisma-free CI and Bot + Mini App parity tests.
+
+No database, secrets, webhook, DNS, deployment, or production runtime settings were changed by this audit.
+
+## Group leagues: Supabase HTTP migration tranche
+
+The five Telegram-group league operations now have a request-scoped Supabase HTTP path:
+
+- `createGroupLeague` → `create_group_league_http`
+- `joinGroupLeague` → `join_group_league_http`
+- `startGroupLeague` → `start_group_league_http`
+- `getGroupLeagueTable` → `get_group_league_table_http`
+- `listGroupLeagues` → `list_group_leagues_http`
+
+Implementation details:
+- `GroupMembershipPort` exposes all five operations and `SupabaseGroupMembershipRepository` calls the corresponding RPCs.
+- `group-service.ts` uses the port when present; the standard Fastify runtime deliberately retains its Prisma fallback until Node API migration is complete.
+- The Cloudflare Worker already binds `SupabaseGroupMembershipRepository` for the request and registers group routes with `requireMembershipPort: true`; these league routes therefore cannot silently fall back to Prisma in the Worker.
+- The SQL migration `20261119430000_group_league_http_rpcs` enforces account/group suspension, active group status, persisted membership, manager role for creation/start, group-to-competition association, creator ownership, and idempotent creation.
+- Join and start call the existing competition lifecycle RPCs within the same PostgreSQL transaction, preserving capacity checks, unique club entry, lineup validation, fixture generation, and replay behavior.
+- Read RPCs return the existing API response envelope and cap league listing at 30 rows.
+- Repository contract tests cover all five RPC names, arguments, and business-error propagation.
+- An ephemeral PostgreSQL integration test now covers group-scoped creation/replay/conflict, manager-only creation, member joins, capacity-triggered atomic auto-start, fixture count, start replay, standings, and suspended-group rejection. CI runs this test immediately after the group membership RPC integration test.
+
+This tranche does not remove Prisma from the Fastify runtime or from unrelated group operations. The migration has been added to the existing Prisma migration directory and will be exercised by CI's current migration pipeline; it has not been applied to any live database. The Node API group paths still use their Prisma fallback when no request-scoped port is installed.
+
+
+
+## Node Fastify Telegram identity lookup
+
+The Node Fastify runtime now scopes a server-only `resolve_telegram_user` PostgREST adapter per request when Supabase credentials are configured. This removes the Prisma user lookup/activity-touch fallback from authenticated Node API requests in that mode, including the superadmin action path. Missing or suspended accounts remain unauthenticated; the service-role key is never sent to clients.
+
+## Node Fastify admin alliance-season RPC tranche
+
+The Node Fastify admin actions for starting, closing, and reviewing alliance seasons now use dedicated Supabase PostgREST RPCs when the Node server has its Supabase service-role credentials configured:
+
+- `admin_start_alliance_season_http`
+- `admin_close_alliance_season_http`
+- `admin_review_alliance_season_http`
+
+The API route retains its existing `superadmin` authorization gate. The RPCs accept the actual authenticated admin Telegram ID (never the founder's ID), lock the target alliance/season rows, preserve season scoring and security-flag calculations, and write both `AllianceAuditLog` and `AdminAuditLog` in the same database transaction. Admin idempotency keys are checked against actor, action, target type, and target ID; duplicate matching requests return the original result, while key reuse for a different action/target is rejected. Season champion payouts remain atomic and ledger-idempotent.
+
+These RPCs are granted only to `service_role`; public, `anon`, and `authenticated` execution is revoked. The new ephemeral PostgreSQL integration test covers start/close/review, actor attribution, audit atomicity, payout, and idempotency. No live migration has been applied.
+
+## Node Fastify group membership: HTTP runtime wiring
+
+The Node API now has a native Node-side `NodeSupabaseGroupMembershipRepository` that implements the complete `GroupMembershipPort` contract over HTTPS/PostgREST RPCs. It deliberately does not import Cloudflare Worker modules, and it validates the Supabase project origin, service-role key, timeout, redirect behavior, and typed business errors.
+
+Runtime behavior:
+- When both `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are present, `apps/api/src/server.ts` constructs the Node repository and injects it into `buildApp`.
+- Supplying only one of those variables fails startup rather than silently switching the group subsystem back to Prisma.
+- Fastify establishes the port through a callback-style `onRequest` hook and `AsyncLocalStorage`; the request continuation is created inside the request scope.
+- Group routes are registered with `requireMembershipPort: true` when the Node repository is configured, preventing silent Prisma fallback for those routes.
+- When neither variable is configured, the legacy Prisma group path remains available for transitional environments. Other API domains still use Prisma and still require `DATABASE_URL`.
+
+Coverage added:
+- Node transport tests assert direct HTTPS RPC addressing, server-side service-role headers, argument serialization, origin/key validation, and SQL business-error mapping.
+- Fastify route test injects a port and verifies group actor authorization and league listing both use that injected port without requiring Prisma group reads.
+
+This completes the Node runtime wiring for the existing GroupMembershipPort contract, but it does not mean all group-related behavior is Prisma-free: alliance routes/services, group-related background jobs, and any unported group code remain in the broader migration audit. No production environment variables were set and no database migration was applied.
+
+## Node Fastify alliance tranche
+
+The standard Node Fastify runtime now accepts an `AlliancePort` alongside the group-membership port. When both server-only Supabase credentials are configured, `server.ts` constructs `NodeSupabaseAllianceRepository`; a per-request `AsyncLocalStorage` scope makes it available to alliance service calls. The Node repository uses direct HTTPS PostgREST RPC calls, rejects non-Supabase origins and redirects, applies request timeouts, and maps database business errors to `AllianceServiceError`.
+
+The HTTP-backed route/service surface includes alliance creation, group invitations and responses, treasury contributions, workspace reads, season lifecycle/review, alliance championships, cross-alliance competitions, and database-backed action throttling. The SQL RPCs are already represented by migrations and integration SQL in this repository. The runtime change does not apply migrations to any live database.
+
+The three admin-only transaction helpers are now bypassed by the Node route when the dedicated admin RPC port is configured; their Prisma implementation remains solely as a transitional fallback when the Node runtime is started without Supabase credentials. This does not remove Prisma from other admin actions or from unrelated API domains.
+
+
+
+## Node Fastify store transaction tranche
+
+The Node API now wires direct HTTPS/PostgREST implementations for the two atomic store write operations:
+
+- `purchase_store_item` handles wallet debit, ledger insertion, purchase idempotency, and inventory grant in one PostgreSQL transaction.
+- `use_store_item` handles inventory consumption, player fitness/morale updates, and replay semantics in one PostgreSQL transaction.
+
+Implementation:
+- `NodeSupabaseStorePurchaseRepository` implements `StorePurchasePort`.
+- `NodeSupabaseStoreItemUseRepository` implements `StoreItemUsePort`.
+- `server.ts` constructs both adapters only when the Supabase URL and service-role key are configured together.
+- Fastify scopes each port with `AsyncLocalStorage` per request; the service-role key remains server-side.
+- The adapters reject non-Supabase origins, non-HTTPS requests, redirects, weak credentials, malformed RPC responses, and map known SQL business errors to the service's typed error handling.
+- Node tests cover RPC names/arguments, authenticated HTTPS headers, bigint-safe balance strings, replay responses, business errors, malformed responses, and unsafe configuration.
+
+Remaining store work: the Node store snapshot still uses Prisma for wallets/inventory/special-player catalog unless a snapshot port is added; its market listings and pack offers also depend on their respective Node ports. This tranche migrates store purchase and item-use writes only. No live database migration or production configuration was changed.
+
+
+## Node Fastify wallet, market, and store snapshot tranche
+
+The Node Fastify runtime now has direct Supabase HTTPS adapters for:
+
+- Wallet ledger entries through `apply_wallet_entry`, preserving bigint balances as decimal strings and validating replay/version metadata.
+- Market listing creation, cancellation, public listing reads, seller-owned listing reads, seller lookup, and atomic purchase through the existing market RPC set.
+- Store snapshot reads through `get_store_snapshot`, with validation of wallet, inventory, and special-player catalog rows.
+- All three adapters use the server-only service-role key, direct HTTPS project-origin validation, redirect rejection, request timeout, and strict response validation.
+- `server.ts` constructs the adapters when Supabase credentials are configured and `app.ts` scopes them per request using AsyncLocalStorage.
+- Node tests cover authenticated RPC calls, arguments, bigint-safe balances, market lifecycle responses, expiration results, snapshot shape, business error mapping, malformed responses, and unsafe origins.
+
+Important remaining limitations:
+- Market create/buy still call `settleClubDailyState` before the market RPC; that settlement path remains Prisma-backed and must be migrated before the full market route can be considered Prisma-free.
+- Other wallet callers only use the HTTP adapter where they call `applyWalletEntry`; surrounding multi-step workflows may still perform Prisma reads/writes.
+- Store snapshot migration covers the snapshot read only; store catalogue definitions remain application code and special acquisition/pack purchase remain separate operations.
+- The Node server still requires `DATABASE_URL` and runs Prisma-backed background workers/readiness. Prisma removal is not complete.
+
+
+## Node Fastify player development and club economy tranche
+
+The Node Fastify server now constructs a direct HTTPS Supabase client and wires two additional request-scoped ports:
+
+- `PlayerDevelopmentPort` uses the existing player-development HTTP RPCs for daily player state, age progression, injuries/recovery, contract expiry, weekly payroll, training, and contract renewal. The repository preserves the existing domain calculations and sends expected-state values to the atomic SQL RPCs.
+- `ClubEconomySettlementPort` calls `settle_club_economy` through direct PostgREST RPC and validates decimal-string monetary values.
+- The Node player-development repository is wired through Fastify AsyncLocalStorage. Consequently, market listing and purchase flows that call `settleClubDailyState` now use the Supabase-backed settlement path when the Node server is configured with Supabase credentials.
+- Club operations that call `settleClubEconomy` now use the Supabase RPC path when configured.
+
+The SQL RPCs are existing migrations; this tranche does not apply migrations to any live database.
+
+Remaining limitations:
+- Club operations other than the daily economy settlement still include Prisma-backed reads and mutations (sponsors, facilities, coaches, academy prospects, finance history, and upgrades).
+- Player-development repository reads still use PostgREST table access for the club, players, coach, wallet, training logs, renewals, and payroll history. These are direct Supabase HTTP calls, but the surrounding workflows are not yet all atomic end-to-end.
+- Node server startup/readiness and other background workers still require Prisma and `DATABASE_URL`. Full Prisma/pg removal remains incomplete.
+
+
+## Additional Node Fastify operational ports
+
+The direct Node Supabase HTTP client is now used by additional server-side repositories:
+
+- Club management commands: facility upgrades, coach upgrades/hiring, sponsor signing, academy scouting, and prospect recruitment use the existing `club_management_command` transactional RPC.
+- Special-player acquisition: pack purchases, legacy challenge listing, and legacy challenge claims use the existing RPCs.
+- Gift codes: rate limiting, reward preflight, and redemption use the existing RPCs; the route retains Telegram group actor verification before group-point redemption.
+- Bot polling lease: acquire/heartbeat/release uses `manage_bot_runtime_lease_http`.
+- Match and competition repositories: Node implementations were added for runtime advance/checkpoint/enqueue/forfeit/lease/settlement/snapshot, competition create/rules/join/start, competition advancement, friendly-match creation, lineup changes, ticket-price changes, match reads/opponents, event-tournament settlement, and pyramid-league settlement.
+- Fastify request scopes are wired for interactive match/competition operations. The Node match worker runs inside the same repository scopes, including promotion settlement.
+
+The new Node adapters reuse existing SQL migrations/RPCs; this work does not execute migrations against a live database.
+
+Still not complete:
+- Club operations dashboard reads and finance reports now use the Node `ClubManagementPort` over PostgREST plus `get_club_finance_totals_http`; wallet balances use a dedicated Node wallet-read adapter. The operational snapshot is a bounded set of direct table reads, while finance totals are aggregated in SQL.
+- Club profile rename now uses the atomic `rename_club_http` RPC with the active-competition guard; the squad roster endpoint reads the club and players directly through PostgREST. The lineup adapter keeps its shared Cloudflare contract stable by exposing Node-only profile methods as optional runtime extensions.
+- The special-player catalog endpoint now reads active catalog rows through the existing Node special-acquisition repository rather than requiring the route-level Prisma query when that port is configured.
+- Some other route families and administrative workflows still fall back to Prisma when no matching port is present.
+- Node server startup, readiness and shutdown still connect/disconnect Prisma, and `DATABASE_URL` remains mandatory.
+- Other scheduler/background tasks and all Prisma-backed paths have not yet been exhaustively removed or audited. Therefore Prisma/`pg` removal and the no-`DATABASE_URL` runtime gate remain blocked.
+
+
+## Node Fastify club profile, operations dashboard, and special-player catalog follow-up
+
+The Node runtime now also routes these read/write paths through Supabase HTTPS when configured:
+
+- Club operations snapshot: club, coach, sponsors, academy prospects, finance entries, and wallet balance are read via PostgREST.
+- Finance report: totals are calculated by the new `get_club_finance_totals_http` RPC and entries are read through PostgREST.
+- Club rename: the `rename_club_http` RPC serializes the owner row, checks active standard and pyramid competitions, and rejects edits while an active competition exists.
+- Squad roster: owner club lookup and player roster reads use PostgREST; monetary fields remain decimal strings.
+- Special-player catalog: active special-player rows use PostgREST through the Node special-acquisition port.
+
+Contract tests cover the new direct-read and RPC paths. The migrations are committed to the repository and are exercised by CI's ephemeral PostgreSQL migration pipeline only; no live database was changed.
+
+These changes reduce Prisma usage but do not complete its removal. Public club discovery/history, parts of match and competition services, market listing fallback paths, wallet mutation workflows, gift-code fallback, event tournament orchestration, and Node startup/readiness/background worker dependencies remain under audit.
+
+## Atomic match settlement and competition progression
+
+The leased Node match worker now settles a completed runtime and advances its competition through a single Supabase RPC transaction:
+
+- `settle_and_advance_match_runtime_http` invokes the existing `settle_match_runtime_result` financial/result transaction and then `advance_competition_after_match_http` before the outer transaction commits.
+- If cup bracket generation, league completion, or round-summary creation fails, PostgreSQL rolls back the match result, runtime completion, wallet credits, ledger rows, player updates, and competition changes together. The leased runtime remains retryable.
+- Replayed settlements invoke the advancement RPC again; its advisory lock and idempotent next-round checks make retry safe.
+- Invalid-lineup forfeits use `settle_invalid_match_fixture_and_advance_http`, which composes the existing forfeit settlement and competition advancement in the same transaction. A valid lineup produces no advancement result; a completed or replayed forfeit retries advancement safely.
+- The Node repositories validate the nested advancement result. The match worker no longer makes a second HTTP request for normal match settlement or invalid-lineup forfeit progression.
+- The new migrations are `20261120210000_match_settlement_advancement_atomic_http_rpc` and `20261120220000_invalid_match_settlement_advancement_atomic_http_rpc`. CI runs a SQL contract test for function composition and service-role-only execution, alongside Node adapter tests.
+
+Pyramid-league and event-tournament finalization are now invoked inside the same transaction as match settlement and competition advancement. Existing scheduled recovery sweeps remain available for older completed competitions and operational retries. This change does not remove Prisma from `match-service.ts`; legacy simulation and non-production compatibility paths remain until their callers and tests are migrated. No live database migration or production deployment was performed.
+
+## Atomic tournament finalization and retry behavior
+
+When a match completes a competition, the match-settlement and invalid-lineup-forfeit RPCs now invoke both `finalize_pyramid_league_http` and `finalize_event_tournament_http` before their transaction commits. Each finalizer is idempotent and safely returns a no-op result when the competition does not belong to that subsystem. A failure in standings, promotion/relegation, prize inventory, wallet ledger or notice creation rolls back the competition completion and the match/forfeit settlement together, so the leased runtime can be retried without partial awards or financial writes.
+
+The existing scheduled recovery sweeps remain enabled: `process_due_pyramid_work_http` retries completed pyramid leagues and expired promotion offers, while `process_due_event_tournament_finalizations_http` retries completed event tournaments. These sweeps are retained for competitions completed before the atomic wrapper and for operational recovery; they are not a second queue implementation. The API worker continues to run both sweeps through the request-scoped Supabase repositories.
+The retry sweeps isolate each candidate in its own PL/pgSQL exception subtransaction. A failed promotion offer or tournament does not abort the rest of the batch; the RPC emits a database warning and increments a `failed` counter. The Node worker logs these counters, and the next scheduler tick retries candidates that remain due. This is per-candidate failure isolation, not a separate duplicate queue.
+
+## Node Fastify readiness and remaining PostgreSQL startup gate (2026-11-20)
+
+The Fastify `GET /ready` endpoint now validates required Telegram/API runtime configuration and a zero-row Supabase PostgREST request. It no longer probes PostgreSQL with Prisma or includes `DATABASE_URL` in its missing-configuration response. A dedicated test verifies the endpoint can report ready with a Supabase HTTP client and no `DATABASE_URL`.
+
+This is deliberately narrower than removing PostgreSQL from the Node runtime: `apps/api/src/server.ts` still requires `DATABASE_URL`, creates/connects the Prisma client and probes it during startup; `apps/api/src/db.ts` still owns the PrismaPg/`pg` adapter. Other service families and their tests still contain transitional Prisma fallbacks. Do not remove the startup gate or driver packages until those paths and the CI migration/seed pipeline have been migrated and verified.
+
+The match runtime remains port-first in the Node API. Production startup requires the complete Supabase match repository set, and the one-shot `simulateScheduledMatch` path explicitly rejects Production. Its Prisma implementation and related legacy cup/round-summary helpers remain for non-production migration tests; the current `match-service.ts` audit still finds 106 Prisma/transaction references across those compatibility paths and other service methods. The next removal tranche must replace the legacy integration-test fixtures with repository/RPC contract tests before deleting that compatibility implementation.
+
+## Production match compatibility fail-closed guards (2026-11-20)
+
+The remaining optional match-service context getters now reject missing repositories in Production instead of returning `undefined` and allowing their Prisma compatibility branches to run. This closes the lease, enqueue, forfeit, and event-tournament-settlement gaps; the other match runtime, competition, opponent, club-match-read, advancement, and pyramid settlement contexts already had equivalent guards. A dedicated API test asserts the newly hardened getters throw when Production has no scoped Supabase port. The request and worker scopes are still responsible for supplying the complete `createNodeSupabaseMatchPorts` set.
+
+This is a Production safety boundary, not deletion of the Prisma compatibility implementation: non-production integration tests still exercise legacy paths, and `server.ts` still connects Prisma for other transitional API services. The remaining PostgreSQL startup gate and `pg` dependency must stay until those other service families and test/seed workflows are migrated. CI remains the verification gate; no live database or deployment action is part of this change.
+
+## Node Telegram account provisioning over Supabase HTTP (2026-11-20)
+
+The Node Fastify API now constructs `NodeSupabaseTelegramAccountProvisioningRepository` from the shared server-side `SupabaseHttpClient`, scopes it per request, and routes both Mini App and Bot onboarding through the existing atomic `provision_telegram_account` RPC. The adapter validates the scalar JSONB response (and a compatible one-row array), checks the returned Telegram identity, club and wallet shape, and serializes starter-player wages as decimal strings. Production fails closed if this provisioning port is missing; the Prisma provisioning fallback remains only for non-production compatibility tests. The Cloudflare Worker keeps using its corresponding adapter and the same RPC contract.
+
+## Production API repository completeness gate (2026-11-20)
+
+The Fastify API now validates the full set of runtime repositories at construction time: Telegram identity lookup and onboarding, group membership/rate limiting, alliance operations, wallet reads/writes, market, store, player development, club management/economy/lineup, gift and special-player flows, bot lease, match runtime, public records/clubs, and tournament/pyramid services. Missing dependencies fail startup with a list of repository names instead of allowing a route to fall through to Prisma. The request-scoped context getters for these service families also fail closed in Production if a repository is absent. Non-production tests retain their compatibility fallbacks.
+
+Telegram account provisioning is now wired in the Node API to the same `provision_telegram_account` Supabase RPC already used by the Cloudflare Worker. Both Bot and Mini App onboarding therefore use the atomic Supabase operation in Production. The Node adapter has dedicated tests for scalar/array response parsing, starter-player wage serialization, and malformed payload rejection.
+
+This is a runtime safety boundary, not a claim that Prisma or PostgreSQL has been removed. The Node process still initializes Prisma for legacy/non-production paths and the Cloudflare Worker still has a transitional Prisma compatibility client. Removal of `pg`, `DATABASE_URL`, and Prisma packages remains blocked on converting those remaining code paths and migration/seed workflows.
+
+## Season awards and remaining route audit (2026-11-20)
+
+The Node API season-awards endpoint now receives `NodeSupabaseSeasonAwardRepository` and calls the existing `get_season_award_data` RPC; its production wiring is mandatory. The adapter validates numeric and string fields before the route builds rankings and the Team of the Season.
+
+A route-level source audit still identifies non-migrated Prisma access in the administrative dashboard/role and league-management endpoints, admin group broadcast delivery, match notification claim/ack endpoints, and Telegram message-deletion queue. Group route compatibility branches remain guarded by the required production group-membership context. Season-award and match-service source files also retain non-production Prisma compatibility implementations. These remaining areas mean the project is not yet Prisma-free and are the next removal blockers; the Node startup `DATABASE_URL` check, Prisma connect/disconnect, `db.ts`, `pg`, and Prisma packages must not be removed yet.
+
+## Node Bot delivery queues moved to Supabase HTTP (2026-11-20)
+
+The Node API no longer uses Prisma for Telegram group-message deletion, match-result/lifecycle notifications, tactical-checkpoint notifications, or admin group-broadcast delivery. These endpoints are backed by server-only `SupabaseHttpClient` repositories and service-role-only Postgres RPCs. Claims use row locking with `SKIP LOCKED`, claim tokens and bounded leases; completion checks ownership; retry paths preserve attempt counts and backoff/terminal limits. The corresponding Node route tests now use repository contracts rather than PostgreSQL Prisma fixtures. CI includes SQL permission/locking/retry contract tests for the new RPCs.
+
+These changes remove direct Prisma access from those Bot delivery routes, but do not yet remove Prisma from the wider Node API. Administrative console routes (`admin-routes.ts`, `admin-league-routes.ts`) and legacy match-service compatibility paths still contain direct Prisma usage and remain migration blockers. The Node server still requires `DATABASE_URL` and connects Prisma for those paths; `pg` and Prisma dependencies must remain until those are converted and their tests are replaced with equivalent repository/RPC coverage.
+
+## Admin role resolution moved to Supabase HTTP (2026-11-20)
+
+Both Node administrative route families now share `NodeSupabaseAdminRoleRepository`, which calls the existing `get_event_tournament_admin_role_http` RPC through the server-side `SupabaseHttpClient`. The adapter validates Telegram IDs and the RPC response, preserves inactive assignments (which intentionally revoke an environment-provisioned scoped role), and returns `null` for accounts without a database assignment. Environment super-admin IDs retain their prior precedence; the JSON role map remains a fallback only when no database assignment exists.
+
+Production app construction now requires the admin-role repository, and both administrative route families fail closed rather than querying Prisma if the repository is absent. Dedicated adapter tests cover active, inactive, missing, and malformed role responses. The existing SQL integration test continues to verify the RPC's role and inactive-assignment semantics.
+
+This tranche migrates only role lookup. Administrative dashboard aggregates, resource browsing, league reports and league mutations still contain Prisma operations and remain explicit migration work; this does not make either administrative console Prisma-free.
+
+
+## Admin pyramid league dashboard reads moved to Supabase HTTP (2026-11-20)
+
+The `GET /v1/admin/pyramid-leagues` dashboard read now uses the Node direct-HTTPS Supabase repository in production. The `get_admin_pyramid_leagues_http` RPC returns the filtered league standings, teams, awards, promotion offers, queued applications and application counts in one read-only request. The function is SECURITY INVOKER and executable only by service_role; the API requires the repository in production and retains Prisma compatibility only for non-production migration tests. The reports endpoint and admin mutations remain a separate migration tranche.
+
+
+## Admin pyramid league reports moved to Supabase HTTP (2026-11-20)
+
+The `GET /v1/admin/pyramid-leagues/reports` endpoint now uses the Node direct-HTTPS Supabase repository in Production. The `get_admin_pyramid_league_reports_http` read-only RPC produces season totals, club rankings, promotion/relegation movements, league history, award summaries, filtered audit history, and application counts in one bounded response. The function is SECURITY INVOKER and service_role-only. The legacy Prisma report implementation remains available only in non-production compatibility tests; league administrative mutations are still a separate migration tranche.
+
+
+## Admin pyramid league actions moved to atomic Supabase HTTP RPC (2026-11-20)
+
+The `POST /v1/admin/pyramid-leagues/actions` route now uses `admin_pyramid_league_action_http` in Production. Queued application withdrawal, pending promotion deadline extension, and award updates execute with their audit row in one database transaction. The RPC serializes idempotency keys with a transaction-scoped advisory lock, returns the original outcome for a matching replay, and rejects key reuse across different actor/action/target tuples. Pyramid league status remains system-managed and is rejected rather than allowing manual cancellation. Only service_role can execute the SECURITY INVOKER RPC; route-level role authorization remains mandatory. The Prisma transaction fallback is restricted to non-production.
+
+
+## Admin roles and game settings moved to Supabase HTTP (2026-11-20)
+
+The admin roles and settings read endpoints now use `get_admin_configuration_http` in Production. Role assignment, revocation, and bounded game-setting updates use `admin_configuration_action_http`; each mutation and its audit record commit atomically with idempotency protection. The RPCs are `SECURITY INVOKER` and executable only by `service_role`. Production fails closed if the repository is missing; Prisma remains only as a non-production compatibility fallback.

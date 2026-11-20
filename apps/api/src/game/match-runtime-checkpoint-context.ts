@@ -56,5 +56,9 @@ export function withMatchRuntimeCheckpointPort<T>(port: MatchRuntimeCheckpointPo
   return scope.run(port, operation);
 }
 export function getMatchRuntimeCheckpointPort(): MatchRuntimeCheckpointPort | undefined {
-  return scope.getStore();
+  const port = scope.getStore();
+  if (!port && (process.env.NODE_ENV === "production" || process.env.ENVIRONMENT === "production")) {
+    throw new Error("MATCH_CHECKPOINT_SUPABASE_REPOSITORY_REQUIRED");
+  }
+  return port;
 }

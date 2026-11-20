@@ -27,13 +27,24 @@ export interface GroupMembershipPort {
   joinChallenge(input: { telegramUserId: string; telegramGroupId: string; challengeId: string }): Promise<unknown>;
   completeChallenge(input: { telegramUserId: string; telegramGroupId: string; challengeId: string; winnerTelegramId: string }): Promise<unknown>;
   cancelChallenge(input: { telegramUserId: string; telegramGroupId: string; challengeId: string }): Promise<unknown>;
+  createLeague(input: { telegramUserId: string; telegramGroupId: string; name: string; maxTeams: number; idempotencyKey: string; now?: Date }): Promise<unknown>;
+  joinLeague(input: { telegramUserId: string; telegramGroupId: string; competitionId: string; now?: Date }): Promise<unknown>;
+  startLeague(input: { telegramUserId: string; telegramGroupId: string; competitionId: string; now?: Date }): Promise<unknown>;
+  getLeagueTable(input: { telegramUserId: string; telegramGroupId: string; competitionId: string }): Promise<unknown>;
+  listLeagues(input: { telegramUserId: string; telegramGroupId: string }): Promise<unknown>;
 }
 export class GroupMembershipPortError extends Error {
   constructor(readonly code: string) { super(code); this.name = "GroupMembershipPortError"; }
 }
 import { AsyncLocalStorage } from "node:async_hooks";
 const scope = new AsyncLocalStorage<GroupMembershipPort>();
-export function withGroupMembershipPort<T>(port: GroupMembershipPort, operation: () => Promise<T>): Promise<T> {
+export function withGroupMembershipPort<T>(port: GroupMembershipPort, operation: () => T): T {
   return scope.run(port, operation);
 }
-export function getGroupMembershipPort(): GroupMembershipPort | undefined { return scope.getStore(); }
+export function getGroupMembershipPort(): GroupMembershipPort | undefined {
+  const port = scope.getStore();
+  if (!port && (process.env.NODE_ENV === "production" || process.env.ENVIRONMENT === "production")) {
+    throw new Error("GROUP_MEMBERSHIP_SUPABASE_REPOSITORY_REQUIRED");
+  }
+  return port;
+}
