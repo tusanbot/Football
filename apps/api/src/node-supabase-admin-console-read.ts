@@ -7,6 +7,7 @@ export interface AdminConsoleGroupTarget { telegramId: string; title: string; }
 export interface AdminConsoleReadPort {
   overview(): Promise<AdminConsoleOverview>;
   groupTargets(): Promise<{ groups: AdminConsoleGroupTarget[] }>;
+  financeSummary(days: number): Promise<Record<string, unknown>>;
 }
 export class NodeSupabaseAdminConsoleReadRepository implements AdminConsoleReadPort {
   constructor(private readonly client: SupabaseHttpClient) {}
@@ -21,6 +22,15 @@ export class NodeSupabaseAdminConsoleReadRepository implements AdminConsoleReadP
       throw new Error("SUPABASE_ADMIN_CONSOLE_INVALID_OVERVIEW");
     }
     return { counts: counts as AdminConsoleOverview["counts"] };
+  }
+  async financeSummary(days: number): Promise<Record<string, unknown>> {
+    if (!Number.isInteger(days) || days < 1 || days > 365) throw new Error("INVALID_FINANCE_PERIOD");
+    const result = await this.client.rpc<Record<string, unknown>>("get_admin_finance_summary_http", { p_days: days });
+    const arrays = ["wallet","clubFinance","groupPoints","walletReconciliation","groupReconciliation","clubFinanceSummary"];
+    if (!result || result.days !== days || typeof result.from !== "string" || typeof result.clubArrearsTotal !== "string" || arrays.some((key) => !Array.isArray(result[key]))) {
+      throw new Error("SUPABASE_ADMIN_CONSOLE_INVALID_FINANCE_SUMMARY");
+    }
+    return result;
   }
   async groupTargets(): Promise<{ groups: AdminConsoleGroupTarget[] }> {
     const result = await this.client.rpc<Record<string, unknown>>("get_admin_console_read_http", { p_view: "group-targets" });
