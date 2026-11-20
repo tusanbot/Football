@@ -40,7 +40,9 @@ function sendMarketError(reply: FastifyReply, error: unknown) {
   throw error;
 }
 
-export function registerPlayerMarketRoutes(app: FastifyInstance) {
+export interface SpecialPlayerCatalogRepository { listActive(): Promise<unknown[]>; }
+
+export function registerPlayerMarketRoutes(app: FastifyInstance, specialPlayers?: SpecialPlayerCatalogRepository) {
   app.get("/v1/players/special/challenges", async (request, reply) => {
     const user = await requireTelegramUser(request);
     if (!user) return reply.code(401).send({ error: "UNAUTHENTICATED" });
@@ -61,8 +63,12 @@ export function registerPlayerMarketRoutes(app: FastifyInstance) {
     const user = await requireTelegramUser(request);
     if (!user) return reply.code(401).send({ error: "UNAUTHENTICATED" });
     const acquisitionPort = getSpecialAcquisitionPort();
-    if (!acquisitionPort?.listActive) return reply.code(503).send({ error: "SUPABASE_SPECIAL_PLAYER_CATALOG_UNAVAILABLE" });
-    const players = await acquisitionPort.listActive();
+    const players = acquisitionPort?.listActive
+      ? await acquisitionPort.listActive()
+      : specialPlayers
+        ? await specialPlayers.listActive()
+        : null;
+    if (!players) return reply.code(503).send({ error: "SUPABASE_SPECIAL_PLAYER_CATALOG_UNAVAILABLE" });
     return { players, packOffers: getSpecialPackOffers() };
   });
   app.post("/v1/players/special/acquire", async (request, reply) => {
