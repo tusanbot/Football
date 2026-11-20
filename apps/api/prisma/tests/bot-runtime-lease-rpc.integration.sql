@@ -26,6 +26,19 @@ BEGIN
   IF NOT EXISTS (SELECT 1 FROM public."BotRuntimeLease" WHERE id='telegram-bot-polling' AND "instanceId"=v_b::text) THEN
     RAISE EXCEPTION 'lease owner was not persisted';
   END IF;
+  -- A crashed owner must not block polling forever: a new instance can take over
+  -- after the persisted expiry, while the old instance can no longer heartbeat.
+  r := public.manage_bot_runtime_lease_http(v_a, 'heartbeat', v_now + interval '67 seconds', 60);
+  IF r->>'acquired' <> 'false' THEN
+    RAISE EXCEPTION 'expired former owner unexpectedly renewed its lease: %', r;
+  END IF;
+  r := public.manage_bot_runtime_lease_http(v_a, 'acquire', v_now + interval '67 seconds', 60);
+  IF r->>'acquired' <> 'true' THEN
+    RAISE EXCEPTION 'expired lease takeover failed: %', r;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM public."BotRuntimeLease" WHERE id='telegram-bot-polling' AND "instanceId"=v_a::text) THEN
+    RAISE EXCEPTION 'expired lease takeover did not persist the new owner';
+  END IF;
 END;
 $test$;
 ROLLBACK;

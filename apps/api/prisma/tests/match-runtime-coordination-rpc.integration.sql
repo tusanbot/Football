@@ -105,10 +105,19 @@ BEGIN
     RAISE EXCEPTION 'checkpoint resolution did not atomically advance runtime and checkpoint rows';
   END IF;
 
+  -- Simulate a worker crash after claim: once the lease expires, another worker
+  -- must be able to reclaim the same runtime with a fresh fencing token.
+  SELECT * INTO v_claim_again FROM public.claim_due_match_runtimes('ci-runtime-coord-worker-recovery',v_now+interval '70 seconds',60000,10);
+  IF v_claim_again.runtime_id<>v_runtime OR v_claim_again.lease_token IS NULL
+    OR v_claim_again.lease_token=v_claim.lease_token THEN
+    RAISE EXCEPTION 'expired match runtime lease was not reclaimed with a new token: %',row_to_json(v_claim_again);
+  END IF;
   SELECT released INTO v_released FROM public.release_match_runtime_lease(v_runtime,'wrong-token',v_now+interval '5 minutes',NULL);
   IF v_released THEN RAISE EXCEPTION 'lease release accepted a mismatched token'; END IF;
   SELECT released INTO v_released FROM public.release_match_runtime_lease(v_runtime,v_claim.lease_token,v_now+interval '5 minutes',NULL);
-  IF NOT v_released THEN RAISE EXCEPTION 'lease release rejected the current token'; END IF;
+  IF v_released THEN RAISE EXCEPTION 'stale worker released a lease after takeover'; END IF;
+  SELECT released INTO v_released FROM public.release_match_runtime_lease(v_runtime,v_claim_again.lease_token,v_now+interval '5 minutes',NULL);
+  IF NOT v_released THEN RAISE EXCEPTION 'recovery worker could not release its current lease'; END IF;
 
   IF has_function_privilege('anon','public.claim_due_match_runtimes(text,timestamp without time zone,integer,integer)','EXECUTE')
     OR has_function_privilege('authenticated','public.claim_due_match_runtimes(text,timestamp without time zone,integer,integer)','EXECUTE')
