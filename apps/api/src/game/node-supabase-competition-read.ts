@@ -1,5 +1,6 @@
 import type { CompetitionReadPort } from "./competition-read-context.js";
 import { SupabaseHttpClient, SupabaseHttpError } from "../node-supabase-http.js";
+import { defaultMatchRules, validateMatchRules } from "@football/domain";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -31,13 +32,19 @@ export class SupabaseCompetitionReadRepository implements CompetitionReadPort {
     try { result = await this.client.rpc("list_open_competitions_http", { p_user_id: userId }); }
     catch (error) { rethrowRpcError(error); }
     if (!validCompetitionList(result)) throw new Error("SUPABASE_COMPETITION_LIST_INVALID_RESPONSE");
-    return result;
+    return result.map((row) => ({ ...row, rules: validateMatchRules(row.rules ?? defaultMatchRules(row.format as "LEAGUE" | "CUP")) }));
   }
   async get(userId: string, competitionId: string): Promise<Record<string, unknown>> {
     let result: unknown;
     try { result = await this.client.rpc("get_competition_http", { p_user_id: userId, p_competition_id: competitionId }); }
     catch (error) { rethrowRpcError(error); }
     if (!validCompetitionDetail(result)) throw new Error("SUPABASE_COMPETITION_DETAIL_INVALID_RESPONSE");
-    return result;
+    const competition = result.competition as Record<string, unknown>;
+    const matches = result.matches as Array<Record<string, unknown>>;
+    return {
+      ...result,
+      competition: { ...competition, rules: validateMatchRules(competition.rules ?? defaultMatchRules(competition.format as "LEAGUE" | "CUP")) },
+      matches: matches.map((match) => ({ ...match, rules: validateMatchRules(match.rules ?? defaultMatchRules(match.type as "FRIENDLY" | "LEAGUE" | "CUP")) })),
+    };
   }
 }
