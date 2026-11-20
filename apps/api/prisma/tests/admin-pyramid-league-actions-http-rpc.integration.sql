@@ -35,6 +35,12 @@ BEGIN
   OR (SELECT "awardType" FROM public."LeagueAward" WHERE id='ci-admin-action-award')<>'GOLD' THEN
   RAISE EXCEPTION 'award update failed: %',v_result;
  END IF;
+ BEGIN
+  PERFORM public.admin_pyramid_league_action_http('update-award','ci-admin-action-award','919900097','admin-pyramid:withdraw-key-0001','reuse',NULL,NULL,'Conflicting Award',NULL);
+  RAISE EXCEPTION 'idempotency key reuse should fail';
+ EXCEPTION WHEN unique_violation THEN
+  NULL;
+ END;
  IF (SELECT count(*) FROM public."AdminAuditLog" WHERE "actorTelegramId"='919900097')<>3 THEN
   RAISE EXCEPTION 'audit rows missing';
  END IF;
