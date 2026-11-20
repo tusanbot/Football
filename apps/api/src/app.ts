@@ -1,6 +1,7 @@
 import Fastify from "fastify";
 import type { SupabaseHttpClient } from "./node-supabase-http.js";
 import type { AdminRoleLookupPort } from "./admin-role-context.js";
+import type { AdminPyramidLeagueReadPort } from "./node-supabase-admin-pyramid-league-read.js";
 import { z } from "zod";
 import { registerTelegramAuthRoutes } from "./auth/routes.js";
 import type { TelegramUserLookupPort } from "./auth/telegram-user-lookup-context.js";
@@ -83,7 +84,7 @@ const healthResponse = z.object({
   version: z.string(),
 });
 
-export function buildApp(options: { logger?: boolean; pluginTimeout?: number; groupMembershipPort?: GroupMembershipPort; alliancePort?: AlliancePort; adminAlliancePort?: AdminAlliancePort; telegramUserLookupPort?: TelegramUserLookupPort; accountProvisioningPort?: TelegramAccountProvisioningPort; storePurchasePort?: StorePurchasePort; storeItemUsePort?: StoreItemUsePort; walletEntryPort?: WalletEntryPort; marketListingPort?: MarketListingPort; marketPurchasePort?: MarketPurchasePort; storeSnapshotPort?: StoreSnapshotPort; playerDevelopmentPort?: PlayerDevelopmentPort; clubEconomySettlementPort?: ClubEconomySettlementPort; clubManagementPort?: ClubManagementPort; specialAcquisitionPort?: SpecialAcquisitionPort; giftCodeRedemptionPort?: GiftCodeRedemptionPort; botRuntimeLeasePort?: BotRuntimeLeasePort; matchPorts?: NodeSupabaseMatchPorts; supabaseHttpClient?: SupabaseHttpClient; gameDashboardPort?: GameDashboardPort; walletReadPort?: WalletReadPort; clubLineupPort?: ClubLineupPort; publicPlayerRecordRepository?: PublicPlayerRecordRepository; publicClubLogoRepository?: PublicClubLogoRepository; publicClubReadRepository?: PublicClubReadRepository; seasonAwardRepository?: SeasonAwardRepository; adminGroupBroadcastPort?: AdminGroupBroadcastPort; matchNotificationPort?: MatchNotificationPort; telegramMessageDeletionPort?: TelegramMessageDeletionPort; eventTournamentSettlementPort?: EventTournamentSettlementPort; eventTournamentReadPort?: EventTournamentReadPort; pyramidLeagueSettlementPort?: PyramidLeagueSettlementPort; adminRoleLookupPort?: AdminRoleLookupPort; actionRateLimitPort?: ActionRateLimitPort } = {}) {
+export function buildApp(options: { logger?: boolean; pluginTimeout?: number; groupMembershipPort?: GroupMembershipPort; alliancePort?: AlliancePort; adminAlliancePort?: AdminAlliancePort; telegramUserLookupPort?: TelegramUserLookupPort; accountProvisioningPort?: TelegramAccountProvisioningPort; storePurchasePort?: StorePurchasePort; storeItemUsePort?: StoreItemUsePort; walletEntryPort?: WalletEntryPort; marketListingPort?: MarketListingPort; marketPurchasePort?: MarketPurchasePort; storeSnapshotPort?: StoreSnapshotPort; playerDevelopmentPort?: PlayerDevelopmentPort; clubEconomySettlementPort?: ClubEconomySettlementPort; clubManagementPort?: ClubManagementPort; specialAcquisitionPort?: SpecialAcquisitionPort; giftCodeRedemptionPort?: GiftCodeRedemptionPort; botRuntimeLeasePort?: BotRuntimeLeasePort; matchPorts?: NodeSupabaseMatchPorts; supabaseHttpClient?: SupabaseHttpClient; gameDashboardPort?: GameDashboardPort; walletReadPort?: WalletReadPort; clubLineupPort?: ClubLineupPort; publicPlayerRecordRepository?: PublicPlayerRecordRepository; publicClubLogoRepository?: PublicClubLogoRepository; publicClubReadRepository?: PublicClubReadRepository; seasonAwardRepository?: SeasonAwardRepository; adminGroupBroadcastPort?: AdminGroupBroadcastPort; matchNotificationPort?: MatchNotificationPort; telegramMessageDeletionPort?: TelegramMessageDeletionPort; eventTournamentSettlementPort?: EventTournamentSettlementPort; eventTournamentReadPort?: EventTournamentReadPort; pyramidLeagueSettlementPort?: PyramidLeagueSettlementPort; adminRoleLookupPort?: AdminRoleLookupPort; adminPyramidLeagueReadPort?: AdminPyramidLeagueReadPort; actionRateLimitPort?: ActionRateLimitPort } = {}) {
   // Production HTTP routes must use direct-HTTPS Supabase repositories for the
   // match runtime and Telegram onboarding. Prisma compatibility remains isolated
   // to non-production migration tests and service families not yet migrated.
@@ -97,6 +98,7 @@ export function buildApp(options: { logger?: boolean; pluginTimeout?: number; gr
       ["ALLIANCE", options.alliancePort],
       ["ADMIN_ALLIANCE", options.adminAlliancePort],
       ["ADMIN_ROLE_LOOKUP", options.adminRoleLookupPort],
+      ["ADMIN_PYRAMID_LEAGUE_READ", options.adminPyramidLeagueReadPort],
       ["WALLET_ENTRY", options.walletEntryPort],
       ["WALLET_READ", options.walletReadPort],
       ["MARKET_LISTING", options.marketListingPort],
@@ -287,7 +289,7 @@ export function buildApp(options: { logger?: boolean; pluginTimeout?: number; gr
   registerGroupRoutes(app, { requireMembershipPort: Boolean(options.groupMembershipPort) });
   registerAllianceRoutes(app, { requirePort: Boolean(options.alliancePort), ...(options.alliancePort ? { port: options.alliancePort } : {}) });
   registerAdminRoutes(app, { ...(options.adminAlliancePort ? { adminAlliancePort: options.adminAlliancePort } : {}), ...(options.adminRoleLookupPort ? { adminRoleLookupPort: options.adminRoleLookupPort } : {}) });
-  registerAdminLeagueRoutes(app, { ...(options.adminRoleLookupPort ? { adminRoleLookupPort: options.adminRoleLookupPort } : {}) });
+  registerAdminLeagueRoutes(app, { ...(options.adminRoleLookupPort ? { adminRoleLookupPort: options.adminRoleLookupPort } : {}), ...(options.adminPyramidLeagueReadPort ? { adminPyramidLeagueReadPort: options.adminPyramidLeagueReadPort } : {}) });
   registerGiftCodeRoutes(app);
   registerTelegramMessageDeletionRoutes(app, options.telegramMessageDeletionPort);
   registerLeagueNoticeRoutes(app);
