@@ -16,7 +16,7 @@ function fixture() {
   async claimCheckpoints(_limit,checkpointId):Promise<MatchCheckpointNotification[]>{if(checkpointId==="cp-1"&&!checkpointClaims.has("HOME")){
    checkpointClaims.set("HOME","claimed");return [{checkpointId:"cp-1",matchId:"match-1",checkpointKey:"minute-45",minute:45,deadlineAt:"2026-11-20T10:01:00Z",
     clubId:"home",clubName:"Home FC",opponentName:"Away FC",telegramUserId:"12345",side:"HOME",attempt:1}];}return [];},
-  async acknowledgeCheckpoint(id,side,delivered){if(id!=="cp-1"||!checkpointClaims.has(side))return false;if(delivered)checkpointClaims.delete(side);return true;},
+  async acknowledgeCheckpoint(id,side,delivered){if(id!=="cp-1"||!checkpointClaims.has(side))return false;if(delivered)checkpointClaims.set(side,"delivered");return true;},
  };
  return port;
 }
