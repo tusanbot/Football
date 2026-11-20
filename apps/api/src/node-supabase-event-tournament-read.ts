@@ -16,7 +16,9 @@ export class NodeSupabaseEventTournamentReadRepository implements EventTournamen
    this.client.select<Participant[]>("EventTournamentParticipant",{select:"id,tournamentId,userId,placement,joinedAt",tournamentId:inFilter(ids)}),
    this.client.select<Prize[]>("EventTournamentPrize",{select:"id,tournamentId,placement,type,amount,itemKey,specialPlayerId",tournamentId:inFilter(ids),order:"placement.asc,type.asc"})
   ]);
-  const participantRows=rows<Participant>(ps);\n  const counts=new Map<string,number>();for(const p of participantRows)counts.set(p.tournamentId,(counts.get(p.tournamentId)??0)+1);\n  const joined=new Map(participantRows.filter(x=>x.userId===userId).map(x=>[x.tournamentId,x]));
+  const participantRows=rows<Participant>(ps);
+  const counts=new Map<string,number>();for(const p of participantRows)counts.set(p.tournamentId,(counts.get(p.tournamentId)??0)+1);
+  const joined=new Map(participantRows.filter(x=>x.userId===userId).map(x=>[x.tournamentId,x]));
   const prizes=new Map<string,Prize[]>();for(const p of rows<Prize>(pr))prizes.set(p.tournamentId,[...(prizes.get(p.tournamentId)??[]),p]);
   return ts.map(x=>{const p=joined.get(x.id);return{id:x.id,title:x.title,description:x.description,status:x.status,competitionId:x.competitionId??null,entryFeeAsset:x.entryFeeAsset,entryFeeAmount:String(x.entryFeeAmount),maxParticipants:x.maxParticipants,participantCount:counts.get(x.id)??0,registrationEndsAt:iso(x.registrationEndsAt),startsAt:iso(x.startsAt),endsAt:iso(x.endsAt),prizes:(prizes.get(x.id)??[]).map(v=>({placement:v.placement,type:v.type,amount:String(v.amount),itemKey:v.itemKey,specialPlayerId:v.specialPlayerId})),joined:Boolean(p),participantId:p?.id??null,placement:p?.placement??null};});
  }
