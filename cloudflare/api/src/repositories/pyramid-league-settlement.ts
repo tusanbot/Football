@@ -74,14 +74,14 @@ export class SupabasePyramidLeagueSettlementRepository implements PyramidLeagueS
   if(!result||!result.challenge||typeof result.asset!=="string"||typeof result.goldCost!=="string"||!result.remaining||typeof result.replayed!=="boolean")throw new Error(typeof result?.error==="string"?result.error:"SUPABASE_FRIENDLY_CHALLENGE_CREATE_INVALID_RESPONSE"); return result;
  }
  async acceptFriendlyChallenge(userId:string,token:string,now:string){
-  const result=await this.client.rpc<Awaited<ReturnType<PyramidLeagueSettlementPort["acceptFriendlyChallenge"]>>>("accept_friendly_challenge_http",{p_user_id:userId,p_token:token,p_now:now});
+  const result=await this.client.rpc<Record<string,unknown>>("accept_friendly_challenge_http",{p_user_id:userId,p_token:token,p_now:now});
   if(result?.error==="FRIENDLY_CHALLENGE_EXPIRED")throw new Error("FRIENDLY_CHALLENGE_EXPIRED");
-  if(!result||!result.match||typeof result.replayed!=="boolean")throw new Error("SUPABASE_FRIENDLY_CHALLENGE_ACCEPT_INVALID_RESPONSE"); return result;
+  if(!result||!result.match||typeof result.replayed!=="boolean")throw new Error("SUPABASE_FRIENDLY_CHALLENGE_ACCEPT_INVALID_RESPONSE"); return result as unknown as Awaited<ReturnType<PyramidLeagueSettlementPort["acceptFriendlyChallenge"]>>;
  }
  async getFriendlyChallengeInfo(token:string,now:string){
-  const result=await this.client.rpc<Awaited<ReturnType<PyramidLeagueSettlementPort["getFriendlyChallengeInfo"]>>>("get_friendly_challenge_info_http",{p_token:token,p_now:now});
+  const result=await this.client.rpc<Record<string,unknown>>("get_friendly_challenge_info_http",{p_token:token,p_now:now});
   if(result?.error==="FRIENDLY_CHALLENGE_EXPIRED")throw new Error("FRIENDLY_CHALLENGE_EXPIRED");
-  if(!result||typeof result.id!=="string"||typeof result.token!=="string"||!result.creatorClub)throw new Error("SUPABASE_FRIENDLY_CHALLENGE_INFO_INVALID_RESPONSE"); return result;
+  if(!result||typeof result.id!=="string"||typeof result.token!=="string"||!result.creatorClub)throw new Error("SUPABASE_FRIENDLY_CHALLENGE_INFO_INVALID_RESPONSE"); return result as unknown as Awaited<ReturnType<PyramidLeagueSettlementPort["getFriendlyChallengeInfo"]>>;
  }
  async grantPurchasedChallengeCredits(userId:string,quantity:number,now:string){
   const result=await this.client.rpc<Awaited<ReturnType<PyramidLeagueSettlementPort["grantPurchasedChallengeCredits"]>>>("grant_friendly_challenge_credits_http",{p_user_id:userId,p_quantity:quantity,p_now:now});
