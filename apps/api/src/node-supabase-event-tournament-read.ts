@@ -8,6 +8,18 @@ function inFilter(values:string[]){return "in.("+values.map(v=>'"'+v.replace(/\\
 function iso(v:string|null){return v?new Date(v).toISOString():null;}
 export class NodeSupabaseEventTournamentReadRepository implements EventTournamentReadPort{
  constructor(private readonly client:SupabaseHttpClient){}
+ async create(input:EventTournamentCreateInput){
+  const result=await this.client.rpc<{tournament:Record<string,unknown>;replayed:boolean}>("create_event_tournament_http",{
+   p_telegram_user_id:input.telegramUserId,p_idempotency_key:"event-tournament-create:"+input.idempotencyKey,
+   p_title:input.title,p_description:input.description,p_entry_fee_asset:input.entryFeeAsset,
+   p_entry_fee_amount:input.entryFeeAmount,p_max_participants:input.maxParticipants,
+   p_registration_ends_at:input.registrationEndsAt,p_starts_at:input.startsAt,p_ends_at:input.endsAt,
+   p_prizes:input.prizes,p_now:new Date().toISOString()
+  });
+  if(!result||typeof result!=="object"||!result.tournament||typeof result.tournament!=="object"||typeof result.replayed!=="boolean")
+   throw new Error("SUPABASE_EVENT_TOURNAMENT_CREATE_INVALID_RESPONSE");
+  return result;
+ }
  async listForUser(userId:string){
   const ts=rows<Tournament>(await this.client.select("EventTournament",{select:"id,title,description,status,competitionId,entryFeeAsset,entryFeeAmount,maxParticipants,registrationEndsAt,startsAt,endsAt",status:"in.(REGISTRATION,ACTIVE,COMPLETED)",order:"status.asc,startsAt.desc",limit:"40"}));
   if(!ts.length)return [];
