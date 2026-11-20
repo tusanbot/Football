@@ -70,8 +70,8 @@ export class SupabasePyramidLeagueSettlementRepository implements PyramidLeagueS
  }
 
  async createFriendlyChallenge(userId:string,goldCost:string,now:string,groupTelegramId:string|null,idempotencyKey:string){
-  const result=await this.client.rpc<Awaited<ReturnType<PyramidLeagueSettlementPort["createFriendlyChallenge"]>>>("create_friendly_challenge_http",{p_user_id:userId,p_gold_cost:goldCost,p_now:now,p_group_telegram_id:groupTelegramId,p_idempotency_key:idempotencyKey});
-  if(!result||!result.challenge||typeof result.asset!=="string"||typeof result.goldCost!=="string"||!result.remaining||typeof result.replayed!=="boolean")throw new Error(typeof result?.error==="string"?result.error:"SUPABASE_FRIENDLY_CHALLENGE_CREATE_INVALID_RESPONSE"); return result;
+  const result=await this.client.rpc<Record<string,unknown>>("create_friendly_challenge_http",{p_user_id:userId,p_gold_cost:goldCost,p_now:now,p_group_telegram_id:groupTelegramId,p_idempotency_key:idempotencyKey});
+  if(!result||!result.challenge||typeof result.asset!=="string"||typeof result.goldCost!=="string"||!result.remaining||typeof result.replayed!=="boolean")throw new Error(typeof result?.error==="string"?result.error:"SUPABASE_FRIENDLY_CHALLENGE_CREATE_INVALID_RESPONSE"); return result as unknown as Awaited<ReturnType<PyramidLeagueSettlementPort["createFriendlyChallenge"]>>;
  }
  async acceptFriendlyChallenge(userId:string,token:string,now:string){
   const result=await this.client.rpc<Record<string,unknown>>("accept_friendly_challenge_http",{p_user_id:userId,p_token:token,p_now:now});
