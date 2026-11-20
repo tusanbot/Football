@@ -19,6 +19,7 @@ import { competitionKickoffAfterDays } from "./match-schedule.js";
 import { getMatchOpponentPort } from "./match-opponents-context.js";
 import { getFriendlyMatchCreationPort } from "./friendly-match-creation-context.js";
 import { getCompetitionCreationPort } from "./competition-creation-context.js";
+import { getCompetitionReadPort } from "./competition-read-context.js";
 import { getClubMatchReadPort } from "./club-match-read-context.js";
 import { getCompetitionAdvancementPort } from "./competition-advancement-context.js";
 import { getEventTournamentSettlementPort } from "../event-tournament-settlement-context.js";
@@ -464,6 +465,11 @@ export async function startLeague(userId: string, competitionId: string, now = n
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 }
 export async function listOpenLeagues(userId: string) {
+  const readPort = getCompetitionReadPort();
+  if (readPort) {
+    try { return await readPort.listOpen(userId); }
+    catch (error) { const code = error instanceof Error ? error.message : ""; if (/^[A-Z][A-Z0-9_]{2,80}$/.test(code)) throw new MatchServiceError(code); throw error; }
+  }
   const club = await getOwnedClub(userId);
   const competitions = await prisma.competition.findMany({
     where: { status: "REGISTRATION" },
@@ -481,6 +487,11 @@ export async function listOpenLeagues(userId: string) {
   }));
 }
 export async function getLeague(userId: string, competitionId: string) {
+  const readPort = getCompetitionReadPort();
+  if (readPort) {
+    try { return await readPort.get(userId, competitionId); }
+    catch (error) { const code = error instanceof Error ? error.message : ""; if (/^[A-Z][A-Z0-9_]{2,80}$/.test(code)) throw new MatchServiceError(code); throw error; }
+  }
   const club = await getOwnedClub(userId);
   const competition = await prisma.competition.findUnique({
     where: { id: competitionId },
