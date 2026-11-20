@@ -12,6 +12,10 @@ export interface PyramidLeagueSettlementPort {
  claimNotices(limit:number,now:string):Promise<{notices:unknown[]}>;
  completeNotice(id:string,claimToken:string,now:string):Promise<{completed:boolean}>;
  failNotice(id:string,claimToken:string,error:string,now:string):Promise<{owned:boolean;rescheduled?:boolean;attempts?:number}>;
+ createFriendlyChallenge(userId:string,goldCost:string,now:string,groupTelegramId:string|null,idempotencyKey:string):Promise<Record<string,unknown>>;
+ acceptFriendlyChallenge(userId:string,token:string,now:string):Promise<Record<string,unknown>>;
+ getFriendlyChallengeInfo(token:string,now:string):Promise<Record<string,unknown>>;
+ grantPurchasedChallengeCredits(userId:string,quantity:number,now:string):Promise<Record<string,unknown>>;
 }
 const scope=new AsyncLocalStorage<PyramidLeagueSettlementPort>();
 export function withPyramidLeagueSettlementPort<T>(port:PyramidLeagueSettlementPort,operation:()=>Promise<T>):Promise<T>{return scope.run(port,operation);}
