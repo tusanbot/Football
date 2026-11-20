@@ -50,6 +50,8 @@ BEGIN
  GET DIAGNOSTICS affected=ROW_COUNT;IF affected<>1 THEN RETURN;END IF;
  RETURN QUERY SELECT current_attempts<8,current_attempts;
 END; $$;
+GRANT SELECT,UPDATE ON TABLE public."AdminGroupBroadcastDelivery" TO service_role;
+GRANT SELECT ON TABLE public."AdminGroupBroadcast",public."TelegramGroup" TO service_role;
 REVOKE ALL ON FUNCTION public.claim_due_admin_group_broadcasts_http(integer,integer) FROM PUBLIC,anon,authenticated;
 REVOKE ALL ON FUNCTION public.complete_admin_group_broadcast_delivery_http(text,text) FROM PUBLIC,anon,authenticated;
 REVOKE ALL ON FUNCTION public.fail_admin_group_broadcast_delivery_http(text,text,text) FROM PUBLIC,anon,authenticated;
