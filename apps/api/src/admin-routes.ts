@@ -149,7 +149,7 @@ if(["player-update","club-update","match-update","player-status","alliance-statu
   if(x.action==="player-status")payload.status=x.status!;
   else if(x.action==="alliance-status")payload.status=x.status!;
   else if(x.action==="season-status")payload.status=x.seasonStatus!;
-  else for(const key of fields[x.action]??[]){const value=(x as Record<string,unknown>)[key];if(value!==undefined)payload[key]=value as string|number;}
+  else for(const key of fields[x.action]??[]){const value=(x as unknown as Record<string,unknown>)[key];if(value!==undefined)payload[key]=value as string|number;}
   const result=await options.adminEntityUpdatePort.execute({
    action:x.action as import("./node-supabase-admin-entity-update.js").AdminEntityUpdateAction,
    targetId:id,actorTelegramId:actor.telegramId,idempotencyKey:x.idempotencyKey,payload,
