@@ -6,7 +6,7 @@ SET search_path=public,pg_temp
 AS $fn$
 DECLARE v_existing public."AdminAuditLog"%ROWTYPE; v_target_type text; v_count integer; v_challenge public."GroupChallenge"%ROWTYPE;
 BEGIN
- IF p_action NOT IN ('suspend-user','restore-user','suspend-group','restore-group','cancel-challenge','competition-status')
+ IF p_action NOT IN ('suspend-user','restore-user','suspend-group','restore-group','cancel-challenge','league-status','competition-status')
   OR p_target_id IS NULL OR length(p_target_id) NOT BETWEEN 1 AND 128
   OR p_actor_telegram_id IS NULL OR p_actor_telegram_id !~ '^[0-9]{1,20}$'
   OR p_idempotency_key IS NULL OR length(p_idempotency_key) NOT BETWEEN 12 AND 160
@@ -47,7 +47,7 @@ BEGIN
   IF v_challenge.status='OPEN' THEN
    UPDATE public."GroupChallenge" SET status='CANCELLED' WHERE id=p_target_id AND status='OPEN';
    IF v_challenge."rewardPoints">0 THEN
-    UPDATE public."TelegramGroup" SET points=points+v_challenge."rewardPoints","updatedAt"=clock_timestamp() WHERE id=v_challenge."groupId";
+    UPDATE public."TelegramGroup" SET points=points+v_challenge."rewardPoints" WHERE id=v_challenge."groupId";
     INSERT INTO public."GroupPointLedger"(id,"idempotencyKey","groupId","userId",amount,source,description,"createdAt")
     VALUES(gen_random_uuid()::text,'challenge:'||p_target_id||':refund',v_challenge."groupId",NULL,v_challenge."rewardPoints",'CHALLENGE_REWARD','Admin cancellation refund',clock_timestamp())
     ON CONFLICT ("idempotencyKey") DO NOTHING;
