@@ -76,15 +76,16 @@ BEGIN
  IF COALESCE(array_length(v_slots,1),0)<>v_tournament."maxParticipants" THEN
   RAISE EXCEPTION USING MESSAGE='TOURNAMENT_CAPACITY_CHANGED',ERRCODE='P0001';
  END IF;
+ IF v_tournament."maxParticipants" NOT BETWEEN 4 AND 16 THEN
+  RAISE EXCEPTION USING MESSAGE='INVALID_TOURNAMENT_CAPACITY',ERRCODE='P0001';
+ END IF;
  IF EXISTS(
   SELECT 1 FROM public."EventTournamentParticipant" p
   WHERE p."tournamentId"=v_tournament.id AND (
-   SELECT count(*) FROM public."Player" pl WHERE pl."clubId"=p."clubId" AND pl.status::text='ACTIVE'
-  )<11 OR EXISTS(
-   SELECT 1 FROM public."EventTournamentParticipant" p2
-   WHERE p2."tournamentId"=v_tournament.id AND NOT EXISTS(
-    SELECT 1 FROM public."Player" pl WHERE pl."clubId"=p2."clubId" AND pl.status::text='ACTIVE' AND pl.position::text='GK'
-   )
+   (SELECT count(*) FROM public."Player" pl
+    WHERE pl."clubId"=p."clubId" AND pl.status::text='ACTIVE')<11
+   OR NOT EXISTS(SELECT 1 FROM public."Player" pl
+    WHERE pl."clubId"=p."clubId" AND pl.status::text='ACTIVE' AND pl.position::text='GK')
   )
  ) THEN RAISE EXCEPTION USING MESSAGE='ALL_TEAMS_NEED_VALID_LINEUPS',ERRCODE='P0001'; END IF;
  SELECT p."clubId" INTO v_club_id FROM public."EventTournamentParticipant" p
