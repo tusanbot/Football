@@ -4,17 +4,19 @@ SET LOCAL TIME ZONE 'America/Los_Angeles';
 DO $test$
 DECLARE
  v_now timestamptz:='2026-11-20T12:34:56.789Z';
- v_owner text:='ci-competition-read-owner';v_other text:='ci-competition-read-other';
- v_club text:='ci-competition-read-club';v_other_club text:='ci-competition-read-other-club';
+ v_owner text:='ci-competition-read-owner';v_other text:='ci-competition-read-other';v_nonmember text:='ci-competition-read-nonmember';
+ v_club text:='ci-competition-read-club';v_other_club text:='ci-competition-read-other-club';v_nonmember_club text:='ci-competition-read-nonmember-club';
  v_comp text:='ci-competition-read-comp';v_result jsonb;v_message text;
 BEGIN
  INSERT INTO public."User"(id,"telegramId","updatedAt") VALUES
   (v_owner,'ci-competition-read-owner-tg',v_now AT TIME ZONE 'UTC'),
-  (v_other,'ci-competition-read-other-tg',v_now AT TIME ZONE 'UTC')
+  (v_other,'ci-competition-read-other-tg',v_now AT TIME ZONE 'UTC'),
+  (v_nonmember,'ci-competition-read-nonmember-tg',v_now AT TIME ZONE 'UTC')
  ON CONFLICT(id) DO NOTHING;
  INSERT INTO public."Club"(id,"ownerId",name,slug,"updatedAt") VALUES
   (v_club,v_owner,'CI Read Club','ci-competition-read-club',v_now AT TIME ZONE 'UTC'),
-  (v_other_club,v_other,'CI Read Away','ci-competition-read-away',v_now AT TIME ZONE 'UTC')
+  (v_other_club,v_other,'CI Read Away','ci-competition-read-away',v_now AT TIME ZONE 'UTC'),
+  (v_nonmember_club,v_nonmember,'CI Nonmember','ci-competition-read-nonmember-club',v_now AT TIME ZONE 'UTC')
  ON CONFLICT(id) DO NOTHING;
  INSERT INTO public."Competition"(id,"idempotencyKey",name,season,format,status,"maxTeams","cupLegs","createdByClubId","createdAt","updatedAt")
  VALUES(v_comp,'ci-competition-read-key','CI Read League',2026,'LEAGUE','REGISTRATION',4,1,v_club,v_now AT TIME ZONE 'UTC',v_now AT TIME ZONE 'UTC');
@@ -41,7 +43,7 @@ BEGIN
   RAISE EXCEPTION 'competition detail response mismatch: %',v_result;
  END IF;
  BEGIN
-  PERFORM public.get_competition_http(v_other,v_comp);
+  PERFORM public.get_competition_http(v_nonmember,v_comp);
   RAISE EXCEPTION 'non-member must not read competition detail';
  EXCEPTION WHEN SQLSTATE 'P0001' THEN
   GET STACKED DIAGNOSTICS v_message=MESSAGE_TEXT;
