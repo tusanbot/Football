@@ -322,6 +322,7 @@ export default {
       return new Response("ok", { status: 200 });
     } catch (error) {
       heartbeatStopped = true;
+      wakeHeartbeat();
       await heartbeatTask;
       await guard.fetch(new Request("https://bot-update-guard/release", {
         method: "POST", body: JSON.stringify({ updateId, claimToken: claimResult.claimToken }),
