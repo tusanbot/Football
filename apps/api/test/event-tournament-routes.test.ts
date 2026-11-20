@@ -61,7 +61,37 @@ test("event tournament auto-starts at capacity and creates a valid round-robin f
   const players = await Promise.all(Array.from({ length: 4 }, (_, index) => makeTournamentClub(suffix, index)));
   process.env.BOT_API_SECRET = secret;
   process.env.GAME_ADMIN_TELEGRAM_IDS = adminTelegramId;
-  const app = buildApp({ logger: false, actionRateLimitPort: { async consume() { return true; } } });
+  const app = buildApp({
+    logger: false,
+    actionRateLimitPort: { async consume() { return true; } },
+    eventTournamentReadPort: {
+      async create(input) {
+        const tournament = await prisma.eventTournament.create({
+          data: {
+            idempotencyKey: "event-tournament-create:" + input.idempotencyKey,
+            title: input.title, description: input.description,
+            entryFeeAsset: input.entryFeeAsset as "CASH" | "GOLD" | "HONOR" | null,
+            entryFeeAmount: BigInt(input.entryFeeAmount), maxParticipants: input.maxParticipants,
+            registrationEndsAt: new Date(input.registrationEndsAt), startsAt: new Date(input.startsAt),
+            endsAt: input.endsAt ? new Date(input.endsAt) : null, createdByTelegramId: input.telegramUserId,
+            prizes: { create: input.prizes.map((prize) => ({
+              placement: prize.placement, type: prize.type as "CASH" | "GOLD" | "HONOR" | "STORE_ITEM" | "SPECIAL_PLAYER",
+              amount: BigInt(prize.amount), itemKey: prize.itemKey, specialPlayerId: prize.specialPlayerId,
+            })) },
+          },
+        });
+        await prisma.adminAuditLog.create({ data: {
+          actorTelegramId: input.telegramUserId, action: "create-event-tournament", targetType: "event-tournament",
+          targetId: tournament.id, idempotencyKey: "event-tournament-audit:" + input.idempotencyKey,
+          metadata: { title: input.title, prizeCount: input.prizes.length },
+        } });
+        return { tournament: { id: tournament.id, title: tournament.title, status: tournament.status }, replayed: false };
+      },
+      async listForUser() { return []; },
+      async listForAdmin() { return []; },
+      async listParticipants() { return []; },
+    },
+  });
   await app.ready();
   let tournamentId: string | undefined;
   let competitionId: string | undefined;
