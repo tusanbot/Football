@@ -192,6 +192,8 @@ export function registerEventTournamentRoutes(app: FastifyInstance) {
     const parsed = createSchema.safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ error: "INVALID_TOURNAMENT", issues: parsed.error.issues.map((issue) => ({ path: issue.path, message: issue.message })) });
     const value = parsed.data;
+    if (value.prizes.some((prize) => prize.type === "STORE_ITEM" && (!prize.itemKey || !getStoreItem(prize.itemKey))))
+      return reply.code(409).send({ error: "STORE_ITEM_NOT_AVAILABLE" });
     const port = getEventTournamentReadPort();
     if (!port) return reply.code(503).send({ error: "SUPABASE_EVENT_TOURNAMENT_CREATE_UNAVAILABLE" });
     try {
