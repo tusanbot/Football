@@ -1,4 +1,5 @@
 import { SupabaseHttpClient } from "../node-supabase-http.js";
+import { prisma } from "../db.js";
 
 export type MatchFallbackPlan = {
   formation: string;
@@ -31,6 +32,14 @@ const allowedMentalities = ["DEFENSIVE", "BALANCED", "ATTACKING"];
 const allowedPressing = ["LOW_BLOCK", "MID_BLOCK", "HIGH_PRESS"];
 const allowedTempos = ["SLOW", "NORMAL", "FAST"];
 const allowedPassingStyles = ["SHORT", "MIXED", "DIRECT"];
+
+function hasSupabaseHttpConfig(): boolean {
+  return Boolean(process.env.SUPABASE_URL?.trim() && process.env.SUPABASE_SERVICE_ROLE_KEY?.trim());
+}
+
+function isProductionRuntime(): boolean {
+  return process.env.NODE_ENV === "production" || process.env.ENVIRONMENT === "production";
+}
 
 function client(): SupabaseHttpClient {
   const url = process.env.SUPABASE_URL;
@@ -73,6 +82,22 @@ async function loadClub(userId: string, select: string): Promise<ClubFallbackRow
 }
 
 export async function getMatchFallbackPlan(userId: string) {
+  if (!hasSupabaseHttpConfig()) {
+    if (isProductionRuntime()) throw new Error("SUPABASE_HTTP_CONFIGURATION_REQUIRED");
+    const club = await prisma.club.findUnique({
+      where: { ownerId: userId },
+      select: {
+        id: true, formation: true, mentality: true, pressing: true, tempo: true,
+        passingStyle: true, matchFallbackPlan: true, matchFallbackPlanVersion: true,
+      },
+    });
+    if (!club) throw new MatchFallbackPlanError("CLUB_NOT_FOUND");
+    return {
+      plan: parseStoredPlan(club.matchFallbackPlan, defaultPlan(club)),
+      version: club.matchFallbackPlanVersion,
+      isCustom: club.matchFallbackPlan !== null,
+    };
+  }
   const club = await loadClub(userId, "id,formation,mentality,pressing,tempo,passingStyle,matchFallbackPlan,matchFallbackPlanVersion");
   if (!club) throw new MatchFallbackPlanError("CLUB_NOT_FOUND");
   const fallback = defaultPlan(club);
@@ -86,6 +111,23 @@ export async function getMatchFallbackPlan(userId: string) {
 export async function saveMatchFallbackPlan(userId: string, plan: MatchFallbackPlan, expectedVersion: number) {
   if (!Number.isInteger(expectedVersion) || expectedVersion < 1) {
     throw new MatchFallbackPlanError("INVALID_FALLBACK_PLAN_VERSION");
+  }
+  if (!hasSupabaseHttpConfig()) {
+    if (isProductionRuntime()) throw new Error("SUPABASE_HTTP_CONFIGURATION_REQUIRED");
+    const club = await prisma.club.findUnique({
+      where: { ownerId: userId },
+      select: { id: true, matchFallbackPlanVersion: true },
+    });
+    if (!club) throw new MatchFallbackPlanError("CLUB_NOT_FOUND");
+    const result = await prisma.club.updateMany({
+      where: { id: club.id, matchFallbackPlanVersion: expectedVersion },
+      data: {
+        matchFallbackPlan: plan,
+        matchFallbackPlanVersion: { increment: 1 },
+      },
+    });
+    if (result.count !== 1) throw new MatchFallbackPlanError("FALLBACK_PLAN_VERSION_CONFLICT");
+    return { plan, version: expectedVersion + 1, isCustom: true };
   }
   const club = await loadClub(userId, "id,matchFallbackPlanVersion");
   if (!club) throw new MatchFallbackPlanError("CLUB_NOT_FOUND");
