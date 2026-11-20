@@ -242,8 +242,8 @@ test("match worker resolves a tactical checkpoint from both clubs through one Su
         calls.push("release");
         assert.equal(input.runtimeId, "runtime-checkpoint");
         assert.equal(input.leaseToken, "lease-checkpoint");
-        assert.equal(input.nextActionAt, new Date(checkpointNow.getTime() + 5_000).toISOString());
         assert.equal(input.lastError, null);
+        assert.equal(input.nextActionAt, new Date(checkpointNow.getTime() + 5_000).toISOString());
         return true;
       },
     }, () => withMatchRuntimeSnapshotPort({
