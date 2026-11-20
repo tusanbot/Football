@@ -31,6 +31,8 @@ import { NodeSupabaseMatchNotificationRepository } from "./game/node-supabase-ma
 import { NodeSupabaseAdminGroupBroadcastRepository } from "./node-supabase-admin-group-broadcast.js";
 import { NodeSupabaseAdminRoleRepository } from "./node-supabase-admin-role.js";
 import { NodeSupabaseAdminConfigurationRepository } from "./node-supabase-admin-configuration.js";
+import { NodeSupabaseAdminCatalogActionsRepository } from "./node-supabase-admin-catalog-actions.js";
+import { NodeSupabaseAdminEntityUpdateRepository } from "./node-supabase-admin-entity-update.js";
 import { NodeSupabaseAdminConsoleReadRepository } from "./node-supabase-admin-console-read.js";
 import { NodeSupabaseAdminModerationActionsRepository } from "./node-supabase-admin-moderation-actions.js";
 import { NodeSupabaseAdminFinancialAdjustmentsRepository } from "./node-supabase-admin-financial-adjustments.js";
@@ -100,6 +102,8 @@ const matchNotificationPort = supabaseHttp ? new NodeSupabaseMatchNotificationRe
 const adminGroupBroadcastPort = supabaseHttp ? new NodeSupabaseAdminGroupBroadcastRepository(supabaseHttp) : undefined;
 const adminRoleLookupPort = supabaseHttp ? new NodeSupabaseAdminRoleRepository(supabaseHttp) : undefined;
 const adminConfigurationPort = supabaseHttp ? new NodeSupabaseAdminConfigurationRepository(supabaseHttp) : undefined;
+const adminCatalogActionPort = supabaseHttp ? new NodeSupabaseAdminCatalogActionsRepository(supabaseHttp) : undefined;
+const adminEntityUpdatePort = supabaseHttp ? new NodeSupabaseAdminEntityUpdateRepository(supabaseHttp) : undefined;
 const adminConsoleReadPort = supabaseHttp ? new NodeSupabaseAdminConsoleReadRepository(supabaseHttp) : undefined;
 const adminModerationActionPort = supabaseHttp ? new NodeSupabaseAdminModerationActionsRepository(supabaseHttp) : undefined;
 const adminFinancialAdjustmentPort = supabaseHttp ? new NodeSupabaseAdminFinancialAdjustmentsRepository(supabaseHttp) : undefined;
@@ -143,6 +147,8 @@ const app = buildApp({
   ...(adminGroupBroadcastPort ? { adminGroupBroadcastPort } : {}),
   ...(adminRoleLookupPort ? { adminRoleLookupPort } : {}),
   ...(adminConfigurationPort ? { adminConfigurationPort } : {}),
+  ...(adminCatalogActionPort ? { adminCatalogActionPort } : {}),
+  ...(adminEntityUpdatePort ? { adminEntityUpdatePort } : {}),
   ...(adminConsoleReadPort ? { adminConsoleReadPort } : {}),
   ...(adminModerationActionPort ? { adminModerationActionPort } : {}),
   ...(adminFinancialAdjustmentPort ? { adminFinancialAdjustmentPort } : {}),
