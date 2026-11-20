@@ -39,19 +39,26 @@ function isProductionRuntime() {
  */
 function requireProductionSupabaseMatchWorkerPorts() {
   if (!isProductionRuntime()) return;
-  const requiredPorts = [
-    getMatchRuntimeSnapshotPort(),
-    getMatchRuntimeLeasePort(),
-    getMatchRuntimeEnqueuePort(),
-    getMatchRuntimeForfeitPort(),
-    getMatchRuntimeAdvancePort(),
-    getMatchRuntimeCheckpointPort(),
-    getMatchRuntimeSettlementPort(),
-    getCompetitionAdvancementPort(),
-    getPyramidLeagueSettlementPort(),
-    getEventTournamentSettlementPort(),
-  ];
-  if (requiredPorts.some((port) => !port)) {
+  let missingRepository = false;
+  try {
+    const requiredPorts = [
+      getMatchRuntimeSnapshotPort(),
+      getMatchRuntimeLeasePort(),
+      getMatchRuntimeEnqueuePort(),
+      getMatchRuntimeForfeitPort(),
+      getMatchRuntimeAdvancePort(),
+      getMatchRuntimeCheckpointPort(),
+      getMatchRuntimeSettlementPort(),
+      getCompetitionAdvancementPort(),
+      getPyramidLeagueSettlementPort(),
+      getEventTournamentSettlementPort(),
+    ];
+    missingRepository = requiredPorts.some((port) => !port);
+  } catch {
+    // Some request-scoped context getters already fail closed independently.
+    missingRepository = true;
+  }
+  if (missingRepository) {
     throw new MatchServiceError("WORKER_MATCH_RUNTIME_REPOSITORY_SET_INCOMPLETE");
   }
 }
