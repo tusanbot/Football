@@ -36,7 +36,7 @@ test("production API refuses to start without direct Supabase match repositories
   try {
     assert.throws(
       () => buildApp(),
-      /SUPABASE_MATCH_PORTS_REQUIRED/,
+      /SUPABASE_RUNTIME_REPOSITORIES_REQUIRED/,
     );
   } finally {
     if (previous === undefined) delete process.env.NODE_ENV;
@@ -50,7 +50,7 @@ test("production API refuses to start without a Supabase readiness client", () =
   try {
     assert.throws(
       () => buildApp({ matchPorts: {} as never }),
-      /SUPABASE_MATCH_PORTS_REQUIRED/,
+      /SUPABASE_RUNTIME_REPOSITORIES_REQUIRED/,
     );
   } finally {
     if (previous === undefined) delete process.env.NODE_ENV;
