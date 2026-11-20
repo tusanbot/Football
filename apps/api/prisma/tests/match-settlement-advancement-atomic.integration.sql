@@ -15,6 +15,8 @@ BEGIN
  v_match_def:=pg_get_functiondef(v_match_oid);
  IF position('settle_match_runtime_result' IN v_match_def)=0
   OR position('advance_competition_after_match_http' IN v_match_def)=0
+  OR position('finalize_pyramid_league_http' IN v_match_def)=0
+  OR position('finalize_event_tournament_http' IN v_match_def)=0
   OR position('jsonb_build_object(''advancement''' IN v_match_def)=0 THEN
   RAISE EXCEPTION 'match settlement RPC does not compose settlement and advancement atomically';
  END IF;
@@ -31,6 +33,8 @@ BEGIN
  v_forfeit_def:=pg_get_functiondef(v_forfeit_oid);
  IF position('settle_invalid_match_fixture_http' IN v_forfeit_def)=0
   OR position('advance_competition_after_match_http' IN v_forfeit_def)=0
+  OR position('finalize_pyramid_league_http' IN v_forfeit_def)=0
+  OR position('finalize_event_tournament_http' IN v_forfeit_def)=0
   OR position('jsonb_build_object(''advancement''' IN v_forfeit_def)=0 THEN
   RAISE EXCEPTION 'invalid-match forfeit RPC does not compose settlement and advancement atomically';
  END IF;
