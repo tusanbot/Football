@@ -407,3 +407,111 @@ test("match worker settles a completed 90-minute runtime through the atomic Supa
     assert.deepEqual(result, { enqueued: 0, claimed: 1, advanced: 0, waiting: 0, settled: 1, failed: 0 });
   });
 });
+
+
+test("match worker releases its lease with the RPC error when Supabase full-time settlement fails", async () => {
+  await withTestEnvironment(async () => {
+    const calls: string[] = [];
+    const now = new Date("2026-11-20T14:00:00.000Z");
+    const kickoffAt = new Date(now.getTime() - 90_000);
+    const makeSide = (id: string): MatchSide => ({
+      clubId: id, clubName: id, formation: "4-3-3",
+      tactics: { mentality: "BALANCED", pressing: "NORMAL", tempo: "NORMAL", passingStyle: "MIXED" },
+      stadiumCapacity: 20_000, ticketPrice: 250n, reputation: 100, coachMedicalSkill: 0,
+      players: Array.from({ length: 11 }, (_, index) => ({
+        id: id + "-player-" + index, name: "Player " + index,
+        position: index === 0 ? "GK" : index === 1 ? "CB" : "ST",
+        overall: 70, morale: 80, fitness: 95,
+        attributes: { pace: 70, shooting: 70, passing: 70, dribbling: 70, defending: 70, physical: 70, goalkeeping: index === 0 ? 75 : 20 },
+      })),
+      bench: [],
+    });
+    const home = makeSide("home");
+    const away = makeSide("away");
+    const initial: MatchSegmentState = {
+      currentMinute: 0, nextSequence: 1,
+      home: { side: home, score: 0, expectedGoals: 0 },
+      away: { side: away, score: 0, expectedGoals: 0 },
+      events: [],
+    };
+    const substitutionsFor = (side: MatchSide): MatchSubstitutionState => ({
+      onPitch: side.players.map(player => ({ id: player.id, position: player.position })),
+      bench: [],
+      substitutionsUsed: 0, inPlayWindowsUsed: 0, substitutedOutIds: [],
+      sentOffIds: [], usedCheckpointIds: [],
+    });
+    let segment = initial;
+    let homeSubstitutions = substitutionsFor(home);
+    let awaySubstitutions = substitutionsFor(away);
+    let substitutionErrors: string[] = [];
+    for (const minute of [45, 60, 75, 90]) {
+      const advanced = advanceMatchSegment({
+        seed: "settlement-seed", state: segment, toMinute: minute,
+        homeSubstitutions, awaySubstitutions, rules: defaultMatchRules("FRIENDLY"),
+      });
+      segment = advanced.state;
+      homeSubstitutions = advanced.homeSubstitutions;
+      awaySubstitutions = advanced.awaySubstitutions;
+      substitutionErrors = [...substitutionErrors, ...advanced.substitutionErrors];
+    }
+    assert.equal(segment.currentMinute, 90);
+    const simulationState = {
+      segment,
+      substitutions: { home: homeSubstitutions, away: awaySubstitutions },
+      substitutionErrors,
+    };
+    const runtime = {
+      id: "runtime-full-time", matchId: "match-full-time", status: "RUNNING",
+      currentMinute: 90, stateVersion: 12, leaseToken: "lease-full-time",
+      simulationState, startedAt: kickoffAt, fallbackPlan: null,
+      kickoffSnapshot: { home, away },
+      match: {
+        id: "match-full-time", status: "IN_PROGRESS", seed: "settlement-seed",
+        type: "FRIENDLY", rulesSnapshot: null, homeClubId: "home", awayClubId: "away",
+        startedAt: kickoffAt, competitionId: null, round: null, leg: 1, tieId: null,
+        competition: null, firstLeg: null,
+      },
+    };
+    const settlementResult: MatchRuntimeSettlementResult = {
+      matchId: "match-full-time", replayed: false, competitionId: null, round: null,
+      homeClub: "Home", awayClub: "Away", homeScore: segment.home.score, awayScore: segment.away.score,
+      homePenalties: null, awayPenalties: null, winnerClubId: null,
+      attendance: 0, ticketRevenue: "0", events: [],
+      advancement: null, pyramidFinalization: null, eventTournamentFinalization: null,
+    };
+    const result = await withMatchRuntimeLeasePort({
+      async claim(input) {
+        calls.push("claim");
+        assert.equal(input.now, now.toISOString());
+        return [{ runtime: { id: "runtime-full-time" }, lease: {
+          owner: input.workerId, token: "lease-full-time", expiresAt: new Date(now.getTime() + 60_000),
+        } }];
+      },
+      async release(input) {
+        calls.push("release");
+        assert.equal(input.runtimeId, "runtime-full-time");
+        assert.equal(input.leaseToken, "lease-full-time");
+        assert.equal(input.nextActionAt, new Date(now.getTime() + 10_000).toISOString());
+        assert.equal(input.lastError, "MATCH_RUNTIME_SETTLEMENT_TEMPORARY_FAILURE");
+        return true;
+      },
+    }, () => withMatchRuntimeSnapshotPort({
+      async get(runtimeId) {
+        calls.push("snapshot");
+        assert.equal(runtimeId, "runtime-full-time");
+        return runtime;
+      },
+    }, () => withMatchRuntimeSettlementPort({
+      async settle(input) {
+        calls.push("settle");
+        assert.equal(input.matchId, "match-full-time");
+        assert.equal(input.runtimeId, "runtime-full-time");
+        assert.equal(input.leaseToken, "lease-full-time");
+        throw new Error("MATCH_RUNTIME_SETTLEMENT_TEMPORARY_FAILURE");
+      },
+    }, () => processDueMatchRuntimes("settlement-worker", now, 1, { enqueue: false }))));
+
+    assert.deepEqual(calls, ["claim", "snapshot", "settle", "release"]);
+    assert.deepEqual(result, { enqueued: 0, claimed: 1, advanced: 0, waiting: 0, settled: 0, failed: 1 });
+  });
+});
