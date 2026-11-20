@@ -14,5 +14,9 @@ export function withMatchRuntimeSnapshotPort<T>(
 }
 
 export function getMatchRuntimeSnapshotPort(): MatchRuntimeSnapshotPort | undefined {
-  return scope.getStore();
+  const port = scope.getStore();
+  if (!port && (process.env.NODE_ENV === "production" || process.env.ENVIRONMENT === "production")) {
+    throw new Error("MATCH_RUNTIME_SNAPSHOT_SUPABASE_REPOSITORY_REQUIRED");
+  }
+  return port;
 }
