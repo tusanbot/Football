@@ -62,6 +62,7 @@ BEGIN
  RETURN QUERY SELECT NOT exhausted,exhausted,current_attempts;
 END; $$;
 
+GRANT SELECT,INSERT,UPDATE,DELETE ON TABLE public."TelegramMessageDeletion" TO service_role;
 REVOKE ALL ON FUNCTION public.schedule_telegram_message_deletion_http(text,integer,timestamptz) FROM PUBLIC,anon,authenticated;
 REVOKE ALL ON FUNCTION public.claim_due_telegram_message_deletions_http(integer) FROM PUBLIC,anon,authenticated;
 REVOKE ALL ON FUNCTION public.complete_telegram_message_deletion_http(text,text) FROM PUBLIC,anon,authenticated;
