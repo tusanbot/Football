@@ -19,7 +19,7 @@ function fakePort(calls: Array<{ method: string; args: unknown[] }>): PyramidLea
     },
     async processDue(...args) {
       calls.push({ method: "processDue", args });
-      return { completedLeagues: 1, processed: 2, accepted: 2 };
+      return { completedLeagues: 1, processed: 2, accepted: 2, failed: 1 };
     },
     async listLeagues(...args) { calls.push({ method: "listLeagues", args }); return { season: 2027, tiers: [], history: [], promotionOffers: [] }; },
     async getClubHistory(...args) { calls.push({ method: "getClubHistory", args }); return { club: {}, stats: {}, tiers: [], movements: [], leagues: [] }; },
@@ -50,7 +50,7 @@ test("pyramid league finalization, promotion response and due work use the Supab
   await withPyramidLeagueSettlementPort(fakePort(calls), async () => {
     assert.equal((await processPyramidLeagueCompletion("competition-1", now)).processed, true);
     assert.equal((await respondToPromotion("user-1", "offer-1", true, now)).accepted, true);
-    assert.deepEqual(await processDuePromotionOffers(now, 10), { completedLeagues: 1, processed: 2, accepted: 2 });
+    assert.deepEqual(await processDuePromotionOffers(now, 10), { completedLeagues: 1, processed: 2, accepted: 2, failed: 1 });
   });
   assert.deepEqual(calls.map((call) => call.method), ["finalize", "respond", "processDue"]);
   assert.deepEqual(calls[0]?.args, ["competition-1", now.toISOString()]);
