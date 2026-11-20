@@ -12,6 +12,11 @@ BEGIN
  IF replay->>'replay'<>'true' OR (SELECT count(*) FROM public."AdminAuditLog" WHERE "idempotencyKey"='admin-config-role-key-001')<>1 THEN
   RAISE EXCEPTION 'role idempotency replay failed';
  END IF;
+ BEGIN
+  PERFORM public.admin_configuration_action_http('set-admin-role','919900096','admin-config-role-key-001','919900095','economy');
+  RAISE EXCEPTION 'changed role payload must not replay';
+ EXCEPTION WHEN unique_violation THEN NULL;
+ END;
  r:=public.admin_configuration_action_http('revoke-admin-role','919900096','admin-config-revoke-key-01','919900095');
  IF EXISTS(SELECT 1 FROM public."AdminRoleAssignment" WHERE "telegramId"='919900095' AND active) THEN RAISE EXCEPTION 'role revoke failed'; END IF;
  r:=public.admin_configuration_action_http('set-game-setting','919900096','admin-config-setting-key-1',NULL,NULL,'groups.minimumMembers','25'::jsonb,'CI setting');
