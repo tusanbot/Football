@@ -69,20 +69,20 @@ BEGIN
   SELECT COALESCE(jsonb_agg(jsonb_build_object(
     'season',season,'tier',tier,'tierName',"tierName",'position',position,
     'targetTier',"targetTier",'status',status,
-    'date',CASE WHEN movement_date IS NULL THEN NULL ELSE to_jsonb(movement_date) END,
+    'date',CASE WHEN movement_date IS NULL THEN NULL ELSE to_jsonb(to_char(movement_date,'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')) END,
     'movement',movement
   ) ORDER BY season DESC,tier,position),'[]'::jsonb) INTO v_movements FROM movements;
 
   SELECT COALESCE(jsonb_agg(jsonb_build_object(
     'id',l.id,'name',c.name,'season',l.season,'tier',l.tier,
     'tierName',public.pyramid_tier_name_http(l.tier),'groupNumber',l."groupNumber",
-    'finalPosition',e."finalPosition",'completedAt',c."completedAt",
+    'finalPosition',e."finalPosition",'completedAt',CASE WHEN c."completedAt" IS NULL THEN NULL ELSE to_char(c."completedAt",'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') END,
     'awards',COALESCE((SELECT jsonb_agg(jsonb_build_object(
       'placement',a.placement,'awardName',a."awardName",'awardType',a."awardType"
     ) ORDER BY a.placement) FROM public."LeagueAward" a WHERE a."leagueId"=l.id AND a."clubId"=v_club.id),'[]'::jsonb),
     'promotionOffers',COALESCE((SELECT jsonb_agg(jsonb_build_object(
       'targetTier',o."targetTier",'finalPosition',o."finalPosition",'status',o.status::text,
-      'offeredAt',o."offeredAt",'resolvedAt',o."resolvedAt"
+      'offeredAt',to_char(o."offeredAt",'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),'resolvedAt',CASE WHEN o."resolvedAt" IS NULL THEN NULL ELSE to_char(o."resolvedAt",'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') END
     ) ORDER BY o."offeredAt") FROM public."LeaguePromotionOffer" o WHERE o."leagueId"=l.id AND o."clubId"=v_club.id),'[]'::jsonb)
   ) ORDER BY l.season DESC,l.tier,l."groupNumber"),'[]'::jsonb)
   INTO v_leagues
