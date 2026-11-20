@@ -115,15 +115,15 @@ BEGIN
    RAISE EXCEPTION USING MESSAGE='TARGET_NOT_FOUND',ERRCODE='P0002';
   END IF;
  ELSIF p_action='player-status' THEN
-  IF p_payload->>'status' IS NULL OR p_payload->>'status' NOT IN ('ACTIVE','RETIRED') OR jsonb_object_length(p_payload)<>1 THEN RAISE EXCEPTION USING MESSAGE='INVALID_PLAYER_STATUS',ERRCODE='22023'; END IF;
+  IF p_payload->>'status' IS NULL OR p_payload->>'status' NOT IN ('ACTIVE','RETIRED') OR (SELECT count(*) FROM jsonb_object_keys(p_payload))<>1 THEN RAISE EXCEPTION USING MESSAGE='INVALID_PLAYER_STATUS',ERRCODE='22023'; END IF;
   UPDATE public."Player" SET status=(p_payload->>'status')::public."PlayerStatus",
    "lineupSlot"=CASE WHEN p_payload->>'status'='RETIRED' THEN NULL ELSE "lineupSlot" END,"updatedAt"=clock_timestamp()
   WHERE id=p_target_id;
  ELSIF p_action='alliance-status' THEN
-  IF p_payload->>'status' IS NULL OR p_payload->>'status' NOT IN ('ACTIVE','SUSPENDED','DISSOLVED') OR jsonb_object_length(p_payload)<>1 THEN RAISE EXCEPTION USING MESSAGE='INVALID_ALLIANCE_STATUS',ERRCODE='22023'; END IF;
+  IF p_payload->>'status' IS NULL OR p_payload->>'status' NOT IN ('ACTIVE','SUSPENDED','DISSOLVED') OR (SELECT count(*) FROM jsonb_object_keys(p_payload))<>1 THEN RAISE EXCEPTION USING MESSAGE='INVALID_ALLIANCE_STATUS',ERRCODE='22023'; END IF;
   UPDATE public."Alliance" SET status=(p_payload->>'status')::public."AllianceStatus","updatedAt"=clock_timestamp() WHERE id=p_target_id;
  ELSE
-  IF p_payload->>'status' IS NULL OR p_payload->>'status' NOT IN ('ACTIVE','CANCELLED') OR jsonb_object_length(p_payload)<>1 THEN RAISE EXCEPTION USING MESSAGE='INVALID_SEASON_STATUS',ERRCODE='22023'; END IF;
+  IF p_payload->>'status' IS NULL OR p_payload->>'status' NOT IN ('ACTIVE','CANCELLED') OR (SELECT count(*) FROM jsonb_object_keys(p_payload))<>1 THEN RAISE EXCEPTION USING MESSAGE='INVALID_SEASON_STATUS',ERRCODE='22023'; END IF;
   UPDATE public."AllianceSeason" SET status=p_payload->>'status' WHERE id=p_target_id AND status<>'COMPLETED';
   IF NOT FOUND THEN
    IF EXISTS(SELECT 1 FROM public."AllianceSeason" WHERE id=p_target_id AND status='COMPLETED') THEN RAISE EXCEPTION USING MESSAGE='ALLIANCE_SEASON_ALREADY_SETTLED',ERRCODE='P0001'; END IF;
