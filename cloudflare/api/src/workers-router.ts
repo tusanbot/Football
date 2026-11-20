@@ -42,6 +42,7 @@ import { registerBotRuntimeRoutes } from "../../../apps/api/src/bot-runtime-rout
 import type { BotRuntimeLeasePort } from "../../../apps/api/src/bot-runtime-lease-context.js";
 import type { GroupMembershipPort } from "../../../apps/api/src/groups/group-membership-context.js";
 import type { AdminRoleLookupPort } from "../../../apps/api/src/admin-role-context.js";
+import type { AdminConfigurationPort } from "../../../apps/api/src/node-supabase-admin-configuration.js";
 import type { AlliancePort } from "../../../apps/api/src/groups/alliance-context.js";
 import { registerPublicClubRoutes } from "../../../apps/api/src/public-club-routes.js";
 import type { PublicClubLogoRepository } from "../../../apps/api/src/node-supabase-public-club-logo.js";
@@ -87,7 +88,7 @@ function queryObject(url: URL): Record<string, string | string[]> {
   return query;
 }
 
-export function createWorkersApiRouter(dependencies: { publicPlayerRecords?: PublicPlayerRecordRepository; seasonAwards?: SeasonAwardRepository; publicClubRead?: PublicClubReadRepository; publicClubLogo?: PublicClubLogoRepository; specialPlayers?: SpecialPlayerCatalogRepository; botRuntimeLease?: BotRuntimeLeasePort; groupMembership?: GroupMembershipPort; alliance?: AlliancePort; adminFinancialAdjustmentPort?: AdminFinancialAdjustmentPort; adminRoleLookupPort?: AdminRoleLookupPort } = {}) {
+export function createWorkersApiRouter(dependencies: { publicPlayerRecords?: PublicPlayerRecordRepository; seasonAwards?: SeasonAwardRepository; publicClubRead?: PublicClubReadRepository; publicClubLogo?: PublicClubLogoRepository; specialPlayers?: SpecialPlayerCatalogRepository; botRuntimeLease?: BotRuntimeLeasePort; groupMembership?: GroupMembershipPort; alliance?: AlliancePort; adminFinancialAdjustmentPort?: AdminFinancialAdjustmentPort; adminRoleLookupPort?: AdminRoleLookupPort; adminConfigurationPort?: AdminConfigurationPort } = {}) {
   const registry = new RouteRegistry();
   const registrar = registry as unknown as Parameters<typeof registerTelegramAuthRoutes>[0];
   registerTelegramAuthRoutes(registrar);
@@ -100,7 +101,7 @@ export function createWorkersApiRouter(dependencies: { publicPlayerRecords?: Pub
   registerMatchNotificationRoutes(registrar);
   registerGroupRoutes(registrar, { requireMembershipPort: true });
   registerAllianceRoutes(registrar, { requirePort: true, port: dependencies.alliance });
-  registerAdminRoutes(registrar, { adminFinancialAdjustmentPort: dependencies.adminFinancialAdjustmentPort, adminRoleLookupPort: dependencies.adminRoleLookupPort });
+  registerAdminRoutes(registrar, { adminFinancialAdjustmentPort: dependencies.adminFinancialAdjustmentPort, adminRoleLookupPort: dependencies.adminRoleLookupPort, adminConfigurationPort: dependencies.adminConfigurationPort });
   registerAdminLeagueRoutes(registrar);
   registerGiftCodeRoutes(registrar);
   registerTelegramMessageDeletionRoutes(registrar);
