@@ -16,6 +16,7 @@ import { SupabaseHttpClient } from "./supabase-http.js";
 import { SupabasePilotAnalyticsRepository } from "./repositories/pilot-analytics.js";
 import { SupabaseRuntimeReadinessRepository } from "./repositories/runtime-readiness.js";
 import { SupabasePublicPlayerRecordRepository } from "./repositories/public-player-records.js";
+import { SupabasePublicClubRepository, SupabasePublicClubLogoRepository } from "./repositories/public-clubs.js";
 import { SupabaseSeasonAwardRepository } from "./repositories/season-awards.js";
 import { SupabaseWalletEntryRepository } from "./repositories/wallet-entry.js";
 import { SupabaseStorePurchaseRepository } from "./repositories/store-purchase.js";
@@ -167,6 +168,8 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
         ? new SupabaseHttpClient({ url: env.SUPABASE_URL, serviceRoleKey: env.SUPABASE_SERVICE_ROLE_KEY })
         : undefined;
       const publicPlayerRecords = supabaseClient ? new SupabasePublicPlayerRecordRepository(supabaseClient) : undefined;
+      const publicClubRead = supabaseClient ? new SupabasePublicClubRepository(supabaseClient) : undefined;
+      const publicClubLogo = supabaseClient ? new SupabasePublicClubLogoRepository(supabaseClient) : undefined;
       const gameDashboard = supabaseClient ? new SupabaseGameDashboardRepository(supabaseClient) : undefined;
       const telegramUserLookup = supabaseClient ? new SupabaseTelegramUserLookupRepository(supabaseClient) : undefined;
       const telegramAccountProvisioning = supabaseClient ? new SupabaseTelegramAccountProvisioningRepository(supabaseClient) : undefined;
@@ -198,7 +201,7 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
       const botRuntimeLease = supabaseClient ? new SupabaseBotRuntimeLeaseRepository(supabaseClient) : undefined;
        const groupMembership = supabaseClient ? new SupabaseGroupMembershipRepository(supabaseClient) : undefined;
         const alliance = supabaseClient ? new SupabaseAllianceRepository(supabaseClient) : undefined;
-       const router = createWorkersApiRouter({ publicPlayerRecords, seasonAwards, specialPlayers, botRuntimeLease, groupMembership, alliance });
+       const router = createWorkersApiRouter({ publicPlayerRecords, publicClubRead, publicClubLogo, seasonAwards, specialPlayers, botRuntimeLease, groupMembership, alliance });
       const handle = async (): Promise<Response> => await router.fetch(request);
       const withGroupMembership = groupMembership ? () => withGroupMembershipPort(groupMembership, handle) : handle;
       const withActionRateLimit = actionRateLimit ? () => withActionRateLimitPort(actionRateLimit, withGroupMembership) : withGroupMembership;
