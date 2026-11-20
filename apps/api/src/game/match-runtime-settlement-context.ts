@@ -37,5 +37,9 @@ export function withMatchRuntimeSettlementPort<T>(port: MatchRuntimeSettlementPo
   return scope.run(port, operation);
 }
 export function getMatchRuntimeSettlementPort(): MatchRuntimeSettlementPort | undefined {
-  return scope.getStore();
+  const port = scope.getStore();
+  if (!port && (process.env.NODE_ENV === "production" || process.env.ENVIRONMENT === "production")) {
+    throw new Error("MATCH_RUNTIME_SETTLEMENT_SUPABASE_REPOSITORY_REQUIRED");
+  }
+  return port;
 }
