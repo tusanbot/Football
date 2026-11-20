@@ -79,6 +79,16 @@ BEGIN
  IF v_group_id IS DISTINCT FROM 'ci-challenge-group' THEN
   RAISE EXCEPTION 'group friendly challenge scope mismatch: %',v_group_id;
  END IF;
+ v_token:=v_create->'challenge'->>'token';
+ v_info:=public.get_friendly_challenge_info_http(v_token,v_now+interval '25 hours');
+ IF v_info->>'error' IS DISTINCT FROM 'FRIENDLY_CHALLENGE_EXPIRED'
+  OR (SELECT status::text FROM public."FriendlyChallenge" WHERE token=v_token) IS DISTINCT FROM 'EXPIRED' THEN
+  RAISE EXCEPTION 'expired challenge was not persisted as EXPIRED: %',v_info;
+ END IF;
+ v_accept:=public.accept_friendly_challenge_http('ci-challenge-away-user',v_token,v_now+interval '25 hours');
+ IF v_accept->>'error' IS DISTINCT FROM 'FRIENDLY_CHALLENGE_EXPIRED' THEN
+  RAISE EXCEPTION 'expired challenge acceptance was not rejected: %',v_accept;
+ END IF;
 
  IF (v_credits->>'purchasedCredits')::integer<>5 THEN RAISE EXCEPTION 'friendly challenge credits mismatch: %',v_credits; END IF;
 END;
