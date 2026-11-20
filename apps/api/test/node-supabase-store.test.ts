@@ -123,3 +123,37 @@ test("store purchase recovers a committed RPC after the HTTP response is lost wi
   } finally { globalThis.fetch = originalFetch; }
 });
 
+test("store item use recovers a committed RPC after its HTTP response is lost without consuming inventory or applying player effects twice", async () => {
+  const originalFetch = globalThis.fetch;
+  const calls: Array<{ url: string; body: Record<string, unknown> }> = [];
+  let durableUses = 0;
+  globalThis.fetch = (async (input, init) => {
+    calls.push({ url: String(input), body: JSON.parse(String(init?.body)) as Record<string, unknown> });
+    if (calls.length === 1) {
+      durableUses++;
+      throw new TypeError("socket closed after store item use commit");
+    }
+    return new Response(JSON.stringify([{
+      item_key: "recovery_kit", player_id: "player-use-replay", inventory: 1,
+      fitness: null, morale: null, replayed: true,
+    }]), { status: 200, headers: { "content-type": "application/json" } });
+  }) as typeof fetch;
+  try {
+    const repo = new NodeSupabaseStoreItemUseRepository("https://example.supabase.co", "node-store-service-role-test-key");
+    const command = {
+      userId: "user-store-use-replay", itemKey: "recovery_kit", playerId: "player-use-replay",
+      fitnessDelta: 35, moraleDelta: 10, idempotencyKey: "store-use-lost-response-001",
+    };
+    await assert.rejects(repo.use(command), /Supabase store RPC request failed/);
+    assert.equal(calls.length, 1, "the transport must not automatically retry item consumption");
+    const replay = await repo.use(command);
+    assert.equal(calls.length, 2);
+    assert.equal(calls[0]!.url, "https://example.supabase.co/rest/v1/rpc/use_store_item");
+    assert.deepEqual(calls[1]!.body, calls[0]!.body);
+    assert.deepEqual(replay, {
+      itemKey: "recovery_kit", playerId: "player-use-replay", inventory: 1, replayed: true,
+    });
+    assert.equal(durableUses, 1);
+  } finally { globalThis.fetch = originalFetch; }
+});
+
