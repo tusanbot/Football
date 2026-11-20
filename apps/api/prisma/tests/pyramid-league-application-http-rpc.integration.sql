@@ -71,7 +71,7 @@ BEGIN
   INSERT INTO public."Player"(id,"clubId","firstName","lastName",nationality,age,position,overall,potential,attributes,wage,"contractDays","createdAt","updatedAt")
   VALUES('ci-pyramid-bad-player','ci-pyramid-bad-club','No','Keeper','US',22,'ST',60,70,'{}'::jsonb,10,365,v_now AT TIME ZONE 'UTC',v_now AT TIME ZONE 'UTC');
   BEGIN
-    PERFORM public.apply_pyramid_league_http('919999999',1,v_now);
+    PERFORM public.apply_pyramid_league_http('ci-pyramid-bad-user',1,v_now);
     RAISE EXCEPTION 'invalid lineup unexpectedly accepted';
   EXCEPTION WHEN SQLSTATE 'P0001' THEN
     IF SQLERRM IS DISTINCT FROM 'ALL_TEAMS_NEED_VALID_LINEUPS' THEN RAISE; END IF;
