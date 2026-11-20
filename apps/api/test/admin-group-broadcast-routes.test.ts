@@ -1,11 +1,14 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { buildApp } from "../src/app.js";
+import type { AdminGroupBroadcastPort } from "../src/admin-group-broadcast-routes.js";
+import { randomUUID } from "node:crypto";
+function fakePort():AdminGroupBroadcastPort{return {claim:async()=>[],complete:async()=>true,fail:async()=>({rescheduled:true,attempts:1})};}
 
 test("admin group broadcast worker endpoints reject requests without the Bot secret", async (t) => {
   const previous = process.env.BOT_API_SECRET;
   process.env.BOT_API_SECRET = "test-admin-group-broadcast-secret";
-  const app = buildApp();
+  const app = buildApp({logger:false,adminGroupBroadcastPort:fakePort()});
   await app.ready();
   t.after(async () => {
     await app.close();
