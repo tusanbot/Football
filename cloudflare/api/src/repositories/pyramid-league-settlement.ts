@@ -48,4 +48,25 @@ export class SupabasePyramidLeagueSettlementRepository implements PyramidLeagueS
   return result;
  }
 
+ async listNotices(userId:string){
+  const result=await this.client.rpc<{notices:unknown[]}>("list_pyramid_league_notices_http",{p_user_id:userId});
+  if(!result||!Array.isArray(result.notices))throw new Error("SUPABASE_PYRAMID_NOTICES_INVALID_RESPONSE"); return result;
+ }
+ async markNoticesRead(userId:string,now:string){
+  const result=await this.client.rpc<{markedRead:number}>("mark_pyramid_league_notices_read_http",{p_user_id:userId,p_now:now});
+  if(!result||typeof result.markedRead!=="number")throw new Error("SUPABASE_PYRAMID_NOTICES_READ_INVALID_RESPONSE"); return result;
+ }
+ async claimNotices(limit:number,now:string){
+  const result=await this.client.rpc<{notices:unknown[]}>("claim_pyramid_league_notices_http",{p_limit:limit,p_now:now});
+  if(!result||!Array.isArray(result.notices))throw new Error("SUPABASE_PYRAMID_NOTICES_CLAIM_INVALID_RESPONSE"); return result;
+ }
+ async completeNotice(id:string,claimToken:string,now:string){
+  const result=await this.client.rpc<{completed:boolean}>("complete_pyramid_league_notice_http",{p_id:id,p_claim_token:claimToken,p_now:now});
+  if(!result||typeof result.completed!=="boolean")throw new Error("SUPABASE_PYRAMID_NOTICE_COMPLETE_INVALID_RESPONSE"); return result;
+ }
+ async failNotice(id:string,claimToken:string,error:string,now:string){
+  const result=await this.client.rpc<{owned:boolean;rescheduled?:boolean;attempts?:number}>("fail_pyramid_league_notice_http",{p_id:id,p_claim_token:claimToken,p_error:error,p_now:now});
+  if(!result||typeof result.owned!=="boolean")throw new Error("SUPABASE_PYRAMID_NOTICE_FAIL_INVALID_RESPONSE"); return result;
+ }
+
 }
