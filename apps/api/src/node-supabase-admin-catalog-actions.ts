@@ -33,7 +33,7 @@ export class NodeSupabaseAdminCatalogActionsRepository implements AdminCatalogAc
       p_action:input.action,p_target_id:input.targetId??null,p_actor_telegram_id:input.actorTelegramId,p_idempotency_key:key,
       p_item_slug:input.itemSlug??null,p_item_name:input.itemName??null,p_item_description:input.itemDescription??null,
       p_item_cost:input.itemCost??null,p_item_scope:input.itemScope??null,p_code:input.code??null,
-      p_reward_type:input.rewardType??null,p_cash_amount:input.cashAmount??"0",p_gold_amount:input.goldAmount??"0",
+      p_reward_type:input.rewardType??(input.action==="create-gift-code"?"WALLET":null),p_cash_amount:input.cashAmount??"0",p_gold_amount:input.goldAmount??"0",
       p_group_points:input.groupPoints??"0",p_max_redemptions:input.maxRedemptions??null,p_per_user_limit:input.perUserLimit??1,
       p_expires_at:input.expiresAt??null,
      });
