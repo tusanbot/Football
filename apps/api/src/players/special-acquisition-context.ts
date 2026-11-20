@@ -42,5 +42,9 @@ export function withSpecialAcquisitionPort<T>(port: SpecialAcquisitionPort, oper
 }
 
 export function getSpecialAcquisitionPort(): SpecialAcquisitionPort | undefined {
-  return specialAcquisitionScope.getStore();
+  const port = specialAcquisitionScope.getStore();
+  if (!port && (process.env.NODE_ENV === "production" || process.env.ENVIRONMENT === "production")) {
+    throw new Error("SPECIAL_ACQUISITION_SUPABASE_REPOSITORY_REQUIRED");
+  }
+  return port;
 }
