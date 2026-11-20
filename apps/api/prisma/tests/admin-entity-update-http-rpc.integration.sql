@@ -22,7 +22,7 @@ BEGIN
  BEGIN
   PERFORM public.admin_entity_update_http('match-update','admin-entity-match-1','990000009','admin-entity-match-update-2','{"matchStatus":"COMPLETED"}'::jsonb);
   RAISE EXCEPTION 'completed match status must be rejected';
- EXCEPTION WHEN invalid_parameter_value THEN NULL;
+ EXCEPTION WHEN SQLSTATE 'P0001' THEN NULL;
  END;
  SELECT count(*) INTO n FROM public."AdminAuditLog" WHERE "idempotencyKey" LIKE 'admin-entity:admin-entity-%';
  IF n<>4 THEN RAISE EXCEPTION 'expected 4 audit rows, got %',n; END IF;
