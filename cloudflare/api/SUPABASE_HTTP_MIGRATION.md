@@ -416,3 +416,8 @@ The `GET /v1/admin/pyramid-leagues` dashboard read now uses the Node direct-HTTP
 ## Admin pyramid league reports moved to Supabase HTTP (2026-11-20)
 
 The `GET /v1/admin/pyramid-leagues/reports` endpoint now uses the Node direct-HTTPS Supabase repository in Production. The `get_admin_pyramid_league_reports_http` read-only RPC produces season totals, club rankings, promotion/relegation movements, league history, award summaries, filtered audit history, and application counts in one bounded response. The function is SECURITY INVOKER and service_role-only. The legacy Prisma report implementation remains available only in non-production compatibility tests; league administrative mutations are still a separate migration tranche.
+
+
+## Admin pyramid league actions moved to atomic Supabase HTTP RPC (2026-11-20)
+
+The `POST /v1/admin/pyramid-leagues/actions` route now uses `admin_pyramid_league_action_http` in Production. Queued application withdrawal, pending promotion deadline extension, and award updates execute with their audit row in one database transaction. The RPC serializes idempotency keys with a transaction-scoped advisory lock, returns the original outcome for a matching replay, and rejects key reuse across different actor/action/target tuples. Pyramid league status remains system-managed and is rejected rather than allowing manual cancellation. Only service_role can execute the SECURITY INVOKER RPC; route-level role authorization remains mandatory. The Prisma transaction fallback is restricted to non-production.
