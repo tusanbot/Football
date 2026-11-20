@@ -1,3 +1,0 @@
-ALTER TABLE "Club"
-  ADD COLUMN "logoData" TEXT,
-  ADD COLUMN "logoMime" VARCHAR(32);
