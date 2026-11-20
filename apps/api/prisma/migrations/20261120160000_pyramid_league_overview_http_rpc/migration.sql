@@ -87,7 +87,8 @@ BEGIN
   JOIN public."Competition" c ON c.id=l."competitionId"
   LEFT JOIN LATERAL (SELECT count(*)::integer AS team_count FROM public."PyramidLeagueEntry" e WHERE e."leagueId"=l.id) ec ON true
   WHERE l.season<v_season
-  AND EXISTS(SELECT 1 FROM public."PyramidLeagueEntry" e WHERE e."leagueId"=l.id AND e."clubId"=v_club.id);
+  ORDER BY l.season DESC,l.tier ASC,l."groupNumber" ASC
+  LIMIT 100;
 
   RETURN jsonb_build_object(
     'season',v_season,'tiers',v_tiers,'currentLeagueId',v_current_league_id,
