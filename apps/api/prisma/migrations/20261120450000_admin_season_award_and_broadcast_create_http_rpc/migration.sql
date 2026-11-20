@@ -87,7 +87,7 @@ BEGIN
   RAISE EXCEPTION USING MESSAGE='IDEMPOTENCY_KEY_REUSED',ERRCODE='23505';
  END IF;
  IF p_kind='users' THEN
-  v_target_id:='user-broadcast:'||p_idempotency_key;
+  v_target_id:=p_idempotency_key;
   INSERT INTO public."LeagueNotice"(id,"userId",kind,title,body,"referenceId","dedupeKey","createdAt")
   SELECT gen_random_uuid()::text,u.id,'ADMIN_BROADCAST','پیام مدیریت Football Empire',btrim(p_message),v_target_id,
    'admin-broadcast:'||p_idempotency_key||':'||u.id,clock_timestamp()
