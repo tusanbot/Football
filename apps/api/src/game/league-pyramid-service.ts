@@ -428,6 +428,8 @@ export async function createFriendlyChallenge(
 ) {
   if (!/^[A-Za-z0-9:_-]{12,128}$/.test(idempotencyKey)) throw new PyramidLeagueError("INVALID_IDEMPOTENCY_KEY");
   if (goldCost <= 0n) throw new PyramidLeagueError("INVALID_CHALLENGE_PRICE");
+  const port = getPyramidLeagueSettlementPort();
+  if (port) return port.createFriendlyChallenge(userId, goldCost.toString(), now.toISOString(), groupTelegramId ?? null, idempotencyKey);
   const club = await ownedClub(userId);
   const day = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
   try {
@@ -546,6 +548,8 @@ export async function createFriendlyChallenge(
   }
 }
 export async function acceptFriendlyChallenge(userId: string, token: string, now = new Date()) {
+  const port = getPyramidLeagueSettlementPort();
+  if (port) return port.acceptFriendlyChallenge(userId, token, now.toISOString());
   const opponent = await ownedClub(userId);
   return prisma.$transaction(async (tx) => {
     const challenge = await tx.friendlyChallenge.findUnique({
@@ -612,6 +616,8 @@ export async function acceptFriendlyChallenge(userId: string, token: string, now
 }
 export async function grantPurchasedChallengeCredits(userId: string, quantity: number, now = new Date()) {
   if (!Number.isInteger(quantity) || quantity < 1 || quantity > 100) throw new PyramidLeagueError("INVALID_CHALLENGE_CREDIT_QUANTITY");
+  const port = getPyramidLeagueSettlementPort();
+  if (port) return port.grantPurchasedChallengeCredits(userId, quantity, now.toISOString());
   const day = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
   return prisma.challengeDailyUsage.upsert({
     where: { userId_usageDate: { userId, usageDate: day } },
@@ -622,6 +628,8 @@ export async function grantPurchasedChallengeCredits(userId: string, quantity: n
 
 
 export async function getFriendlyChallengeInfo(token: string) {
+  const port = getPyramidLeagueSettlementPort();
+  if (port) return port.getFriendlyChallengeInfo(token, new Date().toISOString());
   const challenge = await prisma.friendlyChallenge.findUnique({
     where: { token }, include: {
       creator: { select: { telegramId: true } },
