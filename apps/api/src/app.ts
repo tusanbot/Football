@@ -112,6 +112,8 @@ export function buildApp(options: { logger?: boolean; pluginTimeout?: number; gr
       ["ADMIN_MODERATION_ACTIONS", options.adminModerationActionPort],
       ["ADMIN_FINANCIAL_ADJUSTMENTS", options.adminFinancialAdjustmentPort],
       ["ADMIN_BROADCAST_RETRY", options.adminBroadcastRetryPort],
+      ["ADMIN_SEASON_AWARD_ACTIONS", options.adminSeasonAwardActionPort],
+      ["ADMIN_BROADCAST_CREATE", options.adminBroadcastCreatePort],
       ["ADMIN_PYRAMID_LEAGUE_READ", options.adminPyramidLeagueReadPort],
       ["ADMIN_PYRAMID_LEAGUE_REPORTS", options.adminPyramidLeagueReportsPort],
       ["ADMIN_PYRAMID_LEAGUE_ACTIONS", options.adminPyramidLeagueActionsPort],
@@ -304,7 +306,7 @@ export function buildApp(options: { logger?: boolean; pluginTimeout?: number; gr
   registerMatchNotificationRoutes(app, options.matchNotificationPort);
   registerGroupRoutes(app, { requireMembershipPort: Boolean(options.groupMembershipPort) });
   registerAllianceRoutes(app, { requirePort: Boolean(options.alliancePort), ...(options.alliancePort ? { port: options.alliancePort } : {}) });
-  registerAdminRoutes(app, { ...(options.adminAlliancePort ? { adminAlliancePort: options.adminAlliancePort } : {}), ...(options.adminRoleLookupPort ? { adminRoleLookupPort: options.adminRoleLookupPort } : {}), ...(options.adminConfigurationPort ? { adminConfigurationPort: options.adminConfigurationPort } : {}), ...(options.adminConsoleReadPort ? { adminConsoleReadPort: options.adminConsoleReadPort } : {}), ...(options.adminModerationActionPort ? { adminModerationActionPort: options.adminModerationActionPort } : {}), ...(options.adminFinancialAdjustmentPort ? { adminFinancialAdjustmentPort: options.adminFinancialAdjustmentPort } : {}), ...(options.adminBroadcastRetryPort ? { adminBroadcastRetryPort: options.adminBroadcastRetryPort } : {}) });
+  registerAdminRoutes(app, { ...(options.adminAlliancePort ? { adminAlliancePort: options.adminAlliancePort } : {}), ...(options.adminRoleLookupPort ? { adminRoleLookupPort: options.adminRoleLookupPort } : {}), ...(options.adminConfigurationPort ? { adminConfigurationPort: options.adminConfigurationPort } : {}), ...(options.adminConsoleReadPort ? { adminConsoleReadPort: options.adminConsoleReadPort } : {}), ...(options.adminModerationActionPort ? { adminModerationActionPort: options.adminModerationActionPort } : {}), ...(options.adminFinancialAdjustmentPort ? { adminFinancialAdjustmentPort: options.adminFinancialAdjustmentPort } : {}), ...(options.adminBroadcastRetryPort ? { adminBroadcastRetryPort: options.adminBroadcastRetryPort } : {}), ...(options.adminSeasonAwardActionPort ? { adminSeasonAwardActionPort: options.adminSeasonAwardActionPort } : {}), ...(options.adminBroadcastCreatePort ? { adminBroadcastCreatePort: options.adminBroadcastCreatePort } : {}) });
   registerAdminLeagueRoutes(app, { ...(options.adminAlliancePort ? { adminAlliancePort: options.adminAlliancePort } : {}), ...(options.adminRoleLookupPort ? { adminRoleLookupPort: options.adminRoleLookupPort } : {}), ...(options.adminPyramidLeagueReadPort ? { adminPyramidLeagueReadPort: options.adminPyramidLeagueReadPort } : {}), ...(options.adminPyramidLeagueReportsPort ? { adminPyramidLeagueReportsPort: options.adminPyramidLeagueReportsPort } : {}), ...(options.adminPyramidLeagueActionsPort ? { adminPyramidLeagueActionsPort: options.adminPyramidLeagueActionsPort } : {}) });
   registerGiftCodeRoutes(app);
   registerTelegramMessageDeletionRoutes(app, options.telegramMessageDeletionPort);
