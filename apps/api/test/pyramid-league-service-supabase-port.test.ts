@@ -23,6 +23,12 @@ function fakePort(calls: Array<{ method: string; args: unknown[] }>): PyramidLea
     },
     async listLeagues(...args) { calls.push({ method: "listLeagues", args }); return { season: 2027, tiers: [], history: [], promotionOffers: [] }; },
     async getClubHistory(...args) { calls.push({ method: "getClubHistory", args }); return { club: {}, stats: {}, tiers: [], movements: [], leagues: [] }; },
+    async getLeagueDetails(...args) { calls.push({ method: "getLeagueDetails", args }); return { league: {}, standings: [], matches: [], topScorers: [], topAssists: [], awards: [], nextRoundMatches: [] }; },
+    async listNotices(...args) { calls.push({ method: "listNotices", args }); return { notices: [] }; },
+    async markNoticesRead(...args) { calls.push({ method: "markNoticesRead", args }); return { markedRead: 0 }; },
+    async claimNotices(...args) { calls.push({ method: "claimNotices", args }); return { notices: [] }; },
+    async completeNotice(...args) { calls.push({ method: "completeNotice", args }); return { completed: true }; },
+    async failNotice(...args) { calls.push({ method: "failNotice", args }); return { owned: true, rescheduled: true, attempts: 1 }; },
   };
 }
 
@@ -58,4 +64,17 @@ test("pyramid league overview and club history use the Supabase request scope", 
   assert.ok(history.stats);
  });
  assert.deepEqual(calls.map((call) => call.method), ["listLeagues", "getClubHistory"]);
+});
+
+test("pyramid league details and notice operations use the Supabase request scope", async () => {
+ const calls: Array<{ method: string; args: unknown[] }> = [];
+ const service = await import("../src/game/league-pyramid-service.js");
+ await withPyramidLeagueSettlementPort(fakePort(calls), async () => {
+  await service.getPyramidLeagueDetails("user-1", "league-1");
+  await service.listLeagueNotices("user-1");
+  await service.markLeagueNoticesRead("user-1");
+ });
+ assert.deepEqual(calls.map((call) => call.method), ["getLeagueDetails", "listNotices", "markNoticesRead"]);
+ assert.deepEqual(calls[0]?.args, ["user-1", "league-1"]);
+ assert.equal((calls[2]?.args[1] as string).length, 24);
 });
