@@ -21,5 +21,7 @@ export function withCompetitionCreationPort<T>(port: CompetitionCreationPort, op
   return scope.run(port, operation);
 }
 export function getCompetitionCreationPort(): CompetitionCreationPort | undefined {
-  return scope.getStore();
+  const port = scope.getStore();
+  if (!port && process.env.NODE_ENV === "production") throw new Error("COMPETITION_SUPABASE_REPOSITORY_REQUIRED");
+  return port;
 }
