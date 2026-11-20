@@ -42,4 +42,10 @@ export class SupabasePyramidLeagueSettlementRepository implements PyramidLeagueS
   return result;
  }
 
+ async getLeagueDetails(userId:string,leagueId:string){
+  const result=await this.client.rpc<Record<string,unknown>>("get_pyramid_league_details_http",{p_user_id:userId,p_league_id:leagueId});
+  if(!result||!result.league||!Array.isArray(result.standings)||!Array.isArray(result.matches)||!Array.isArray(result.topScorers)||!Array.isArray(result.topAssists)||!Array.isArray(result.awards)||!Array.isArray(result.nextRoundMatches))throw new Error("SUPABASE_PYRAMID_DETAILS_INVALID_RESPONSE");
+  return result;
+ }
+
 }
