@@ -60,6 +60,31 @@ test("match runtime settlement delegates the complete financial and match result
   } finally { stub.restore(); }
 });
 
+test("completed competition settlement requires both finalization results", async () => {
+  const result = {
+    matchId: "match-1", replayed: false, competitionId: "competition-1", round: 2,
+    homeClub: "Home", awayClub: "Away", homeScore: 2, awayScore: 1,
+    homePenalties: null, awayPenalties: null, winnerClubId: "club-home",
+    attendance: 1200, ticketRevenue: "60000", events: [],
+    advancement: {
+      competitionId: "competition-1", format: "LEAGUE" as const, completed: true,
+      roundComplete: true, nextRound: null, fixturesCreated: 0, noticesCreated: 8, replayed: false,
+    },
+    pyramidFinalization: null,
+    eventTournamentFinalization: null,
+  };
+  const stub = stubFetch(result);
+  try {
+    const repository = new SupabaseMatchRuntimeSettlementRepository(new SupabaseHttpClient({ url, serviceRoleKey: key }));
+    await assert.rejects(repository.settle({
+      matchId: "match-1", runtimeId: "runtime-1", leaseToken: "lease-secret",
+      now: "2026-11-20T10:00:00.000Z", result: {}, injuryDurationDays: 7,
+      redCardSuspensionMatches: 2, yellowCardsToSuspend: 3,
+      yellowCardSuspensionMatches: 1, homeReward: "250", awayReward: "100",
+    }), /SUPABASE_MATCH_FINALIZATION_RESULT_MISSING/);
+  } finally { stub.restore(); }
+});
+
 test("match runtime settlement rejects malformed RPC responses and preserves SQL business errors", async () => {
   const malformed = stubFetch([{ matchId: "match-1" }]);
   try {
