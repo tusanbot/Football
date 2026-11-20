@@ -148,6 +148,8 @@ jobs:
         run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f apps/api/prisma/tests/admin-broadcast-retry-http-rpc.integration.sql
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/football_empire
+      - name: Test Supabase HTTP admin console, moderation and broadcast repositories
+        run: pnpm --filter @football/api exec tsx --test --test-concurrency=1 test/node-supabase-admin-console-read.test.ts test/node-supabase-admin-moderation-actions.test.ts test/node-supabase-admin-broadcast-management.test.ts
       - name: Test pyramid league notice list, claim, complete and retry RPCs
         run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f apps/api/prisma/tests/pyramid-league-notices-http-rpc.integration.sql
         env:
