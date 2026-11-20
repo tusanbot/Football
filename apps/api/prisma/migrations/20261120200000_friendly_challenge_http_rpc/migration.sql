@@ -151,9 +151,9 @@ DECLARE v_day date; v_usage public."ChallengeDailyUsage"%ROWTYPE;
 BEGIN
  IF p_quantity IS NULL OR p_quantity<1 OR p_quantity>100 OR p_now IS NULL THEN RAISE EXCEPTION USING MESSAGE='INVALID_CHALLENGE_CREDIT_QUANTITY',ERRCODE='P0001'; END IF;
  v_day:=(p_now AT TIME ZONE 'UTC')::date;
- INSERT INTO public."ChallengeDailyUsage"(id,"userId","usageDate","purchasedCredits")
+ INSERT INTO public."ChallengeDailyUsage" AS usage(id,"userId","usageDate","purchasedCredits")
  VALUES('challenge_usage_'||replace(gen_random_uuid()::text,'-',''),p_user_id,v_day,p_quantity)
- ON CONFLICT ("userId","usageDate") DO UPDATE SET "purchasedCredits"=public."ChallengeDailyUsage"."purchasedCredits"+EXCLUDED."purchasedCredits"
+ ON CONFLICT ("userId","usageDate") DO UPDATE SET "purchasedCredits"=usage."purchasedCredits"+EXCLUDED."purchasedCredits"
  RETURNING * INTO v_usage;
  RETURN jsonb_build_object('userId',v_usage."userId",'usageDate',v_usage."usageDate",
   'freeUsed',v_usage."freeUsed",'goldUsed',v_usage."goldUsed",'purchasedCredits',v_usage."purchasedCredits");
