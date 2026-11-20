@@ -99,7 +99,7 @@ BEGIN
  INSERT INTO public."PyramidLeague"(id,"competitionId",tier,season,"groupNumber","createdAt")
  VALUES
  ('ci-retry-pyr-1','ci-retry-pyramid-fail',2,2026,1,(v_now-interval '2 minutes') AT TIME ZONE 'UTC'),
- ('ci-retry-pyr-2','ci-retry-pyramid-ok',2,2026,1,(v_now-interval '1 minute') AT TIME ZONE 'UTC')
+ ('ci-retry-pyr-2','ci-retry-pyramid-ok',2,2026,2,(v_now-interval '1 minute') AT TIME ZONE 'UTC')
  ON CONFLICT(id) DO NOTHING;
 
  INSERT INTO public."EventTournament"(
