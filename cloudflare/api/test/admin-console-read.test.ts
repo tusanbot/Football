@@ -45,3 +45,13 @@ test("admin console rejects malformed RPC data", async () => {
   await assert.rejects(repo.groupTargets(), /SUPABASE_ADMIN_CONSOLE_INVALID_GROUP_TARGET/);
   await assert.rejects(repo.financeSummary(7), /SUPABASE_ADMIN_CONSOLE_INVALID_FINANCE_SUMMARY/);
 });
+
+test("admin resource lists call the shared allowlisted RPC and validate rows", async () => {
+  const rows = [{ id: "player-1", firstName: "A", club: { id: "club-1", name: "Tosan" } }];
+  const { repo, calls } = repository([rows, { nope: true }, [{ name: "missing-id" }]]);
+  assert.deepEqual(await repo.resourceList("players", 12, "A", 2030), rows);
+  assert.deepEqual(calls[0], { name: "get_admin_resource_list_http", args: { p_resource: "players", p_limit: 12, p_query: "A", p_season: 2030 } });
+  await assert.rejects(repo.resourceList("users", 101), /INVALID_ADMIN_RESOURCE_LIMIT/);
+  await assert.rejects(repo.resourceList("users", 10), /SUPABASE_ADMIN_RESOURCE_INVALID_RESPONSE/);
+  await assert.rejects(repo.resourceList("clubs", 10), /SUPABASE_ADMIN_RESOURCE_INVALID_ROW/);
+});
