@@ -56,19 +56,19 @@ test("match runtime claim does not auto-retry an ambiguous claim and permits rec
   const calls: Array<{ url: string; body: Record<string, unknown> }> = [];
   const now = Date.parse("2026-11-20T12:00:00.000Z");
   let durableClaimCount = 0;
-  let lease: { token: string; expiresAt: number } | null = null;
+  const state: { lease: { token: string; expiresAt: number } | null } = { lease: null };
   globalThis.fetch = (async (input, init) => {
     const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
     calls.push({ url: String(input), body });
     const requestedNow = Date.parse(String(body.p_now));
     let rows: Array<Record<string, unknown>> = [];
-    if (!lease || lease.expiresAt <= requestedNow) {
+    if (!state.lease || state.lease.expiresAt <= requestedNow) {
       durableClaimCount++;
-      lease = { token: "lease-token-" + durableClaimCount, expiresAt: requestedNow + Number(body.p_lease_ms) };
+      state.lease = { token: "lease-token-" + durableClaimCount, expiresAt: requestedNow + Number(body.p_lease_ms) };
       rows = [{
         runtime_id: "runtime-ambiguous-claim",
-        lease_token: lease.token,
-        lease_expires_at: new Date(lease.expiresAt).toISOString(),
+        lease_token: state.lease.token,
+        lease_expires_at: new Date(state.lease.expiresAt).toISOString(),
       }];
     }
     if (calls.length === 1) throw new TypeError("socket closed after match runtime claim commit");

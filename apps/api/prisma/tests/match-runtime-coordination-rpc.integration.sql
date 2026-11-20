@@ -12,7 +12,7 @@ DECLARE
   v_schedule record;
   v_fixture record;
   v_claim record;
-  v_claim_again bigint;
+  v_claim_again record;
   v_checkpoint jsonb;
   v_decision jsonb;
   v_replay jsonb;
