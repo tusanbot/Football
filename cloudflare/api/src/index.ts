@@ -1,4 +1,3 @@
-import { createPrismaClient, withPrismaClient } from "../../../apps/api/src/db.js";
 import { withWalletEntryPort } from "../../../apps/api/src/economy/wallet-entry-context.js";
 import { withStorePurchasePort } from "../../../apps/api/src/store/store-purchase-context.js";
 import { withStoreSnapshotPort } from "../../../apps/api/src/store/store-snapshot-context.js";
@@ -97,7 +96,7 @@ import { SupabaseAdminPyramidLeagueReportsRepository } from "./repositories/admi
 interface MatchCoordinatorNamespace { idFromName(name: string): unknown; get(id: unknown): { fetch(input: string, init?: RequestInit): Promise<Response> }; }
 interface MatchCoordinatorState { storage: { setAlarm(scheduledTime: number): Promise<void>; deleteAlarm(): Promise<void>; }; }
 interface Env {
-  MATCH_COORDINATOR?: MatchCoordinatorNamespace; DATABASE_URL?: string;
+  MATCH_COORDINATOR?: MatchCoordinatorNamespace;
   SUPABASE_URL?: string; SUPABASE_SERVICE_ROLE_KEY?: string;
   TELEGRAM_BOT_TOKEN?: string; BOT_API_SECRET?: string; CORS_ORIGIN?: string; GAME_ADMIN_TELEGRAM_IDS?: string;
   ALLIANCE_REVIEWER_TELEGRAM_IDS?: string; GAME_ADMIN_ROLE_MAP?: string; ENVIRONMENT?: string;
@@ -106,20 +105,10 @@ interface ExecutionContext { waitUntil(promise: Promise<unknown>): void }
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), {
   status, headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store", "x-content-type-options": "nosniff" },
 });
-function dbUrl(env: Env): string | null { return env.DATABASE_URL ?? null; }
 function missingConfig(env: Env): string[] {
   const missing: string[] = [];
-  const database = dbUrl(env);
-  if (!database) missing.push("DATABASE_URL");
-  else if (!/^postgres(?:ql)?:\/\//i.test(database)) missing.push("DATABASE_URL_INVALID");
-  else if (env.ENVIRONMENT !== "development") {
-    try {
-      const parsed = new URL(database);
-      if (!(parsed.hostname.endsWith(".pooler.supabase.com") && parsed.port === "6543")) {
-        missing.push("DATABASE_URL_MUST_USE_SUPABASE_TRANSACTION_POOLER");
-      }
-    } catch { missing.push("DATABASE_URL_INVALID"); }
-  }
+  if (!env.SUPABASE_URL?.trim()) missing.push("SUPABASE_URL");
+  if (!env.SUPABASE_SERVICE_ROLE_KEY?.trim()) missing.push("SUPABASE_SERVICE_ROLE_KEY");
   if (!isValidTelegramBotToken(env.TELEGRAM_BOT_TOKEN ?? "")) missing.push("TELEGRAM_BOT_TOKEN");
   if (!env.BOT_API_SECRET || env.BOT_API_SECRET.length < 32 || /^(replace-with|change-me|your-)/i.test(env.BOT_API_SECRET)) missing.push("BOT_API_SECRET");
   if (!parseAdminTelegramIds(env.GAME_ADMIN_TELEGRAM_IDS).length) missing.push("GAME_ADMIN_TELEGRAM_IDS");
@@ -136,7 +125,8 @@ function missingConfig(env: Env): string[] {
 }
 function configureEnv(env: Env): void {
   process.env.ENVIRONMENT = env.ENVIRONMENT ?? "production";
-  process.env.DATABASE_URL = dbUrl(env) ?? "";
+  process.env.SUPABASE_URL = env.SUPABASE_URL ?? "";
+  process.env.SUPABASE_SERVICE_ROLE_KEY = env.SUPABASE_SERVICE_ROLE_KEY ?? "";
   process.env.TELEGRAM_BOT_TOKEN = env.TELEGRAM_BOT_TOKEN ?? "";
   process.env.BOT_API_SECRET = env.BOT_API_SECRET ?? "";
   process.env.CORS_ORIGIN = env.CORS_ORIGIN ?? "";
@@ -169,15 +159,12 @@ function constantTimeSecretEqual(left: string, right: string): boolean {
 }
 
 
-async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+async function handleApi(request: Request, env: Env, _ctx: ExecutionContext): Promise<Response> {
   const missing = missingConfig(env);
   if (missing.length) return json({ status: "not_ready", service: "football-empire-cloudflare-api", missing }, 503);
-  let client: ReturnType<typeof createPrismaClient>;
-  try { client = createPrismaClient(dbUrl(env) ?? undefined, 1); }
-  catch { return json({ status: "not_ready", service: "football-empire-cloudflare-api", missing: ["DATABASE_CONFIGURATION"] }, 503); }
-  let cleanupScheduled = false;
+  configureEnv(env);
   try {
-    const response = await withPrismaClient(client, () => {
+    const response = await (() => {
       const supabaseClient = env.SUPABASE_URL && env.SUPABASE_SERVICE_ROLE_KEY
         ? new SupabaseHttpClient({ url: env.SUPABASE_URL, serviceRoleKey: env.SUPABASE_SERVICE_ROLE_KEY })
         : undefined;
@@ -262,15 +249,11 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
       const withMarketListing = marketListing ? () => withMarketListingPort(marketListing, withSpecialAcquisition) : withSpecialAcquisition;
       const withStoreRead = storeSnapshot ? () => withStoreSnapshotPort(storeSnapshot, withMarketListing) : withMarketListing;
       return storeItemUse ? withStoreItemUsePort(storeItemUse, withStoreRead) : withStoreRead();
-    });
-    cleanupScheduled = true;
-    ctx.waitUntil(client.$disconnect().catch((error: unknown) => console.error("Prisma request client cleanup failed", error)));
+    })();
     return response;
   } catch (error) {
     console.error("Cloudflare API request failed", describeRuntimeError(error));
     return json({ error: "INTERNAL_SERVER_ERROR" }, 500);
-  } finally {
-    if (!cleanupScheduled) await client.$disconnect().catch(() => undefined);
   }
 }
 export class MatchCoordinator {
@@ -290,10 +273,10 @@ export class MatchCoordinator {
       await this.state.storage.deleteAlarm();
       return;
     }
-    const client = createPrismaClient(dbUrl(this.env) ?? undefined, 1);
+    configureEnv(this.env);
     let nextAlarm: number | null = null;
     try {
-      await withPrismaClient(client, async () => {
+      await (async () => {
         const supabase = this.env.SUPABASE_URL && this.env.SUPABASE_SERVICE_ROLE_KEY
           ? new SupabaseHttpClient({ url: this.env.SUPABASE_URL, serviceRoleKey: this.env.SUPABASE_SERVICE_ROLE_KEY })
           : undefined;
@@ -338,7 +321,7 @@ export class MatchCoordinator {
         if (matchWork.failed) console.warn("Match runtime work failed", matchWork);
         if (tournamentFinalizations.failed) console.error("Tournament finalization retries remain pending", tournamentFinalizations);
         nextAlarm = schedule.nextAlarm?.getTime() ?? null;
-      });
+      })();
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       const quotaLimited = /Usage limit for account exceeded/i.test(message);
@@ -347,8 +330,6 @@ export class MatchCoordinator {
         const now = new Date();
         nextAlarm = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1, 0, 0, 5);
       } else nextAlarm = Date.now() + 60_000;
-    } finally {
-      await client.$disconnect();
     }
     if (nextAlarm === null) await this.state.storage.deleteAlarm();
     else await this.state.storage.setAlarm(Math.max(Date.now() + 1_000, nextAlarm));
@@ -429,41 +410,13 @@ async function scheduledJobs(env: Env): Promise<void> {
     return;
   }
   console.info("Scheduled fallback skipped; MatchCoordinator owns match and tournament processing.");
-  return;
-  /* Legacy scheduled Prisma path intentionally unreachable; match work must use MatchCoordinator/Supabase. */
-  const missing = missingConfig(env);
-  if (missing.length) { console.error("Scheduled game jobs skipped; missing configuration:", missing); return; }
-  configureEnv(env);
-  const client = createPrismaClient(dbUrl(env) ?? undefined, 1);
-  try {
-    await withPrismaClient(client, async () => {
-      const now = new Date();
-      const supabase = env.SUPABASE_URL && env.SUPABASE_SERVICE_ROLE_KEY
-        ? new SupabaseHttpClient({ url: env.SUPABASE_URL, serviceRoleKey: env.SUPABASE_SERVICE_ROLE_KEY }) : undefined;
-      const matchNotifications = supabase ? new SupabaseMatchNotificationRepository(supabase) : undefined;
-      const pyramidLeagueSettlement = supabase ? new SupabasePyramidLeagueSettlementRepository(supabase) : undefined;
-      const eventTournamentSettlement = supabase ? new SupabaseEventTournamentSettlementRepository(supabase) : undefined;
-      const matches = env.MATCH_COORDINATOR
-        ? null
-        : await processDueMatchRuntimes("cloudflare-api-scheduled-fallback", now, 10);
-      if (!pyramidLeagueSettlement || !eventTournamentSettlement) throw new Error("SUPABASE_TOURNAMENT_SETTLEMENT_REPOSITORY_UNAVAILABLE");
-      const tournamentFinalizations = await withEventTournamentSettlementPort(eventTournamentSettlement, () => processDueEventTournamentFinalizations(now, 1));
-      if (!matchNotifications) throw new Error("SUPABASE_MATCH_NOTIFICATION_REPOSITORY_UNAVAILABLE");
-      await deliverDueMatchLifecycle(env, matchNotifications);
-      const promotions = await withPyramidLeagueSettlementPort(pyramidLeagueSettlement, () => processDuePromotionOffers(now, 50));
-      if ((matches && (matches.advanced || matches.settled || matches.failed))
-        || tournamentFinalizations.finalized || tournamentFinalizations.failed
-        || promotions.accepted || promotions.completedLeagues) {
-        console.info("Cloudflare scheduled game tick", { matches, tournamentFinalizations, promotions });
-      }
-    });
-  } finally { await client.$disconnect(); }
 }
+
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
     if (request.method === "GET" && url.pathname === "/health") {
-      return json({ status: "ok", service: "football-empire-cloudflare-api", mode: "hono-prisma-runtime", build: "2026-11-16-hono-router-1" });
+      return json({ status: "ok", service: "football-empire-cloudflare-api", mode: "supabase-http-runtime", build: "2026-11-16-hono-router-1" });
     }
     if (url.pathname === "/internal/pilot/events") {
       if (request.method !== "POST") return json({ error: "METHOD_NOT_ALLOWED" }, 405);
