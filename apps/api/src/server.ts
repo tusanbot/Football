@@ -56,7 +56,6 @@ const alliancePort = hasSupabaseUrl
 const telegramUserLookupPort = hasSupabaseUrl
   ? new NodeSupabaseTelegramUserLookupRepository(process.env.SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
   : undefined;
-const accountProvisioningPort = supabaseHttp ? new NodeSupabaseTelegramAccountProvisioningRepository(supabaseHttp) : undefined;
 const storePurchasePort = hasSupabaseUrl
   ? new NodeSupabaseStorePurchaseRepository(process.env.SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
   : undefined;
@@ -67,6 +66,7 @@ const walletEntryPort = hasSupabaseUrl ? new NodeSupabaseWalletEntryRepository(p
 const marketRepository = hasSupabaseUrl ? new NodeSupabaseMarketRepository(process.env.SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!) : undefined;
 const storeSnapshotPort = hasSupabaseUrl ? new NodeSupabaseStoreSnapshotRepository(process.env.SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!) : undefined;
 const supabaseHttp = hasSupabaseUrl ? new SupabaseHttpClient({ url: process.env.SUPABASE_URL!, serviceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY! }) : undefined;
+const accountProvisioningPort = supabaseHttp ? new NodeSupabaseTelegramAccountProvisioningRepository(supabaseHttp) : undefined;
 const playerDevelopmentPort = supabaseHttp ? new SupabasePlayerDevelopmentRepository(supabaseHttp) : undefined;
 const actionRateLimitPort = supabaseHttp ? new NodeSupabaseActionRateLimitRepository(supabaseHttp) : undefined;
 const clubEconomySettlementPort = supabaseHttp ? new NodeSupabaseClubEconomyRepository(supabaseHttp) : undefined;
