@@ -5,4 +5,10 @@ export interface EventTournamentSettlementPort {
 }
 const scope=new AsyncLocalStorage<EventTournamentSettlementPort>();
 export function withEventTournamentSettlementPort<T>(port:EventTournamentSettlementPort,operation:()=>Promise<T>):Promise<T>{return scope.run(port,operation);}
-export function getEventTournamentSettlementPort():EventTournamentSettlementPort|undefined{return scope.getStore();}
+export function getEventTournamentSettlementPort(): EventTournamentSettlementPort | undefined {
+ const port = scope.getStore();
+ if (!port && (process.env.NODE_ENV === "production" || process.env.ENVIRONMENT === "production")) {
+  throw new Error("EVENT_TOURNAMENT_SETTLEMENT_SUPABASE_REPOSITORY_REQUIRED");
+ }
+ return port;
+}
