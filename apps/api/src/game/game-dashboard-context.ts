@@ -8,4 +8,10 @@ export interface GameDashboardSnapshot {
 export interface GameDashboardPort { getDashboard(userId: string): Promise<GameDashboardSnapshot>; }
 const scope = new AsyncLocalStorage<GameDashboardPort>();
 export function withGameDashboardPort<T>(port: GameDashboardPort, operation: () => Promise<T>): Promise<T> { return scope.run(port, operation); }
-export function getGameDashboardPort(): GameDashboardPort | undefined { return scope.getStore(); }
+export function getGameDashboardPort(): GameDashboardPort | undefined {
+  const port = scope.getStore();
+  if (!port && (process.env.NODE_ENV === "production" || process.env.ENVIRONMENT === "production")) {
+    throw new Error("GAME_DASHBOARD_SUPABASE_REPOSITORY_REQUIRED");
+  }
+  return port;
+}
