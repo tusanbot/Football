@@ -21,7 +21,7 @@ BEGIN
   OR p_registration_ends_at IS NULL OR p_starts_at IS NULL OR p_now IS NULL
   OR p_registration_ends_at<=p_now OR p_starts_at<p_registration_ends_at
   OR (p_ends_at IS NOT NULL AND p_ends_at<=p_starts_at)
-  OR jsonb_typeof(p_prizes)<>'array' OR jsonb_array_length(p_prizes) NOT BETWEEN 1 AND 12
+  OR p_prizes IS NULL OR jsonb_typeof(p_prizes)<>'array' OR jsonb_array_length(p_prizes) NOT BETWEEN 1 AND 12
  THEN RAISE EXCEPTION USING MESSAGE='INVALID_EVENT_TOURNAMENT',ERRCODE='22023'; END IF;
  PERFORM pg_advisory_xact_lock(hashtextextended(p_idempotency_key,0));
  SELECT COALESCE(jsonb_agg(jsonb_build_object('placement',x.placement,'type',x.type,
