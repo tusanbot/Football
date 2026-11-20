@@ -162,6 +162,9 @@ jobs:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/football_empire
       - name: Test admin entity update RPC atomicity, audit and access controls
         run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f apps/api/prisma/tests/admin-entity-update-http-rpc.integration.sql
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/football_empire
+      - name: Test admin season award and broadcast creation RPC atomicity
         run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f apps/api/prisma/tests/admin-season-award-and-broadcast-create-http-rpc.integration.sql
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/football_empire
