@@ -28,6 +28,33 @@ import { getPyramidLeagueSettlementPort } from "./pyramid-league-settlement-cont
 const DAY_MS = 86_400_000;
 const MATCH_MINUTE_MS = 1_000;
 const MATCH_CHECKPOINT_WINDOW_MS = 5_000;
+function isProductionRuntime() {
+  return process.env.NODE_ENV === "production" || process.env.ENVIRONMENT === "production";
+}
+
+/**
+ * Worker entry points are exported for scheduling and tests, so the production
+ * repository contract must be enforced at each boundary, not only at the
+ * processDueMatchRuntimes coordinator.
+ */
+function requireProductionSupabaseMatchWorkerPorts() {
+  if (!isProductionRuntime()) return;
+  const requiredPorts = [
+    getMatchRuntimeSnapshotPort(),
+    getMatchRuntimeLeasePort(),
+    getMatchRuntimeEnqueuePort(),
+    getMatchRuntimeForfeitPort(),
+    getMatchRuntimeAdvancePort(),
+    getMatchRuntimeCheckpointPort(),
+    getMatchRuntimeSettlementPort(),
+    getCompetitionAdvancementPort(),
+    getPyramidLeagueSettlementPort(),
+    getEventTournamentSettlementPort(),
+  ];
+  if (requiredPorts.some((port) => !port)) {
+    throw new MatchServiceError("WORKER_MATCH_RUNTIME_REPOSITORY_SET_INCOMPLETE");
+  }
+}
 export class MatchServiceError extends Error {
   constructor(public readonly code: string, public readonly details?: Record<string, string>) {
     super(code); this.name = "MatchServiceError";
@@ -788,6 +815,7 @@ export async function submitMatchCheckpointDecision(userId: string, matchId: str
 /** Atomically lease due runtimes; expired leases are recoverable after worker crashes. */
 /** Atomically lease due runtimes in one statement; SKIP LOCKED prevents competing workers from claiming the same match. */
 export async function claimDueMatchRuntimes(workerId: string, now = new Date(), leaseMs = 60_000, limit = 10) {
+  requireProductionSupabaseMatchWorkerPorts();
   if (!workerId.trim() || workerId.length > 100 || !Number.isInteger(leaseMs) || leaseMs < 1_000
     || !Number.isInteger(limit) || limit < 1 || limit > 100) throw new MatchServiceError("INVALID_MATCH_WORKER_LEASE");
   const leasePort = getMatchRuntimeLeasePort();
@@ -816,6 +844,7 @@ export async function claimDueMatchRuntimes(workerId: string, now = new Date(), 
 }
 export async function releaseMatchRuntimeLease(runtimeId: string, leaseToken: string,
   nextActionAt: Date | null, lastError: string | null = null) {
+  requireProductionSupabaseMatchWorkerPorts();
   const leasePort = getMatchRuntimeLeasePort();
   if (leasePort) return leasePort.release({ runtimeId, leaseToken, nextActionAt: nextActionAt?.toISOString() ?? null, lastError });
   const result = await prisma.matchRuntime.updateMany({ where: { id: runtimeId, leaseToken },
@@ -837,7 +866,12 @@ async function publishLeagueRoundSummary(competitionId: string, round: number, n
   await prisma.leagueNotice.createMany({ data: notices, skipDuplicates: true });
   return { published: true, teams: notices.length, round, at: now.toISOString() };
 }
+/**
+ * Legacy one-shot simulation is retained only for isolated migration tests.
+ * Production must exclusively use the leased, checkpointed runtime worker.
+ */
 export async function simulateScheduledMatch(userId: string, matchId: string, now = new Date()) {
+  if (isProductionRuntime()) throw new MatchServiceError("MATCH_RUNTIME_AUTOMATIC");
   const settlement = await prisma.$transaction(async (tx) => {
     const match = await tx.footballMatch.findUnique({ where: { id: matchId } });
     if (!match) throw new MatchServiceError("MATCH_NOT_FOUND");
@@ -1336,6 +1370,7 @@ function applyRuntimeInstruction(
 
 /** Create durable kickoff snapshots for due fixtures that predate runtime creation. */
 export async function enqueueDueMatchRuntimes(now = new Date(), limit = 50) {
+  requireProductionSupabaseMatchWorkerPorts();
   const enqueuePort = getMatchRuntimeEnqueuePort();
   if (enqueuePort) {
     const result = await enqueuePort.enqueue(now.toISOString(), limit);
@@ -1834,21 +1869,7 @@ export async function processDueMatchRuntimes(
   limit = 10,
   options: { enqueue?: boolean; claim?: boolean } = {},
 ): Promise<{ enqueued: number; claimed: number; advanced: number; waiting: number; settled: number; failed: number }> {
-  if (process.env.NODE_ENV === "production" || process.env.ENVIRONMENT === "production" || getMatchRuntimeSnapshotPort()) {
-    const requiredPorts = [
-      getMatchRuntimeSnapshotPort(),
-      getMatchRuntimeLeasePort(),
-      getMatchRuntimeEnqueuePort(),
-      getMatchRuntimeForfeitPort(),
-      getMatchRuntimeAdvancePort(),
-      getMatchRuntimeCheckpointPort(),
-      getMatchRuntimeSettlementPort(),
-      getCompetitionAdvancementPort(),
-      getPyramidLeagueSettlementPort(),
-      getEventTournamentSettlementPort(),
-    ];
-    if (requiredPorts.some((port) => !port)) throw new MatchServiceError("WORKER_MATCH_RUNTIME_REPOSITORY_SET_INCOMPLETE");
-  }
+  requireProductionSupabaseMatchWorkerPorts();
   const enqueued = options.enqueue === false ? 0 : await enqueueDueMatchRuntimes(now, Math.max(limit, 10));
   // The coordinator skips queue scans entirely when its scheduler snapshot says no work is due.
   const claimed = options.claim === false ? [] : await claimDueMatchRuntimes(workerId, now, 60_000, limit);
