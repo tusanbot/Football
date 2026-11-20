@@ -85,7 +85,7 @@ function clubSnapshot(id:string){
 }
 test("runtime enqueue snapshots valid due fixtures, reports invalid squads and bounds requested limit",async()=>{
  const stub=stubFetch([[{match_id:"match-1",scheduled_at:"2026-11-20T10:00:00.000Z",home_club:clubSnapshot("home"),away_club:clubSnapshot("away")},
-  {match_id:"match-invalid",scheduled_at:"2026-11-20T10:00:00.000Z",home_club:{...clubSnapshot("bad"),players:[]},away_club:clubSnapshot("away-2")}],[1]]);
+  {match_id:"match-invalid",scheduled_at:"2026-11-20T10:00:00.000Z",home_club:{...clubSnapshot("bad"),players:[]},away_club:clubSnapshot("away-2")}],1]);
  try{
   const result=await new SupabaseMatchRuntimeEnqueueRepository(client()).enqueue("2026-11-20T10:00:00.000Z",500);
   assert.deepEqual(result,{enqueued:1,invalidFixtures:[{id:"match-invalid",ownerId:"owner-bad"}]});
