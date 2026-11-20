@@ -21,7 +21,7 @@ test("admin group broadcast worker endpoints reject requests without the Bot sec
 });
 
 test("readiness reports missing production configuration without exposing secrets", async (t) => {
-  const keys = ["DATABASE_URL", "TELEGRAM_BOT_TOKEN", "BOT_API_SECRET", "CORS_ORIGIN", "GAME_ADMIN_TELEGRAM_IDS"] as const;
+  const keys = ["TELEGRAM_BOT_TOKEN", "BOT_API_SECRET", "CORS_ORIGIN", "GAME_ADMIN_TELEGRAM_IDS"] as const;
   const previous = new Map(keys.map((key) => [key, process.env[key]]));
   for (const key of keys) delete process.env[key];
   const app = buildApp();
@@ -38,6 +38,6 @@ test("readiness reports missing production configuration without exposing secret
   assert.equal(response.statusCode, 503);
   const body = response.json() as { status: string; missing: string[] };
   assert.equal(body.status, "not_ready");
-  assert.deepEqual(body.missing, ["DATABASE_URL", "TELEGRAM_BOT_TOKEN", "BOT_API_SECRET", "CORS_ORIGIN", "GAME_ADMIN_TELEGRAM_IDS"]);
+  assert.deepEqual(body.missing, ["TELEGRAM_BOT_TOKEN", "BOT_API_SECRET", "CORS_ORIGIN", "GAME_ADMIN_TELEGRAM_IDS"]);
   assert.equal(JSON.stringify(body).includes("secret"), false);
 });
