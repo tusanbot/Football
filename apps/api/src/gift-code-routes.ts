@@ -12,7 +12,7 @@ export function registerGiftCodeRoutes(app: FastifyInstance) {
     const body = z.object({
       code: z.string().trim().min(4).max(32).regex(/^[A-Za-z0-9_-]+$/),
       idempotencyKey: z.string().min(12).max(128),
-      telegramGroupId: z.string().regex(/^-?\\d{5,20}$/).optional(),
+      telegramGroupId: z.string().regex(/^-?\d{5,20}$/).optional(),
     }).strict().safeParse(req.body);
     if (!body.success) return reply.code(400).send({ error: "INVALID_GIFT_CODE" });
 
