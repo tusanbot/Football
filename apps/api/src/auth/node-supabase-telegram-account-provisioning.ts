@@ -37,7 +37,7 @@ function isProvisioningResponse(value: unknown, telegramId: string): value is Pr
     if (!wallet || typeof wallet !== "object" || Array.isArray(wallet)) return false;
     const item = wallet as Record<string, unknown>;
     return ["CASH", "GOLD", "HONOR"].includes(String(item.asset))
-      && typeof item.balance === "string" && /^-?\\d+$/.test(item.balance);
+      && typeof item.balance === "string" && /^-?\d+$/.test(item.balance);
   });
 }
 
