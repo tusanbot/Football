@@ -56,7 +56,7 @@ BEGIN
  WHERE "competitionId"=v_competition_id AND status::text<>'COMPLETED' AND round IS NOT NULL;
  SELECT COALESCE(jsonb_agg(item ORDER BY (item->>'scheduledAt')),'[]'::jsonb)
  INTO v_next_matches
- FROM jsonb_array_elements(v_matches) item
+ FROM jsonb_array_elements(v_matches) AS expanded(item)
  WHERE v_next_round IS NOT NULL AND (item->>'round')::integer=v_next_round;
 
  SELECT COALESCE(jsonb_agg(jsonb_build_object(
