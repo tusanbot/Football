@@ -13,7 +13,7 @@ CREATE OR REPLACE FUNCTION public.mark_pyramid_league_notices_read_http(p_user_i
 RETURNS jsonb LANGUAGE plpgsql VOLATILE SECURITY INVOKER SET search_path=public,pg_temp AS $fn$
 DECLARE v_count integer;
 BEGIN
- UPDATE public."LeagueNotice" SET "readAt"=p_now
+ UPDATE public."LeagueNotice" SET "readAt"=(p_now AT TIME ZONE 'UTC')::timestamp(3)
  WHERE "userId"=p_user_id AND "readAt" IS NULL;
  GET DIAGNOSTICS v_count=ROW_COUNT;
  RETURN jsonb_build_object('markedRead',v_count);
@@ -29,12 +29,12 @@ BEGIN
  WITH due AS (
   SELECT n.id FROM public."LeagueNotice" n
   WHERE n."deliveredAt" IS NULL AND n."readAt" IS NULL AND n."deliveryAttempts"<8
-   AND (n."deliveryLockedUntil" IS NULL OR n."deliveryLockedUntil"<=p_now)
+   AND (n."deliveryLockedUntil" IS NULL OR n."deliveryLockedUntil"<=(p_now AT TIME ZONE 'UTC')::timestamp(3))
   ORDER BY n."createdAt" ASC FOR UPDATE SKIP LOCKED LIMIT p_limit
  ), claimed AS (
   UPDATE public."LeagueNotice" n SET
    "deliveryClaimToken"=gen_random_uuid()::text,
-   "deliveryLockedUntil"=p_now+interval '60 seconds',
+   "deliveryLockedUntil"=(p_now AT TIME ZONE 'UTC')::timestamp(3)+interval '60 seconds',
    "deliveryAttempts"=n."deliveryAttempts"+1
   FROM due WHERE n.id=due.id
   RETURNING n.id,n."userId",n.title,n.body,n.kind,n."referenceId",n."deliveryClaimToken"
@@ -51,7 +51,7 @@ CREATE OR REPLACE FUNCTION public.complete_pyramid_league_notice_http(p_id text,
 RETURNS jsonb LANGUAGE plpgsql VOLATILE SECURITY INVOKER SET search_path=public,pg_temp AS $fn$
 DECLARE v_count integer;
 BEGIN
- UPDATE public."LeagueNotice" SET "deliveredAt"=p_now,"deliveryClaimToken"=NULL,
+ UPDATE public."LeagueNotice" SET "deliveredAt"=(p_now AT TIME ZONE 'UTC')::timestamp(3),"deliveryClaimToken"=NULL,
   "deliveryLockedUntil"=NULL,"deliveryLastError"=NULL
  WHERE id=p_id AND "deliveryClaimToken"=p_claim_token AND "deliveredAt" IS NULL;
  GET DIAGNOSTICS v_count=ROW_COUNT;
@@ -70,7 +70,7 @@ BEGIN
  IF NOT FOUND THEN RETURN jsonb_build_object('owned',false); END IF;
  v_delay:=LEAST(15000::numeric*power(2,GREATEST(0,v_attempts-1)),3600000)::integer;
  UPDATE public."LeagueNotice" SET "deliveryClaimToken"=NULL,
-  "deliveryLockedUntil"=CASE WHEN v_attempts>=8 THEN '9999-12-31T00:00:00Z'::timestamptz ELSE p_now+(v_delay::text||' milliseconds')::interval END,
+  "deliveryLockedUntil"=CASE WHEN v_attempts>=8 THEN '9999-12-31T00:00:00Z'::timestamptz ELSE (p_now AT TIME ZONE 'UTC')::timestamp(3)+(v_delay::text||' milliseconds')::interval END,
   "deliveryLastError"=p_error
  WHERE id=p_id AND "deliveryClaimToken"=p_claim_token AND "deliveredAt" IS NULL;
  GET DIAGNOSTICS v_count=ROW_COUNT;
