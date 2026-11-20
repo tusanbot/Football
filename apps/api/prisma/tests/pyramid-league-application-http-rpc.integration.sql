@@ -10,6 +10,7 @@ DECLARE
   v_clubs text[]:=ARRAY['ci-pyramid-club-1','ci-pyramid-club-2','ci-pyramid-club-3','ci-pyramid-club-4','ci-pyramid-club-5','ci-pyramid-club-6','ci-pyramid-club-7','ci-pyramid-club-8'];
   v_positions text[]:=ARRAY['GK','RB','CB','CB','LB','CDM','CM','CM','RW','LW','ST'];
   v_competition_id text;
+  v_details jsonb;
   v_league_id text;
   i integer;n integer;
 BEGIN
@@ -52,6 +53,12 @@ BEGIN
     OR COALESCE(v_league_id,'')='' OR COALESCE(v_competition_id,'')='' THEN
     RAISE EXCEPTION 'eight-team queue did not form a league: %',v_result;
   END IF;
+  v_details:=public.get_pyramid_league_details_http(v_users[1],v_league_id);
+  IF jsonb_array_length(v_details->'standings')<>8 OR jsonb_array_length(v_details->'matches')<>28
+    OR v_details->'league'->>'id' IS DISTINCT FROM v_league_id THEN
+    RAISE EXCEPTION 'pyramid league detail read response mismatch: %',v_details;
+  END IF;
+
   IF (SELECT count(*) FROM public."PyramidLeagueEntry" WHERE "leagueId"=v_league_id)<>8
     OR (SELECT count(*) FROM public."CompetitionEntry" WHERE "competitionId"=v_competition_id)<>8
     OR (SELECT count(*) FROM public."FootballMatch" WHERE "competitionId"=v_competition_id)<>28
