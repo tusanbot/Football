@@ -32,3 +32,10 @@ test("classic icons are excluded from ordinary icon packs", () => {
     assert.ok(!player.acquisitionMethods.includes("icon_pack" as never));
   }
 });
+
+test("special acquisition fails closed without the Supabase port", async () => {
+  await assert.rejects(
+    acquireSpecialPlayer("user-1", "epic_pack", "request-12345"),
+    (error: unknown) => error instanceof SpecialAcquisitionError && error.code === "SUPABASE_SPECIAL_ACQUISITION_UNAVAILABLE",
+  );
+});
