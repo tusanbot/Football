@@ -19,13 +19,13 @@ BEGIN
     RAISE EXCEPTION USING MESSAGE = 'INVALID_ACTION_RATE_LIMIT', ERRCODE = 'P0001';
   END IF;
 
-  INSERT INTO public."AllianceActionThrottle" ("key", "windowStart", "count", "updatedAt")
+  INSERT INTO public."AllianceActionThrottle" AS throttle ("key", "windowStart", "count", "updatedAt")
   VALUES (p_key, p_window_start AT TIME ZONE 'UTC', 1, p_now AT TIME ZONE 'UTC')
   ON CONFLICT ("key") DO UPDATE
   SET "windowStart" = EXCLUDED."windowStart",
       "count" = CASE
-        WHEN public."AllianceActionThrottle"."windowStart" = EXCLUDED."windowStart"
-          THEN public."AllianceActionThrottle"."count" + 1
+        WHEN throttle."windowStart" = EXCLUDED."windowStart"
+          THEN throttle."count" + 1
         ELSE 1
       END,
       "updatedAt" = EXCLUDED."updatedAt"
