@@ -164,3 +164,57 @@ test("competition advancement uses the atomic Supabase RPC and validates its res
     }), /SUPABASE_COMPETITION_ADVANCEMENT_REJECTED/);
   } finally { malformed.restore(); }
 });
+
+test("match runtime settlement recovers a committed RPC whose HTTP response was lost without duplicating effects", async () => {
+  const originalFetch = globalThis.fetch;
+  const calls: Array<{ url: string; body: Record<string, unknown> }> = [];
+  let durableSettlementCount = 0;
+  const persisted = {
+    matchId: "match-lost-response", replayed: false,
+    competitionId: null, round: null,
+    homeScore: 3, awayScore: 1, homePenalties: null, awayPenalties: null,
+    winnerClubId: "home", attendance: 1400, ticketRevenue: "70000",
+    advancement: null, pyramidFinalization: null, eventTournamentFinalization: null,
+  };
+  globalThis.fetch = (async (input, init) => {
+    const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+    calls.push({ url: String(input), body });
+    if (calls.length === 1) {
+      // Model Postgres committing the RPC, followed by the connection dropping
+      // before PostgREST can deliver its successful HTTP response.
+      durableSettlementCount++;
+      throw new TypeError("socket closed after server commit");
+    }
+    return new Response(JSON.stringify({ ...persisted, replayed: true }), {
+      status: 200, headers: { "content-type": "application/json" },
+    });
+  }) as typeof fetch;
+
+  try {
+    const repository = new SupabaseMatchRuntimeSettlementRepository(
+      new SupabaseHttpClient({ url, serviceRoleKey: key }),
+    );
+    const command = {
+      matchId: "match-lost-response", runtimeId: "runtime-lost-response",
+      leaseToken: "lease-lost-response", now: "2026-11-20T10:00:00.000Z",
+      result: { homeScore: 3, awayScore: 1 }, injuryDurationDays: 7,
+      redCardSuspensionMatches: 2, yellowCardsToSuspend: 3,
+      yellowCardSuspensionMatches: 1, homeReward: "250", awayReward: "100",
+    };
+
+    await assert.rejects(repository.settle(command), /Supabase HTTP request failed/);
+    assert.equal(calls.length, 1, "the HTTP transport must not automatically retry a mutation");
+    assert.equal(durableSettlementCount, 1);
+
+    const replay = await repository.settle(command);
+    assert.equal(calls.length, 2, "only the explicit recovery attempt should issue a second RPC");
+    assert.deepEqual(calls[1]!.body, calls[0]!.body, "recovery must preserve the original RPC payload");
+    assert.equal(replay.replayed, true);
+    assert.equal(replay.homeScore, 3);
+    assert.equal(replay.awayScore, 1);
+    assert.equal(durableSettlementCount, 1, "idempotent replay must not repeat the durable settlement");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
