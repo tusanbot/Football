@@ -353,3 +353,9 @@ The leased Node match worker now settles a completed runtime and advances its co
 - The new migrations are `20261120210000_match_settlement_advancement_atomic_http_rpc` and `20261120220000_invalid_match_settlement_advancement_atomic_http_rpc`. CI runs a SQL contract test for function composition and service-role-only execution, alongside Node adapter tests.
 
 Pyramid-league and event-tournament finalization still run as follow-up operations after the atomic match/competition transaction. Those workflows remain a separate retry/durability item. This change does not remove Prisma from `match-service.ts`; the legacy simulation and non-production compatibility paths remain until their callers and tests are migrated. No live database migration or production deployment was performed.
+
+## Atomic tournament finalization and retry behavior
+
+When a match completes a competition, the match-settlement and invalid-lineup-forfeit RPCs now invoke both `finalize_pyramid_league_http` and `finalize_event_tournament_http` before their transaction commits. Each finalizer is idempotent and safely returns a no-op result when the competition does not belong to that subsystem. A failure in standings, promotion/relegation, prize inventory, wallet ledger or notice creation rolls back the competition completion and the match/forfeit settlement together, so the leased runtime can be retried without partial awards or financial writes.
+
+The existing scheduled recovery sweeps remain enabled: `process_due_pyramid_work_http` retries completed pyramid leagues and expired promotion offers, while `process_due_event_tournament_finalizations_http` retries completed event tournaments. These sweeps are retained for competitions completed before the atomic wrapper and for operational recovery; they are not a second queue implementation. The API worker continues to run both sweeps through the request-scoped Supabase repositories.
