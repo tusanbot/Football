@@ -69,7 +69,7 @@ export function registerAdminLeagueRoutes(app: FastifyInstance, options: { admin
     const parsed = filters.safeParse(request.query);
     if (!parsed.success) return reply.code(400).send({ error: "INVALID_QUERY" });
     const { season, tier, status, q, limit } = parsed.data;
-    if (options.adminPyramidLeagueReadPort) return options.adminPyramidLeagueReadPort.list({ season, tier, status, q, limit });
+    if (options.adminPyramidLeagueReadPort) return options.adminPyramidLeagueReadPort.list({ ...(season !== undefined ? { season } : {}), ...(tier !== undefined ? { tier } : {}), ...(status !== undefined ? { status } : {}), ...(q !== undefined ? { q } : {}), limit });
     if (process.env.NODE_ENV === "production" || process.env.ENVIRONMENT === "production") {
       throw new Error("ADMIN_PYRAMID_LEAGUE_READ_SUPABASE_REPOSITORY_REQUIRED");
     }
