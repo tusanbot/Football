@@ -120,6 +120,7 @@ async function shutdown(signal: string) {
   if (matchWorker) clearInterval(matchWorker);
   if (workerTask) await workerTask;
   await app.close();
+  await prisma.$disconnect();
 }
 process.once("SIGTERM", () => { void shutdown("SIGTERM").catch((error) => { app.log.error(error); process.exitCode = 1; }); });
 process.once("SIGINT", () => { void shutdown("SIGINT").catch((error) => { app.log.error(error); process.exitCode = 1; }); });
