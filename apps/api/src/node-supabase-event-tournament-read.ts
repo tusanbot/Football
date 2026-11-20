@@ -1,4 +1,4 @@
-import type { EventTournamentCreateInput, EventTournamentReadPort } from "./event-tournament-read-context.js";
+import type { EventTournamentCreateInput, EventTournamentJoinInput, EventTournamentJoinResult, EventTournamentReadPort } from "./event-tournament-read-context.js";
 import { SupabaseHttpClient } from "./node-supabase-http.js";
 type Tournament={id:string;title:string;description:string;status:string;competitionId?:string|null;entryFeeAsset:string|null;entryFeeAmount:string|number;maxParticipants:number;registrationEndsAt:string;startsAt:string;endsAt:string|null;createdAt?:string};
 type Participant={id:string;tournamentId:string;userId:string;clubId:string;placement:number|null;score:number;joinedAt:string};
@@ -8,6 +8,29 @@ function inFilter(values:string[]){return "in.("+values.map(v=>'"'+v.replace(/\\
 function iso(v:string|null){return v?new Date(v).toISOString():null;}
 export class NodeSupabaseEventTournamentReadRepository implements EventTournamentReadPort{
  constructor(private readonly client:SupabaseHttpClient){}
+ async join(input:EventTournamentJoinInput):Promise<EventTournamentJoinResult>{
+  let result:unknown;
+  try {
+   result=await this.client.rpc("join_event_tournament_http",{
+    p_telegram_user_id:input.telegramUserId,p_tournament_id:input.tournamentId,p_now:input.now
+   });
+  } catch(error) {
+   if(error instanceof SupabaseHttpError&&/^[A-Z][A-Z0-9_]{2,80}$/.test(error.message))throw new Error(error.message);
+   throw error;
+  }
+  if(!result||typeof result!=="object"||Array.isArray(result))throw new Error("SUPABASE_EVENT_TOURNAMENT_JOIN_INVALID_RESPONSE");
+  const row=result as Record<string,unknown>;
+  if(typeof row.participantId!=="string"||!row.participantId||typeof row.replayed!=="boolean"||typeof row.autoStarted!=="boolean")
+   throw new Error("SUPABASE_EVENT_TOURNAMENT_JOIN_INVALID_RESPONSE");
+  const integer=(value:unknown)=>Number.isInteger(value)&&Number(value)>=0;
+  if(row.replayed===false&&(!integer(row.participantCount)||!integer(row.requiredParticipants)&&row.autoStarted===false))
+   throw new Error("SUPABASE_EVENT_TOURNAMENT_JOIN_INVALID_RESPONSE");
+  if(row.autoStarted===true&&(!integer(row.fixturesCreated)||!integer(row.rounds)
+   ||typeof row.startsAt!=="string"||!Number.isFinite(Date.parse(row.startsAt))
+   ||typeof row.competitionId!=="string"||!row.competitionId))
+   throw new Error("SUPABASE_EVENT_TOURNAMENT_JOIN_INVALID_RESPONSE");
+  return row as unknown as EventTournamentJoinResult;
+ }
  async create(input:EventTournamentCreateInput){
   const result=await this.client.rpc<{tournament:Record<string,unknown>;replayed:boolean}>("create_event_tournament_http",{
    p_telegram_user_id:input.telegramUserId,p_idempotency_key:"event-tournament-create:"+input.idempotencyKey,
