@@ -36,3 +36,17 @@ test("admin group targets are validated", async () => {
   const invalid = new NodeSupabaseAdminConsoleReadRepository(clientWith({ groups: [{ telegramId: 1 }] }).client);
   await assert.rejects(invalid.groupTargets(), /SUPABASE_ADMIN_CONSOLE_INVALID_GROUP_TARGET/);
 });
+
+test("admin broadcasts read through bounded Supabase HTTP RPC", async () => {
+  const rows = [{ id: "b1", kind: "groups", name: "Group broadcast", createdByTelegramId: "123", createdAt: "2026-11-20T10:00:00.000Z", total: 4, delivered: 2, skipped: 1, failed: 1, pending: 0 }];
+  const { client, calls } = clientWith(rows);
+  const repo = new NodeSupabaseAdminConsoleReadRepository(client);
+  assert.deepEqual(await repo.broadcasts(25), rows);
+  assert.deepEqual(calls[0], { name: "get_admin_broadcasts_http", args: { p_limit: 25 } });
+});
+test("admin broadcasts reject invalid limits and malformed rows", async () => {
+  const invalidLimit = new NodeSupabaseAdminConsoleReadRepository(clientWith([]).client);
+  await assert.rejects(invalidLimit.broadcasts(0), /INVALID_BROADCAST_LIMIT/);
+  const malformed = new NodeSupabaseAdminConsoleReadRepository(clientWith([{ id: "b1", kind: "other" }]).client);
+  await assert.rejects(malformed.broadcasts(10), /SUPABASE_ADMIN_CONSOLE_INVALID_BROADCAST/);
+});
