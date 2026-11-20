@@ -43,6 +43,8 @@ import type { BotRuntimeLeasePort } from "../../../apps/api/src/bot-runtime-leas
 import type { GroupMembershipPort } from "../../../apps/api/src/groups/group-membership-context.js";
 import type { AlliancePort } from "../../../apps/api/src/groups/alliance-context.js";
 import { registerPublicClubRoutes } from "../../../apps/api/src/public-club-routes.js";
+import type { PublicClubLogoRepository } from "../../../apps/api/src/node-supabase-public-club-logo.js";
+import type { PublicClubReadRepository } from "../../../apps/api/src/public-club-routes.js";
 import { registerPublicPlayerRecordRoutes, type PublicPlayerRecordRepository } from "../../../apps/api/src/players/public-record-routes.js";
 import { registerSeasonAwardRoutes, type SeasonAwardRepository } from "../../../apps/api/src/game/season-award-routes.js";
 import { registerStoreRoutes } from "../../../apps/api/src/store/store-routes.js";
@@ -84,7 +86,7 @@ function queryObject(url: URL): Record<string, string | string[]> {
   return query;
 }
 
-export function createWorkersApiRouter(dependencies: { publicPlayerRecords?: PublicPlayerRecordRepository; seasonAwards?: SeasonAwardRepository; specialPlayers?: SpecialPlayerCatalogRepository; botRuntimeLease?: BotRuntimeLeasePort; groupMembership?: GroupMembershipPort; alliance?: AlliancePort } = {}) {
+export function createWorkersApiRouter(dependencies: { publicPlayerRecords?: PublicPlayerRecordRepository; seasonAwards?: SeasonAwardRepository; publicClubRead?: PublicClubReadRepository; publicClubLogo?: PublicClubLogoRepository; specialPlayers?: SpecialPlayerCatalogRepository; botRuntimeLease?: BotRuntimeLeasePort; groupMembership?: GroupMembershipPort; alliance?: AlliancePort } = {}) {
   const registry = new RouteRegistry();
   const registrar = registry as unknown as Parameters<typeof registerTelegramAuthRoutes>[0];
   registerTelegramAuthRoutes(registrar);
@@ -104,7 +106,7 @@ export function createWorkersApiRouter(dependencies: { publicPlayerRecords?: Pub
   registerLeagueNoticeRoutes(registrar);
   registerAdminGroupBroadcastRoutes(registrar);
   registerBotRuntimeRoutes(registrar, { leasePort: dependencies.botRuntimeLease, requireLeasePort: true });
-  registerPublicClubRoutes(registrar);
+  registerPublicClubRoutes(registrar, dependencies.publicClubLogo, dependencies.publicClubRead);
   registerPublicPlayerRecordRoutes(registrar, dependencies.publicPlayerRecords);
   registerSeasonAwardRoutes(registrar, dependencies.seasonAwards);
   registerStoreRoutes(registrar);
