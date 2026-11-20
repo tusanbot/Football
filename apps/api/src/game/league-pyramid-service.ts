@@ -136,6 +136,44 @@ export async function listPyramidLeagues(userId: string) {
   const port = getPyramidLeagueSettlementPort();
   if (port) return port.listLeagues(userId);
   const club = await ownedClub(userId);
+  const season = new Date().getUTCFullYear() + 1;
+  const [leagues, applications, currentEntry, promotionOffers, historyLeagues] = await Promise.all([
+    prisma.pyramidLeague.findMany({
+      where: { season }, include: {
+        competition: { select: { id: true, name: true, status: true, startsAt: true, completedAt: true } },
+        entries: { select: { clubId: true, club: { select: { name: true } } } },
+      }, orderBy: [{ tier: "asc" }, { groupNumber: "asc" }],
+    }),
+    prisma.pyramidLeagueApplication.findMany({
+      where: { clubId: club.id, season }, orderBy: { appliedAt: "desc" }, take: 20,
+    }),
+    prisma.pyramidLeagueEntry.findFirst({ where: { clubId: club.id, league: { season } }, include: { league: true } }),
+    prisma.leaguePromotionOffer.findMany({ where: { clubId: club.id, status: "PENDING" }, include: { league: { select: { tier: true, season: true } } }, orderBy: { offeredAt: "desc" } }),
+    prisma.pyramidLeague.findMany({ where: { season: { lt: season } }, include: { competition: { select: { name: true, status: true } }, entries: { select: { clubId: true } } }, orderBy: [{ season: "desc" }, { tier: "asc" }, { groupNumber: "asc" }], take: 100 }),
+  ]);
+  const queueCounts = await prisma.pyramidLeagueApplication.groupBy({
+    by: ["tier"], where: { season, status: "QUEUED" }, _count: { _all: true },
+  });
+  return {
+    season, tiers: Array.from({ length: 7 }, (_, index) => {
+      const tier = index + 1;
+      const level = leagueTier(tier);
+      return {
+        tier, key: level.key, name: level.name,
+        waitingTeams: queueCounts.find((row) => row.tier === tier)?._count._all ?? 0,
+        leagues: leagues.filter((league) => league.tier === tier).map((league) => ({
+          id: league.id, competitionId: league.competition.id, name: league.competition.name,
+          status: league.competition.status, startsAt: league.competition.startsAt?.toISOString() ?? null,
+          teams: league.entries.length, clubs: league.entries.map((entry) => entry.club.name),
+          isMyLeague: league.entries.some((entry) => entry.clubId === club.id),
+        })),
+        myApplication: applications.find((application) => application.tier === tier)?.status ?? null,
+      };
+    }),
+    currentLeagueId: currentEntry?.leagueId ?? null,
+    promotionOffers: promotionOffers.map((offer) => ({ id: offer.id, fromTier: offer.league.tier, targetTier: offer.targetTier, season: offer.league.season, finalPosition: offer.finalPosition })),
+    history: historyLeagues.map((league) => ({ id: league.id, tier: league.tier, tierName: leagueTier(league.tier).name, season: league.season, groupNumber: league.groupNumber, name: league.competition.name, status: league.competition.status, teams: league.entries.length })),
+  };
 }
 
 export async function getPyramidLeagueClubHistory(userId: string) {
