@@ -36,8 +36,7 @@ BEGIN
   UPDATE public."TelegramGroup" SET
    "isSuspended"=(p_action='suspend-group'),"isActive"=false,
    "suspendedAt"=CASE WHEN p_action='suspend-group' THEN clock_timestamp() ELSE NULL END,
-   "suspensionReason"=CASE WHEN p_action='suspend-group' THEN COALESCE(p_reason,'Administrative action') ELSE NULL END,
-   "updatedAt"=clock_timestamp()
+   "suspensionReason"=CASE WHEN p_action='suspend-group' THEN COALESCE(p_reason,'Administrative action') ELSE NULL END
    WHERE id=p_target_id;
   GET DIAGNOSTICS v_count=ROW_COUNT;
   IF v_count<>1 THEN RAISE EXCEPTION USING MESSAGE='TARGET_NOT_FOUND',ERRCODE='P0002'; END IF;
