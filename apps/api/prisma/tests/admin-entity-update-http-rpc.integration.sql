@@ -26,7 +26,7 @@ BEGIN
  END;
  SELECT count(*) INTO n FROM public."AdminAuditLog" WHERE "idempotencyKey" LIKE 'admin-entity:admin-entity-%';
  IF n<>4 THEN RAISE EXCEPTION 'expected 4 audit rows, got %',n; END IF;
- IF has_function_privilege('anon','public.admin_entity_update_http(text,text,text,text,jsonb)','EXECUTE') THEN RAISE EXCEPTION 'anon must not execute admin entity RPC'; END IF;
- IF has_function_privilege('authenticated','public.admin_entity_update_http(text,text,text,text,jsonb)','EXECUTE') THEN RAISE EXCEPTION 'authenticated must not execute admin entity RPC'; END IF;
+ IF has_function_privilege('anon','public.admin_entity_update_http(text,text,text,text,jsonb,text)','EXECUTE') THEN RAISE EXCEPTION 'anon must not execute admin entity RPC'; END IF;
+ IF has_function_privilege('authenticated','public.admin_entity_update_http(text,text,text,text,jsonb,text)','EXECUTE') THEN RAISE EXCEPTION 'authenticated must not execute admin entity RPC'; END IF;
 END $$;
 ROLLBACK;
