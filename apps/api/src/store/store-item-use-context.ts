@@ -28,5 +28,9 @@ export function withStoreItemUsePort<T>(port: StoreItemUsePort, operation: () =>
 }
 
 export function getStoreItemUsePort(): StoreItemUsePort | undefined {
-  return storeItemUseScope.getStore();
+  const port = storeItemUseScope.getStore();
+  if (!port && (process.env.NODE_ENV === "production" || process.env.ENVIRONMENT === "production")) {
+    throw new Error("STORE_ITEM_USE_SUPABASE_REPOSITORY_REQUIRED");
+  }
+  return port;
 }
