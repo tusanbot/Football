@@ -38,7 +38,7 @@ const scope=new AsyncLocalStorage<PyramidLeagueSettlementPort>();
 export function withPyramidLeagueSettlementPort<T>(port:PyramidLeagueSettlementPort,operation:()=>Promise<T>):Promise<T>{return scope.run(port,operation);}
 export function getPyramidLeagueSettlementPort():PyramidLeagueSettlementPort|undefined{
  const port=scope.getStore();
- if(!port&&process.env.NODE_ENV==="production"){
+ if(!port&&(process.env.NODE_ENV==="production" || process.env.ENVIRONMENT==="production")){
   throw new Error("PYRAMID_LEAGUE_SUPABASE_REPOSITORY_REQUIRED");
  }
  return port;
