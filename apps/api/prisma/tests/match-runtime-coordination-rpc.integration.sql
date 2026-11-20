@@ -13,6 +13,7 @@ DECLARE
   v_fixture record;
   v_claim record;
   v_claim_again record;
+  v_claim_count integer;
   v_checkpoint jsonb;
   v_decision jsonb;
   v_replay jsonb;
@@ -59,8 +60,8 @@ BEGIN
   IF v_claim.runtime_id<>v_runtime OR v_claim.lease_token IS NULL OR v_claim.lease_expires_at<=v_now THEN
     RAISE EXCEPTION 'runtime lease claim returned invalid lease: %',row_to_json(v_claim);
   END IF;
-  SELECT count(*) INTO v_claim_again FROM public.claim_due_match_runtimes('ci-runtime-coord-worker-2',v_now,60000,10);
-  IF v_claim_again<>0 THEN RAISE EXCEPTION 'active lease was claimed twice'; END IF;
+  SELECT count(*) INTO v_claim_count FROM public.claim_due_match_runtimes('ci-runtime-coord-worker-2',v_now,60000,10);
+  IF v_claim_count<>0 THEN RAISE EXCEPTION 'active lease was claimed twice'; END IF;
 
   IF NOT public.advance_match_runtime_first_half(
     v_runtime,1,v_claim.lease_token,
