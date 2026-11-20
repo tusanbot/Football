@@ -40,5 +40,9 @@ export function withMarketListingPort<T>(port: MarketListingPort, operation: () 
 }
 
 export function getMarketListingPort(): MarketListingPort | undefined {
-  return marketListingScope.getStore();
+  const port = marketListingScope.getStore();
+  if (!port && (process.env.NODE_ENV === "production" || process.env.ENVIRONMENT === "production")) {
+    throw new Error("MARKET_LISTING_SUPABASE_REPOSITORY_REQUIRED");
+  }
+  return port;
 }
