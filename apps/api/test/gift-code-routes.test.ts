@@ -75,3 +75,48 @@ test("gift redemption rejects rate-limited requests before redemption", async ()
     assert.equal(response.json().error, "GIFT_CODE_RATE_LIMITED");
   } finally { await app.close(); }
 }));
+
+
+test("gift redemption accepts numeric Telegram group IDs and forwards the group scope", async () => withAuthEnv(async () => {
+  const lookup: TelegramUserLookupPort = { async loadActiveUser() { return actor; } };
+  let receivedGroupId: string | null | undefined;
+  const port: GiftCodeRedemptionPort = {
+    async consumeRateLimit() { return true; },
+    async getRewardType() { return "CASH"; },
+    async redeem(input) {
+      receivedGroupId = input.telegramGroupId;
+      return { ok: true, reward: { cash: "500", gold: "0", groupPoints: "0" }, replayed: false };
+    },
+  };
+  const app = buildApp({ telegramUserLookupPort: lookup, giftCodeRedemptionPort: port });
+  await app.ready();
+  try {
+    const response = await app.inject({
+      method: "POST", url: "/v1/gift-codes/redeem",
+      headers: { "x-football-bot-secret": process.env.BOT_API_SECRET!, "x-telegram-user-id": actor.telegramId },
+      payload: { code: "welcome", idempotencyKey: "gift-test-key-0004", telegramGroupId: "-1001234567890" },
+    });
+    assert.equal(response.statusCode, 200);
+    assert.equal(receivedGroupId, "-1001234567890");
+  } finally { await app.close(); }
+}));
+
+test("gift redemption rejects malformed Telegram group IDs", async () => withAuthEnv(async () => {
+  const lookup: TelegramUserLookupPort = { async loadActiveUser() { return actor; } };
+  const port: GiftCodeRedemptionPort = {
+    async consumeRateLimit() { throw new Error("must not consume rate limit"); },
+    async getRewardType() { throw new Error("must not preflight"); },
+    async redeem() { throw new Error("must not redeem"); },
+  };
+  const app = buildApp({ telegramUserLookupPort: lookup, giftCodeRedemptionPort: port });
+  await app.ready();
+  try {
+    const response = await app.inject({
+      method: "POST", url: "/v1/gift-codes/redeem",
+      headers: { "x-football-bot-secret": process.env.BOT_API_SECRET!, "x-telegram-user-id": actor.telegramId },
+      payload: { code: "welcome", idempotencyKey: "gift-test-key-0005", telegramGroupId: "not-a-group" },
+    });
+    assert.equal(response.statusCode, 400);
+    assert.equal(response.json().error, "INVALID_GIFT_CODE");
+  } finally { await app.close(); }
+}));
