@@ -65,6 +65,60 @@ test("event tournament auto-starts at capacity and creates a valid round-robin f
     logger: false,
     actionRateLimitPort: { async consume() { return true; } },
     eventTournamentReadPort: {
+      async join(input) {
+        return prisma.$transaction(async (tx) => {
+          const existing = await tx.eventTournamentParticipant.findUnique({
+            where: { tournamentId_userId: { tournamentId: input.tournamentId, userId: (await tx.user.findUniqueOrThrow({ where: { telegramId: input.telegramUserId }, select: { id: true } })).id } },
+          });
+          if (existing) return { participantId: existing.id, replayed: true, autoStarted: false };
+          const user = await tx.user.findUniqueOrThrow({ where: { telegramId: input.telegramUserId }, select: { id: true } });
+          const tournament = await tx.eventTournament.findUniqueOrThrow({ where: { id: input.tournamentId } });
+          const club = await tx.club.findUniqueOrThrow({ where: { ownerId: user.id }, select: { id: true } });
+          const now = new Date(input.now);
+          const count = await tx.eventTournamentParticipant.count({ where: { tournamentId: tournament.id } });
+          const participant = await tx.eventTournamentParticipant.create({ data: { tournamentId: tournament.id, userId: user.id, clubId: club.id } });
+          const participantCount = count + 1;
+          if (participantCount < tournament.maxParticipants) return {
+            participantId: participant.id, replayed: false, autoStarted: false,
+            participantCount, requiredParticipants: tournament.maxParticipants,
+          };
+          const participants = await tx.eventTournamentParticipant.findMany({
+            where: { tournamentId: tournament.id }, orderBy: [{ joinedAt: "asc" }, { id: "asc" }],
+          });
+          const slots = participants.map((item) => item.clubId);
+          const rounds = slots.length - 1;
+          const kickoffAt = new Date(now.getTime() + 86_400_000);
+          const competition = await tx.competition.create({ data: {
+            idempotencyKey: "event-tournament-competition:" + tournament.id, name: tournament.title,
+            season: now.getUTCFullYear(), format: "LEAGUE", status: "ACTIVE",
+            maxTeams: participants.length, createdByClubId: participants[0]!.clubId,
+            startsAt: kickoffAt, rules: { penaltiesOnDraw: false },
+            entries: { create: participants.map((item) => ({ clubId: item.clubId })) },
+          } });
+          const fixtures = [];
+          for (let round = 0; round < rounds; round++) {
+            for (let index = 0; index < slots.length / 2; index++) {
+              const first = slots[index]!, second = slots[slots.length - 1 - index]!;
+              const swap = (round + index) % 2 === 1;
+              const homeClubId = swap ? second : first, awayClubId = swap ? first : second;
+              const idempotencyKey = "event-tournament:" + tournament.id + ":r" + (round + 1) + ":" + homeClubId + ":" + awayClubId;
+              fixtures.push({ idempotencyKey, type: "LEAGUE" as const, competitionId: competition.id,
+                round: round + 1, homeClubId, awayClubId,
+                scheduledAt: new Date(kickoffAt.getTime() + round * 86_400_000), seed: idempotencyKey });
+            }
+            const fixed = slots[0]!, rotating = slots.slice(1);
+            rotating.unshift(rotating.pop()!);
+            slots.splice(0, slots.length, fixed, ...rotating);
+          }
+          await tx.footballMatch.createMany({ data: fixtures });
+          await tx.eventTournament.update({ where: { id: tournament.id }, data: {
+            status: "ACTIVE", competitionId: competition.id, startsAt: kickoffAt,
+          } });
+          return { participantId: participant.id, replayed: false, autoStarted: true,
+            participantCount, fixturesCreated: fixtures.length, rounds, startsAt: kickoffAt.toISOString(),
+            competitionId: competition.id };
+        });
+      },
       async create(input) {
         const tournament = await prisma.eventTournament.create({
           data: {
