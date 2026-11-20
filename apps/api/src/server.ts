@@ -9,6 +9,7 @@ import { NodeSupabaseGroupMembershipRepository } from "./groups/node-supabase-gr
 import { NodeSupabaseActionRateLimitRepository } from "./groups/node-supabase-action-rate-limit.js";
 import { NodeSupabaseAllianceRepository } from "./groups/node-supabase-alliance.js";
 import { NodeSupabaseTelegramUserLookupRepository } from "./auth/node-supabase-telegram-user-lookup.js";
+import { NodeSupabaseTelegramAccountProvisioningRepository } from "./auth/node-supabase-telegram-account-provisioning.js";
 import { NodeSupabaseStorePurchaseRepository, NodeSupabaseStoreItemUseRepository } from "./store/node-supabase-store.js";
 import { NodeSupabaseWalletEntryRepository, NodeSupabaseMarketRepository, NodeSupabaseStoreSnapshotRepository } from "./economy/node-supabase-commerce.js";
 import { SupabaseHttpClient } from "./node-supabase-http.js";
@@ -55,6 +56,7 @@ const alliancePort = hasSupabaseUrl
 const telegramUserLookupPort = hasSupabaseUrl
   ? new NodeSupabaseTelegramUserLookupRepository(process.env.SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
   : undefined;
+const accountProvisioningPort = supabaseHttp ? new NodeSupabaseTelegramAccountProvisioningRepository(supabaseHttp) : undefined;
 const storePurchasePort = hasSupabaseUrl
   ? new NodeSupabaseStorePurchaseRepository(process.env.SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
   : undefined;
@@ -87,6 +89,7 @@ const app = buildApp({
   ...(actionRateLimitPort ? { actionRateLimitPort } : {}),
   ...(alliancePort ? { alliancePort, adminAlliancePort: alliancePort } : {}),
   ...(telegramUserLookupPort ? { telegramUserLookupPort } : {}),
+  ...(accountProvisioningPort ? { accountProvisioningPort } : {}),
   ...(storePurchasePort ? { storePurchasePort } : {}),
   ...(storeItemUsePort ? { storeItemUsePort } : {}),
   ...(walletEntryPort ? { walletEntryPort } : {}),
