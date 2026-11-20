@@ -92,106 +92,13 @@ BEGIN
    RAISE EXCEPTION USING MESSAGE='INVALID_MATCH_UPDATE',ERRCODE='22023';
   END IF;
   IF (p_payload ? 'scheduledAt' AND (p_payload->>'scheduledAt') IS NULL)
-   OR (p_payload ? 'homeScore' AND ((p_payload->>'homeScore') IS NULL OR p_payload->>'homeScore' !~ '^[0-9]{1,2}
-  UPDATE public."FootballMatch" SET
-   "scheduledAt"=CASE WHEN p_payload ? 'scheduledAt' THEN (p_payload->>'scheduledAt')::timestamptz ELSE "scheduledAt" END,
-   "homeScore"=CASE WHEN p_payload ? 'homeScore' THEN (p_payload->>'homeScore')::int ELSE "homeScore" END,
-   "awayScore"=CASE WHEN p_payload ? 'awayScore' THEN (p_payload->>'awayScore')::int ELSE "awayScore" END,
-   status=CASE WHEN p_payload ? 'matchStatus' THEN (p_payload->>'matchStatus')::public."MatchStatus" ELSE status END,
-   "updatedAt"=clock_timestamp()
-  WHERE id=p_target_id AND status NOT IN ('COMPLETED','IN_PROGRESS');
-  IF NOT FOUND THEN
-   IF EXISTS(SELECT 1 FROM public."FootballMatch" WHERE id=p_target_id AND status='COMPLETED') THEN
-    RAISE EXCEPTION USING MESSAGE='MATCH_COMPLETION_AUTOMATIC_ONLY',ERRCODE='P0001';
-   ELSIF EXISTS(SELECT 1 FROM public."FootballMatch" WHERE id=p_target_id AND status='IN_PROGRESS') THEN
-    RAISE EXCEPTION USING MESSAGE='MATCH_ALREADY_STARTED',ERRCODE='P0001';
-   END IF;
-   RAISE EXCEPTION USING MESSAGE='TARGET_NOT_FOUND',ERRCODE='P0002';
-  END IF;
- ELSIF p_action='player-status' THEN
-  IF p_payload->>'status' IS NULL OR p_payload->>'status' NOT IN ('ACTIVE','RETIRED') OR jsonb_object_length(p_payload)<>1 THEN RAISE EXCEPTION USING MESSAGE='INVALID_PLAYER_STATUS',ERRCODE='22023'; END IF;
-  UPDATE public."Player" SET status=(p_payload->>'status')::public."PlayerStatus",
-   "lineupSlot"=CASE WHEN p_payload->>'status'='RETIRED' THEN NULL ELSE "lineupSlot" END,"updatedAt"=clock_timestamp()
-  WHERE id=p_target_id;
- ELSIF p_action='alliance-status' THEN
-  IF p_payload->>'status' IS NULL OR p_payload->>'status' NOT IN ('ACTIVE','SUSPENDED','DISSOLVED') OR jsonb_object_length(p_payload)<>1 THEN RAISE EXCEPTION USING MESSAGE='INVALID_ALLIANCE_STATUS',ERRCODE='22023'; END IF;
-  UPDATE public."Alliance" SET status=(p_payload->>'status')::public."AllianceStatus","updatedAt"=clock_timestamp() WHERE id=p_target_id;
- ELSE
-  IF p_payload->>'status' IS NULL OR p_payload->>'status' NOT IN ('ACTIVE','CANCELLED') OR jsonb_object_length(p_payload)<>1 THEN RAISE EXCEPTION USING MESSAGE='INVALID_SEASON_STATUS',ERRCODE='22023'; END IF;
-  UPDATE public."AllianceSeason" SET status=p_payload->>'status' WHERE id=p_target_id AND status<>'COMPLETED';
-  IF NOT FOUND THEN
-   IF EXISTS(SELECT 1 FROM public."AllianceSeason" WHERE id=p_target_id AND status='COMPLETED') THEN RAISE EXCEPTION USING MESSAGE='ALLIANCE_SEASON_ALREADY_SETTLED',ERRCODE='P0001'; END IF;
-   RAISE EXCEPTION USING MESSAGE='TARGET_NOT_FOUND',ERRCODE='P0002';
-  END IF;
- END IF;
- IF NOT FOUND THEN RAISE EXCEPTION USING MESSAGE='TARGET_NOT_FOUND',ERRCODE='P0002'; END IF;
- INSERT INTO public."AdminAuditLog"(id,"actorTelegramId",action,"targetType","targetId",reason,metadata,"idempotencyKey","createdAt")
- VALUES(gen_random_uuid()::text,p_actor_telegram_id,p_action,v_target_type,v_target_id,p_reason,v_metadata,'admin-entity:'||p_idempotency_key,clock_timestamp());
- RETURN jsonb_build_object('ok',true,'targetType',v_target_type,'targetId',v_target_id,'replay',false);
-END;
-$fn$;
-REVOKE ALL ON FUNCTION public.admin_entity_update_http(text,text,text,text,jsonb,text) FROM PUBLIC,anon,authenticated;
-DO $grant$
-BEGIN
- IF EXISTS(SELECT 1 FROM pg_roles WHERE rolname='service_role') THEN
-  GRANT EXECUTE ON FUNCTION public.admin_entity_update_http(text,text,text,text,jsonb,text) TO service_role;
- END IF;
-END;
-$grant$;
- OR (p_payload->>'homeScore')::int NOT BETWEEN 0 AND 99))
-   OR (p_payload ? 'awayScore' AND ((p_payload->>'awayScore') IS NULL OR p_payload->>'awayScore' !~ '^[0-9]{1,2}
-  UPDATE public."FootballMatch" SET
-   "scheduledAt"=CASE WHEN p_payload ? 'scheduledAt' THEN (p_payload->>'scheduledAt')::timestamptz ELSE "scheduledAt" END,
-   "homeScore"=CASE WHEN p_payload ? 'homeScore' THEN (p_payload->>'homeScore')::int ELSE "homeScore" END,
-   "awayScore"=CASE WHEN p_payload ? 'awayScore' THEN (p_payload->>'awayScore')::int ELSE "awayScore" END,
-   status=CASE WHEN p_payload ? 'matchStatus' THEN (p_payload->>'matchStatus')::public."MatchStatus" ELSE status END,
-   "updatedAt"=clock_timestamp()
-  WHERE id=p_target_id AND status NOT IN ('COMPLETED','IN_PROGRESS');
-  IF NOT FOUND THEN
-   IF EXISTS(SELECT 1 FROM public."FootballMatch" WHERE id=p_target_id AND status='COMPLETED') THEN
-    RAISE EXCEPTION USING MESSAGE='MATCH_COMPLETION_AUTOMATIC_ONLY',ERRCODE='P0001';
-   ELSIF EXISTS(SELECT 1 FROM public."FootballMatch" WHERE id=p_target_id AND status='IN_PROGRESS') THEN
-    RAISE EXCEPTION USING MESSAGE='MATCH_ALREADY_STARTED',ERRCODE='P0001';
-   END IF;
-   RAISE EXCEPTION USING MESSAGE='TARGET_NOT_FOUND',ERRCODE='P0002';
-  END IF;
- ELSIF p_action='player-status' THEN
-  IF p_payload->>'status' IS NULL OR p_payload->>'status' NOT IN ('ACTIVE','RETIRED') OR jsonb_object_length(p_payload)<>1 THEN RAISE EXCEPTION USING MESSAGE='INVALID_PLAYER_STATUS',ERRCODE='22023'; END IF;
-  UPDATE public."Player" SET status=(p_payload->>'status')::public."PlayerStatus",
-   "lineupSlot"=CASE WHEN p_payload->>'status'='RETIRED' THEN NULL ELSE "lineupSlot" END,"updatedAt"=clock_timestamp()
-  WHERE id=p_target_id;
- ELSIF p_action='alliance-status' THEN
-  IF p_payload->>'status' IS NULL OR p_payload->>'status' NOT IN ('ACTIVE','SUSPENDED','DISSOLVED') OR jsonb_object_length(p_payload)<>1 THEN RAISE EXCEPTION USING MESSAGE='INVALID_ALLIANCE_STATUS',ERRCODE='22023'; END IF;
-  UPDATE public."Alliance" SET status=(p_payload->>'status')::public."AllianceStatus","updatedAt"=clock_timestamp() WHERE id=p_target_id;
- ELSE
-  IF p_payload->>'status' IS NULL OR p_payload->>'status' NOT IN ('ACTIVE','CANCELLED') OR jsonb_object_length(p_payload)<>1 THEN RAISE EXCEPTION USING MESSAGE='INVALID_SEASON_STATUS',ERRCODE='22023'; END IF;
-  UPDATE public."AllianceSeason" SET status=p_payload->>'status' WHERE id=p_target_id AND status<>'COMPLETED';
-  IF NOT FOUND THEN
-   IF EXISTS(SELECT 1 FROM public."AllianceSeason" WHERE id=p_target_id AND status='COMPLETED') THEN RAISE EXCEPTION USING MESSAGE='ALLIANCE_SEASON_ALREADY_SETTLED',ERRCODE='P0001'; END IF;
-   RAISE EXCEPTION USING MESSAGE='TARGET_NOT_FOUND',ERRCODE='P0002';
-  END IF;
- END IF;
- IF NOT FOUND THEN RAISE EXCEPTION USING MESSAGE='TARGET_NOT_FOUND',ERRCODE='P0002'; END IF;
- INSERT INTO public."AdminAuditLog"(id,"actorTelegramId",action,"targetType","targetId",reason,metadata,"idempotencyKey","createdAt")
- VALUES(gen_random_uuid()::text,p_actor_telegram_id,p_action,v_target_type,v_target_id,p_reason,v_metadata,'admin-entity:'||p_idempotency_key,clock_timestamp());
- RETURN jsonb_build_object('ok',true,'targetType',v_target_type,'targetId',v_target_id,'replay',false);
-END;
-$fn$;
-REVOKE ALL ON FUNCTION public.admin_entity_update_http(text,text,text,text,jsonb,text) FROM PUBLIC,anon,authenticated;
-DO $grant$
-BEGIN
- IF EXISTS(SELECT 1 FROM pg_roles WHERE rolname='service_role') THEN
-  GRANT EXECUTE ON FUNCTION public.admin_entity_update_http(text,text,text,text,jsonb,text) TO service_role;
- END IF;
-END;
-$grant$;
- OR (p_payload->>'awayScore')::int NOT BETWEEN 0 AND 99)) THEN
+   OR (p_payload ? 'homeScore' AND ((p_payload->>'homeScore') IS NULL OR p_payload->>'homeScore' !~ '^[0-9]{1,2}$' OR (p_payload->>'homeScore')::int NOT BETWEEN 0 AND 99))
+   OR (p_payload ? 'awayScore' AND ((p_payload->>'awayScore') IS NULL OR p_payload->>'awayScore' !~ '^[0-9]{1,2}$' OR (p_payload->>'awayScore')::int NOT BETWEEN 0 AND 99)) THEN
    RAISE EXCEPTION USING MESSAGE='INVALID_MATCH_UPDATE',ERRCODE='22023';
   END IF;
   IF p_payload ? 'matchStatus' AND p_payload->>'matchStatus'='COMPLETED' THEN
    RAISE EXCEPTION USING MESSAGE='MATCH_COMPLETION_AUTOMATIC_ONLY',ERRCODE='P0001';
   END IF;
-  UPDATE public."FootballMatch" SET
    "scheduledAt"=CASE WHEN p_payload ? 'scheduledAt' THEN (p_payload->>'scheduledAt')::timestamptz ELSE "scheduledAt" END,
    "homeScore"=CASE WHEN p_payload ? 'homeScore' THEN (p_payload->>'homeScore')::int ELSE "homeScore" END,
    "awayScore"=CASE WHEN p_payload ? 'awayScore' THEN (p_payload->>'awayScore')::int ELSE "awayScore" END,
