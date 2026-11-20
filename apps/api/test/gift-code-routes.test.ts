@@ -4,7 +4,7 @@ import { buildApp } from "../src/app.js";
 import type { GiftCodeRedemptionPort } from "../src/gift-code-redemption-context.js";
 import type { TelegramUserLookupPort } from "../src/auth/telegram-user-lookup-context.js";
 
-const actor = { id: "user_test", telegramId: "123456", username: null, displayName: "Test", createdAt: new Date("2026-01-01T00:00:00.000Z"), isSuspended: false };
+const actor = { id: "user_test", telegramId: "123456", username: null, displayName: "Test", createdAt: "2026-01-01T00:00:00.000Z" };
 
 async function withAuthEnv<T>(run: () => Promise<T>) {
   const previous = process.env.BOT_API_SECRET;
