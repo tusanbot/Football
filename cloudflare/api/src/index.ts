@@ -87,6 +87,9 @@ import { SupabaseAdminBroadcastManagementRepository } from "./repositories/admin
 import { SupabaseAdminModerationActionsRepository } from "./repositories/admin-moderation-actions.js";
 import { SupabaseAdminCatalogActionsRepository } from "./repositories/admin-catalog-actions.js";
 import { SupabaseAdminEntityUpdateRepository } from "./repositories/admin-entity-update.js";
+import { SupabaseAdminSeasonAwardActionsRepository } from "./repositories/admin-season-awards.js";
+import { SupabaseAdminBroadcastCreateRepository } from "./repositories/admin-broadcast-create.js";
+import { SupabaseAdminGroupBroadcastRepository } from "./repositories/admin-group-broadcast.js";
 import { SupabaseAdminPyramidLeagueActionsRepository } from "./repositories/admin-pyramid-league-actions.js";
 import { SupabaseAdminPyramidLeagueReadRepository } from "./repositories/admin-pyramid-league-read.js";
 import { SupabaseAdminPyramidLeagueReportsRepository } from "./repositories/admin-pyramid-league-reports.js";
@@ -219,11 +222,14 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
        const adminModerationActions = supabaseClient ? new SupabaseAdminModerationActionsRepository(supabaseClient) : undefined;
        const adminCatalogActions = supabaseClient ? new SupabaseAdminCatalogActionsRepository(supabaseClient) : undefined;
         const adminEntityUpdates = supabaseClient ? new SupabaseAdminEntityUpdateRepository(supabaseClient) : undefined;
+       const adminSeasonAwardActions = supabaseClient ? new SupabaseAdminSeasonAwardActionsRepository(supabaseClient) : undefined;
+       const adminBroadcastCreate = supabaseClient ? new SupabaseAdminBroadcastCreateRepository(supabaseClient) : undefined;
+       const adminGroupBroadcast = supabaseClient ? new SupabaseAdminGroupBroadcastRepository(supabaseClient) : undefined;
        const adminPyramidLeagueActions = supabaseClient ? new SupabaseAdminPyramidLeagueActionsRepository(supabaseClient) : undefined;
        const adminPyramidLeagueRead = supabaseClient ? new SupabaseAdminPyramidLeagueReadRepository(supabaseClient) : undefined;
        const adminPyramidLeagueReports = supabaseClient ? new SupabaseAdminPyramidLeagueReportsRepository(supabaseClient) : undefined;
         const alliance = supabaseClient ? new SupabaseAllianceRepository(supabaseClient) : undefined;
-       const router = createWorkersApiRouter({ publicPlayerRecords, publicClubRead, publicClubLogo, seasonAwards, specialPlayers, botRuntimeLease, groupMembership, alliance, adminFinancialAdjustmentPort: adminFinancialAdjustment, adminRoleLookupPort: adminRoleLookup, adminConfigurationPort: adminConfiguration, adminConsoleReadPort: adminConsoleRead, adminBroadcastRetryPort: adminBroadcastRetry, adminModerationActionPort: adminModerationActions, adminCatalogActionPort: adminCatalogActions, adminEntityUpdatePort: adminEntityUpdates, adminAlliancePort: alliance, adminPyramidLeagueActionsPort: adminPyramidLeagueActions, adminPyramidLeagueReadPort: adminPyramidLeagueRead, adminPyramidLeagueReportsPort: adminPyramidLeagueReports });
+       const router = createWorkersApiRouter({ publicPlayerRecords, publicClubRead, publicClubLogo, seasonAwards, specialPlayers, botRuntimeLease, groupMembership, alliance, adminFinancialAdjustmentPort: adminFinancialAdjustment, adminRoleLookupPort: adminRoleLookup, adminConfigurationPort: adminConfiguration, adminConsoleReadPort: adminConsoleRead, adminBroadcastRetryPort: adminBroadcastRetry, adminModerationActionPort: adminModerationActions, adminCatalogActionPort: adminCatalogActions, adminEntityUpdatePort: adminEntityUpdates, adminSeasonAwardActionPort: adminSeasonAwardActions, adminBroadcastCreatePort: adminBroadcastCreate, adminGroupBroadcastPort: adminGroupBroadcast, adminAlliancePort: alliance, adminPyramidLeagueActionsPort: adminPyramidLeagueActions, adminPyramidLeagueReadPort: adminPyramidLeagueRead, adminPyramidLeagueReportsPort: adminPyramidLeagueReports });
       const handle = async (): Promise<Response> => await router.fetch(request);
       const withGroupMembership = groupMembership ? () => withGroupMembershipPort(groupMembership, handle) : handle;
       const withActionRateLimit = actionRateLimit ? () => withActionRateLimitPort(actionRateLimit, withGroupMembership) : withGroupMembership;
