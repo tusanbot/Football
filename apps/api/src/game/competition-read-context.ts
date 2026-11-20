@@ -9,5 +9,7 @@ export function withCompetitionReadPort<T>(port: CompetitionReadPort, operation:
   return scope.run(port, operation);
 }
 export function getCompetitionReadPort(): CompetitionReadPort | undefined {
-  return scope.getStore();
+  const port = scope.getStore();
+  if (!port && process.env.NODE_ENV === "production") throw new Error("COMPETITION_READ_SUPABASE_REPOSITORY_REQUIRED");
+  return port;
 }
