@@ -26,5 +26,9 @@ export function withMatchRuntimeLeasePort<T>(port: MatchRuntimeLeasePort, operat
   return scope.run(port, operation);
 }
 export function getMatchRuntimeLeasePort(): MatchRuntimeLeasePort | undefined {
-  return scope.getStore();
+  const port = scope.getStore();
+  if (!port && (process.env.NODE_ENV === "production" || process.env.ENVIRONMENT === "production")) {
+    throw new Error("MATCH_RUNTIME_LEASE_SUPABASE_REPOSITORY_REQUIRED");
+  }
+  return port;
 }
