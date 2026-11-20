@@ -60,3 +60,25 @@ test("event tournament creation uses the atomic Supabase RPC",async()=>{
  assert.equal(result.tournament.id,"t-created");
  assert.equal(result.replayed,false);
 });
+
+test("event tournament join sends the atomic registration RPC and validates auto-start data",async()=>{
+ let requestUrl="";let requestBody:Record<string,unknown>|undefined;
+ const client=new SupabaseHttpClient({url:"https://example.supabase.co",serviceRoleKey:"service-role-key-that-is-long-enough",fetchImpl:async(input,init)=>{
+  requestUrl=String(input);requestBody=JSON.parse(String(init?.body)) as Record<string,unknown>;
+  return new Response(JSON.stringify({participantId:"p-join",replayed:false,autoStarted:true,participantCount:4,
+   fixturesCreated:6,rounds:3,startsAt:"2026-12-02T12:00:00.000Z",competitionId:"comp-join"}),
+   {status:200,headers:{"content-type":"application/json"}});
+ }});
+ const repo=new NodeSupabaseEventTournamentReadRepository(client);
+ const result=await repo.join({telegramUserId:"12345",tournamentId:"t-join",now:"2026-12-01T12:00:00.000Z"});
+ assert.equal(new URL(requestUrl).pathname,"/rest/v1/rpc/join_event_tournament_http");
+ assert.deepEqual(requestBody,{p_telegram_user_id:"12345",p_tournament_id:"t-join",p_now:"2026-12-01T12:00:00.000Z"});
+ assert.equal(result.autoStarted,true);
+ assert.equal(result.fixturesCreated,6);
+ assert.equal(result.competitionId,"comp-join");
+});
+test("event tournament join rejects malformed RPC responses",async()=>{
+ const client=new SupabaseHttpClient({url:"https://example.supabase.co",serviceRoleKey:"service-role-key-that-is-long-enough",fetchImpl:async()=>new Response(JSON.stringify({participantId:"p-join",replayed:false,autoStarted:true,fixturesCreated:6}),{status:200,headers:{"content-type":"application/json"}})});
+ const repo=new NodeSupabaseEventTournamentReadRepository(client);
+ await assert.rejects(()=>repo.join({telegramUserId:"12345",tournamentId:"t-join",now:"2026-12-01T12:00:00.000Z"}),/SUPABASE_EVENT_TOURNAMENT_JOIN_INVALID_RESPONSE/);
+});
