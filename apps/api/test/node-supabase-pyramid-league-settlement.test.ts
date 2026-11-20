@@ -84,3 +84,33 @@ test("pyramid league details call the read RPC and reject malformed payloads", a
  assert.equal(new URL(called).pathname, "/rest/v1/rpc/get_pyramid_league_details_http");
  assert.equal((result.league as { id: string }).id, "league-1");
 });
+
+test("pyramid league notice operations use the atomic Supabase RPCs", async () => {
+ const calls: Array<{ path: string; body: Record<string, unknown> }> = [];
+ const responses = [
+  { notices: [] }, { markedRead: 2 }, { notices: [] },
+  { completed: true }, { owned: true, rescheduled: true, attempts: 1 },
+ ];
+ const client = new SupabaseHttpClient({
+  url: "https://example.supabase.co", serviceRoleKey: "service-role-key-that-is-long-enough",
+  fetchImpl: async (input, init) => {
+   calls.push({ path: new URL(String(input)).pathname, body: JSON.parse(String(init?.body)) as Record<string, unknown> });
+   return new Response(JSON.stringify(responses.shift()), { status: 200, headers: { "content-type": "application/json" } });
+  },
+ });
+ const repository = new SupabasePyramidLeagueSettlementRepository(client);
+ const now = "2026-11-20T12:34:56.789Z";
+ assert.deepEqual(await repository.listNotices("user-1"), { notices: [] });
+ assert.deepEqual(await repository.markNoticesRead("user-1", now), { markedRead: 2 });
+ assert.deepEqual(await repository.claimNotices(25, now), { notices: [] });
+ assert.deepEqual(await repository.completeNotice("notice-1", "claim-token", now), { completed: true });
+ assert.deepEqual(await repository.failNotice("notice-1", "claim-token", "temporary failure", now), { owned: true, rescheduled: true, attempts: 1 });
+ assert.deepEqual(calls.map((call) => call.path), [
+  "/rest/v1/rpc/list_pyramid_league_notices_http",
+  "/rest/v1/rpc/mark_pyramid_league_notices_read_http",
+  "/rest/v1/rpc/claim_pyramid_league_notices_http",
+  "/rest/v1/rpc/complete_pyramid_league_notice_http",
+  "/rest/v1/rpc/fail_pyramid_league_notice_http",
+ ]);
+ assert.deepEqual(calls[2]?.body, { p_limit: 25, p_now: now });
+});
