@@ -132,19 +132,37 @@ try {
   matchWorker = setInterval(() => {
     if (workerRunning || shuttingDown) return;
     workerRunning = true;
-    workerTask = (matchPorts
-      ? withNodeSupabaseMatchPorts(matchPorts, async () => withEventTournamentSettlementPort(eventTournamentSettlementPort!, async () => withPyramidLeagueSettlementPort(pyramidLeagueSettlementPort!, async () => {
-          const now = new Date();
-          const result = await processDueMatchRuntimes("api-match-worker", now, 10);
-          const promotions = await processDuePromotionOffers(now, 50);
+    const runWorkerTick = async () => {
+      const now = new Date();
+      // Keep each durable subsystem independent: a broken match runtime must
+      // not prevent pyramid promotions or completed event tournaments retrying.
+      try {
+        const result = await processDueMatchRuntimes("api-match-worker", now, 10);
+        if (result.advanced || result.settled || result.failed) app.log.info({ matchRuntime: result }, "Match runtime worker tick");
+      } catch (error) {
+        app.log.error({ error }, "Match runtime worker failed");
+      }
+      try {
+        const promotions = await processDuePromotionOffers(now, 50);
+        if (promotions.accepted || promotions.completedLeagues || promotions.failed) app.log.info({ promotions }, "Pyramid league worker tick");
+      } catch (error) {
+        app.log.error({ error }, "Pyramid league worker failed");
+      }
+      if (matchPorts) {
+        try {
           const tournaments = await processDueEventTournamentFinalizations(now, 10);
-          if (result.advanced || result.settled || result.failed || promotions.accepted || promotions.completedLeagues || promotions.failed || tournaments.finalized || tournaments.failed) app.log.info({ ...result, promotions, tournaments }, "Game worker tick");
-        })))
-      : processDueMatchRuntimes("api-match-worker", new Date(), 10).then(async (result) => {
-          const promotions = await processDuePromotionOffers(new Date(), 50);
-          if (result.advanced || result.settled || result.failed || promotions.accepted || promotions.completedLeagues || promotions.failed) app.log.info({ ...result, promotions }, "Game worker tick");
-        }))
-      .catch((error: unknown) => app.log.error({ error }, "Match runtime worker failed"))
+          if (tournaments.finalized || tournaments.failed) app.log.info({ tournaments }, "Event tournament worker tick");
+        } catch (error) {
+          app.log.error({ error }, "Event tournament worker failed");
+        }
+      }
+    };
+    workerTask = (matchPorts
+      ? withNodeSupabaseMatchPorts(matchPorts, async () =>
+          withEventTournamentSettlementPort(eventTournamentSettlementPort!, async () =>
+            withPyramidLeagueSettlementPort(pyramidLeagueSettlementPort!, runWorkerTick)))
+      : runWorkerTick())
+      .catch((error: unknown) => app.log.error({ error }, "Game worker tick failed"))
       .finally(() => { workerRunning = false; workerTask = null; });
   }, 5_000);
   matchWorker.unref();
