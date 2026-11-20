@@ -151,7 +151,7 @@ jobs:
       - name: Test Supabase HTTP admin console, moderation and broadcast repositories
         run: pnpm --filter @football/api exec tsx --test --test-concurrency=1 test/node-supabase-admin-console-read.test.ts test/node-supabase-admin-moderation-actions.test.ts test/node-supabase-admin-broadcast-management.test.ts
       - name: Test admin role authorization through injected Supabase repositories
-        run: pnpm --filter @football/api exec tsx --test test/admin-role-consistency.test.ts
+        run: pnpm --filter @football/api exec tsx --test test/admin-role-consistency.test.ts test/admin-competition-status.test.ts
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/football_empire
       - name: Test pyramid league notice list, claim, complete and retry RPCs
