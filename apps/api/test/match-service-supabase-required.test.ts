@@ -32,8 +32,10 @@ test("production API refuses to start without a Supabase readiness client", () =
 });
 
 test("production match worker refuses to use Prisma when Supabase runtime ports are absent", async () => {
-  const previous = process.env.NODE_ENV;
-  process.env.NODE_ENV = "production";
+  const previousNodeEnv = process.env.NODE_ENV;
+  const previousEnvironment = process.env.ENVIRONMENT;
+  process.env.NODE_ENV = "test";
+  process.env.ENVIRONMENT = "production";
   try {
     await assert.rejects(
       processDueMatchRuntimes(),
@@ -41,7 +43,9 @@ test("production match worker refuses to use Prisma when Supabase runtime ports 
         && error.code === "WORKER_MATCH_RUNTIME_REPOSITORY_SET_INCOMPLETE",
     );
   } finally {
-    if (previous === undefined) delete process.env.NODE_ENV;
-    else process.env.NODE_ENV = previous;
+    if (previousNodeEnv === undefined) delete process.env.NODE_ENV;
+    else process.env.NODE_ENV = previousNodeEnv;
+    if (previousEnvironment === undefined) delete process.env.ENVIRONMENT;
+    else process.env.ENVIRONMENT = previousEnvironment;
   }
 });
