@@ -49,3 +49,35 @@ test("production match worker refuses to use Prisma when Supabase runtime ports 
     else process.env.ENVIRONMENT = previousEnvironment;
   }
 });
+
+import { getMatchOpponentPort } from "../src/game/match-opponents-context.js";
+import { getFriendlyMatchCreationPort } from "../src/game/friendly-match-creation-context.js";
+import { getCompetitionCreationPort } from "../src/game/competition-creation-context.js";
+import { getCompetitionReadPort } from "../src/game/competition-read-context.js";
+import { getClubMatchReadPort } from "../src/game/club-match-read-context.js";
+import { getCompetitionAdvancementPort } from "../src/game/competition-advancement-context.js";
+
+test("production match service scopes fail closed when any request-scoped Supabase repository is missing", () => {
+  const previous = process.env.NODE_ENV;
+  process.env.NODE_ENV = "production";
+  try {
+    const requiredRepositories = [
+      [getMatchOpponentPort, "MATCH_OPPONENT_SUPABASE_REPOSITORY_REQUIRED"],
+      [getFriendlyMatchCreationPort, "FRIENDLY_MATCH_SUPABASE_REPOSITORY_REQUIRED"],
+      [getCompetitionCreationPort, "COMPETITION_SUPABASE_REPOSITORY_REQUIRED"],
+      [getCompetitionReadPort, "COMPETITION_READ_SUPABASE_REPOSITORY_REQUIRED"],
+      [getClubMatchReadPort, "CLUB_MATCH_READ_SUPABASE_REPOSITORY_REQUIRED"],
+      [getCompetitionAdvancementPort, "COMPETITION_ADVANCEMENT_SUPABASE_REPOSITORY_REQUIRED"],
+    ] as const;
+
+    for (const [getRepository, expectedCode] of requiredRepositories) {
+      assert.throws(
+        () => getRepository(),
+        (error: unknown) => error instanceof Error && error.message === expectedCode,
+      );
+    }
+  } finally {
+    if (previous === undefined) delete process.env.NODE_ENV;
+    else process.env.NODE_ENV = previous;
+  }
+});
