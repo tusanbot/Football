@@ -178,25 +178,83 @@ async function creditMatchCash(
 }
 export async function listMatchOpponents(userId: string, search?: string) {
   const port = getMatchOpponentPort();
-  if (!port) throw new Error("MATCH_OPPONENT_SUPABASE_REPOSITORY_REQUIRED");
-  return port.list(userId, search);
+  if (port) return port.list(userId, search);
+  const own = await getOwnedClub(userId);
+  const query = search?.trim().slice(0, 80);
+  const clubs = await prisma.club.findMany({
+    where: {
+      id: { not: own.id },
+      players: { some: { lineupSlot: { not: null }, status: "ACTIVE" } },
+      ...(query ? { OR: [
+        { name: { contains: query, mode: "insensitive" } },
+        { owner: { telegramId: query.replace(/^@/, "") } },
+        ...(query.startsWith("@") ? [{ owner: { username: query.slice(1) } }] : []),
+      ] } : {}),
+    },
+    include: {
+      owner: { select: { telegramId: true, username: true, lastActiveAt: true } },
+      players: { where: { status: "ACTIVE", suspensionMatchesRemaining: 0 }, select: { id: true, position: true } },
+    },
+    orderBy: query ? [{ reputation: "desc" }, { level: "desc" }] : [{ owner: { lastActiveAt: "desc" } }, { createdAt: "desc" }],
+    take: query ? 25 : 10,
+  });
+  return clubs.filter((club) => club.players.length >= 11 && club.players.some((player) => player.position === "GK")).map((club) => ({
+    id: club.id, name: club.name, level: club.level, reputation: club.reputation,
+    ownerTelegramId: club.owner.telegramId, ownerUsername: club.owner.username,
+    lastActiveAt: club.owner.lastActiveAt.toISOString(),
+  }));
 }
-
 export async function createFriendlyMatch(userId: string, opponentClubId: string, idempotencyKey: string, scheduledAt = new Date()) {
   keyValid(idempotencyKey);
   if (scheduledAt.getTime() < Date.now() - 60_000 || scheduledAt.getTime() > Date.now() + 30 * DAY_MS) {
     throw new MatchServiceError("INVALID_MATCH_SCHEDULE");
   }
   const port = getFriendlyMatchCreationPort();
-  if (!port) throw new Error("FRIENDLY_MATCH_SUPABASE_REPOSITORY_REQUIRED");
-  try { return await port.create(userId, opponentClubId, idempotencyKey, scheduledAt); }
-  catch (error) {
-    const code = error instanceof Error ? error.message : "";
-    if (/^[A-Z][A-Z0-9_]{2,80}$/.test(code)) throw new MatchServiceError(code);
-    throw error;
-  }
-}
+  if (port) return port.create(userId, opponentClubId, idempotencyKey, scheduledAt);
+  return prisma.$transaction(async (tx) => {
+    const own = await tx.club.findUnique({ where: { ownerId: userId }, select: { id: true } });
+    if (!own) throw new MatchServiceError("CLUB_NOT_FOUND");
+    if (own.id === opponentClubId) throw new MatchServiceError("MATCH_TEAMS_MUST_DIFFER");
 
+    const previous = await tx.footballMatch.findUnique({ where: { idempotencyKey } });
+    if (previous) {
+      if (previous.homeClubId !== own.id || previous.awayClubId !== opponentClubId || previous.type !== "FRIENDLY") {
+        throw new MatchServiceError("IDEMPOTENCY_CONFLICT");
+      }
+      return { match: previous, replayed: true };
+    }
+
+    const [home, away] = await Promise.all([
+      tx.club.findUnique({ where: { id: own.id }, include: matchClubInclude }),
+      tx.club.findUnique({ where: { id: opponentClubId }, include: matchClubInclude }),
+    ]);
+    if (!home || !away) throw new MatchServiceError("OPPONENT_NOT_FOUND");
+    if (home.players.length < 11 || away.players.length < 11) throw new MatchServiceError("BOTH_CLUBS_NEED_VALID_LINEUPS");
+    const homeSide = toSide(home); const awaySide = toSide(away);
+    if (!isValidMatchSide(homeSide) || !isValidMatchSide(awaySide)) throw new MatchServiceError("BOTH_CLUBS_NEED_VALID_LINEUPS");
+
+    const overlap = await tx.footballMatch.findFirst({
+      where: {
+        status: { in: ["SCHEDULED", "IN_PROGRESS"] },
+        scheduledAt: {
+          gte: new Date(scheduledAt.getTime() - 2 * 60 * 60_000),
+          lte: new Date(scheduledAt.getTime() + 2 * 60 * 60_000),
+        },
+        OR: [{ homeClubId: { in: [own.id, opponentClubId] } }, { awayClubId: { in: [own.id, opponentClubId] } }],
+      },
+      select: { id: true },
+    });
+    if (overlap) throw new MatchServiceError("CLUB_ALREADY_HAS_MATCH_IN_WINDOW");
+
+    const match = await tx.footballMatch.create({
+      data: {
+        idempotencyKey, type: "FRIENDLY", homeClubId: own.id, awayClubId: opponentClubId,
+        scheduledAt, seed: idempotencyKey + ":" + randomUUID(), rulesSnapshot: defaultMatchRules("FRIENDLY"),
+      },
+    });
+    return { match, replayed: false };
+  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+}
 export async function createLeague(userId: string, name: string, maxTeams: number, idempotencyKey: string, format: "LEAGUE" | "CUP" = "LEAGUE", inputRules?: MatchRules, cupLegs = 1) {
   keyValid(idempotencyKey);
   if (format === "CUP" && ![4, 8].includes(maxTeams)) throw new MatchServiceError("CUP_SIZE_MUST_BE_FOUR_OR_EIGHT");
@@ -205,55 +263,319 @@ export async function createLeague(userId: string, name: string, maxTeams: numbe
   const rules = validateMatchRules(inputRules ?? defaultMatchRules(format));
   if (format === "LEAGUE" && rules.penaltiesOnDraw) throw new MatchServiceError("PENALTIES_NOT_ALLOWED_FOR_LEAGUE");
   if (format === "CUP" && !rules.penaltiesOnDraw) throw new MatchServiceError("CUP_REQUIRES_PENALTIES");
-  const port = getCompetitionCreationPort();
-  if (!port) throw new Error("COMPETITION_SUPABASE_REPOSITORY_REQUIRED");
-  const now = new Date();
-  try {
-    return await port.create({ userId, name, maxTeams, idempotencyKey, format, cupLegs,
-      season: now.getUTCFullYear(), rules: rules as unknown as Record<string, boolean | number>, now });
-  } catch (error) {
-    const code = error instanceof Error ? error.message : "";
-    if (/^[A-Z][A-Z0-9_]{2,80}$/.test(code)) throw new MatchServiceError(code);
-    throw error;
+  const creationPort = getCompetitionCreationPort();
+  if (creationPort) {
+    const now = new Date();
+    try {
+      return await creationPort.create({
+        userId, name, maxTeams, idempotencyKey, format, cupLegs,
+        season: now.getUTCFullYear(),
+        rules: rules as unknown as Record<string, boolean | number>,
+        now,
+      });
+    } catch (error) {
+      const code = error instanceof Error ? error.message : "";
+      if (/^[A-Z][A-Z0-9_]{2,80}$/.test(code)) throw new MatchServiceError(code);
+      throw error;
+    }
   }
+  const club = await getOwnedClub(userId);
+  const existing = await prisma.competition.findUnique({ where: { idempotencyKey } });
+  if (existing) {
+    // Rules may be edited after creation; replaying the original create command
+    // must return that competition rather than treating its current rules as a new payload.
+    if (existing.createdByClubId !== club.id || existing.name !== name
+      || existing.maxTeams !== maxTeams || existing.format !== format || existing.cupLegs !== cupLegs) {
+      throw new MatchServiceError("IDEMPOTENCY_CONFLICT");
+    }
+    return { competition: existing, replayed: true };
+  }
+  const competition = await prisma.competition.create({
+    data: {
+      idempotencyKey, name, season: new Date().getUTCFullYear(), format, maxTeams, cupLegs, rules, createdByClubId: club.id,
+      entries: { create: { clubId: club.id } },
+    },
+  });
+  return { competition, replayed: false };
 }
-
 export async function updateCompetitionRules(userId: string, competitionId: string, input: MatchRules) {
   const rules = validateMatchRules(input);
   const port = getCompetitionCreationPort();
-  if (!port) throw new Error("COMPETITION_SUPABASE_REPOSITORY_REQUIRED");
-  try { return await port.updateRules(userId, competitionId, rules as unknown as Record<string, boolean | number>, new Date()); }
-  catch (error) { const code = error instanceof Error ? error.message : ""; if (/^[A-Z][A-Z0-9_]{2,80}$/.test(code)) throw new MatchServiceError(code); throw error; }
+  if (port) {
+    try { return await port.updateRules(userId, competitionId, rules as unknown as Record<string, boolean | number>, new Date()); }
+    catch (error) { const code = error instanceof Error ? error.message : ""; if (/^[A-Z][A-Z0-9_]{2,80}$/.test(code)) throw new MatchServiceError(code); throw error; }
+  }
+  const club = await getOwnedClub(userId);
+  return prisma.$transaction(async (tx) => {
+    const competition = await tx.competition.findUnique({ where: { id: competitionId } });
+    if (!competition) throw new MatchServiceError("COMPETITION_NOT_FOUND");
+    if (competition.createdByClubId !== club.id) throw new MatchServiceError("ONLY_CREATOR_CAN_START");
+    if (competition.status !== "REGISTRATION") throw new MatchServiceError("COMPETITION_RULES_LOCKED");
+    if (competition.format !== "CUP" && rules.penaltiesOnDraw) throw new MatchServiceError("PENALTIES_NOT_ALLOWED_FOR_LEAGUE");
+    if (competition.format === "CUP" && !rules.penaltiesOnDraw) throw new MatchServiceError("CUP_REQUIRES_PENALTIES");
+    await tx.competition.update({ where: { id: competitionId }, data: { rules } });
+    return { competitionId, rules };
+  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 }
-
 export async function joinLeague(userId: string, competitionId: string, now = new Date()) {
   const port = getCompetitionCreationPort();
-  if (!port) throw new Error("COMPETITION_SUPABASE_REPOSITORY_REQUIRED");
-  try { return await port.join(userId, competitionId, now); }
-  catch (error) { const code = error instanceof Error ? error.message : ""; if (/^[A-Z][A-Z0-9_]{2,80}$/.test(code)) throw new MatchServiceError(code); throw error; }
+  if (port) {
+    try { return await port.join(userId, competitionId, now); }
+    catch (error) {
+      const code = error instanceof Error ? error.message : "";
+      if (/^[A-Z][A-Z0-9_]{2,80}$/.test(code)) throw new MatchServiceError(code);
+      throw error;
+    }
+  }
+  const club = await getOwnedClub(userId);
+  return prisma.$transaction(async (tx) => {
+    const competition = await tx.competition.findUnique({ where: { id: competitionId }, include: { entries: true } });
+    if (!competition) throw new MatchServiceError("COMPETITION_NOT_FOUND");
+    const existing = competition.entries.find((entry) => entry.clubId === club.id);
+    if (existing) return { joined: true, replayed: true, teams: competition.entries.length, autoStarted: competition.status === "ACTIVE" };
+    if (competition.status !== "REGISTRATION") throw new MatchServiceError("COMPETITION_NOT_OPEN");
+    if (competition.entries.length >= competition.maxTeams) throw new MatchServiceError("COMPETITION_FULL");
+    await tx.competitionEntry.create({ data: { competitionId, clubId: club.id } });
+    const teams = competition.entries.length + 1;
+    if (competition.format !== "LEAGUE" || teams < competition.maxTeams) {
+      return { joined: true, replayed: false, teams, autoStarted: false, requiredTeams: competition.maxTeams };
+    }
+    const entries = await tx.competitionEntry.findMany({
+      where: { competitionId },
+      include: { club: { select: { id: true, players: { where: { status: "ACTIVE" }, select: { id: true, position: true } } } } },
+      orderBy: { joinedAt: "asc" },
+    });
+    if (entries.length !== competition.maxTeams) throw new MatchServiceError("COMPETITION_WAITING_FOR_TEAMS");
+    if (entries.some((entry) => entry.club.players.length < 11 || !entry.club.players.some((player) => player.position === "GK"))) {
+      throw new MatchServiceError("ALL_TEAMS_NEED_VALID_LINEUPS");
+    }
+    const slots = entries.map((entry) => entry.clubId);
+    for (let index = slots.length - 1; index > 0; index--) {
+      const swapIndex = Math.floor(Math.random() * (index + 1));
+      [slots[index], slots[swapIndex]] = [slots[swapIndex]!, slots[index]!];
+    }
+    if (slots.length % 2) slots.push("");
+    const rounds = slots.length - 1;
+    const kickoffAt = competitionKickoffAfterDays(now, 1);
+    const fixtures: Array<{ homeClubId: string; awayClubId: string; round: number; scheduledAt: Date; seed: string; idempotencyKey: string; type: "LEAGUE"; competitionId: string; rulesSnapshot: Prisma.InputJsonValue }> = [];
+    for (let round = 0; round < rounds; round++) {
+      for (let index = 0; index < slots.length / 2; index++) {
+        const first = slots[index]!;
+        const second = slots[slots.length - 1 - index]!;
+        if (!first || !second) continue;
+        const swap = (round + index) % 2 === 1;
+        const homeClubId = swap ? second : first;
+        const awayClubId = swap ? first : second;
+        const idempotencyKey = "league:" + competition.id + ":r" + (round + 1) + ":" + homeClubId + ":" + awayClubId;
+        fixtures.push({ homeClubId, awayClubId, round: round + 1, scheduledAt: new Date(kickoffAt.getTime() + round * DAY_MS), seed: idempotencyKey, idempotencyKey, type: "LEAGUE", competitionId, rulesSnapshot: validateMatchRules(competition.rules ?? defaultMatchRules("LEAGUE")) });
+      }
+      const fixed = slots[0]!;
+      const rotating = slots.slice(1);
+      rotating.unshift(rotating.pop()!);
+      slots.splice(0, slots.length, fixed, ...rotating);
+    }
+    await tx.footballMatch.createMany({ data: fixtures });
+    const activated = await tx.competition.updateMany({ where: { id: competitionId, status: "REGISTRATION" }, data: { status: "ACTIVE", startsAt: kickoffAt } });
+    if (activated.count !== 1) throw new MatchServiceError("COMPETITION_NOT_OPEN");
+    return { joined: true, replayed: false, teams, autoStarted: true, fixturesCreated: fixtures.length, rounds, startsAt: kickoffAt.toISOString() };
+  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, timeout: 15_000, maxWait: 10_000 });
 }
-
 export async function startLeague(userId: string, competitionId: string, now = new Date()) {
   const port = getCompetitionCreationPort();
-  if (!port) throw new Error("COMPETITION_SUPABASE_REPOSITORY_REQUIRED");
-  try { return await port.start(userId, competitionId, now); }
-  catch (error) { const code = error instanceof Error ? error.message : ""; if (/^[A-Z][A-Z0-9_]{2,80}$/.test(code)) throw new MatchServiceError(code); throw error; }
+  if (port) {
+    try { return await port.start(userId, competitionId, now); }
+    catch (error) {
+      const code = error instanceof Error ? error.message : "";
+      if (/^[A-Z][A-Z0-9_]{2,80}$/.test(code)) throw new MatchServiceError(code);
+      throw error;
+    }
+  }
+  const club = await getOwnedClub(userId);
+  return prisma.$transaction(async (tx) => {
+    const competition = await tx.competition.findUnique({
+      where: { id: competitionId },
+      include: {
+        entries: {
+          include: {
+            club: {
+              select: {
+                id: true,
+                players: { where: { status: "ACTIVE" }, select: { id: true, position: true } },
+              },
+            },
+          },
+        },
+      },
+    });
+    if (!competition) throw new MatchServiceError("COMPETITION_NOT_FOUND");
+    if (competition.createdByClubId !== club.id) throw new MatchServiceError("ONLY_CREATOR_CAN_START");
+    if (competition.status !== "REGISTRATION") {
+      if (competition.status === "ACTIVE" || competition.status === "COMPLETED") {
+        const existingFixtures = await tx.footballMatch.findMany({ where: { competitionId }, select: { round: true } });
+        return {
+          fixturesCreated: existingFixtures.length,
+          rounds: Math.max(0, ...existingFixtures.map((fixture) => fixture.round ?? 0)),
+          teams: competition.entries.length,
+          replayed: true,
+        };
+      }
+      throw new MatchServiceError("COMPETITION_NOT_OPEN");
+    }
+    if (competition.format === "LEAGUE" && competition.entries.length < competition.maxTeams) throw new MatchServiceError("COMPETITION_WAITING_FOR_TEAMS");
+    if (competition.entries.length < 4) throw new MatchServiceError("LEAGUE_NEEDS_FOUR_TEAMS");
+    if (competition.entries.some((entry) => entry.club.players.length < 11 || !entry.club.players.some((player) => player.position === "GK"))) throw new MatchServiceError("ALL_TEAMS_NEED_VALID_LINEUPS");
+    competition.entries.sort((a, b) => a.joinedAt.getTime() - b.joinedAt.getTime());
+    const teams = competition.entries.map((entry) => entry.clubId);
+    if (competition.format === "LEAGUE") {
+      for (let index = teams.length - 1; index > 0; index--) {
+        const swapIndex = Math.floor(Math.random() * (index + 1));
+        [teams[index], teams[swapIndex]] = [teams[swapIndex]!, teams[index]!];
+      }
+    }
+    if (competition.format === "CUP") {
+      if (![4, 8].includes(competition.maxTeams) || teams.length !== competition.maxTeams) {
+        throw new MatchServiceError("CUP_REQUIRES_FULL_FOUR_OR_EIGHT_TEAM_BRACKET");
+      }
+      const firstRoundFixtures = Array.from({ length: teams.length / 2 }, (_, index) => {
+        const homeClubId = teams[index]!;
+        const awayClubId = teams[teams.length - 1 - index]!;
+        const tieId = `cup:${competition.id}:r1:t${index + 1}`;
+        return Array.from({ length: competition.cupLegs }, (_, legIndex) => {
+          const leg = legIndex + 1;
+          const legHome = leg === 1 ? homeClubId : awayClubId;
+          const legAway = leg === 1 ? awayClubId : homeClubId;
+          const idempotencyKey = tieId + `:leg${leg}`;
+          return {
+            homeClubId: legHome, awayClubId: legAway, round: 1, type: "CUP" as const,
+            competitionId, rulesSnapshot: validateMatchRules(competition.rules ?? defaultMatchRules("CUP")),
+            tieId: competition.cupLegs === 2 ? tieId : null, leg, scheduledAt: competitionKickoffAfterDays(now, leg * 3),
+            seed: idempotencyKey, idempotencyKey,
+          };
+        });
+      }).flat();
+      await tx.footballMatch.createMany({ data: firstRoundFixtures });
+      const updated = await tx.competition.updateMany({
+        where: { id: competitionId, status: "REGISTRATION" },
+        data: { status: "ACTIVE", startsAt: firstRoundFixtures[0]!.scheduledAt },
+      });
+      if (updated.count !== 1) throw new MatchServiceError("COMPETITION_NOT_OPEN");
+      return { fixturesCreated: firstRoundFixtures.length, rounds: Math.log2(teams.length), teams: teams.length, cupLegs: competition.cupLegs, replayed: false };
+    }
+    const slots: Array<string | null> = [...teams];
+    if (slots.length % 2) slots.push(null);
+    const rounds = slots.length - 1;
+    const kickoffAt = new Date(now.getTime() + DAY_MS);
+    const fixtures: Array<{ homeClubId: string; awayClubId: string; round: number; scheduledAt: Date; seed: string; idempotencyKey: string }> = [];
+    for (let round = 0; round < rounds; round++) {
+      for (let index = 0; index < slots.length / 2; index++) {
+        const first = slots[index]!;
+        const second = slots[slots.length - 1 - index]!;
+        if (!first || !second) continue;
+        const swap = (round + index) % 2 === 1;
+        const homeClubId = swap ? second : first;
+        const awayClubId = swap ? first : second;
+        const idempotencyKey = `league:${competition.id}:r${round + 1}:${homeClubId}:${awayClubId}`;
+        fixtures.push({
+          homeClubId, awayClubId, round: round + 1,
+          scheduledAt: new Date(kickoffAt.getTime() + round * DAY_MS),
+          seed: idempotencyKey, idempotencyKey,
+        });
+      }
+      const fixed = slots[0]!;
+      const rotating = slots.slice(1);
+      rotating.unshift(rotating.pop()!);
+      slots.splice(0, slots.length, fixed, ...rotating);
+    }
+    await tx.footballMatch.createMany({ data: fixtures.map((fixture) => ({
+      ...fixture, type: "LEAGUE", competitionId,
+      rulesSnapshot: validateMatchRules(competition.rules ?? defaultMatchRules("LEAGUE")),
+    })) });
+    const updated = await tx.competition.updateMany({
+      where: { id: competitionId, status: "REGISTRATION" },
+      data: { status: "ACTIVE", startsAt: fixtures[0]?.scheduledAt ?? kickoffAt },
+    });
+    if (updated.count !== 1) throw new MatchServiceError("COMPETITION_NOT_OPEN");
+    return { fixturesCreated: fixtures.length, rounds, teams: teams.length, replayed: false };
+  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 }
-
 export async function listOpenLeagues(userId: string) {
-  const port = getCompetitionReadPort();
-  if (!port) throw new Error("COMPETITION_READ_SUPABASE_REPOSITORY_REQUIRED");
-  try { return await port.listOpen(userId); }
-  catch (error) { const code = error instanceof Error ? error.message : ""; if (/^[A-Z][A-Z0-9_]{2,80}$/.test(code)) throw new MatchServiceError(code); throw error; }
+  const readPort = getCompetitionReadPort();
+  if (readPort) {
+    try { return await readPort.listOpen(userId); }
+    catch (error) { const code = error instanceof Error ? error.message : ""; if (/^[A-Z][A-Z0-9_]{2,80}$/.test(code)) throw new MatchServiceError(code); throw error; }
+  }
+  const club = await getOwnedClub(userId);
+  const competitions = await prisma.competition.findMany({
+    where: { status: "REGISTRATION" },
+    include: { entries: { select: { clubId: true, club: { select: { name: true } } } } },
+    orderBy: { createdAt: "desc" }, take: 30,
+  });
+  return competitions.map((competition) => ({
+    id: competition.id, name: competition.name, season: competition.season, format: competition.format, cupLegs: competition.cupLegs,
+    rules: validateMatchRules(competition.rules ?? defaultMatchRules(competition.format)),
+    status: competition.status, maxTeams: competition.maxTeams,
+    teams: competition.entries.length,
+    joined: competition.entries.some((entry) => entry.clubId === club.id),
+    isCreator: competition.createdByClubId === club.id,
+    creator: competition.entries.find((entry) => entry.clubId === competition.createdByClubId)?.club.name ?? "Club",
+  }));
 }
-
 export async function getLeague(userId: string, competitionId: string) {
-  const port = getCompetitionReadPort();
-  if (!port) throw new Error("COMPETITION_READ_SUPABASE_REPOSITORY_REQUIRED");
-  try { return await port.get(userId, competitionId); }
-  catch (error) { const code = error instanceof Error ? error.message : ""; if (/^[A-Z][A-Z0-9_]{2,80}$/.test(code)) throw new MatchServiceError(code); throw error; }
+  const readPort = getCompetitionReadPort();
+  if (readPort) {
+    try { return await readPort.get(userId, competitionId); }
+    catch (error) { const code = error instanceof Error ? error.message : ""; if (/^[A-Z][A-Z0-9_]{2,80}$/.test(code)) throw new MatchServiceError(code); throw error; }
+  }
+  const club = await getOwnedClub(userId);
+  const competition = await prisma.competition.findUnique({
+    where: { id: competitionId },
+    include: {
+      entries: { include: { club: { select: { id: true, name: true, level: true } } }, orderBy: { points: "desc" } },
+      matches: { include: { homeClub: { select: { id: true, name: true } }, awayClub: { select: { id: true, name: true } } }, orderBy: [{ round: "asc" }, { scheduledAt: "asc" }] },
+    },
+  });
+  if (!competition) throw new MatchServiceError("COMPETITION_NOT_FOUND");
+  if (!competition.entries.some((entry) => entry.clubId === club.id)) throw new MatchServiceError("NOT_COMPETITION_MEMBER");
+  competition.entries.sort((a, b) => b.points - a.points
+    || (b.goalsFor - b.goalsAgainst) - (a.goalsFor - a.goalsAgainst)
+    || b.goalsFor - a.goalsFor || a.club.name.localeCompare(b.club.name));
+  const [scorers] = await Promise.all([
+    prisma.playerMatchPerformance.groupBy({
+      by: ["playerId", "clubId"], where: { match: { competitionId } },
+      _sum: { goals: true, assists: true }, orderBy: { _sum: { goals: "desc" } }, take: 20,
+    }),
+  ]);
+  const playerIds = scorers.map((row) => row.playerId);
+  const players = await prisma.player.findMany({ where: { id: { in: playerIds } }, select: { id: true, firstName: true, lastName: true } });
+  const playerNames = new Map(players.map((player) => [player.id, player.firstName + " " + player.lastName]));
+  const clubNames = new Map(competition.entries.map((entry) => [entry.clubId, entry.club.name]));
+  const nextRound = competition.matches.filter((match) => match.status !== "COMPLETED" && match.round !== null)
+    .reduce<number | null>((minimum, match) => minimum === null ? match.round! : Math.min(minimum, match.round!), null);
+  const nextRoundMatches = nextRound === null ? [] : competition.matches.filter((match) => match.round === nextRound);
+  return {
+    competition: { id: competition.id, name: competition.name, season: competition.season, format: competition.format, cupLegs: competition.cupLegs, rules: validateMatchRules(competition.rules ?? defaultMatchRules(competition.format)), status: competition.status, startsAt: competition.startsAt?.toISOString() ?? null },
+    standings: competition.entries.map((entry, index) => ({
+      position: index + 1, clubId: entry.clubId, clubName: entry.club.name, played: entry.played,
+      won: entry.won, drawn: entry.drawn, lost: entry.lost, goalsFor: entry.goalsFor,
+      goalsAgainst: entry.goalsAgainst, goalDifference: entry.goalsFor - entry.goalsAgainst, points: entry.points,
+    })),
+    matches: competition.matches.map((match) => ({
+      id: match.id, round: match.round, leg: match.leg, tieId: match.tieId, scheduledAt: match.scheduledAt.toISOString(), status: match.status,
+      homeClub: match.homeClub, awayClub: match.awayClub, homeScore: match.homeScore, awayScore: match.awayScore,
+      ...aggregateCupScore(match, competition.matches),
+      rules: validateMatchRules(match.rulesSnapshot ?? defaultMatchRules(match.type)), homePenalties: match.homePenalties, awayPenalties: match.awayPenalties, winnerClubId: match.winnerClubId,
+    })),
+    nextRound, nextRoundMatches: nextRoundMatches.map((match) => ({
+      id: match.id, round: match.round, scheduledAt: match.scheduledAt.toISOString(), status: match.status,
+      homeClub: match.homeClub, awayClub: match.awayClub, homeScore: match.homeScore, awayScore: match.awayScore,
+    })),
+    topScorers: scorers.map((row) => ({
+      playerId: row.playerId, playerName: playerNames.get(row.playerId) ?? "Unknown",
+      clubId: row.clubId, clubName: clubNames.get(row.clubId) ?? "Club",
+      goals: row._sum.goals ?? 0, assists: row._sum.assists ?? 0,
+    })),
+  };
 }
-
 export async function listClubMatches(userId: string) {
   const clubMatchReadPort = getClubMatchReadPort();
   if (clubMatchReadPort) {
