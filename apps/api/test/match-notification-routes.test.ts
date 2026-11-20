@@ -49,6 +49,8 @@ test("tactical checkpoint notifications are claimed and acknowledged through the
  const headers={"x-football-bot-secret":"test-match-notification-secret"};
  const claim=await app.inject({method:"POST",url:"/v1/bot/match-checkpoints/claim",headers,payload:{limit:10,checkpointId:"cp-1"}});
  assert.equal(claim.statusCode,200);assert.equal(claim.json().notifications[0].side,"HOME");
+ const missingToken=await app.inject({method:"POST",url:"/v1/bot/match-checkpoints/ack",headers,payload:{checkpointId:"cp-1",side:"HOME",delivered:true}});
+ assert.equal(missingToken.statusCode,400);
  const ack=await app.inject({method:"POST",url:"/v1/bot/match-checkpoints/ack",headers,payload:{checkpointId:"cp-1",side:"HOME",claimToken:randomUUID(),delivered:true}});
  assert.equal(ack.statusCode,200);assert.deepEqual((await app.inject({method:"POST",url:"/v1/bot/match-checkpoints/claim",headers,payload:{limit:10,checkpointId:"cp-1"}})).json(),{notifications:[]});
 });

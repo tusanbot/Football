@@ -24,9 +24,10 @@ test("lifecycle and tactical checkpoint adapters validate the RPC row shapes",as
  assert.equal(checkpoint?.side,"HOME");assert.equal(checkpoint?.claimToken,"checkpoint-claim");
 });
 test("notification completion and checkpoint acknowledgement use their atomic RPCs",async()=>{
- const calls:string[]=[];
- const repository=new NodeSupabaseMatchNotificationRepository({rpc:async(name:string)=>{calls.push(name);return true;}} as never);
+ const calls:Array<{name:string;args:Record<string,unknown>}>=[];
+ const repository=new NodeSupabaseMatchNotificationRepository({rpc:async(name:string,args:Record<string,unknown>)=>{calls.push({name,args});return true;}} as never);
  assert.equal(await repository.complete("RESULT","n","claim",true,null,30),true);
  assert.equal(await repository.acknowledgeCheckpoint("cp","AWAY","claim-token",true,null),true);
- assert.deepEqual(calls,["complete_match_notification_delivery","ack_match_checkpoint_notification_node_http"]);
+ assert.deepEqual(calls.map(call=>call.name),["complete_match_notification_delivery","ack_match_checkpoint_notification_node_http"]);
+ assert.equal(calls[1]?.args.p_claim_token,"claim-token");
 });

@@ -31,7 +31,9 @@ BEGIN
  IF NOT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='MatchTacticalCheckpoint' AND column_name='homeBotNotificationClaimToken')
   OR NOT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='MatchTacticalCheckpoint' AND column_name='awayBotNotificationClaimToken')
   OR NOT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='MatchLifecycleNotification' AND column_name='deadLetteredAt')
-  OR NOT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='MatchResultNotification' AND column_name='deadLetteredAt') THEN
+  OR NOT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='MatchResultNotification' AND column_name='deadLetteredAt')
+  OR NOT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='MatchLifecycleNotification' AND column_name='completedDelivered')
+  OR NOT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='MatchResultNotification' AND column_name='completedDelivered') THEN
   RAISE EXCEPTION 'notification fencing/dead-letter columns are missing';END IF;
  IF NOT has_function_privilege('service_role',v_lifecycle,'EXECUTE')
   OR NOT has_function_privilege('service_role',v_result,'EXECUTE')
