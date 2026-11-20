@@ -36,7 +36,7 @@ BEGIN
   OR jsonb_array_length(v_result->'matches')<>1
   OR v_result->'matches'->0->>'id'<>'ci-competition-read-match'
   OR v_result->'matches'->0->'homeClub'->>'name'<>'CI Read Club'
-  OR v_result->>'nextRound'<>'null'
+  OR v_result->'nextRound' IS DISTINCT FROM 'null'::jsonb
   OR jsonb_array_length(v_result->'topScorers')<>0 THEN
   RAISE EXCEPTION 'competition detail response mismatch: %',v_result;
  END IF;
