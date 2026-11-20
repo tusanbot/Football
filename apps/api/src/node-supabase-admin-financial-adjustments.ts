@@ -10,9 +10,9 @@ export interface AdminFinancialAdjustmentPort {
 export class NodeSupabaseAdminFinancialAdjustmentsRepository implements AdminFinancialAdjustmentPort {
  constructor(private readonly client:SupabaseHttpClient){}
  async execute(input:AdminFinancialAdjustmentInput){
-  if(!input.targetId||input.targetId.length>128||!/^-[0-9]{1,15}$|^[0-9]{1,15}$/.test(input.amount)||input.amount==="0"||
+  if(typeof input.targetId!=="string"||!input.targetId||input.targetId.length>128||typeof input.amount!=="string"||!/^-[0-9]{1,15}$|^[0-9]{1,15}$/.test(input.amount)||input.amount==="0"||
    !/^[0-9]{1,20}$/.test(input.actorTelegramId)||!/^[A-Za-z0-9:_-]{12,128}$/.test(input.idempotencyKey)||
-   !input.reason.trim()||input.reason.length>500||
+   typeof input.reason!=="string"||!input.reason.trim()||input.reason.length>500||
    (input.action==="adjust-wallet"&&!input.asset)||(input.action==="adjust-group-points"&&input.asset))throw new Error("INVALID_ADMIN_FINANCIAL_ADJUSTMENT");
   const result=await this.client.rpc<Record<string,unknown>>("admin_financial_adjustment_http",{
    p_action:input.action,p_target_id:input.targetId,p_amount:input.amount,p_asset:input.asset??null,

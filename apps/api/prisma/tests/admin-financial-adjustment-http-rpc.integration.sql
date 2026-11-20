@@ -37,7 +37,8 @@ BEGIN
  SELECT count(*) INTO v_count FROM public."GroupPointLedger" WHERE "groupId"='ci-admin-fin-group';
  IF v_points<>125 OR v_count<>1 THEN RAISE EXCEPTION 'failed group points adjustment mutated ledger or balance'; END IF;
  IF (SELECT count(*) FROM public."AdminAuditLog" WHERE "actorTelegramId"='919900097')<>2 THEN RAISE EXCEPTION 'admin finance audit rows missing'; END IF;
- IF has_function_privilege('anon','public.admin_financial_adjustment_http(text,text,bigint,text,text,text,text)','EXECUTE')
+ IF NOT has_function_privilege('service_role','public.admin_financial_adjustment_http(text,text,bigint,text,text,text,text)','EXECUTE')
+  OR has_function_privilege('anon','public.admin_financial_adjustment_http(text,text,bigint,text,text,text,text)','EXECUTE')
   OR has_function_privilege('authenticated','public.admin_financial_adjustment_http(text,text,bigint,text,text,text,text)','EXECUTE') THEN
   RAISE EXCEPTION 'admin financial adjustment RPC exposed to public roles';
  END IF;

@@ -35,7 +35,7 @@ BEGIN
   OR p_reason IS NULL OR length(btrim(p_reason)) NOT BETWEEN 1 AND 500 THEN
   RAISE EXCEPTION USING MESSAGE='INVALID_ADMIN_FINANCIAL_ADJUSTMENT',ERRCODE='22023';
  END IF;
- IF (p_action='adjust-wallet' AND p_asset NOT IN ('CASH','GOLD','HONOR'))
+ IF (p_action='adjust-wallet' AND (p_asset IS NULL OR p_asset NOT IN ('CASH','GOLD','HONOR')))
   OR (p_action='adjust-group-points' AND p_asset IS NOT NULL) THEN
   RAISE EXCEPTION USING MESSAGE='INVALID_ADMIN_FINANCIAL_ADJUSTMENT',ERRCODE='22023';
  END IF;
@@ -45,7 +45,7 @@ BEGIN
  IF FOUND THEN
   IF v_existing."actorTelegramId"=p_actor_telegram_id
    AND v_existing.action=p_action AND v_existing."targetId"=p_target_id
-   AND v_existing.reason=p_reason
+   AND v_existing.reason=btrim(p_reason)
    AND v_existing.metadata->>'amount'=p_amount::text
    AND v_existing.metadata->>'asset' IS NOT DISTINCT FROM p_asset THEN
    RETURN jsonb_build_object('ok',true,'targetType',v_existing."targetType",
