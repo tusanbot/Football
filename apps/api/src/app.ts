@@ -82,9 +82,9 @@ const healthResponse = z.object({
 });
 
 export function buildApp(options: { logger?: boolean; pluginTimeout?: number; groupMembershipPort?: GroupMembershipPort; alliancePort?: AlliancePort; adminAlliancePort?: AdminAlliancePort; telegramUserLookupPort?: TelegramUserLookupPort; accountProvisioningPort?: TelegramAccountProvisioningPort; storePurchasePort?: StorePurchasePort; storeItemUsePort?: StoreItemUsePort; walletEntryPort?: WalletEntryPort; marketListingPort?: MarketListingPort; marketPurchasePort?: MarketPurchasePort; storeSnapshotPort?: StoreSnapshotPort; playerDevelopmentPort?: PlayerDevelopmentPort; clubEconomySettlementPort?: ClubEconomySettlementPort; clubManagementPort?: ClubManagementPort; specialAcquisitionPort?: SpecialAcquisitionPort; giftCodeRedemptionPort?: GiftCodeRedemptionPort; botRuntimeLeasePort?: BotRuntimeLeasePort; matchPorts?: NodeSupabaseMatchPorts; supabaseHttpClient?: SupabaseHttpClient; gameDashboardPort?: GameDashboardPort; walletReadPort?: WalletReadPort; clubLineupPort?: ClubLineupPort; publicPlayerRecordRepository?: PublicPlayerRecordRepository; publicClubLogoRepository?: PublicClubLogoRepository; publicClubReadRepository?: PublicClubReadRepository; eventTournamentSettlementPort?: EventTournamentSettlementPort; eventTournamentReadPort?: EventTournamentReadPort; pyramidLeagueSettlementPort?: PyramidLeagueSettlementPort; actionRateLimitPort?: ActionRateLimitPort } = {}) {
-  // The match service still contains Prisma compatibility paths for isolated legacy
-  // tests and migration parity. Never allow production HTTP routes to reach those
-  // paths: the complete direct-HTTPS Supabase match repository set is mandatory.
+  // Production HTTP routes must use direct-HTTPS Supabase repositories for the
+  // match runtime and Telegram onboarding. Prisma compatibility remains isolated
+  // to non-production migration tests and service families not yet migrated.
   if ((process.env.NODE_ENV === "production" || process.env.ENVIRONMENT === "production") && (!options.matchPorts || !options.supabaseHttpClient || !options.pyramidLeagueSettlementPort || !options.accountProvisioningPort)) {
     throw new Error("SUPABASE_MATCH_PORTS_REQUIRED: production API must use direct Supabase HTTP repositories and a Supabase readiness client.");
   }
