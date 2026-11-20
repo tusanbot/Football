@@ -13,3 +13,13 @@ test("Node admin catalog adapter rejects invalid inputs and malformed responses"
  const malformed=repository({ok:true,targetType:"item"});
  await assert.rejects(malformed.repo.execute({action:"toggle-item",targetId:"item-1",active:true,actorTelegramId:"910000001",idempotencyKey:"catalog-toggle-node-02"}),/SUPABASE_ADMIN_CATALOG_INVALID_RESPONSE/);
 });
+
+test("Node admin catalog adapter routes create and edit through the management RPC",async()=>{
+ const {repo,calls}=repository({ok:true,targetType:"item",targetId:"item-created",replay:false});
+ const created=await repo.execute({action:"create-item",actorTelegramId:"910000001",idempotencyKey:"catalog-create-node-01",itemSlug:"new-item",itemName:"New item",itemDescription:"Description",itemCost:"100",itemScope:"PERSONAL"});
+ assert.deepEqual(created,{ok:true,targetType:"item",targetId:"item-created",replay:false});
+ assert.equal(calls[0]?.name,"admin_catalog_manage_http");
+ assert.equal(calls[0]?.args.p_action,"create-item");
+ assert.equal(calls[0]?.args.p_item_slug,"new-item");
+ assert.equal(calls[0]?.args.p_idempotency_key,"admin-catalog:catalog-create-node-01");
+});
