@@ -15,7 +15,7 @@ BEGIN
  IF NOT FOUND THEN RAISE EXCEPTION USING MESSAGE='CLUB_NOT_FOUND',ERRCODE='P0001'; END IF;
  PERFORM pg_advisory_xact_lock(hashtextextended('friendly-challenge-key:'||p_idempotency_key,0));
  IF p_group_telegram_id IS NOT NULL AND btrim(p_group_telegram_id)<>'' THEN
-  SELECT * INTO v_group FROM public."TelegramGroup" WHERE "telegramId"=p_group_telegram_id;
+  SELECT * INTO v_group FROM public."TelegramGroup" WHERE "telegramId"=p_group_telegram_id FOR SHARE;
   IF NOT FOUND OR NOT EXISTS(SELECT 1 FROM public."GroupMembership" WHERE "groupId"=v_group.id AND "userId"=p_user_id) THEN
    RAISE EXCEPTION USING MESSAGE='GROUP_MEMBERSHIP_REQUIRED',ERRCODE='P0001';
   END IF;
@@ -54,7 +54,7 @@ BEGIN
    v_asset:='GOLD'; v_charged:=p_gold_cost;
    INSERT INTO public."LedgerTransaction"(id,"idempotencyKey","userId",asset,direction,amount,reason,"referenceType","referenceId","createdAt")
    VALUES('ledger_'||replace(gen_random_uuid()::text,'-',''),'friendly-challenge:'||p_user_id||':'||p_idempotency_key,
-    p_user_id,'GOLD','DEBIT',p_gold_cost,'FRIENDLY_CHALLENGE_CREATE','FRIENDLY_CHALLENGE',p_idempotency_key,p_now);
+    p_user_id,'GOLD','DEBIT',p_gold_cost,'FRIENDLY_CHALLENGE_CREATE','FRIENDLY_CHALLENGE',p_idempotency_key,(p_now AT TIME ZONE 'UTC')::timestamp(3));
    UPDATE public."ChallengeDailyUsage" SET "goldUsed"="goldUsed"+1 WHERE id=v_usage.id RETURNING * INTO v_usage;
   ELSIF v_usage."purchasedCredits">0 THEN
    v_asset:='PURCHASED';
@@ -71,7 +71,7 @@ BEGIN
  VALUES('friendly_challenge_'||replace(gen_random_uuid()::text,'-',''),
   replace(gen_random_uuid()::text,'-',''),
   p_idempotency_key,v_asset::"ChallengeChargeAsset",v_charged,p_user_id,v_club.id,v_group_id,
-  p_now+interval '24 hours',p_now) RETURNING * INTO v_challenge;
+  (p_now AT TIME ZONE 'UTC')::timestamp(3)+interval '24 hours',(p_now AT TIME ZONE 'UTC')::timestamp(3)) RETURNING * INTO v_challenge;
  v_remaining:=jsonb_build_object('free',GREATEST(0,3-v_usage."freeUsed"),
   'gold',GREATEST(0,2-v_usage."goldUsed"),'purchased',v_usage."purchasedCredits");
  v_challenge_json:=to_jsonb(v_challenge)||jsonb_build_object('goldCost',v_challenge."goldCost"::text,'expiresAt',to_char(v_challenge."expiresAt",'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),'createdAt',to_char(v_challenge."createdAt",'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'));
@@ -101,7 +101,7 @@ BEGIN
   RETURN jsonb_build_object('error','FRIENDLY_CHALLENGE_EXPIRED');
  END IF;
  IF v_challenge."groupId" IS NOT NULL THEN
-  SELECT * INTO v_group FROM public."TelegramGroup" WHERE id=v_challenge."groupId";
+  SELECT * INTO v_group FROM public."TelegramGroup" WHERE id=v_challenge."groupId" FOR SHARE;
   IF NOT FOUND OR NOT v_group."isActive" OR v_group."isSuspended" THEN RAISE EXCEPTION USING MESSAGE='GROUP_INACTIVE',ERRCODE='P0001'; END IF;
   IF NOT EXISTS(SELECT 1 FROM public."GroupMembership" WHERE "groupId"=v_challenge."groupId" AND "userId"=p_user_id) THEN
    RAISE EXCEPTION USING MESSAGE='GROUP_MEMBERSHIP_REQUIRED',ERRCODE='P0001';
