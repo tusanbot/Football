@@ -71,6 +71,8 @@ import type { WalletReadPort } from "./economy/wallet-read-context.js";
 import { withWalletReadPort } from "./economy/wallet-read-context.js";
 import { withGameDashboardPort } from "./game/game-dashboard-context.js";
 import { withNodeSupabaseMatchPorts } from "./game/node-supabase-match-ports.js";
+import type { PyramidLeagueSettlementPort } from "./game/pyramid-league-settlement-context.js";
+import { withPyramidLeagueSettlementPort } from "./game/pyramid-league-settlement-context.js";
 
 const healthResponse = z.object({
   status: z.literal("ok"),
@@ -78,11 +80,11 @@ const healthResponse = z.object({
   version: z.string(),
 });
 
-export function buildApp(options: { logger?: boolean; pluginTimeout?: number; groupMembershipPort?: GroupMembershipPort; alliancePort?: AlliancePort; adminAlliancePort?: AdminAlliancePort; telegramUserLookupPort?: TelegramUserLookupPort; storePurchasePort?: StorePurchasePort; storeItemUsePort?: StoreItemUsePort; walletEntryPort?: WalletEntryPort; marketListingPort?: MarketListingPort; marketPurchasePort?: MarketPurchasePort; storeSnapshotPort?: StoreSnapshotPort; playerDevelopmentPort?: PlayerDevelopmentPort; clubEconomySettlementPort?: ClubEconomySettlementPort; clubManagementPort?: ClubManagementPort; specialAcquisitionPort?: SpecialAcquisitionPort; giftCodeRedemptionPort?: GiftCodeRedemptionPort; botRuntimeLeasePort?: BotRuntimeLeasePort; matchPorts?: NodeSupabaseMatchPorts; supabaseHttpClient?: SupabaseHttpClient; gameDashboardPort?: GameDashboardPort; walletReadPort?: WalletReadPort; clubLineupPort?: ClubLineupPort; publicPlayerRecordRepository?: PublicPlayerRecordRepository; publicClubLogoRepository?: PublicClubLogoRepository; publicClubReadRepository?: PublicClubReadRepository; eventTournamentSettlementPort?: EventTournamentSettlementPort; eventTournamentReadPort?: EventTournamentReadPort; actionRateLimitPort?: ActionRateLimitPort } = {}) {
+export function buildApp(options: { logger?: boolean; pluginTimeout?: number; groupMembershipPort?: GroupMembershipPort; alliancePort?: AlliancePort; adminAlliancePort?: AdminAlliancePort; telegramUserLookupPort?: TelegramUserLookupPort; storePurchasePort?: StorePurchasePort; storeItemUsePort?: StoreItemUsePort; walletEntryPort?: WalletEntryPort; marketListingPort?: MarketListingPort; marketPurchasePort?: MarketPurchasePort; storeSnapshotPort?: StoreSnapshotPort; playerDevelopmentPort?: PlayerDevelopmentPort; clubEconomySettlementPort?: ClubEconomySettlementPort; clubManagementPort?: ClubManagementPort; specialAcquisitionPort?: SpecialAcquisitionPort; giftCodeRedemptionPort?: GiftCodeRedemptionPort; botRuntimeLeasePort?: BotRuntimeLeasePort; matchPorts?: NodeSupabaseMatchPorts; supabaseHttpClient?: SupabaseHttpClient; gameDashboardPort?: GameDashboardPort; walletReadPort?: WalletReadPort; clubLineupPort?: ClubLineupPort; publicPlayerRecordRepository?: PublicPlayerRecordRepository; publicClubLogoRepository?: PublicClubLogoRepository; publicClubReadRepository?: PublicClubReadRepository; eventTournamentSettlementPort?: EventTournamentSettlementPort; eventTournamentReadPort?: EventTournamentReadPort; pyramidLeagueSettlementPort?: PyramidLeagueSettlementPort; actionRateLimitPort?: ActionRateLimitPort } = {}) {
   // The match service still contains Prisma compatibility paths for isolated legacy
   // tests and migration parity. Never allow production HTTP routes to reach those
   // paths: the complete direct-HTTPS Supabase match repository set is mandatory.
-  if ((process.env.NODE_ENV === "production" || process.env.ENVIRONMENT === "production") && (!options.matchPorts || !options.supabaseHttpClient)) {
+  if ((process.env.NODE_ENV === "production" || process.env.ENVIRONMENT === "production") && (!options.matchPorts || !options.supabaseHttpClient || !options.pyramidLeagueSettlementPort)) {
     throw new Error("SUPABASE_MATCH_PORTS_REQUIRED: production API must use direct Supabase HTTP repositories and a Supabase readiness client.");
   }
   const app = Fastify({
@@ -151,6 +153,7 @@ export function buildApp(options: { logger?: boolean; pluginTimeout?: number; gr
   if (options.giftCodeRedemptionPort) app.addHook("onRequest", (_request, _reply, done) => { void withGiftCodeRedemptionPort(options.giftCodeRedemptionPort!, async () => done()); });
   if (options.eventTournamentSettlementPort) app.addHook("onRequest", (_request, _reply, done) => { void withEventTournamentSettlementPort(options.eventTournamentSettlementPort!, async () => done()); });
   if (options.eventTournamentReadPort) app.addHook("onRequest", (_request, _reply, done) => { void withEventTournamentReadPort(options.eventTournamentReadPort!, async () => done()); });
+  if (options.pyramidLeagueSettlementPort) app.addHook("onRequest", (_request, _reply, done) => { void withPyramidLeagueSettlementPort(options.pyramidLeagueSettlementPort!, async () => done()); });
   if (options.matchPorts) app.addHook("onRequest", (_request, _reply, done) => { void withNodeSupabaseMatchPorts(options.matchPorts!, async () => done()); });
   if (options.gameDashboardPort) app.addHook("onRequest", (_request, _reply, done) => { void withGameDashboardPort(options.gameDashboardPort!, async () => done()); });
   if (options.walletReadPort) app.addHook("onRequest", (_request, _reply, done) => { void withWalletReadPort(options.walletReadPort!, async () => done()); });
