@@ -162,6 +162,7 @@ jobs:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/football_empire
       - name: Test admin entity update RPC atomicity, audit and access controls
         run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f apps/api/prisma/tests/admin-entity-update-http-rpc.integration.sql
+        run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f apps/api/prisma/tests/admin-season-award-and-broadcast-create-http-rpc.integration.sql
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/football_empire
       - name: Test admin financial adjustment RPC atomicity, audit and idempotency
@@ -183,7 +184,7 @@ jobs:
       - name: Build shared domain package
         run: pnpm --filter @football/domain build
       - name: Test Supabase HTTP admin console, moderation and broadcast repositories
-        run: pnpm --filter @football/api exec tsx --test --test-concurrency=1 test/node-supabase-admin-console-read.test.ts test/node-supabase-admin-moderation-actions.test.ts test/node-supabase-admin-catalog-actions.test.ts test/node-supabase-admin-entity-update.test.ts test/node-supabase-admin-financial-adjustments.test.ts test/node-supabase-admin-broadcast-management.test.ts
+        run: pnpm --filter @football/api exec tsx --test --test-concurrency=1 test/node-supabase-admin-console-read.test.ts test/node-supabase-admin-moderation-actions.test.ts test/node-supabase-admin-catalog-actions.test.ts test/node-supabase-admin-entity-update.test.ts test/node-supabase-admin-financial-adjustments.test.ts test/node-supabase-admin-broadcast-management.test.ts test/node-supabase-admin-season-awards.test.ts test/node-supabase-admin-broadcast-create.test.ts
       - name: Test Supabase HTTP match entrypoint repositories
         run: pnpm --filter @football/api exec tsx --test --test-concurrency=1 test/node-supabase-match-entrypoints.test.ts
       - name: Test Supabase match runtime coordination repositories
