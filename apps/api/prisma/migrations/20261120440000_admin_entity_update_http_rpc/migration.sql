@@ -139,7 +139,7 @@ REVOKE ALL ON FUNCTION public.admin_entity_update_http(text,text,text,text,jsonb
 DO $grant$
 BEGIN
  IF EXISTS(SELECT 1 FROM pg_roles WHERE rolname='service_role') THEN
-  GRANT EXECUTE ON FUNCTION public.admin_entity_update_http(text,text,text,text,jsonb) TO service_role;
+  GRANT EXECUTE ON FUNCTION public.admin_entity_update_http(text,text,text,text,jsonb,text) TO service_role;
  END IF;
 END;
 $grant$;
