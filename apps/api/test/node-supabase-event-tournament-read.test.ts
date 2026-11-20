@@ -41,3 +41,22 @@ test("participant reads reject broken foreign-key references",async()=>{
  const {repo}=repository({EventTournamentParticipant:[{id:"p-1",tournamentId:"t-1",userId:"u-1",clubId:"c-1",placement:null,score:0,joinedAt:"2026-11-02T00:00:00.000Z"}],User:[],Club:[]});
  await assert.rejects(()=>repo.listParticipants("t-1"),/REFERENCE_MISSING/);
 });
+
+test("event tournament creation uses the atomic Supabase RPC",async()=>{
+ let requestUrl="";let requestBody:Record<string,unknown>|undefined;
+ const client=new SupabaseHttpClient({url:"https://example.supabase.co",serviceRoleKey:"service-role-key-that-is-long-enough",fetchImpl:async(input,init)=>{
+  requestUrl=String(input);requestBody=JSON.parse(String(init?.body)) as Record<string,unknown>;
+  return new Response(JSON.stringify({tournament:{id:"t-created",title:"Cup",status:"REGISTRATION"},replayed:false}),{status:200,headers:{"content-type":"application/json"}});
+ }});
+ const repo=new NodeSupabaseEventTournamentReadRepository(client);
+ const result=await repo.create({telegramUserId:"12345",idempotencyKey:"create-cup-123456",title:"Cup",description:"Season cup",
+  entryFeeAsset:"GOLD",entryFeeAmount:"10",maxParticipants:8,registrationEndsAt:"2026-12-01T00:00:00.000Z",
+  startsAt:"2026-12-02T00:00:00.000Z",endsAt:null,
+  prizes:[{placement:1,type:"HONOR",amount:"100",itemKey:null,specialPlayerId:null}]});
+ assert.equal(new URL(requestUrl).pathname,"/rest/v1/rpc/create_event_tournament_http");
+ assert.equal(requestBody?.p_telegram_user_id,"12345");
+ assert.equal(requestBody?.p_idempotency_key,"event-tournament-create:create-cup-123456");
+ assert.equal(requestBody?.p_entry_fee_amount,"10");
+ assert.equal(result.tournament.id,"t-created");
+ assert.equal(result.replayed,false);
+});
