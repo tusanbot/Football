@@ -69,7 +69,7 @@ BEGIN
 
  INSERT INTO public."FriendlyChallenge"(id,token,"idempotencyKey","chargeAsset","goldCost","creatorUserId","creatorClubId","groupId","expiresAt","createdAt")
  VALUES('friendly_challenge_'||replace(gen_random_uuid()::text,'-',''),
-  translate(rtrim(encode(gen_random_bytes(18),'base64'),'='),'+/','-_'),
+  replace(gen_random_uuid()::text,'-',''),
   p_idempotency_key,v_asset::"ChallengeChargeAsset",v_charged,p_user_id,v_club.id,v_group_id,
   p_now+interval '24 hours',p_now) RETURNING * INTO v_challenge;
  v_remaining:=jsonb_build_object('free',GREATEST(0,3-v_usage."freeUsed"),
@@ -98,7 +98,7 @@ BEGIN
   IF v_challenge.status::text='OPEN' AND v_challenge."expiresAt"<=p_now THEN
    UPDATE public."FriendlyChallenge" SET status='EXPIRED' WHERE id=v_challenge.id;
   END IF;
-  RAISE EXCEPTION USING MESSAGE='FRIENDLY_CHALLENGE_EXPIRED',ERRCODE='P0001';
+  RETURN jsonb_build_object('error','FRIENDLY_CHALLENGE_EXPIRED');
  END IF;
  IF v_challenge."groupId" IS NOT NULL THEN
   SELECT * INTO v_group FROM public."TelegramGroup" WHERE id=v_challenge."groupId";
@@ -126,7 +126,7 @@ BEGIN
  IF NOT FOUND THEN RAISE EXCEPTION USING MESSAGE='FRIENDLY_CHALLENGE_NOT_FOUND',ERRCODE='P0001'; END IF;
  IF v_challenge.status::text='OPEN' AND v_challenge."expiresAt"<=p_now THEN
   UPDATE public."FriendlyChallenge" SET status='EXPIRED' WHERE id=v_challenge.id AND status='OPEN';
-  RAISE EXCEPTION USING MESSAGE='FRIENDLY_CHALLENGE_EXPIRED',ERRCODE='P0001';
+  RETURN jsonb_build_object('error','FRIENDLY_CHALLENGE_EXPIRED');
  END IF;
  SELECT jsonb_build_object(
   'id',ch.id,'token',ch.token,'status',ch.status::text,'expiresAt',ch."expiresAt",
