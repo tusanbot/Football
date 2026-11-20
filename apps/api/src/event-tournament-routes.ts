@@ -93,6 +93,23 @@ export function registerEventTournamentRoutes(app: FastifyInstance) {
     if (!await consumeAllianceActionRateLimit({ telegramUserId: actor.telegramId, telegramGroupId: "event-tournament", action: "event-tournament-join", limit: 8 })) {
       return reply.code(429).send({ error: "TOURNAMENT_JOIN_RATE_LIMITED", retryAfterSeconds: 60 });
     }
+    const tournamentPort = getEventTournamentReadPort();
+    if (tournamentPort) {
+      try {
+        const result = await tournamentPort.join({
+          telegramUserId: actor.telegramId, tournamentId: params.data.id, now: new Date().toISOString(),
+        });
+        return { joined: true, ...result };
+      } catch (error) {
+        const code = error instanceof Error ? error.message : "TOURNAMENT_JOIN_FAILED";
+        const notFound = ["TOURNAMENT_NOT_FOUND", "ACCOUNT_NOT_FOUND"];
+        const conflicts = ["INSUFFICIENT_FUNDS", "TOURNAMENT_FULL", "TOURNAMENT_REGISTRATION_CLOSED",
+          "ALL_TEAMS_NEED_VALID_LINEUPS", "TOURNAMENT_CAPACITY_CHANGED", "TOURNAMENT_CLUB_ALREADY_REGISTERED",
+          "CONCURRENT_MODIFICATION", "IDEMPOTENCY_CONFLICT"];
+        const status = notFound.includes(code) ? 404 : conflicts.includes(code) ? 409 : 400;
+        return reply.code(status).send({ error: code });
+      }
+    }
     try {
       const result = await prisma.$transaction(async (tx) => {
         const existing = await tx.eventTournamentParticipant.findUnique({ where: { tournamentId_userId: { tournamentId: params.data.id, userId: actor.id } } });
