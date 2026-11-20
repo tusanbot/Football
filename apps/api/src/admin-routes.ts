@@ -78,24 +78,8 @@ const actor=await authorizeAdmin(req,reply,"moderation");if(!actor)return;
 if(actor.adminRole!=="superadmin")return reply.code(403).send({error:"SUPERADMIN_REQUIRED"});
 const q=z.object({limit:z.coerce.number().int().min(1).max(100).default(40)}).safeParse(req.query);
 if(!q.success)return reply.code(400).send({error:"INVALID_QUERY"});
-if(options.adminConsoleReadPort)return options.adminConsoleReadPort.broadcasts(q.data.limit);
-if(process.env.NODE_ENV==="production"||process.env.ENVIRONMENT==="production")throw new Error("ADMIN_CONSOLE_SUPABASE_REPOSITORY_REQUIRED");
-const [broadcasts,userAudits]=await Promise.all([
-prisma.adminGroupBroadcast.findMany({take:q.data.limit,orderBy:{createdAt:"desc"},include:{deliveries:{select:{deliveredAt:true,deliveryAttempts:true,deliveryLastError:true}}}}),
-prisma.adminAuditLog.findMany({where:{action:"broadcast",targetType:"broadcast"},take:q.data.limit,orderBy:{createdAt:"desc"},select:{targetId:true,createdAt:true,actorTelegramId:true}}),
-]);
-const refs=userAudits.map(x=>x.targetId).filter((x):x is string=>Boolean(x));
-const [userTotals,userDelivered,userFailed]=refs.length?await Promise.all([
-prisma.leagueNotice.groupBy({by:["referenceId"],where:{kind:"ADMIN_BROADCAST",referenceId:{in:refs}},_count:{_all:true}}),
-prisma.leagueNotice.groupBy({by:["referenceId"],where:{kind:"ADMIN_BROADCAST",referenceId:{in:refs},OR:[{deliveredAt:{not:null}},{readAt:{not:null}}]},_count:{_all:true}}),
-prisma.leagueNotice.groupBy({by:["referenceId"],where:{kind:"ADMIN_BROADCAST",referenceId:{in:refs},deliveredAt:null,deliveryAttempts:{gte:8}},_count:{_all:true}}),
-]):[[],[],[]];
-const totalMap=new Map(userTotals.map(x=>[x.referenceId??"",x._count._all]));
-const deliveredMap=new Map(userDelivered.map(x=>[x.referenceId??"",x._count._all]));
-const failedMap=new Map(userFailed.map(x=>[x.referenceId??"",x._count._all]));
-const groupRows=broadcasts.map(b=>({id:b.id,kind:"groups",name:"ارسال گروهی به گروه‌ها",createdByTelegramId:b.createdByTelegramId,createdAt:b.createdAt.toISOString(),total:b.deliveries.length,delivered:b.deliveries.filter(d=>d.deliveredAt!==null&&d.deliveryLastError!=="SKIPPED_GROUP_INACTIVE").length,skipped:b.deliveries.filter(d=>d.deliveryLastError==="SKIPPED_GROUP_INACTIVE").length,failed:b.deliveries.filter(d=>d.deliveryAttempts>=8&&d.deliveredAt===null).length,pending:b.deliveries.filter(d=>d.deliveredAt===null&&d.deliveryAttempts<8).length}));
-const userRows=userAudits.map(a=>{const total=totalMap.get(a.targetId)??0,delivered=deliveredMap.get(a.targetId)??0,failed=failedMap.get(a.targetId)??0;return{id:a.targetId,kind:"users",name:"ارسال خصوصی به کاربران",createdByTelegramId:a.actorTelegramId,createdAt:a.createdAt.toISOString(),total,delivered,skipped:0,failed,pending:Math.max(0,total-delivered-failed)};});
-return [...groupRows,...userRows].sort((a,b)=>b.createdAt.localeCompare(a.createdAt)).slice(0,q.data.limit);
+if(!options.adminConsoleReadPort)throw new Error("ADMIN_CONSOLE_SUPABASE_REPOSITORY_REQUIRED");
+return options.adminConsoleReadPort.broadcasts(q.data.limit);
 });
 app.get("/v1/admin/roles",async(req,reply)=>{const actor=await authorizeAdmin(req,reply);if(!actor)return;if(actor.adminRole!=="superadmin")return reply.code(403).send({error:"SUPERADMIN_REQUIRED"});if(options.adminConfigurationPort)return (await options.adminConfigurationPort.list()).roles;if(process.env.NODE_ENV==="production"||process.env.ENVIRONMENT==="production")throw new Error("ADMIN_CONFIGURATION_SUPABASE_REPOSITORY_REQUIRED");return prisma.adminRoleAssignment.findMany({orderBy:{updatedAt:"desc"}});});
 app.get("/v1/admin/settings",async(req,reply)=>{const actor=await authorizeAdmin(req,reply);if(!actor)return;if(actor.adminRole!=="superadmin")return reply.code(403).send({error:"SUPERADMIN_REQUIRED"});if(options.adminConfigurationPort)return (await options.adminConfigurationPort.list()).settings;if(process.env.NODE_ENV==="production"||process.env.ENVIRONMENT==="production")throw new Error("ADMIN_CONFIGURATION_SUPABASE_REPOSITORY_REQUIRED");return prisma.gameSetting.findMany({orderBy:{key:"asc"}});});
