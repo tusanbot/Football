@@ -208,7 +208,7 @@ if(["set-season-player-award","remove-season-player-award"].includes(x.action)&&
   const result=await options.adminSeasonAwardActionPort.execute({
    action:x.action as import("./node-supabase-admin-season-awards.js").AdminSeasonAwardAction,
    actorTelegramId:actor.telegramId,idempotencyKey:x.idempotencyKey,
-   ...(x.action==="set-season-player-award"?{season:x.awardSeason,playerId:x.awardPlayerId,awardType:x.awardType,awardName:x.awardName,...(x.awardReason!==undefined?{reason:x.awardReason}:{})}:{targetId:id,...(x.reason!==undefined?{reason:x.reason}:{})})
+   ...(x.action==="set-season-player-award"?{...(x.awardSeason!==undefined?{season:x.awardSeason}:{}),...(x.awardPlayerId?{playerId:x.awardPlayerId}:{}),...(x.awardType?{awardType:x.awardType}:{}),...(x.awardName?{awardName:x.awardName}:{}),...(x.awardReason!==undefined?{reason:x.awardReason}:{})}:{...(id?{targetId:id}:{}),...(x.reason!==undefined?{reason:x.reason}:{})})
   });
   return {ok:true,targetType:result.targetType,targetId:result.targetId,replayed:result.replay};
  }catch(error){
