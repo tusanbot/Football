@@ -31,7 +31,7 @@ BEGIN
   SELECT * INTO v_usage FROM public."ChallengeDailyUsage" WHERE "userId"=p_user_id AND "usageDate"=v_day;
   v_remaining:=jsonb_build_object('free',GREATEST(0,3-COALESCE(v_usage."freeUsed",0)),
    'gold',GREATEST(0,2-COALESCE(v_usage."goldUsed",0)),'purchased',COALESCE(v_usage."purchasedCredits",0));
-  v_challenge_json:=to_jsonb(v_existing)||jsonb_build_object('goldCost',v_existing."goldCost"::text);
+  v_challenge_json:=to_jsonb(v_existing)||jsonb_build_object('goldCost',v_existing."goldCost"::text,'expiresAt',to_char(v_existing."expiresAt",'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),'createdAt',to_char(v_existing."createdAt",'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'));
   RETURN jsonb_build_object('challenge',v_challenge_json,'asset',v_existing."chargeAsset"::text,
    'goldCost',v_existing."goldCost"::text,'remaining',v_remaining,'replayed',true);
  END IF;
@@ -48,7 +48,7 @@ BEGIN
  ELSIF v_usage."goldUsed"<2 THEN
   SELECT * INTO v_wallet FROM public."Wallet" WHERE "userId"=p_user_id AND asset::text='GOLD' FOR UPDATE;
   IF FOUND AND v_wallet.balance>=p_gold_cost THEN
-   UPDATE public."Wallet" SET balance=balance-p_gold_cost,version=version+1,"updatedAt"=p_now
+   UPDATE public."Wallet" SET balance=balance-p_gold_cost,version=version+1,"updatedAt"=(p_now AT TIME ZONE 'UTC')::timestamp(3)
     WHERE id=v_wallet.id AND balance>=p_gold_cost;
    IF NOT FOUND THEN RAISE EXCEPTION USING MESSAGE='CONCURRENT_MODIFICATION',ERRCODE='P0001'; END IF;
    v_asset:='GOLD'; v_charged:=p_gold_cost;
@@ -74,7 +74,7 @@ BEGIN
   p_now+interval '24 hours',p_now) RETURNING * INTO v_challenge;
  v_remaining:=jsonb_build_object('free',GREATEST(0,3-v_usage."freeUsed"),
   'gold',GREATEST(0,2-v_usage."goldUsed"),'purchased',v_usage."purchasedCredits");
- v_challenge_json:=to_jsonb(v_challenge)||jsonb_build_object('goldCost',v_challenge."goldCost"::text);
+ v_challenge_json:=to_jsonb(v_challenge)||jsonb_build_object('goldCost',v_challenge."goldCost"::text,'expiresAt',to_char(v_challenge."expiresAt",'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),'createdAt',to_char(v_challenge."createdAt",'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'));
  RETURN jsonb_build_object('challenge',v_challenge_json,'asset',v_asset,'goldCost',v_charged::text,'remaining',v_remaining,'replayed',false);
 END;$fn$;
 
@@ -94,8 +94,8 @@ BEGIN
   IF v_match IS NULL OR v_match_id<>v_opponent_id THEN RAISE EXCEPTION USING MESSAGE='FRIENDLY_CHALLENGE_ALREADY_ACCEPTED',ERRCODE='P0001'; END IF;
   RETURN jsonb_build_object('match',v_match,'replayed',true);
  END IF;
- IF v_challenge.status::text<>'OPEN' OR v_challenge."expiresAt"<=p_now THEN
-  IF v_challenge.status::text='OPEN' AND v_challenge."expiresAt"<=p_now THEN
+ IF v_challenge.status::text<>'OPEN' OR v_challenge."expiresAt"<=(p_now AT TIME ZONE 'UTC')::timestamp(3) THEN
+  IF v_challenge.status::text='OPEN' AND v_challenge."expiresAt"<=(p_now AT TIME ZONE 'UTC')::timestamp(3) THEN
    UPDATE public."FriendlyChallenge" SET status='EXPIRED' WHERE id=v_challenge.id;
   END IF;
   RETURN jsonb_build_object('error','FRIENDLY_CHALLENGE_EXPIRED');
@@ -124,12 +124,12 @@ DECLARE v_challenge public."FriendlyChallenge"%ROWTYPE; v_result jsonb;
 BEGIN
  SELECT * INTO v_challenge FROM public."FriendlyChallenge" WHERE token=p_token;
  IF NOT FOUND THEN RAISE EXCEPTION USING MESSAGE='FRIENDLY_CHALLENGE_NOT_FOUND',ERRCODE='P0001'; END IF;
- IF v_challenge.status::text='OPEN' AND v_challenge."expiresAt"<=p_now THEN
+ IF v_challenge.status::text='OPEN' AND v_challenge."expiresAt"<=(p_now AT TIME ZONE 'UTC')::timestamp(3) THEN
   UPDATE public."FriendlyChallenge" SET status='EXPIRED' WHERE id=v_challenge.id AND status='OPEN';
   RETURN jsonb_build_object('error','FRIENDLY_CHALLENGE_EXPIRED');
  END IF;
  SELECT jsonb_build_object(
-  'id',ch.id,'token',ch.token,'status',ch.status::text,'expiresAt',ch."expiresAt",
+  'id',ch.id,'token',ch.token,'status',ch.status::text,'expiresAt',to_char(ch."expiresAt",'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),
   'creatorClub',jsonb_build_object('name',cl.name,'level',cl.level,'reputation',cl.reputation),
   'creatorTelegramId',u."telegramId",
   'groupTitle',g.title,'groupTelegramId',g."telegramId"
@@ -155,7 +155,7 @@ BEGIN
  VALUES('challenge_usage_'||replace(gen_random_uuid()::text,'-',''),p_user_id,v_day,p_quantity)
  ON CONFLICT ("userId","usageDate") DO UPDATE SET "purchasedCredits"=usage."purchasedCredits"+EXCLUDED."purchasedCredits"
  RETURNING * INTO v_usage;
- RETURN jsonb_build_object('userId',v_usage."userId",'usageDate',v_usage."usageDate",
+ RETURN jsonb_build_object('userId',v_usage."userId",'id',v_usage.id,'usageDate',v_usage."usageDate",
   'freeUsed',v_usage."freeUsed",'goldUsed',v_usage."goldUsed",'purchasedCredits',v_usage."purchasedCredits");
 END;$fn$;
 
