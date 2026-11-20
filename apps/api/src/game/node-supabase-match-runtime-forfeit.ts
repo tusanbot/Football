@@ -17,6 +17,11 @@ export class SupabaseMatchRuntimeForfeitRepository implements MatchRuntimeForfei
   }else if(result.advancement!==null)throw new Error("SUPABASE_MATCH_RUNTIME_FORFEIT_ADVANCEMENT_INVALID_RESPONSE");
   if(result.pyramidFinalization!==null&&(typeof result.pyramidFinalization!=="object"||typeof result.pyramidFinalization.processed!=="boolean"))throw new Error("SUPABASE_PYRAMID_FINALIZATION_INVALID_RESPONSE");
   if(result.eventTournamentFinalization!==null&&(typeof result.eventTournamentFinalization!=="object"||typeof result.eventTournamentFinalization.finalized!=="boolean"))throw new Error("SUPABASE_EVENT_TOURNAMENT_FINALIZATION_INVALID_RESPONSE");
+  if(result.advancement?.completed){
+   if(!result.pyramidFinalization||!result.eventTournamentFinalization)throw new Error("SUPABASE_MATCH_FINALIZATION_RESULT_MISSING");
+  }else if(result.pyramidFinalization!==null||result.eventTournamentFinalization!==null){
+   throw new Error("SUPABASE_MATCH_FINALIZATION_RESULT_UNEXPECTED");
+  }
   return result;
  }
 }
