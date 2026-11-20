@@ -12,7 +12,7 @@ AS $fn$
 DECLARE
  v_existing public."AdminAuditLog"%ROWTYPE; v_metadata jsonb; v_target_id text; v_target_type text;
 BEGIN
- IF p_action NOT IN ('create-item','item-update','create-gift-code')
+ IF p_action IS NULL OR p_action NOT IN ('create-item','item-update','create-gift-code')
   OR p_actor_telegram_id IS NULL OR p_actor_telegram_id !~ '^[0-9]{1,20}$'
   OR p_idempotency_key IS NULL OR length(p_idempotency_key) NOT BETWEEN 12 AND 160 THEN
   RAISE EXCEPTION USING MESSAGE='INVALID_ADMIN_CATALOG_ACTION',ERRCODE='22023';
@@ -21,7 +21,7 @@ BEGIN
   IF (p_action='create-item' AND (p_item_slug IS NULL OR p_item_slug !~ '^[a-z0-9]+(?:-[a-z0-9]+)*$' OR length(p_item_slug) NOT BETWEEN 3 AND 48
       OR p_item_name IS NULL OR length(btrim(p_item_name)) NOT BETWEEN 2 AND 80
       OR p_item_description IS NULL OR length(btrim(p_item_description)) NOT BETWEEN 2 AND 500
-      OR p_item_cost IS NULL OR p_item_cost < 0 OR p_item_scope NOT IN ('PERSONAL','GROUP')))
+      OR p_item_cost IS NULL OR p_item_cost < 0 OR p_item_scope IS NULL OR p_item_scope NOT IN ('PERSONAL','GROUP')))
    OR (p_action='item-update' AND (p_target_id IS NULL OR length(p_target_id) NOT BETWEEN 1 AND 128
       OR (p_item_name IS NULL AND p_item_description IS NULL AND p_item_cost IS NULL)
       OR (p_item_name IS NOT NULL AND length(btrim(p_item_name)) NOT BETWEEN 2 AND 80)
@@ -35,6 +35,7 @@ BEGIN
    OR p_reward_type IS NULL OR p_max_redemptions IS NULL OR p_max_redemptions NOT BETWEEN 1 AND 100000
    OR p_per_user_limit IS NULL OR p_per_user_limit NOT BETWEEN 1 AND 1000
    OR COALESCE(p_cash_amount,0)<0 OR COALESCE(p_gold_amount,0)<0 OR COALESCE(p_group_points,0)<0
+   OR COALESCE(p_cash_amount,0)>9223372036854775807-COALESCE(p_gold_amount,0)
    OR (p_reward_type='GROUP_POINTS' AND COALESCE(p_group_points,0)<=0)
    OR (p_reward_type='WALLET' AND COALESCE(p_cash_amount,0)+COALESCE(p_gold_amount,0)<=0) THEN
    RAISE EXCEPTION USING MESSAGE='INVALID_GIFT_CODE',ERRCODE='22023';
