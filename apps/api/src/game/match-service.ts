@@ -914,12 +914,15 @@ export async function simulateScheduledMatch(userId: string, matchId: string, no
       };
     }
     const runtime = await tx.matchRuntime.findUnique({ where: { matchId: match.id } });
-    const runtimeState = runtime?.simulationState as unknown as {
+    // Durable runtimes are settled only by the leased worker through the atomic
+    // Supabase settlement RPC. The legacy one-shot transaction must never settle
+    // or mutate a runtime, even outside production/test environments.
+    if (runtime) throw new MatchServiceError("MATCH_RUNTIME_AUTOMATIC");
+    const runtimeState = null as {
       segment: MatchSegmentState;
       substitutions: { home: MatchSubstitutionState; away: MatchSubstitutionState };
     } | null;
-    const isRuntimeSettlement = match.status === "IN_PROGRESS" && runtime?.status === "RUNNING"
-      && runtime.currentMinute === 90 && runtimeState?.segment.currentMinute === 90;
+    const isRuntimeSettlement = false;
     if (match.status !== "SCHEDULED" && !isRuntimeSettlement) throw new MatchServiceError("MATCH_NOT_SCHEDULED");
     if (match.simulationVersion !== 1) throw new MatchServiceError("UNSUPPORTED_SIMULATION_VERSION");
     const competition = match.competitionId
