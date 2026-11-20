@@ -1,5 +1,5 @@
-export type AdminResourceListName = "players" | "clubs" | "users" | "groups" | "challenges" | "leagues" | "items" | "gift-codes" | "alliances" | "matches" | "alliance-seasons" | "season-awards";
 import { SupabaseHttpClient } from "./node-supabase-http.js";
+export type AdminResourceListName = "players" | "clubs" | "users" | "groups" | "challenges" | "leagues" | "items" | "gift-codes" | "alliances" | "matches" | "alliance-seasons" | "season-awards";
 
 export interface AdminConsoleOverview {
   counts: Record<"users"|"clubs"|"players"|"groups"|"challenges"|"leagues"|"items"|"giftCodes"|"flags"|"alliances"|"matches"|"walletTransactions"|"groupTransactions", number>;
