@@ -914,22 +914,32 @@ export async function simulateScheduledMatch(userId: string, matchId: string, no
       };
     }
     const runtime = await tx.matchRuntime.findUnique({ where: { matchId: match.id } });
-    // Durable runtimes are settled only by the leased worker through the atomic
-    // Supabase settlement RPC. The legacy one-shot transaction is limited to
-    // scheduled fixtures that have never entered the durable runtime lifecycle.
-    if (runtime) throw new MatchServiceError("MATCH_RUNTIME_AUTOMATIC");
-    if (match.status !== "SCHEDULED") throw new MatchServiceError("MATCH_NOT_SCHEDULED");
+    const runtimeState = runtime?.simulationState as unknown as {
+      segment: MatchSegmentState;
+      substitutions: { home: MatchSubstitutionState; away: MatchSubstitutionState };
+    } | null;
+    const isRuntimeSettlement = match.status === "IN_PROGRESS" && runtime?.status === "RUNNING"
+      && runtime.currentMinute === 90 && runtimeState?.segment.currentMinute === 90;
+    if (match.status !== "SCHEDULED" && !isRuntimeSettlement) throw new MatchServiceError("MATCH_NOT_SCHEDULED");
     if (match.simulationVersion !== 1) throw new MatchServiceError("UNSUPPORTED_SIMULATION_VERSION");
     const competition = match.competitionId
       ? await tx.competition.findUnique({ where: { id: match.competitionId }, select: { format: true, rules: true, cupLegs: true } })
       : null;
     if (match.scheduledAt > now) throw new MatchServiceError("MATCH_NOT_DUE", { scheduledAt: match.scheduledAt.toISOString() });
     const matchRules = validateMatchRules(match.rulesSnapshot ?? competition?.rules ?? defaultMatchRules(match.type));
-    const homeSide = toSide(home);
-    const awaySide = toSide(away);
+    const kickoffSnapshot = runtime?.kickoffSnapshot as unknown as { home?: MatchSide; away?: MatchSide } | null;
+    if (isRuntimeSettlement && (!kickoffSnapshot?.home || !kickoffSnapshot?.away)) {
+      throw new MatchServiceError("MATCH_KICKOFF_SNAPSHOT_MISSING");
+    }
+    const homeSide = isRuntimeSettlement
+      ? { ...kickoffSnapshot!.home!, ticketPrice: BigInt(String(kickoffSnapshot!.home!.ticketPrice)) }
+      : toSide(home);
+    const awaySide = isRuntimeSettlement
+      ? { ...kickoffSnapshot!.away!, ticketPrice: BigInt(String(kickoffSnapshot!.away!.ticketPrice)) }
+      : toSide(away);
     const homeForfeit = !isValidMatchSide(homeSide);
     const awayForfeit = !isValidMatchSide(awaySide);
-    const forfeit = homeForfeit || awayForfeit;
+    const forfeit = !isRuntimeSettlement && (homeForfeit || awayForfeit);
     const generated = forfeit
       ? {
           homeScore: homeForfeit ? 0 : 3,
@@ -942,7 +952,39 @@ export async function simulateScheduledMatch(userId: string, matchId: string, no
           awayExpectedGoals: 0,
         } as ReturnType<typeof simulateFootballMatch>
       : simulateFootballMatch({ seed: match.seed, home: homeSide, away: awaySide, rules: matchRules });
-    const result = generated;
+    const runtimeEvents = runtimeState?.segment.events;
+    const runtimePlayerStats = new Map((runtimeState?.segment.playerStats ?? [])
+      .map((item) => [item.playerId, item]));
+    const result = isRuntimeSettlement && runtimeState
+      ? {
+          ...generated,
+          homeScore: runtimeState.segment.home.score,
+          awayScore: runtimeState.segment.away.score,
+          events: runtimeEvents ?? [],
+          homeExpectedGoals: runtimeState.segment.home.expectedGoals,
+          awayExpectedGoals: runtimeState.segment.away.expectedGoals,
+          performances: generated.performances.map((line) => {
+            const stats = runtimePlayerStats.get(line.playerId);
+            const goals = (runtimeEvents ?? []).filter((event) => event.type === "GOAL" && event.playerId === line.playerId).length;
+            const assists = (runtimeEvents ?? []).filter((event) => event.type === "GOAL" && event.relatedPlayerId === line.playerId).length;
+            const yellowCards = (runtimeEvents ?? []).filter((event) => event.type === "YELLOW_CARD" && event.playerId === line.playerId).length;
+            const redCards = (runtimeEvents ?? []).filter((event) => event.type === "RED_CARD" && event.playerId === line.playerId).length;
+            const injuries = (runtimeEvents ?? []).filter((event) => event.type === "INJURY" && event.playerId === line.playerId).length;
+            const minutesPlayed = stats?.minutesPlayed ?? 0;
+            const shots = Math.max(goals, stats?.shots ?? 0);
+            const passes = stats?.passes ?? 0;
+            const tackles = stats?.tackles ?? 0;
+            const fitnessLoss = stats?.fitnessLoss ?? 0;
+            const rating = Math.max(3, Math.min(10,
+              6 + goals * 0.9 + assists * 0.45 + shots * 0.08 + tackles * 0.06
+              + passes / 100 * 0.2 - yellowCards * 0.35 - redCards * 1.25 - injuries * 0.65));
+            return {
+              ...line, minutesPlayed, goals, assists, yellowCards, redCards, rating,
+              shots, passes, tackles, fitnessLoss,
+            };
+          }),
+        }
+      : generated;
     const isTwoLegCup = competition?.format === "CUP" && competition.cupLegs === 2 && !!match.tieId;
     let aggregateHomeScore = result.homeScore;
     let aggregateAwayScore = result.awayScore;
@@ -971,8 +1013,36 @@ export async function simulateScheduledMatch(userId: string, matchId: string, no
       : aggregateHomeScore > aggregateAwayScore ? home.id
         : aggregateAwayScore > aggregateHomeScore ? away.id
           : penalties ? (penalties.winner === "HOME" ? home.id : away.id) : null;
+    const settlementPort = getMatchRuntimeSettlementPort();
+    if (settlementPort && isRuntimeSettlement && runtime?.leaseToken) {
+      return settlementPort.settle({
+        matchId: match.id, runtimeId: runtime.id, leaseToken: runtime.leaseToken,
+        now: now.toISOString(), result: jsonSafe({
+          homeScore: result.homeScore, awayScore: result.awayScore,
+          homePenalties: penalties?.homePenalties ?? null, awayPenalties: penalties?.awayPenalties ?? null,
+          winnerClubId, attendance: result.attendance, ticketRevenue: result.ticketRevenue.toString(),
+          homeExpectedGoals: result.homeExpectedGoals, awayExpectedGoals: result.awayExpectedGoals,
+          events: result.events.map((event) => ({
+            sequence: event.sequence, minute: event.minute, type: event.type, teamId: event.teamId,
+            playerId: event.playerId, relatedPlayerId: event.relatedPlayerId ?? null, detail: event.detail,
+          })),
+          performances: result.performances,
+          injuredPlayerIds: result.events.filter((event) => event.type === "INJURY").map((event) => event.playerId),
+          yellowCardPlayerIds: result.events.filter((event) => event.type === "YELLOW_CARD").map((event) => event.playerId),
+          redCardPlayerIds: result.events.filter((event) => event.type === "RED_CARD").map((event) => event.playerId),
+          forfeit, competitionId: match.competitionId, competitionFormat: competition?.format ?? null,
+          round: match.round,
+        }),
+        injuryDurationDays: matchRules.injuryDurationDays,
+        redCardSuspensionMatches: matchRules.redCardSuspensionMatches,
+        yellowCardsToSuspend: matchRules.yellowCardsToSuspend,
+        yellowCardSuspensionMatches: matchRules.yellowCardSuspensionMatches,
+        homeReward: (winnerClubId ? (winnerClubId === home.id ? 250n : 100n) : 150n).toString(),
+        awayReward: (winnerClubId ? (winnerClubId === away.id ? 250n : 100n) : 150n).toString(),
+      });
+    }
     const claimed = await tx.footballMatch.updateMany({
-      where: { id: match.id, status: "SCHEDULED" },
+      where: { id: match.id, status: isRuntimeSettlement ? "IN_PROGRESS" : "SCHEDULED" },
       data: {
         status: "COMPLETED", startedAt: now, completedAt: now,
         homeScore: result.homeScore, awayScore: result.awayScore, homePenalties: penalties?.homePenalties ?? null,
@@ -1016,6 +1086,13 @@ export async function simulateScheduledMatch(userId: string, matchId: string, no
           },
         });
       }
+    }
+    if (isRuntimeSettlement && runtime) {
+      const runtimeCompleted = await tx.matchRuntime.updateMany({
+        where: { id: runtime.id, status: "RUNNING", currentMinute: 90 },
+        data: { status: "COMPLETED", completedAt: now, nextActionAt: null, leaseOwner: null, leaseToken: null, leaseExpiresAt: null },
+      });
+      if (runtimeCompleted.count !== 1) throw new MatchServiceError("MATCH_RUNTIME_CONCURRENT_MODIFICATION");
     }
     if (result.events.length) {
       await tx.matchEvent.createMany({ data: result.events.map((event) => ({
