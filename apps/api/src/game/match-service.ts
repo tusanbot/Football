@@ -1834,7 +1834,7 @@ export async function processDueMatchRuntimes(
   limit = 10,
   options: { enqueue?: boolean; claim?: boolean } = {},
 ): Promise<{ enqueued: number; claimed: number; advanced: number; waiting: number; settled: number; failed: number }> {
-  if (process.env.NODE_ENV === "production" || getMatchRuntimeSnapshotPort()) {
+  if (process.env.NODE_ENV === "production" || process.env.ENVIRONMENT === "production" || getMatchRuntimeSnapshotPort()) {
     const requiredPorts = [
       getMatchRuntimeLeasePort(), getMatchRuntimeEnqueuePort(), getMatchRuntimeForfeitPort(),
       getMatchRuntimeAdvancePort(), getMatchRuntimeCheckpointPort(), getMatchRuntimeSettlementPort(),
