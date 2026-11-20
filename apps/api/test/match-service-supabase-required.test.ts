@@ -8,6 +8,15 @@ import { getCompetitionCreationPort } from "../src/game/competition-creation-con
 import { getCompetitionReadPort } from "../src/game/competition-read-context.js";
 import { getClubMatchReadPort } from "../src/game/club-match-read-context.js";
 import { getCompetitionAdvancementPort } from "../src/game/competition-advancement-context.js";
+import { withMatchRuntimeSnapshotPort } from "../src/game/match-runtime-snapshot-context.js";
+import { withMatchRuntimeLeasePort } from "../src/game/match-runtime-lease-context.js";
+import { withMatchRuntimeEnqueuePort } from "../src/game/match-runtime-enqueue-context.js";
+import { withMatchRuntimeForfeitPort } from "../src/game/match-runtime-forfeit-context.js";
+import { withMatchRuntimeAdvancePort } from "../src/game/match-runtime-advance-context.js";
+import { withMatchRuntimeCheckpointPort } from "../src/game/match-runtime-checkpoint-context.js";
+import { withMatchRuntimeSettlementPort } from "../src/game/match-runtime-settlement-context.js";
+import { withCompetitionAdvancementPort } from "../src/game/competition-advancement-context.js";
+import { withPyramidLeagueSettlementPort } from "../src/game/pyramid-league-settlement-context.js";
 
 test("production API refuses to start without direct Supabase match repositories", () => {
   const previous = process.env.NODE_ENV;
@@ -78,5 +87,42 @@ test("production match service scopes fail closed when any request-scoped Supaba
   } finally {
     if (previous === undefined) delete process.env.NODE_ENV;
     else process.env.NODE_ENV = previous;
+  }
+});
+
+
+test("production match worker refuses to start without event tournament settlement repository", async () => {
+  const previousNodeEnv = process.env.NODE_ENV;
+  const previousEnvironment = process.env.ENVIRONMENT;
+  process.env.NODE_ENV = "production";
+  delete process.env.ENVIRONMENT;
+  const emptyPort = {} as never;
+  try {
+    await assert.rejects(
+      withMatchRuntimeSnapshotPort(emptyPort, () =>
+        withMatchRuntimeLeasePort(emptyPort, () =>
+          withMatchRuntimeEnqueuePort(emptyPort, () =>
+            withMatchRuntimeForfeitPort(emptyPort, () =>
+              withMatchRuntimeAdvancePort(emptyPort, () =>
+                withMatchRuntimeCheckpointPort(emptyPort, () =>
+                  withMatchRuntimeSettlementPort(emptyPort, () =>
+                    withCompetitionAdvancementPort(emptyPort, () =>
+                      withPyramidLeagueSettlementPort(emptyPort, () => processDueMatchRuntimes()),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+      (error: unknown) => error instanceof MatchServiceError
+        && error.code === "WORKER_MATCH_RUNTIME_REPOSITORY_SET_INCOMPLETE",
+    );
+  } finally {
+    if (previousNodeEnv === undefined) delete process.env.NODE_ENV;
+    else process.env.NODE_ENV = previousNodeEnv;
+    if (previousEnvironment === undefined) delete process.env.ENVIRONMENT;
+    else process.env.ENVIRONMENT = previousEnvironment;
   }
 });
