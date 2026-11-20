@@ -8,6 +8,20 @@ function inFilter(values:string[]){return "in.("+values.map(v=>'"'+v.replace(/\\
 function iso(v:string|null){return v?new Date(v).toISOString():null;}
 export class NodeSupabaseEventTournamentReadRepository implements EventTournamentReadPort{
  constructor(private readonly client:SupabaseHttpClient){}
+ async getAdminRole(telegramId:string):Promise<{role:string;active:boolean}|null>{
+  let result:unknown;
+  try { result=await this.client.rpc("get_event_tournament_admin_role_http",{p_telegram_id:telegramId}); }
+  catch(error) {
+   if(error instanceof SupabaseHttpError&&/^[A-Z][A-Z0-9_]{2,80}$/.test(error.message))throw new Error(error.message);
+   throw error;
+  }
+  if(result===null)return null;
+  if(!result||typeof result!=="object"||Array.isArray(result)
+   ||typeof (result as Record<string,unknown>).role!=="string"
+   ||typeof (result as Record<string,unknown>).active!=="boolean")
+   throw new Error("SUPABASE_EVENT_TOURNAMENT_ADMIN_ROLE_INVALID_RESPONSE");
+  return result as {role:string;active:boolean};
+ }
  async join(input:EventTournamentJoinInput):Promise<EventTournamentJoinResult>{
   let result:unknown;
   try {
