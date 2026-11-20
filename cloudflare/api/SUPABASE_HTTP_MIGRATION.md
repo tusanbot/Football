@@ -340,3 +340,16 @@ The Node runtime now also routes these read/write paths through Supabase HTTPS w
 Contract tests cover the new direct-read and RPC paths. The migrations are committed to the repository and are exercised by CI's ephemeral PostgreSQL migration pipeline only; no live database was changed.
 
 These changes reduce Prisma usage but do not complete its removal. Public club discovery/history, parts of match and competition services, market listing fallback paths, wallet mutation workflows, gift-code fallback, event tournament orchestration, and Node startup/readiness/background worker dependencies remain under audit.
+
+## Atomic match settlement and competition progression
+
+The leased Node match worker now settles a completed runtime and advances its competition through a single Supabase RPC transaction:
+
+- `settle_and_advance_match_runtime_http` invokes the existing `settle_match_runtime_result` financial/result transaction and then `advance_competition_after_match_http` before the outer transaction commits.
+- If cup bracket generation, league completion, or round-summary creation fails, PostgreSQL rolls back the match result, runtime completion, wallet credits, ledger rows, player updates, and competition changes together. The leased runtime remains retryable.
+- Replayed settlements invoke the advancement RPC again; its advisory lock and idempotent next-round checks make retry safe.
+- Invalid-lineup forfeits use `settle_invalid_match_fixture_and_advance_http`, which composes the existing forfeit settlement and competition advancement in the same transaction. A valid lineup produces no advancement result; a completed or replayed forfeit retries advancement safely.
+- The Node repositories validate the nested advancement result. The match worker no longer makes a second HTTP request for normal match settlement or invalid-lineup forfeit progression.
+- The new migrations are `20261120210000_match_settlement_advancement_atomic_http_rpc` and `20261120220000_invalid_match_settlement_advancement_atomic_http_rpc`. CI runs a SQL contract test for function composition and service-role-only execution, alongside Node adapter tests.
+
+Pyramid-league and event-tournament finalization still run as follow-up operations after the atomic match/competition transaction. Those workflows remain a separate retry/durability item. This change does not remove Prisma from `match-service.ts`; the legacy simulation and non-production compatibility paths remain until their callers and tests are migrated. No live database migration or production deployment was performed.
