@@ -36,6 +36,8 @@ import { NodeSupabaseAdminConsoleReadRepository } from "./node-supabase-admin-co
 import { NodeSupabaseAdminModerationActionsRepository } from "./node-supabase-admin-moderation-actions.js";
 import { NodeSupabaseAdminFinancialAdjustmentsRepository } from "./node-supabase-admin-financial-adjustments.js";
 import { NodeSupabaseAdminBroadcastManagementRepository } from "./node-supabase-admin-broadcast-management.js";
+import { NodeSupabaseAdminSeasonAwardActionsRepository } from "./node-supabase-admin-season-awards.js";
+import { NodeSupabaseAdminBroadcastCreateRepository } from "./node-supabase-admin-broadcast-create.js";
 import { NodeSupabaseAdminPyramidLeagueReadRepository } from "./node-supabase-admin-pyramid-league-read.js";
 import { NodeSupabaseAdminPyramidLeagueReportsRepository } from "./node-supabase-admin-pyramid-league-reports.js";
 import { NodeSupabaseAdminPyramidLeagueActionsRepository } from "./node-supabase-admin-pyramid-league-actions.js";
@@ -104,6 +106,8 @@ const adminConsoleReadPort = supabaseHttp ? new NodeSupabaseAdminConsoleReadRepo
 const adminModerationActionPort = supabaseHttp ? new NodeSupabaseAdminModerationActionsRepository(supabaseHttp) : undefined;
 const adminFinancialAdjustmentPort = supabaseHttp ? new NodeSupabaseAdminFinancialAdjustmentsRepository(supabaseHttp) : undefined;
 const adminBroadcastRetryPort = supabaseHttp ? new NodeSupabaseAdminBroadcastManagementRepository(supabaseHttp) : undefined;
+const adminSeasonAwardActionPort = supabaseHttp ? new NodeSupabaseAdminSeasonAwardActionsRepository(supabaseHttp) : undefined;
+const adminBroadcastCreatePort = supabaseHttp ? new NodeSupabaseAdminBroadcastCreateRepository(supabaseHttp) : undefined;
 const adminPyramidLeagueReadPort = supabaseHttp ? new NodeSupabaseAdminPyramidLeagueReadRepository(supabaseHttp) : undefined;
 const adminPyramidLeagueReportsPort = supabaseHttp ? new NodeSupabaseAdminPyramidLeagueReportsRepository(supabaseHttp) : undefined;
 const adminPyramidLeagueActionsPort = supabaseHttp ? new NodeSupabaseAdminPyramidLeagueActionsRepository(supabaseHttp) : undefined;
@@ -145,6 +149,8 @@ const app = buildApp({
   ...(adminModerationActionPort ? { adminModerationActionPort } : {}),
   ...(adminFinancialAdjustmentPort ? { adminFinancialAdjustmentPort } : {}),
   ...(adminBroadcastRetryPort ? { adminBroadcastRetryPort } : {}),
+  ...(adminSeasonAwardActionPort ? { adminSeasonAwardActionPort } : {}),
+  ...(adminBroadcastCreatePort ? { adminBroadcastCreatePort } : {}),
   ...(adminPyramidLeagueReadPort ? { adminPyramidLeagueReadPort } : {}),
   ...(adminPyramidLeagueReportsPort ? { adminPyramidLeagueReportsPort } : {}),
   ...(adminPyramidLeagueActionsPort ? { adminPyramidLeagueActionsPort } : {}),
