@@ -1,7 +1,6 @@
 import type { FastifyInstance, FastifyReply } from "fastify";
 import { z } from "zod";
 import { requireTelegramUser } from "../auth/require-telegram-user.js";
-import { prisma } from "../db.js";
 import { buyMarketListing, cancelMarketListing, createMarketListing, getOpenMarketListings, MarketError } from "./market-service.js";
 import { getMarketListingPort } from "./market-listing-context.js";
 import { getSpecialAcquisitionPort } from "./special-acquisition-context.js";
@@ -20,6 +19,9 @@ const idSchema = z.object({ id: z.string().min(1).max(64) });
 const specialAcquisitionSchema = z.object({ method: z.enum(["epic_pack", "legendary_pack", "icon_pack"]), idempotencyKey: z.string().regex(/^[A-Za-z0-9:_-]{8,80}$/) });
 
 function sendMarketError(reply: FastifyReply, error: unknown) {
+  if (error instanceof Error && "code" in error && String((error as { code: unknown }).code).startsWith("SUPABASE_")) {
+    return reply.code(503).send({ error: String((error as { code: unknown }).code) });
+  }
   if (error instanceof LegacyChallengeError) {
     const status = ["CLUB_NOT_FOUND", "LEGACY_CHALLENGE_NOT_FOUND"].includes(error.code) ? 404
       : ["LEGACY_CHALLENGE_NOT_COMPLETED", "LEGACY_REWARD_ALREADY_CLAIMED", "CONCURRENT_MODIFICATION"].includes(error.code) ? 409 : 400;
@@ -38,9 +40,7 @@ function sendMarketError(reply: FastifyReply, error: unknown) {
   throw error;
 }
 
-export interface SpecialPlayerCatalogRepository { listActive(): Promise<unknown[]>; }
-
-export function registerPlayerMarketRoutes(app: FastifyInstance, specialPlayers?: SpecialPlayerCatalogRepository) {
+export function registerPlayerMarketRoutes(app: FastifyInstance) {
   app.get("/v1/players/special/challenges", async (request, reply) => {
     const user = await requireTelegramUser(request);
     if (!user) return reply.code(401).send({ error: "UNAUTHENTICATED" });
@@ -61,11 +61,8 @@ export function registerPlayerMarketRoutes(app: FastifyInstance, specialPlayers?
     const user = await requireTelegramUser(request);
     if (!user) return reply.code(401).send({ error: "UNAUTHENTICATED" });
     const acquisitionPort = getSpecialAcquisitionPort();
-    const players = acquisitionPort?.listActive
-      ? await acquisitionPort.listActive()
-      : specialPlayers
-        ? await specialPlayers.listActive()
-        : await prisma.specialPlayer.findMany({ where: { active: true }, orderBy: [{ rarity: "desc" }, { overall: "desc" }], select: { id: true, slug: true, fullName: true, nationality: true, birthDate: true, positions: true, rarity: true, overall: true, potential: true, attributes: true, acquisitionMethods: true } });
+    if (!acquisitionPort?.listActive) return reply.code(503).send({ error: "SUPABASE_SPECIAL_PLAYER_CATALOG_UNAVAILABLE" });
+    const players = await acquisitionPort.listActive();
     return { players, packOffers: getSpecialPackOffers() };
   });
   app.post("/v1/players/special/acquire", async (request, reply) => {
@@ -84,16 +81,8 @@ export function registerPlayerMarketRoutes(app: FastifyInstance, specialPlayers?
     const user = await requireTelegramUser(request);
     if (!user) return reply.code(401).send({ error: "UNAUTHENTICATED" });
     const listingPort = getMarketListingPort();
-    if (listingPort) return { listings: await listingPort.listMine(user.id) };
-    const club = await prisma.club.findUnique({ where: { ownerId: user.id }, select: { id: true } });
-    if (!club) return reply.code(404).send({ error: "CLUB_NOT_FOUND" });
-    const listings = await prisma.playerMarketListing.findMany({
-      where: { sellerClubId: club.id, status: { in: ["OPEN", "SOLD", "CANCELLED", "EXPIRED"] } },
-      orderBy: { createdAt: "desc" }, take: 50,
-      select: { id: true, askingPrice: true, status: true, expiresAt: true, createdAt: true,
-        player: { select: { id: true, firstName: true, lastName: true, overall: true, position: true, marketValue: true } } },
-    });
-    return { listings: listings.map((item) => ({ ...item, askingPrice: item.askingPrice.toString(), player: { ...item.player, marketValue: item.player.marketValue.toString() } })) };
+    if (!listingPort) return reply.code(503).send({ error: "SUPABASE_MARKET_LISTING_UNAVAILABLE" });
+    return { listings: await listingPort.listMine(user.id) };
   });
 
   app.get("/v1/market/listings", async (request, reply) => {
