@@ -1389,11 +1389,10 @@ export async function enqueueDueMatchRuntimes(now = new Date(), limit = 50) {
         continue;
       }
       const settlement = await forfeitPort.forfeit(fixture.id, now.toISOString());
-      if (!settlement.settled || !settlement.competitionId || settlement.round === null) continue;
-      const advancement = getCompetitionAdvancementPort();
-      if (!advancement) throw new MatchServiceError("WORKER_COMPETITION_ADVANCEMENT_REPOSITORY_REQUIRED");
-      const result = await advancement.advance({competitionId:settlement.competitionId,round:settlement.round,now:now.toISOString()});
-      if (result.completed && result.format==="LEAGUE") {
+      if ((!settlement.settled && !settlement.replayed) || !settlement.competitionId || settlement.round === null) continue;
+      const advancement = settlement.advancement;
+      if (!advancement) throw new MatchServiceError("WORKER_MATCH_RUNTIME_FORFEIT_ADVANCEMENT_REQUIRED");
+      if (advancement.completed && advancement.format==="LEAGUE") {
         const pyramid = getPyramidLeagueSettlementPort();
         if (!pyramid) throw new MatchServiceError("WORKER_PYRAMID_SETTLEMENT_REPOSITORY_REQUIRED");
         await pyramid.finalize(settlement.competitionId,now.toISOString());
