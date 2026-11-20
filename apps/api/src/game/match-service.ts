@@ -1836,8 +1836,16 @@ export async function processDueMatchRuntimes(
 ): Promise<{ enqueued: number; claimed: number; advanced: number; waiting: number; settled: number; failed: number }> {
   if (process.env.NODE_ENV === "production" || process.env.ENVIRONMENT === "production" || getMatchRuntimeSnapshotPort()) {
     const requiredPorts = [
-      getMatchRuntimeSnapshotPort(), getMatchRuntimeLeasePort(), getMatchRuntimeEnqueuePort(), getMatchRuntimeForfeitPort(),
-      getMatchRuntimeAdvancePort(), getMatchRuntimeCheckpointPort(), getMatchRuntimeSettlementPort(),
+      getMatchRuntimeSnapshotPort(),
+      getMatchRuntimeLeasePort(),
+      getMatchRuntimeEnqueuePort(),
+      getMatchRuntimeForfeitPort(),
+      getMatchRuntimeAdvancePort(),
+      getMatchRuntimeCheckpointPort(),
+      getMatchRuntimeSettlementPort(),
+      getCompetitionAdvancementPort(),
+      getPyramidLeagueSettlementPort(),
+      getEventTournamentSettlementPort(),
     ];
     if (requiredPorts.some((port) => !port)) throw new MatchServiceError("WORKER_MATCH_RUNTIME_REPOSITORY_SET_INCOMPLETE");
   }
