@@ -6,6 +6,7 @@ import { processDueEventTournamentFinalizations } from "./event-tournament-servi
 import { withEventTournamentSettlementPort } from "./event-tournament-settlement-context.js";
 import { prisma } from "./db.js";
 import { NodeSupabaseGroupMembershipRepository } from "./groups/node-supabase-group-membership.js";
+import { NodeSupabaseActionRateLimitRepository } from "./groups/node-supabase-action-rate-limit.js";
 import { NodeSupabaseAllianceRepository } from "./groups/node-supabase-alliance.js";
 import { NodeSupabaseTelegramUserLookupRepository } from "./auth/node-supabase-telegram-user-lookup.js";
 import { NodeSupabaseStorePurchaseRepository, NodeSupabaseStoreItemUseRepository } from "./store/node-supabase-store.js";
@@ -62,6 +63,7 @@ const marketRepository = hasSupabaseUrl ? new NodeSupabaseMarketRepository(proce
 const storeSnapshotPort = hasSupabaseUrl ? new NodeSupabaseStoreSnapshotRepository(process.env.SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!) : undefined;
 const supabaseHttp = hasSupabaseUrl ? new SupabaseHttpClient({ url: process.env.SUPABASE_URL!, serviceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY! }) : undefined;
 const playerDevelopmentPort = supabaseHttp ? new SupabasePlayerDevelopmentRepository(supabaseHttp) : undefined;
+const actionRateLimitPort = supabaseHttp ? new NodeSupabaseActionRateLimitRepository(supabaseHttp) : undefined;
 const clubEconomySettlementPort = supabaseHttp ? new NodeSupabaseClubEconomyRepository(supabaseHttp) : undefined;
 const clubManagementPort = supabaseHttp ? new NodeSupabaseClubManagementRepository(supabaseHttp) : undefined;
 const specialAcquisitionPort = supabaseHttp ? new NodeSupabaseSpecialAcquisitionRepository(supabaseHttp) : undefined;
@@ -77,6 +79,7 @@ const publicClubReadRepository = supabaseHttp ? new NodeSupabasePublicClubReposi
 const eventTournamentSettlementPort = supabaseHttp ? new SupabaseEventTournamentSettlementRepository(supabaseHttp) : undefined;
 const app = buildApp({
   ...(groupMembershipPort ? { groupMembershipPort } : {}),
+  ...(actionRateLimitPort ? { actionRateLimitPort } : {}),
   ...(alliancePort ? { alliancePort, adminAlliancePort: alliancePort } : {}),
   ...(telegramUserLookupPort ? { telegramUserLookupPort } : {}),
   ...(storePurchasePort ? { storePurchasePort } : {}),
