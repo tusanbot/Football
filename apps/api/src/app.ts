@@ -4,6 +4,8 @@ import { z } from "zod";
 import { registerTelegramAuthRoutes } from "./auth/routes.js";
 import type { TelegramUserLookupPort } from "./auth/telegram-user-lookup-context.js";
 import { withTelegramUserLookupPort } from "./auth/telegram-user-lookup-context.js";
+import type { TelegramAccountProvisioningPort } from "./auth/account-provisioning-context.js";
+import { withTelegramAccountProvisioningPort } from "./auth/account-provisioning-context.js";
 import { registerBotAuthRoutes } from "./auth/bot-routes.js";
 import { registerGameRoutes } from "./game/routes.js";
 import type { ClubLineupPort } from "./game/club-lineup-context.js";
@@ -79,7 +81,7 @@ const healthResponse = z.object({
   version: z.string(),
 });
 
-export function buildApp(options: { logger?: boolean; pluginTimeout?: number; groupMembershipPort?: GroupMembershipPort; alliancePort?: AlliancePort; adminAlliancePort?: AdminAlliancePort; telegramUserLookupPort?: TelegramUserLookupPort; storePurchasePort?: StorePurchasePort; storeItemUsePort?: StoreItemUsePort; walletEntryPort?: WalletEntryPort; marketListingPort?: MarketListingPort; marketPurchasePort?: MarketPurchasePort; storeSnapshotPort?: StoreSnapshotPort; playerDevelopmentPort?: PlayerDevelopmentPort; clubEconomySettlementPort?: ClubEconomySettlementPort; clubManagementPort?: ClubManagementPort; specialAcquisitionPort?: SpecialAcquisitionPort; giftCodeRedemptionPort?: GiftCodeRedemptionPort; botRuntimeLeasePort?: BotRuntimeLeasePort; matchPorts?: NodeSupabaseMatchPorts; supabaseHttpClient?: SupabaseHttpClient; gameDashboardPort?: GameDashboardPort; walletReadPort?: WalletReadPort; clubLineupPort?: ClubLineupPort; publicPlayerRecordRepository?: PublicPlayerRecordRepository; publicClubLogoRepository?: PublicClubLogoRepository; publicClubReadRepository?: PublicClubReadRepository; eventTournamentSettlementPort?: EventTournamentSettlementPort; eventTournamentReadPort?: EventTournamentReadPort; pyramidLeagueSettlementPort?: PyramidLeagueSettlementPort; actionRateLimitPort?: ActionRateLimitPort } = {}) {
+export function buildApp(options: { logger?: boolean; pluginTimeout?: number; groupMembershipPort?: GroupMembershipPort; alliancePort?: AlliancePort; adminAlliancePort?: AdminAlliancePort; telegramUserLookupPort?: TelegramUserLookupPort; accountProvisioningPort?: TelegramAccountProvisioningPort; storePurchasePort?: StorePurchasePort; storeItemUsePort?: StoreItemUsePort; walletEntryPort?: WalletEntryPort; marketListingPort?: MarketListingPort; marketPurchasePort?: MarketPurchasePort; storeSnapshotPort?: StoreSnapshotPort; playerDevelopmentPort?: PlayerDevelopmentPort; clubEconomySettlementPort?: ClubEconomySettlementPort; clubManagementPort?: ClubManagementPort; specialAcquisitionPort?: SpecialAcquisitionPort; giftCodeRedemptionPort?: GiftCodeRedemptionPort; botRuntimeLeasePort?: BotRuntimeLeasePort; matchPorts?: NodeSupabaseMatchPorts; supabaseHttpClient?: SupabaseHttpClient; gameDashboardPort?: GameDashboardPort; walletReadPort?: WalletReadPort; clubLineupPort?: ClubLineupPort; publicPlayerRecordRepository?: PublicPlayerRecordRepository; publicClubLogoRepository?: PublicClubLogoRepository; publicClubReadRepository?: PublicClubReadRepository; eventTournamentSettlementPort?: EventTournamentSettlementPort; eventTournamentReadPort?: EventTournamentReadPort; pyramidLeagueSettlementPort?: PyramidLeagueSettlementPort; actionRateLimitPort?: ActionRateLimitPort } = {}) {
   // The match service still contains Prisma compatibility paths for isolated legacy
   // tests and migration parity. Never allow production HTTP routes to reach those
   // paths: the complete direct-HTTPS Supabase match repository set is mandatory.
@@ -107,6 +109,12 @@ export function buildApp(options: { logger?: boolean; pluginTimeout?: number; gr
   if (options.telegramUserLookupPort) {
     app.addHook("onRequest", (_request, _reply, done) => {
       void withTelegramUserLookupPort(options.telegramUserLookupPort!, async () => done());
+    });
+  }
+
+  if (options.accountProvisioningPort) {
+    app.addHook("onRequest", (_request, _reply, done) => {
+      void withTelegramAccountProvisioningPort(options.accountProvisioningPort!, async () => done());
     });
   }
 
