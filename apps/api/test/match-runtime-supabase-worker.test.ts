@@ -152,7 +152,7 @@ test("match worker advances a due kickoff through the Supabase first-half RPC an
         assert.equal(input.events.some(event => event.eventKey === "kickoff" && event.kind === "KICKOFF"), true);
         return true;
       },
-    }, () => processDueMatchRuntimes("supabase-worker-test", now, 1, { enqueue: false }))))));
+    }, () => processDueMatchRuntimes("supabase-worker-test", now, 1, { enqueue: false })))));
 
     assert.deepEqual(calls, ["claim", "snapshot", "advance-first-half", "release"]);
     assert.deepEqual(result, { enqueued: 0, claimed: 1, advanced: 1, waiting: 0, settled: 0, failed: 0 });
