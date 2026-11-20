@@ -38,10 +38,16 @@ BEGIN
   SELECT season,count(*)::integer leagues,count(*) FILTER(WHERE status='COMPLETED')::integer completed,
    COALESCE(sum(jsonb_array_length(entries)) FILTER(WHERE status='COMPLETED'),0)::integer teams,
    COALESCE(sum(match_count) FILTER(WHERE status='COMPLETED'),0)::integer matches,
-   COALESCE(sum((SELECT count(*) FROM jsonb_array_elements(entries) x WHERE (x->>'finalPosition')::integer=1)) FILTER(WHERE status='COMPLETED'),0)::integer champions,
-   COALESCE(sum((SELECT count(*) FROM jsonb_array_elements(offers) x WHERE x->>'status'='ACCEPTED')),0)::integer promotions,
-   COALESCE(sum((SELECT count(*) FROM jsonb_array_elements(entries) x WHERE tier>1 AND NULLIF(x->>'finalPosition','') IS NOT NULL AND (x->>'finalPosition')::integer>=7)) FILTER(WHERE status='COMPLETED'),0)::integer relegations
-  FROM report_leagues GROUP BY season
+   COALESCE(sum(champions) FILTER(WHERE status='COMPLETED'),0)::integer champions,
+   COALESCE(sum(promotions),0)::integer promotions,
+   COALESCE(sum(relegations) FILTER(WHERE status='COMPLETED'),0)::integer relegations
+  FROM (
+   SELECT r.*,
+    (SELECT count(*) FROM jsonb_array_elements(r.entries) x WHERE (x->>'finalPosition')::integer=1)::integer champions,
+    (SELECT count(*) FROM jsonb_array_elements(r.offers) x WHERE x->>'status'='ACCEPTED')::integer promotions,
+    (SELECT count(*) FROM jsonb_array_elements(r.entries) x WHERE r.tier>1 AND NULLIF(x->>'finalPosition','') IS NOT NULL AND (x->>'finalPosition')::integer>=7)::integer relegations
+   FROM report_leagues r
+  ) per_league GROUP BY season
  ), club_entries AS (
   SELECT (x->>'clubId') club_id,x->>'clubName' club_name,r.season,r.tier,r."groupNumber",r.status,
    NULLIF(x->>'finalPosition','')::integer final_position
