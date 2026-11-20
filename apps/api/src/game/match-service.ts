@@ -1392,11 +1392,7 @@ export async function enqueueDueMatchRuntimes(now = new Date(), limit = 50) {
       if ((!settlement.settled && !settlement.replayed) || !settlement.competitionId || settlement.round === null) continue;
       const advancement = settlement.advancement;
       if (!advancement) throw new MatchServiceError("WORKER_MATCH_RUNTIME_FORFEIT_ADVANCEMENT_REQUIRED");
-      if (advancement.completed && advancement.format==="LEAGUE") {
-        const pyramid = getPyramidLeagueSettlementPort();
-        if (!pyramid) throw new MatchServiceError("WORKER_PYRAMID_SETTLEMENT_REPOSITORY_REQUIRED");
-        await pyramid.finalize(settlement.competitionId,now.toISOString());
-      }
+      // Pyramid/event finalization is included in the atomic forfeit RPC.
     }
     return result.enqueued;
   }
@@ -1575,20 +1571,8 @@ async function settleClaimedMatchRuntime(runtime: LoadedMatchRuntime, now: Date)
     yellowCardSuspensionMatches: matchRules.yellowCardSuspensionMatches,
     homeReward: homeReward.toString(), awayReward: awayReward.toString(),
   });
-  // Competition advancement is part of the same Supabase transaction as
-  // settlement. A failed cup/league progression therefore rolls back financial
-  // settlement too, allowing the leased runtime to retry safely.
-  const advancement = settlement.advancement;
-  if (settlement.competitionId && settlement.round !== null && advancement) {
-    if (advancement.completed && advancement.format === "LEAGUE") {
-      const pyramidPort = getPyramidLeagueSettlementPort();
-      if (!pyramidPort) throw new MatchServiceError("WORKER_PYRAMID_SETTLEMENT_REPOSITORY_REQUIRED");
-      await pyramidPort.finalize(settlement.competitionId, now.toISOString());
-    }
-    const eventTournamentPort = getEventTournamentSettlementPort();
-    if (!eventTournamentPort) throw new MatchServiceError("WORKER_EVENT_TOURNAMENT_REPOSITORY_REQUIRED");
-    await eventTournamentPort.finalize(settlement.competitionId, now.toISOString());
-  }
+  // Competition progression, pyramid promotion/relegation and event prizes are
+  // finalized by the same Supabase transaction as the match result.
   return settlement;
 }
 
