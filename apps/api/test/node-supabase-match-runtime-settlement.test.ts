@@ -60,6 +60,36 @@ test("match runtime settlement delegates the complete financial and match result
   } finally { stub.restore(); }
 });
 
+test("match runtime settlement accepts an idempotent replay response without applying settlement twice", async () => {
+  const replay = {
+    matchId: "match-already-completed", replayed: true,
+    competitionId: null, round: null,
+    homeScore: 2, awayScore: 1, homePenalties: null, awayPenalties: null,
+    winnerClubId: "home", attendance: 1200, ticketRevenue: "60000",
+    advancement: null, pyramidFinalization: null, eventTournamentFinalization: null,
+  };
+  const stub = stubFetch(replay);
+  try {
+    const repository = new SupabaseMatchRuntimeSettlementRepository(
+      new SupabaseHttpClient({ url, serviceRoleKey: key }),
+    );
+    const result = await repository.settle({
+      matchId: "match-already-completed", runtimeId: "runtime-already-completed",
+      leaseToken: "stale-or-recovered-lease", now: "2026-11-20T10:00:00.000Z",
+      result: { homeScore: 9, awayScore: 9 }, injuryDurationDays: 7,
+      redCardSuspensionMatches: 2, yellowCardsToSuspend: 3,
+      yellowCardSuspensionMatches: 1, homeReward: "999", awayReward: "999",
+    });
+    assert.equal(stub.calls.length, 1);
+    assert.equal(stub.calls[0]!.url, url + "/rest/v1/rpc/settle_and_advance_match_runtime_http");
+    assert.deepEqual(result, replay);
+    assert.equal(result.replayed, true);
+    // The repository must surface the database's persisted result, not the
+    // conflicting retry payload supplied by a duplicate worker attempt.
+    assert.notEqual(result.homeScore, (stub.calls[0]!.body.p_result as { homeScore: number }).homeScore);
+  } finally { stub.restore(); }
+});
+
 test("completed competition settlement requires both finalization results", async () => {
   const result = {
     matchId: "match-1", replayed: false, competitionId: "competition-1", round: 2,
