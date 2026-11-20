@@ -82,3 +82,21 @@ test("event tournament join rejects malformed RPC responses",async()=>{
  const repo=new NodeSupabaseEventTournamentReadRepository(client);
  await assert.rejects(()=>repo.join({telegramUserId:"12345",tournamentId:"t-join",now:"2026-12-01T12:00:00.000Z"}),/SUPABASE_EVENT_TOURNAMENT_JOIN_INVALID_RESPONSE/);
 });
+
+test("event tournament admin role lookup uses the Supabase RPC",async()=>{
+ let requestUrl="";let requestBody:Record<string,unknown>|undefined;
+ const client=new SupabaseHttpClient({url:"https://example.supabase.co",serviceRoleKey:"service-role-key-that-is-long-enough",fetchImpl:async(input,init)=>{
+  requestUrl=String(input);requestBody=JSON.parse(String(init?.body)) as Record<string,unknown>;
+  return new Response(JSON.stringify({role:"football",active:true}),{status:200,headers:{"content-type":"application/json"}});
+ }});
+ const repo=new NodeSupabaseEventTournamentReadRepository(client);
+ const role=await repo.getAdminRole("12345");
+ assert.equal(new URL(requestUrl).pathname,"/rest/v1/rpc/get_event_tournament_admin_role_http");
+ assert.deepEqual(requestBody,{p_telegram_id:"12345"});
+ assert.deepEqual(role,{role:"football",active:true});
+});
+test("event tournament admin role lookup returns null for an unassigned administrator",async()=>{
+ const client=new SupabaseHttpClient({url:"https://example.supabase.co",serviceRoleKey:"service-role-key-that-is-long-enough",fetchImpl:async()=>new Response("null",{status:200,headers:{"content-type":"application/json"}})});
+ const repo=new NodeSupabaseEventTournamentReadRepository(client);
+ assert.equal(await repo.getAdminRole("12345"),null);
+});
