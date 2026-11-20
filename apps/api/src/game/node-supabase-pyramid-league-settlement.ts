@@ -27,8 +27,8 @@ export class SupabasePyramidLeagueSettlementRepository implements PyramidLeagueS
   return result;
  }
  async processDue(now:string,limit:number){
-  const result=await this.client.rpc<{completedLeagues:number;processed:number;accepted:number}>("process_due_pyramid_work_http",{p_now:now,p_limit:limit});
-  if(!result||typeof result.completedLeagues!=="number"||typeof result.processed!=="number"||typeof result.accepted!=="number")throw new Error("SUPABASE_PYRAMID_BATCH_REJECTED");
+  const result=await this.client.rpc<{completedLeagues:number;processed:number;accepted:number;failed:number}>("process_due_pyramid_work_http",{p_now:now,p_limit:limit});
+  if(!result||typeof result.completedLeagues!=="number"||typeof result.processed!=="number"||typeof result.accepted!=="number"||typeof result.failed!=="number")throw new Error("SUPABASE_PYRAMID_BATCH_REJECTED");
   return result;
  }
  async listLeagues(userId:string){
