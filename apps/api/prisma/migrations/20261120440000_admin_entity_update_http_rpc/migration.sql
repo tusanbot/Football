@@ -1,5 +1,5 @@
 CREATE OR REPLACE FUNCTION public.admin_entity_update_http(
- p_action text,p_target_id text,p_actor_telegram_id text,p_idempotency_key text,p_payload jsonb
+ p_action text,p_target_id text,p_actor_telegram_id text,p_idempotency_key text,p_payload jsonb,p_reason text DEFAULT NULL
 ) RETURNS jsonb
 LANGUAGE plpgsql VOLATILE SECURITY INVOKER
 SET search_path=public,pg_temp
@@ -15,10 +15,11 @@ BEGIN
   OR p_target_id IS NULL OR length(p_target_id) NOT BETWEEN 1 AND 128
   OR p_actor_telegram_id IS NULL OR p_actor_telegram_id !~ '^[0-9]{1,20}$'
   OR p_idempotency_key IS NULL OR p_idempotency_key !~ '^[A-Za-z0-9:_-]{12,128}$'
-  OR p_payload IS NULL OR jsonb_typeof(p_payload)<>'object' OR p_payload='{}'::jsonb THEN
+  OR p_payload IS NULL OR jsonb_typeof(p_payload)<>'object' OR p_payload='{}'::jsonb
+  OR (p_reason IS NOT NULL AND length(p_reason)>500) THEN
   RAISE EXCEPTION USING MESSAGE='INVALID_ADMIN_ENTITY_ACTION',ERRCODE='22023';
  END IF;
- v_metadata:=jsonb_build_object('payload',p_payload);
+ v_metadata:=jsonb_build_object('payload',p_payload,'reason',p_reason);
  v_target_type:=CASE WHEN p_action IN ('player-update','player-status') THEN 'player'
   WHEN p_action='club-update' THEN 'club'
   WHEN p_action='match-update' THEN 'match'
@@ -129,12 +130,12 @@ BEGIN
   END IF;
  END IF;
  IF NOT FOUND THEN RAISE EXCEPTION USING MESSAGE='TARGET_NOT_FOUND',ERRCODE='P0002'; END IF;
- INSERT INTO public."AdminAuditLog"(id,"actorTelegramId",action,"targetType","targetId",metadata,"idempotencyKey","createdAt")
- VALUES(gen_random_uuid()::text,p_actor_telegram_id,p_action,v_target_type,v_target_id,v_metadata,'admin-entity:'||p_idempotency_key,clock_timestamp());
+ INSERT INTO public."AdminAuditLog"(id,"actorTelegramId",action,"targetType","targetId",reason,metadata,"idempotencyKey","createdAt")
+ VALUES(gen_random_uuid()::text,p_actor_telegram_id,p_action,v_target_type,v_target_id,p_reason,v_metadata,'admin-entity:'||p_idempotency_key,clock_timestamp());
  RETURN jsonb_build_object('ok',true,'targetType',v_target_type,'targetId',v_target_id,'replay',false);
 END;
 $fn$;
-REVOKE ALL ON FUNCTION public.admin_entity_update_http(text,text,text,text,jsonb) FROM PUBLIC,anon,authenticated;
+REVOKE ALL ON FUNCTION public.admin_entity_update_http(text,text,text,text,jsonb,text) FROM PUBLIC,anon,authenticated;
 DO $grant$
 BEGIN
  IF EXISTS(SELECT 1 FROM pg_roles WHERE rolname='service_role') THEN
