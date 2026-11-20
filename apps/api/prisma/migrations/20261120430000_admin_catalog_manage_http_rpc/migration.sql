@@ -35,7 +35,7 @@ BEGIN
    OR p_reward_type IS NULL OR p_max_redemptions IS NULL OR p_max_redemptions NOT BETWEEN 1 AND 100000
    OR p_per_user_limit IS NULL OR p_per_user_limit NOT BETWEEN 1 AND 1000
    OR COALESCE(p_cash_amount,0)<0 OR COALESCE(p_gold_amount,0)<0 OR COALESCE(p_group_points,0)<0
-   OR COALESCE(p_cash_amount,0)>9223372036854775807-COALESCE(p_gold_amount,0)
+   OR COALESCE(p_cash_amount,0)::numeric+COALESCE(p_gold_amount,0)::numeric>9223372036854775807::numeric
    OR (p_reward_type='GROUP_POINTS' AND COALESCE(p_group_points,0)<=0)
    OR (p_reward_type='WALLET' AND COALESCE(p_cash_amount,0)+COALESCE(p_gold_amount,0)<=0) THEN
    RAISE EXCEPTION USING MESSAGE='INVALID_GIFT_CODE',ERRCODE='22023';
