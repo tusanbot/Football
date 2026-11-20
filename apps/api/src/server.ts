@@ -29,6 +29,7 @@ import { NodeSupabasePublicClubRepository } from "./node-supabase-public-clubs.j
 import { NodeSupabaseSeasonAwardRepository } from "./game/node-supabase-season-awards.js";
 import { NodeSupabaseTelegramMessageDeletionRepository } from "./node-supabase-telegram-message-deletions.js";
 import { NodeSupabaseMatchNotificationRepository } from "./game/node-supabase-match-notifications.js";
+import { NodeSupabaseAdminGroupBroadcastRepository } from "./node-supabase-admin-group-broadcast.js";
 import { SupabaseEventTournamentSettlementRepository } from "./game/node-supabase-event-tournament-settlement.js";
 import { NodeSupabaseEventTournamentReadRepository } from "./node-supabase-event-tournament-read.js";
 import { SupabasePyramidLeagueSettlementRepository } from "./game/node-supabase-pyramid-league-settlement.js";
@@ -87,6 +88,7 @@ const publicClubReadRepository = supabaseHttp ? new NodeSupabasePublicClubReposi
 const seasonAwardRepository = supabaseHttp ? new NodeSupabaseSeasonAwardRepository(supabaseHttp) : undefined;
 const telegramMessageDeletionPort = supabaseHttp ? new NodeSupabaseTelegramMessageDeletionRepository(supabaseHttp) : undefined;
 const matchNotificationPort = supabaseHttp ? new NodeSupabaseMatchNotificationRepository(supabaseHttp) : undefined;
+const adminGroupBroadcastPort = supabaseHttp ? new NodeSupabaseAdminGroupBroadcastRepository(supabaseHttp) : undefined;
 const eventTournamentSettlementPort = supabaseHttp ? new SupabaseEventTournamentSettlementRepository(supabaseHttp) : undefined;
 const eventTournamentReadPort = supabaseHttp ? new NodeSupabaseEventTournamentReadRepository(supabaseHttp) : undefined;
 const pyramidLeagueSettlementPort = supabaseHttp ? new SupabasePyramidLeagueSettlementRepository(supabaseHttp) : undefined;
@@ -118,6 +120,7 @@ const app = buildApp({
   ...(seasonAwardRepository ? { seasonAwardRepository } : {}),
   ...(telegramMessageDeletionPort ? { telegramMessageDeletionPort } : {}),
   ...(matchNotificationPort ? { matchNotificationPort } : {}),
+  ...(adminGroupBroadcastPort ? { adminGroupBroadcastPort } : {}),
   ...(eventTournamentSettlementPort ? { eventTournamentSettlementPort } : {}),
   ...(eventTournamentReadPort ? { eventTournamentReadPort } : {}),
   ...(pyramidLeagueSettlementPort ? { pyramidLeagueSettlementPort } : {}),
