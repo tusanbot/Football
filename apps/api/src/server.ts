@@ -27,6 +27,8 @@ import { NodeSupabasePublicClubLogoRepository } from "./node-supabase-public-clu
 import { NodeSupabasePublicClubRepository } from "./node-supabase-public-clubs.js";
 import { SupabaseEventTournamentSettlementRepository } from "./game/node-supabase-event-tournament-settlement.js";
 import { NodeSupabaseEventTournamentReadRepository } from "./node-supabase-event-tournament-read.js";
+import { SupabasePyramidLeagueSettlementRepository } from "./game/node-supabase-pyramid-league-settlement.js";
+import { withPyramidLeagueSettlementPort } from "./game/pyramid-league-settlement-context.js";
 import { isValidTelegramBotToken, parseAdminTelegramIds, parseCorsOrigins } from "./runtime-config.js";
 const required = ["DATABASE_URL", "TELEGRAM_BOT_TOKEN", "BOT_API_SECRET", "CORS_ORIGIN", "GAME_ADMIN_TELEGRAM_IDS"] as const;
 const missing = required.filter((key) => !process.env[key]?.trim());
@@ -79,6 +81,7 @@ const publicClubLogoRepository = supabaseHttp ? new NodeSupabasePublicClubLogoRe
 const publicClubReadRepository = supabaseHttp ? new NodeSupabasePublicClubRepository(supabaseHttp) : undefined;
 const eventTournamentSettlementPort = supabaseHttp ? new SupabaseEventTournamentSettlementRepository(supabaseHttp) : undefined;
 const eventTournamentReadPort = supabaseHttp ? new NodeSupabaseEventTournamentReadRepository(supabaseHttp) : undefined;
+const pyramidLeagueSettlementPort = supabaseHttp ? new SupabasePyramidLeagueSettlementRepository(supabaseHttp) : undefined;
 const app = buildApp({
   ...(groupMembershipPort ? { groupMembershipPort } : {}),
   ...(actionRateLimitPort ? { actionRateLimitPort } : {}),
@@ -105,6 +108,7 @@ const app = buildApp({
   ...(publicClubReadRepository ? { publicClubReadRepository } : {}),
   ...(eventTournamentSettlementPort ? { eventTournamentSettlementPort } : {}),
   ...(eventTournamentReadPort ? { eventTournamentReadPort } : {}),
+  ...(pyramidLeagueSettlementPort ? { pyramidLeagueSettlementPort } : {}),
 });
 let matchWorker: NodeJS.Timeout | undefined;
 let workerTask: Promise<void> | null = null;
@@ -129,13 +133,13 @@ try {
     if (workerRunning || shuttingDown) return;
     workerRunning = true;
     workerTask = (matchPorts
-      ? withNodeSupabaseMatchPorts(matchPorts, async () => withEventTournamentSettlementPort(eventTournamentSettlementPort!, async () => {
+      ? withNodeSupabaseMatchPorts(matchPorts, async () => withEventTournamentSettlementPort(eventTournamentSettlementPort!, async () => withPyramidLeagueSettlementPort(pyramidLeagueSettlementPort!, async () => {
           const now = new Date();
           const result = await processDueMatchRuntimes("api-match-worker", now, 10);
           const promotions = await processDuePromotionOffers(now, 50);
           const tournaments = await processDueEventTournamentFinalizations(now, 10);
           if (result.advanced || result.settled || result.failed || promotions.accepted || promotions.completedLeagues || tournaments.finalized || tournaments.failed) app.log.info({ ...result, promotions, tournaments }, "Game worker tick");
-        }))
+        })))
       : processDueMatchRuntimes("api-match-worker", new Date(), 10).then(async (result) => {
           const promotions = await processDuePromotionOffers(new Date(), 50);
           if (result.advanced || result.settled || result.failed || promotions.accepted || promotions.completedLeagues) app.log.info({ ...result, promotions }, "Game worker tick");
