@@ -8,9 +8,21 @@ export interface AdminConsoleReadPort {
   overview(): Promise<AdminConsoleOverview>;
   groupTargets(): Promise<{ groups: AdminConsoleGroupTarget[] }>;
   financeSummary(days: number): Promise<Record<string, unknown>>;
+  broadcasts(limit: number): Promise<Array<Record<string, unknown>>>;
 }
 export class NodeSupabaseAdminConsoleReadRepository implements AdminConsoleReadPort {
   constructor(private readonly client: SupabaseHttpClient) {}
+  async broadcasts(limit: number): Promise<Array<Record<string, unknown>>> {
+    if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw new Error("INVALID_BROADCAST_LIMIT");
+    const result = await this.client.rpc<unknown>("get_admin_broadcasts_http", { p_limit: limit });
+    if (!Array.isArray(result)) throw new Error("SUPABASE_ADMIN_CONSOLE_INVALID_BROADCASTS");
+    for (const row of result) {
+      if (!row || typeof row !== "object" || Array.isArray(row)) throw new Error("SUPABASE_ADMIN_CONSOLE_INVALID_BROADCAST");
+      const value = row as Record<string, unknown>;
+      if (typeof value.id !== "string" || !["groups", "users"].includes(String(value.kind)) || typeof value.name !== "string" || typeof value.createdByTelegramId !== "string" || typeof value.createdAt !== "string" || ["total", "delivered", "skipped", "failed", "pending"].some((key) => !Number.isSafeInteger(value[key]) || Number(value[key]) < 0)) throw new Error("SUPABASE_ADMIN_CONSOLE_INVALID_BROADCAST");
+    }
+    return result as Array<Record<string, unknown>>;
+  }
   async overview(): Promise<AdminConsoleOverview> {
     const result = await this.client.rpc<Record<string, unknown>>("get_admin_console_read_http", { p_view: "overview" });
     if (!result || !result.counts || typeof result.counts !== "object" || Array.isArray(result.counts)) {
