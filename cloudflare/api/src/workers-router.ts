@@ -86,7 +86,7 @@ function queryObject(url: URL): Record<string, string | string[]> {
   return query;
 }
 
-export function createWorkersApiRouter(dependencies: { publicPlayerRecords?: PublicPlayerRecordRepository; seasonAwards?: SeasonAwardRepository; publicClubRead?: PublicClubReadRepository; publicClubLogo?: PublicClubLogoRepository; specialPlayers?: SpecialPlayerCatalogRepository; botRuntimeLease?: BotRuntimeLeasePort; groupMembership?: GroupMembershipPort; alliance?: AlliancePort } = {}) {
+export function createWorkersApiRouter(dependencies: { publicPlayerRecords?: PublicPlayerRecordRepository; seasonAwards?: SeasonAwardRepository; publicClubRead?: PublicClubReadRepository; publicClubLogo?: PublicClubLogoRepository; specialPlayers?: SpecialPlayerCatalogRepository; botRuntimeLease?: BotRuntimeLeasePort; groupMembership?: GroupMembershipPort; alliance?: AlliancePort; adminFinancialAdjustmentPort?: AdminFinancialAdjustmentPort } = {}) {
   const registry = new RouteRegistry();
   const registrar = registry as unknown as Parameters<typeof registerTelegramAuthRoutes>[0];
   registerTelegramAuthRoutes(registrar);
@@ -99,7 +99,7 @@ export function createWorkersApiRouter(dependencies: { publicPlayerRecords?: Pub
   registerMatchNotificationRoutes(registrar);
   registerGroupRoutes(registrar, { requireMembershipPort: true });
   registerAllianceRoutes(registrar, { requirePort: true, port: dependencies.alliance });
-  registerAdminRoutes(registrar);
+  registerAdminRoutes(registrar, { adminFinancialAdjustmentPort: dependencies.adminFinancialAdjustmentPort });
   registerAdminLeagueRoutes(registrar);
   registerGiftCodeRoutes(registrar);
   registerTelegramMessageDeletionRoutes(registrar);
