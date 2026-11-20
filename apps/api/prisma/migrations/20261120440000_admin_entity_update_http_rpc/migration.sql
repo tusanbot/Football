@@ -35,7 +35,7 @@ BEGIN
 
  IF p_action='player-update' THEN
   IF NOT (p_payload ?| ARRAY['firstName','lastName','age','overall','potential','wage','contractDays','fitness','morale'])
-   OR EXISTS(SELECT 1 FROM jsonb_object_keys(p_payload) k WHERE k NOT IN ('firstName','lastName','age','overall','potential','wage','contractDays','fitness','morale')) THEN
+   OR EXISTS(SELECT 1 FROM jsonb_object_keys(p_payload) AS keys(key) WHERE key NOT IN ('firstName','lastName','age','overall','potential','wage','contractDays','fitness','morale')) THEN
    RAISE EXCEPTION USING MESSAGE='INVALID_PLAYER_UPDATE',ERRCODE='22023';
   END IF;
   IF (p_payload ? 'firstName' AND length(btrim(p_payload->>'firstName')) NOT BETWEEN 1 AND 60)
@@ -63,7 +63,7 @@ BEGIN
   WHERE id=p_target_id;
  ELSIF p_action='club-update' THEN
   IF NOT (p_payload ?| ARRAY['clubName','level','reputation','stadiumLevel','academyLevel','trainingGroundLevel','ticketPrice'])
-   OR EXISTS(SELECT 1 FROM jsonb_object_keys(p_payload) k WHERE k NOT IN ('clubName','level','reputation','stadiumLevel','academyLevel','trainingGroundLevel','ticketPrice')) THEN
+   OR EXISTS(SELECT 1 FROM jsonb_object_keys(p_payload) AS keys(key) WHERE key NOT IN ('clubName','level','reputation','stadiumLevel','academyLevel','trainingGroundLevel','ticketPrice')) THEN
    RAISE EXCEPTION USING MESSAGE='INVALID_CLUB_UPDATE',ERRCODE='22023';
   END IF;
   IF (p_payload ? 'clubName' AND length(btrim(p_payload->>'clubName')) NOT BETWEEN 2 AND 60)
@@ -87,13 +87,16 @@ BEGIN
   WHERE id=p_target_id;
  ELSIF p_action='match-update' THEN
   IF NOT (p_payload ?| ARRAY['scheduledAt','homeScore','awayScore','matchStatus'])
-   OR EXISTS(SELECT 1 FROM jsonb_object_keys(p_payload) k WHERE k NOT IN ('scheduledAt','homeScore','awayScore','matchStatus')) THEN
+   OR EXISTS(SELECT 1 FROM jsonb_object_keys(p_payload) AS keys(key) WHERE key NOT IN ('scheduledAt','homeScore','awayScore','matchStatus')) THEN
    RAISE EXCEPTION USING MESSAGE='INVALID_MATCH_UPDATE',ERRCODE='22023';
   END IF;
   IF (p_payload ? 'scheduledAt' AND (p_payload->>'scheduledAt') IS NULL)
    OR (p_payload ? 'homeScore' AND (p_payload->>'homeScore' !~ '^[0-9]{1,2}$' OR (p_payload->>'homeScore')::int NOT BETWEEN 0 AND 99))
    OR (p_payload ? 'awayScore' AND (p_payload->>'awayScore' !~ '^[0-9]{1,2}$' OR (p_payload->>'awayScore')::int NOT BETWEEN 0 AND 99))
-   OR (p_payload ? 'matchStatus' AND p_payload->>'matchStatus' NOT IN ('SCHEDULED','CANCELLED')) THEN
+   OR (p_payload ? 'matchStatus' AND p_payload->>'matchStatus'='COMPLETED') THEN
+   RAISE EXCEPTION USING MESSAGE='MATCH_COMPLETION_AUTOMATIC_ONLY',ERRCODE='P0001';
+  END IF;
+  IF (p_payload ? 'matchStatus' AND (p_payload->>'matchStatus' IS NULL OR p_payload->>'matchStatus' NOT IN ('SCHEDULED','CANCELLED'))) THEN
    RAISE EXCEPTION USING MESSAGE='INVALID_MATCH_UPDATE',ERRCODE='22023';
   END IF;
   UPDATE public."FootballMatch" SET
@@ -110,15 +113,15 @@ BEGIN
    RAISE EXCEPTION USING MESSAGE='TARGET_NOT_FOUND',ERRCODE='P0002';
   END IF;
  ELSIF p_action='player-status' THEN
-  IF p_payload->>'status' NOT IN ('ACTIVE','RETIRED') OR jsonb_object_length(p_payload)<>1 THEN RAISE EXCEPTION USING MESSAGE='INVALID_PLAYER_STATUS',ERRCODE='22023'; END IF;
+  IF p_payload->>'status' IS NULL OR p_payload->>'status' NOT IN ('ACTIVE','RETIRED') OR jsonb_object_length(p_payload)<>1 THEN RAISE EXCEPTION USING MESSAGE='INVALID_PLAYER_STATUS',ERRCODE='22023'; END IF;
   UPDATE public."Player" SET status=(p_payload->>'status')::public."PlayerStatus",
    "lineupSlot"=CASE WHEN p_payload->>'status'='RETIRED' THEN NULL ELSE "lineupSlot" END,"updatedAt"=clock_timestamp()
   WHERE id=p_target_id;
  ELSIF p_action='alliance-status' THEN
-  IF p_payload->>'status' NOT IN ('ACTIVE','SUSPENDED','DISSOLVED') OR jsonb_object_length(p_payload)<>1 THEN RAISE EXCEPTION USING MESSAGE='INVALID_ALLIANCE_STATUS',ERRCODE='22023'; END IF;
+  IF p_payload->>'status' IS NULL OR p_payload->>'status' NOT IN ('ACTIVE','SUSPENDED','DISSOLVED') OR jsonb_object_length(p_payload)<>1 THEN RAISE EXCEPTION USING MESSAGE='INVALID_ALLIANCE_STATUS',ERRCODE='22023'; END IF;
   UPDATE public."Alliance" SET status=(p_payload->>'status')::public."AllianceStatus","updatedAt"=clock_timestamp() WHERE id=p_target_id;
  ELSE
-  IF p_payload->>'status' NOT IN ('ACTIVE','CANCELLED') OR jsonb_object_length(p_payload)<>1 THEN RAISE EXCEPTION USING MESSAGE='INVALID_SEASON_STATUS',ERRCODE='22023'; END IF;
+  IF p_payload->>'status' IS NULL OR p_payload->>'status' NOT IN ('ACTIVE','CANCELLED') OR jsonb_object_length(p_payload)<>1 THEN RAISE EXCEPTION USING MESSAGE='INVALID_SEASON_STATUS',ERRCODE='22023'; END IF;
   UPDATE public."AllianceSeason" SET status=p_payload->>'status' WHERE id=p_target_id AND status<>'COMPLETED';
   IF NOT FOUND THEN
    IF EXISTS(SELECT 1 FROM public."AllianceSeason" WHERE id=p_target_id AND status='COMPLETED') THEN RAISE EXCEPTION USING MESSAGE='ALLIANCE_SEASON_ALREADY_SETTLED',ERRCODE='P0001'; END IF;
