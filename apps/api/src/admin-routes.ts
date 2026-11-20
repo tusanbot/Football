@@ -11,6 +11,7 @@ import type { AdminAlliancePort } from "./groups/node-supabase-alliance.js";
 import type { AdminConsoleReadPort, AdminResourceListName } from "./node-supabase-admin-console-read.js";
 import type { AdminModerationActionPort } from "./node-supabase-admin-moderation-actions.js";
 import type { AdminCatalogActionPort } from "./node-supabase-admin-catalog-actions.js";
+import type { AdminEntityUpdatePort } from "./node-supabase-admin-entity-update.js";
 import type { AdminFinancialAdjustmentPort } from "./node-supabase-admin-financial-adjustments.js";
 import type { AdminBroadcastRetryPort } from "./node-supabase-admin-broadcast-management.js";
 type AdminPermission="read"|"players"|"clubs"|"matches"|"competitions"|"economy"|"groups"|"moderation"|"gifts";
@@ -19,7 +20,7 @@ async function adminRoleFor(telegramId:string,port?:AdminRoleLookupPort){const s
 async function authorize(req:FastifyRequest,reply:FastifyReply,permission:AdminPermission="read",port?:AdminRoleLookupPort){const u=await requireTelegramUser(req);if(!u){reply.code(401).send({error:"UNAUTHENTICATED"});return null;}const role=await adminRoleFor(u.telegramId,port);if(!role||!ROLE_PERMISSIONS[role]?.includes(permission)){reply.code(403).send({error:"ADMIN_PERMISSION_REQUIRED",permission});return null;}return {...u,adminRole:role};}
 const querySchema=z.object({q:z.string().trim().max(100).optional(),season:z.coerce.number().int().min(2020).max(2200).optional(),limit:z.coerce.number().int().min(1).max(100).default(40)});
 export function assertManualCompetitionStatus(status:string){if(status==="COMPLETED")throw new Error("COMPETITION_COMPLETION_AUTOMATIC_ONLY");if(status==="ACTIVE")throw new Error("COMPETITION_ACTIVATION_AUTOMATIC_ONLY");if(status!=="CANCELLED")throw new Error("COMPETITION_STATUS_MANUAL_CANCELLATION_ONLY");}
-export function registerAdminRoutes(app:FastifyInstance,options:{adminAlliancePort?:AdminAlliancePort;adminRoleLookupPort?:AdminRoleLookupPort;adminConfigurationPort?:AdminConfigurationPort;adminConsoleReadPort?:AdminConsoleReadPort;adminModerationActionPort?:AdminModerationActionPort;adminCatalogActionPort?:AdminCatalogActionPort;adminFinancialAdjustmentPort?:AdminFinancialAdjustmentPort;adminBroadcastRetryPort?:AdminBroadcastRetryPort}={}){
+export function registerAdminRoutes(app:FastifyInstance,options:{adminAlliancePort?:AdminAlliancePort;adminRoleLookupPort?:AdminRoleLookupPort;adminConfigurationPort?:AdminConfigurationPort;adminConsoleReadPort?:AdminConsoleReadPort;adminModerationActionPort?:AdminModerationActionPort;adminCatalogActionPort?:AdminCatalogActionPort;adminEntityUpdatePort?:AdminEntityUpdatePort;adminFinancialAdjustmentPort?:AdminFinancialAdjustmentPort;adminBroadcastRetryPort?:AdminBroadcastRetryPort}={}){
 const authorizeAdmin=(req:FastifyRequest,reply:FastifyReply,permission:AdminPermission="read")=>authorize(req,reply,permission,options.adminRoleLookupPort);
 app.get("/v1/admin/overview",async(req,reply)=>{if(!await authorizeAdmin(req,reply))return;if(!options.adminConsoleReadPort)throw new Error("ADMIN_CONSOLE_SUPABASE_REPOSITORY_REQUIRED");return options.adminConsoleReadPort.overview();});
 app.get("/v1/admin/group-targets",async(req,reply)=>{const actor=await authorizeAdmin(req,reply);if(!actor)return;if(actor.adminRole!=="superadmin")return reply.code(403).send({error:"SUPERADMIN_REQUIRED"});if(!options.adminConsoleReadPort)throw new Error("ADMIN_CONSOLE_SUPABASE_REPOSITORY_REQUIRED");return options.adminConsoleReadPort.groupTargets();});
@@ -136,6 +137,34 @@ if(["toggle-item","toggle-gift-code","create-item","item-update","create-gift-co
  }
 }
 if(["toggle-item","toggle-gift-code","create-item","item-update","create-gift-code"].includes(x.action)&&(process.env.NODE_ENV==="production"||process.env.ENVIRONMENT==="production")&&!options.adminCatalogActionPort)throw new Error("ADMIN_CATALOG_SUPABASE_REPOSITORY_REQUIRED");
+if(["player-update","club-update","match-update","player-status","alliance-status","season-status"].includes(x.action)&&options.adminEntityUpdatePort){
+ try{
+  if(!id)return reply.code(400).send({error:"INVALID_ADMIN_ENTITY_ACTION"});
+  const payload:Record<string,string|number>={};
+  const fields:Record<string,string[]>={
+   "player-update":["firstName","lastName","age","overall","potential","wage","contractDays","fitness","morale"],
+   "club-update":["clubName","level","reputation","stadiumLevel","academyLevel","trainingGroundLevel","ticketPrice"],
+   "match-update":["scheduledAt","homeScore","awayScore","matchStatus"],
+  };
+  if(x.action==="player-status")payload.status=x.status!;
+  else if(x.action==="alliance-status")payload.status=x.status!;
+  else if(x.action==="season-status")payload.status=x.seasonStatus!;
+  else for(const key of fields[x.action]??[]){const value=(x as Record<string,unknown>)[key];if(value!==undefined)payload[key]=value as string|number;}
+  const result=await options.adminEntityUpdatePort.execute({
+   action:x.action as import("./node-supabase-admin-entity-update.js").AdminEntityUpdateAction,
+   targetId:id,actorTelegramId:actor.telegramId,idempotencyKey:x.idempotencyKey,payload,
+   ...(x.reason?{reason:x.reason}:{})
+  });
+  return {ok:true,targetType:result.targetType,targetId:result.targetId,replayed:result.replay};
+ }catch(error){
+  const code=error instanceof Error?error.message:"ADMIN_ENTITY_UPDATE_FAILED";
+  if(code.includes("TARGET_NOT_FOUND"))return reply.code(404).send({error:code});
+  if(["IDEMPOTENCY_KEY_REUSED","MATCH_ALREADY_STARTED","MATCH_COMPLETION_AUTOMATIC_ONLY","ALLIANCE_SEASON_ALREADY_SETTLED"].some(v=>code.includes(v)))return reply.code(409).send({error:code});
+  if(code.startsWith("INVALID_"))return reply.code(400).send({error:code});
+  throw error;
+ }
+}
+if(["player-update","club-update","match-update","player-status","alliance-status","season-status"].includes(x.action)&&(process.env.NODE_ENV==="production"||process.env.ENVIRONMENT==="production")&&!options.adminEntityUpdatePort)throw new Error("ADMIN_ENTITY_UPDATE_SUPABASE_REPOSITORY_REQUIRED");
 if(["suspend-user","restore-user","suspend-group","restore-group","cancel-challenge","league-status","competition-status"].includes(x.action)&&options.adminModerationActionPort){
 try{
  const result=await options.adminModerationActionPort.execute({action:x.action as import("./node-supabase-admin-moderation-actions.js").AdminModerationAction,targetId:id,actorTelegramId:actor.telegramId,idempotencyKey:x.idempotencyKey,...(x.reason?{reason:x.reason}:{})});
