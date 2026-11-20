@@ -10,13 +10,14 @@ import {adminCloseAllianceSeasonInTransaction,adminReviewAllianceSeasonInTransac
 import type { AdminAlliancePort } from "./groups/node-supabase-alliance.js";
 import type { AdminConsoleReadPort } from "./node-supabase-admin-console-read.js";
 import type { AdminModerationActionPort } from "./node-supabase-admin-moderation-actions.js";
+import type { AdminBroadcastRetryPort } from "./node-supabase-admin-broadcast-management.js";
 type AdminPermission="read"|"players"|"clubs"|"matches"|"competitions"|"economy"|"groups"|"moderation"|"gifts";
 const ROLE_PERMISSIONS:Record<string,AdminPermission[]>={superadmin:["read","players","clubs","matches","competitions","economy","groups","moderation","gifts"],football:["read","players","clubs","matches","competitions"],economy:["read","economy","gifts"],moderator:["read","groups","moderation"]};
 async function adminRoleFor(telegramId:string,port?:AdminRoleLookupPort){const superAdmins=parseAdminTelegramIds(process.env.GAME_ADMIN_TELEGRAM_IDS);if(superAdmins.includes(telegramId))return "superadmin";let assigned: AdminRoleAssignment | null;if(port)assigned=await port.getAssignment(telegramId);else{if(process.env.NODE_ENV==="production"||process.env.ENVIRONMENT==="production")throw new Error("ADMIN_ROLE_SUPABASE_REPOSITORY_REQUIRED");assigned=await prisma.adminRoleAssignment.findUnique({where:{telegramId},select:{role:true,active:true}});}if(assigned)return assigned.active&&Object.prototype.hasOwnProperty.call(ROLE_PERMISSIONS,assigned.role)?assigned.role:null;try{const map=JSON.parse(process.env.GAME_ADMIN_ROLE_MAP??"{}") as Record<string,string>;const role=map[telegramId];return role&&Object.prototype.hasOwnProperty.call(ROLE_PERMISSIONS,role)?role:null;}catch{return null;}}
 async function authorize(req:FastifyRequest,reply:FastifyReply,permission:AdminPermission="read",port?:AdminRoleLookupPort){const u=await requireTelegramUser(req);if(!u){reply.code(401).send({error:"UNAUTHENTICATED"});return null;}const role=await adminRoleFor(u.telegramId,port);if(!role||!ROLE_PERMISSIONS[role]?.includes(permission)){reply.code(403).send({error:"ADMIN_PERMISSION_REQUIRED",permission});return null;}return {...u,adminRole:role};}
 const querySchema=z.object({q:z.string().trim().max(100).optional(),season:z.coerce.number().int().min(2020).max(2200).optional(),limit:z.coerce.number().int().min(1).max(100).default(40)});
 export function assertManualCompetitionStatus(status:string){if(status==="COMPLETED")throw new Error("COMPETITION_COMPLETION_AUTOMATIC_ONLY");if(status==="ACTIVE")throw new Error("COMPETITION_ACTIVATION_AUTOMATIC_ONLY");if(status!=="CANCELLED")throw new Error("COMPETITION_STATUS_MANUAL_CANCELLATION_ONLY");}
-export function registerAdminRoutes(app:FastifyInstance,options:{adminAlliancePort?:AdminAlliancePort;adminRoleLookupPort?:AdminRoleLookupPort;adminConfigurationPort?:AdminConfigurationPort;adminConsoleReadPort?:AdminConsoleReadPort;adminModerationActionPort?:AdminModerationActionPort}={}){
+export function registerAdminRoutes(app:FastifyInstance,options:{adminAlliancePort?:AdminAlliancePort;adminRoleLookupPort?:AdminRoleLookupPort;adminConfigurationPort?:AdminConfigurationPort;adminConsoleReadPort?:AdminConsoleReadPort;adminModerationActionPort?:AdminModerationActionPort;adminBroadcastRetryPort?:AdminBroadcastRetryPort}={}){
 const authorizeAdmin=(req:FastifyRequest,reply:FastifyReply,permission:AdminPermission="read")=>authorize(req,reply,permission,options.adminRoleLookupPort);
 app.get("/v1/admin/overview",async(req,reply)=>{if(!await authorizeAdmin(req,reply))return;if(options.adminConsoleReadPort)return options.adminConsoleReadPort.overview();if(process.env.NODE_ENV==="production"||process.env.ENVIRONMENT==="production")throw new Error("ADMIN_CONSOLE_SUPABASE_REPOSITORY_REQUIRED");const [users,clubs,players,groups,challenges,leagues,items,giftCodes,flags,alliances,matches,walletTransactions,groupTransactions]=await Promise.all([prisma.user.count(),prisma.club.count(),prisma.player.count(),prisma.telegramGroup.count(),prisma.groupChallenge.count(),prisma.competition.count(),prisma.groupRewardItem.count(),prisma.giftCode.count(),prisma.allianceSeason.count({where:{reviewStatus:"FLAGGED"}}),prisma.alliance.count(),prisma.footballMatch.count(),prisma.ledgerTransaction.count(),prisma.groupPointLedger.count()]);return{counts:{users,clubs,players,groups,challenges,leagues,items,giftCodes,flags,alliances,matches,walletTransactions,groupTransactions}};});
 app.get("/v1/admin/group-targets",async(req,reply)=>{const actor=await authorizeAdmin(req,reply);if(!actor)return;if(actor.adminRole!=="superadmin")return reply.code(403).send({error:"SUPERADMIN_REQUIRED"});if(options.adminConsoleReadPort)return options.adminConsoleReadPort.groupTargets();if(process.env.NODE_ENV==="production"||process.env.ENVIRONMENT==="production")throw new Error("ADMIN_CONSOLE_SUPABASE_REPOSITORY_REQUIRED");const groups=await prisma.telegramGroup.findMany({where:{isActive:true,isSuspended:false},select:{telegramId:true,title:true},orderBy:{createdAt:"asc"},take:5000});return{groups};});
@@ -28,6 +29,11 @@ const params=z.object({id:z.string().min(1).max(128)}).safeParse(req.params);
 const body=z.object({idempotencyKey:z.string().min(12).max(128)}).safeParse(req.body);
 if(!params.success||!body.success)return reply.code(400).send({error:"INVALID_BROADCAST_RETRY"});
 try{
+if(options.adminBroadcastRetryPort){
+ try{return await options.adminBroadcastRetryPort.retry("groups",params.data.id,actor.telegramId,body.data.idempotencyKey);}
+ catch(error){const code=error instanceof Error?error.message:"ADMIN_BROADCAST_RETRY_FAILED";if(code.includes("NO_FAILED_DELIVERIES"))return reply.code(409).send({error:"NO_FAILED_DELIVERIES"});if(code.includes("IDEMPOTENCY_KEY_REUSED"))return reply.code(409).send({error:"DUPLICATE_OR_IDEMPOTENCY_CONFLICT"});throw error;}
+}
+if(process.env.NODE_ENV==="production"||process.env.ENVIRONMENT==="production")throw new Error("ADMIN_BROADCAST_SUPABASE_REPOSITORY_REQUIRED");
 const result=await prisma.$transaction(async tx=>{
 const updated=await tx.adminGroupBroadcastDelivery.updateMany({where:{broadcastId:params.data.id,deliveredAt:null,deliveryAttempts:{gte:8}},data:{deliveryAttempts:0,availableAt:new Date(),deliveryClaimToken:null,deliveryLockedUntil:null,deliveryLastError:null}});
 if(!updated.count)throw new Error("NO_FAILED_DELIVERIES");
@@ -49,6 +55,11 @@ const params=z.object({id:z.string().min(12).max(128)}).safeParse(req.params);
 const body=z.object({idempotencyKey:z.string().min(12).max(128)}).safeParse(req.body);
 if(!params.success||!body.success)return reply.code(400).send({error:"INVALID_BROADCAST_RETRY"});
 try{
+if(options.adminBroadcastRetryPort){
+ try{return await options.adminBroadcastRetryPort.retry("users",params.data.id,actor.telegramId,body.data.idempotencyKey);}
+ catch(error){const code=error instanceof Error?error.message:"ADMIN_BROADCAST_RETRY_FAILED";if(code.includes("NO_FAILED_DELIVERIES"))return reply.code(409).send({error:"NO_FAILED_DELIVERIES"});if(code.includes("IDEMPOTENCY_KEY_REUSED"))return reply.code(409).send({error:"DUPLICATE_OR_IDEMPOTENCY_CONFLICT"});throw error;}
+}
+if(process.env.NODE_ENV==="production"||process.env.ENVIRONMENT==="production")throw new Error("ADMIN_BROADCAST_SUPABASE_REPOSITORY_REQUIRED");
 const result=await prisma.$transaction(async tx=>{
 const updated=await tx.leagueNotice.updateMany({where:{referenceId:params.data.id,kind:"ADMIN_BROADCAST",deliveredAt:null,readAt:null,deliveryAttempts:{gte:8}},data:{deliveryAttempts:0,deliveryClaimToken:null,deliveryLockedUntil:null,deliveryLastError:null}});
 if(!updated.count)throw new Error("NO_FAILED_DELIVERIES");
