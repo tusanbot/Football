@@ -99,7 +99,29 @@ CREATE OR REPLACE FUNCTION public.advance_competition_after_match_http(
 SET search_path=public,pg_temp
 AS $stub$
 BEGIN
- RAISE EXCEPTION USING MESSAGE='ATOMIC_TEST_ADVANCEMENT_FAILURE',ERRCODE='P0001';
+ INSERT INTO pg_temp.atomic_settlement_effects(id) VALUES(2);
+ RETURN jsonb_build_object('completed',true);
+END;
+$stub$;
+
+CREATE OR REPLACE FUNCTION public.finalize_pyramid_league_http(
+ p_competition_id text,p_now timestamptz
+) RETURNS jsonb LANGUAGE plpgsql VOLATILE SECURITY INVOKER
+SET search_path=public,pg_temp
+AS $stub$
+BEGIN
+ INSERT INTO pg_temp.atomic_settlement_effects(id) VALUES(3);
+ RETURN jsonb_build_object('processed',true);
+END;
+$stub$;
+
+CREATE OR REPLACE FUNCTION public.finalize_event_tournament_http(
+ p_competition_id text,p_now timestamptz
+) RETURNS jsonb LANGUAGE plpgsql VOLATILE SECURITY INVOKER
+SET search_path=public,pg_temp
+AS $stub$
+BEGIN
+ RAISE EXCEPTION USING MESSAGE='ATOMIC_TEST_EVENT_FINALIZATION_FAILURE',ERRCODE='P0001';
 END;
 $stub$;
 
@@ -121,7 +143,7 @@ BEGIN
  END IF;
  SELECT count(*) INTO v_effects FROM pg_temp.atomic_settlement_effects;
  IF v_effects<>0 THEN
-  RAISE EXCEPTION 'settlement side effects survived advancement failure: %',v_effects;
+  RAISE EXCEPTION 'settlement/advancement/finalization effects survived event finalization failure: %',v_effects;
  END IF;
 END;
 $atomic_test$;
