@@ -31,4 +31,15 @@ export class SupabasePyramidLeagueSettlementRepository implements PyramidLeagueS
   if(!result||typeof result.completedLeagues!=="number"||typeof result.processed!=="number"||typeof result.accepted!=="number")throw new Error("SUPABASE_PYRAMID_BATCH_REJECTED");
   return result;
  }
+ async listLeagues(userId:string){
+  const result=await this.client.rpc<Record<string,unknown>>("get_pyramid_league_overview_http",{p_user_id:userId});
+  if(!result||typeof result.season!=="number"||!Array.isArray(result.tiers)||!Array.isArray(result.history)||!Array.isArray(result.promotionOffers))throw new Error("SUPABASE_PYRAMID_OVERVIEW_INVALID_RESPONSE");
+  return result;
+ }
+ async getClubHistory(userId:string){
+  const result=await this.client.rpc<Record<string,unknown>>("get_pyramid_league_history_http",{p_user_id:userId});
+  if(!result||!result.club||!result.stats||!Array.isArray(result.tiers)||!Array.isArray(result.movements)||!Array.isArray(result.leagues))throw new Error("SUPABASE_PYRAMID_HISTORY_INVALID_RESPONSE");
+  return result;
+ }
+
 }
