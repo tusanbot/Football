@@ -5,12 +5,12 @@ DECLARE
  v_result regprocedure:=to_regprocedure('public.claim_due_match_result_notifications_node_http(integer,integer)');
  v_checkpoint regprocedure:=to_regprocedure('public.claim_due_match_checkpoint_notifications_node_http(integer,text)');
  v_ack regprocedure:=to_regprocedure('public.ack_match_checkpoint_notification_node_http(text,text,text,boolean,text)');
- v_lifecycle_def text;v_result_def text;v_checkpoint_def text;
+ v_lifecycle_def text;v_result_def text;v_checkpoint_def text;v_ack_def text;
 BEGIN
  IF v_lifecycle IS NULL OR v_result IS NULL OR v_checkpoint IS NULL OR v_ack IS NULL THEN
   RAISE EXCEPTION 'Node match notification RPC set is incomplete';
  END IF;
- v_lifecycle_def:=pg_get_functiondef(v_lifecycle);v_result_def:=pg_get_functiondef(v_result);v_checkpoint_def:=pg_get_functiondef(v_checkpoint);
+ v_lifecycle_def:=pg_get_functiondef(v_lifecycle);v_result_def:=pg_get_functiondef(v_result);v_checkpoint_def:=pg_get_functiondef(v_checkpoint);v_ack_def:=pg_get_functiondef(v_ack);
  IF NOT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='MatchLifecycleNotification' AND column_name='completedClaimToken')
   OR NOT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='MatchResultNotification' AND column_name='completedClaimToken')
   OR position('completedClaimToken' IN pg_get_functiondef(to_regprocedure('public.complete_match_notification_delivery(text,text,text,boolean,text,integer)')))=0 THEN
@@ -23,7 +23,9 @@ BEGIN
  IF position('FOR UPDATE' IN v_checkpoint_def)=0 OR position('SKIP LOCKED' IN v_checkpoint_def)=0
   OR position('homeBotNotificationAttempts' IN v_checkpoint_def)=0
   OR position('awayBotNotificationAttempts' IN v_checkpoint_def)=0
-  OR position('claimToken' IN v_checkpoint_def)=0 OR position('DEAD_LETTER' IN v_checkpoint_def)=0 THEN
+  OR position('NotificationClaimToken' IN v_checkpoint_def)=0
+  OR position('p_claim_token' IN v_ack_def)=0 OR position('NotificationClaimToken' IN v_ack_def)=0
+  OR position('DEAD_LETTER' IN v_checkpoint_def)=0 THEN
   RAISE EXCEPTION 'checkpoint notification claim is missing fencing or dead-letter handling';END IF;
  IF position('DEAD_LETTER' IN v_lifecycle_def)=0 OR position('DEAD_LETTER' IN v_result_def)=0
   OR position('attempts' IN v_lifecycle_def)=0 OR position('attempts' IN v_result_def)=0 THEN
