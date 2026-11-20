@@ -61,7 +61,7 @@ test("event tournament auto-starts at capacity and creates a valid round-robin f
   const players = await Promise.all(Array.from({ length: 4 }, (_, index) => makeTournamentClub(suffix, index)));
   process.env.BOT_API_SECRET = secret;
   process.env.GAME_ADMIN_TELEGRAM_IDS = adminTelegramId;
-  const app = buildApp({ logger: false });
+  const app = buildApp({ logger: false, actionRateLimitPort: { async consume() { return true; } } });
   await app.ready();
   let tournamentId: string | undefined;
   let competitionId: string | undefined;
