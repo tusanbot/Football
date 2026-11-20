@@ -14,7 +14,7 @@ import { registerClubOperationsRoutes } from "./game/club-operations-routes.js";
 import { registerPlayerMarketRoutes } from "./players/market-routes.js";
 import { registerPlayerDevelopmentRoutes } from "./players/player-development-routes.js";
 import { registerMatchRoutes } from "./game/match-routes.js";
-import { registerMatchNotificationRoutes } from "./game/match-notification-routes.js";
+import { registerMatchNotificationRoutes, type MatchNotificationPort } from "./game/match-notification-routes.js";
 import { registerGroupRoutes } from "./groups/group-routes.js";
 import type { GroupMembershipPort } from "./groups/group-membership-context.js";
 import { withGroupMembershipPort } from "./groups/group-membership-context.js";
@@ -82,7 +82,7 @@ const healthResponse = z.object({
   version: z.string(),
 });
 
-export function buildApp(options: { logger?: boolean; pluginTimeout?: number; groupMembershipPort?: GroupMembershipPort; alliancePort?: AlliancePort; adminAlliancePort?: AdminAlliancePort; telegramUserLookupPort?: TelegramUserLookupPort; accountProvisioningPort?: TelegramAccountProvisioningPort; storePurchasePort?: StorePurchasePort; storeItemUsePort?: StoreItemUsePort; walletEntryPort?: WalletEntryPort; marketListingPort?: MarketListingPort; marketPurchasePort?: MarketPurchasePort; storeSnapshotPort?: StoreSnapshotPort; playerDevelopmentPort?: PlayerDevelopmentPort; clubEconomySettlementPort?: ClubEconomySettlementPort; clubManagementPort?: ClubManagementPort; specialAcquisitionPort?: SpecialAcquisitionPort; giftCodeRedemptionPort?: GiftCodeRedemptionPort; botRuntimeLeasePort?: BotRuntimeLeasePort; matchPorts?: NodeSupabaseMatchPorts; supabaseHttpClient?: SupabaseHttpClient; gameDashboardPort?: GameDashboardPort; walletReadPort?: WalletReadPort; clubLineupPort?: ClubLineupPort; publicPlayerRecordRepository?: PublicPlayerRecordRepository; publicClubLogoRepository?: PublicClubLogoRepository; publicClubReadRepository?: PublicClubReadRepository; seasonAwardRepository?: SeasonAwardRepository; telegramMessageDeletionPort?: TelegramMessageDeletionPort; eventTournamentSettlementPort?: EventTournamentSettlementPort; eventTournamentReadPort?: EventTournamentReadPort; pyramidLeagueSettlementPort?: PyramidLeagueSettlementPort; actionRateLimitPort?: ActionRateLimitPort } = {}) {
+export function buildApp(options: { logger?: boolean; pluginTimeout?: number; groupMembershipPort?: GroupMembershipPort; alliancePort?: AlliancePort; adminAlliancePort?: AdminAlliancePort; telegramUserLookupPort?: TelegramUserLookupPort; accountProvisioningPort?: TelegramAccountProvisioningPort; storePurchasePort?: StorePurchasePort; storeItemUsePort?: StoreItemUsePort; walletEntryPort?: WalletEntryPort; marketListingPort?: MarketListingPort; marketPurchasePort?: MarketPurchasePort; storeSnapshotPort?: StoreSnapshotPort; playerDevelopmentPort?: PlayerDevelopmentPort; clubEconomySettlementPort?: ClubEconomySettlementPort; clubManagementPort?: ClubManagementPort; specialAcquisitionPort?: SpecialAcquisitionPort; giftCodeRedemptionPort?: GiftCodeRedemptionPort; botRuntimeLeasePort?: BotRuntimeLeasePort; matchPorts?: NodeSupabaseMatchPorts; supabaseHttpClient?: SupabaseHttpClient; gameDashboardPort?: GameDashboardPort; walletReadPort?: WalletReadPort; clubLineupPort?: ClubLineupPort; publicPlayerRecordRepository?: PublicPlayerRecordRepository; publicClubLogoRepository?: PublicClubLogoRepository; publicClubReadRepository?: PublicClubReadRepository; seasonAwardRepository?: SeasonAwardRepository; matchNotificationPort?: MatchNotificationPort; telegramMessageDeletionPort?: TelegramMessageDeletionPort; eventTournamentSettlementPort?: EventTournamentSettlementPort; eventTournamentReadPort?: EventTournamentReadPort; pyramidLeagueSettlementPort?: PyramidLeagueSettlementPort; actionRateLimitPort?: ActionRateLimitPort } = {}) {
   // Production HTTP routes must use direct-HTTPS Supabase repositories for the
   // match runtime and Telegram onboarding. Prisma compatibility remains isolated
   // to non-production migration tests and service families not yet migrated.
@@ -116,6 +116,7 @@ export function buildApp(options: { logger?: boolean; pluginTimeout?: number; gr
       ["PUBLIC_CLUB_READ", options.publicClubReadRepository],
       ["SEASON_AWARDS", options.seasonAwardRepository],
       ["TELEGRAM_MESSAGE_DELETION", options.telegramMessageDeletionPort],
+      ["MATCH_NOTIFICATIONS", options.matchNotificationPort],
       ["EVENT_TOURNAMENT_READ", options.eventTournamentReadPort],
       ["EVENT_TOURNAMENT_SETTLEMENT", options.eventTournamentSettlementPort],
       ["PYRAMID_LEAGUE_SETTLEMENT", options.pyramidLeagueSettlementPort],
@@ -279,7 +280,7 @@ export function buildApp(options: { logger?: boolean; pluginTimeout?: number; gr
   registerPlayerMarketRoutes(app);
   registerPlayerDevelopmentRoutes(app);
   registerMatchRoutes(app);
-  registerMatchNotificationRoutes(app);
+  registerMatchNotificationRoutes(app, options.matchNotificationPort);
   registerGroupRoutes(app, { requireMembershipPort: Boolean(options.groupMembershipPort) });
   registerAllianceRoutes(app, { requirePort: Boolean(options.alliancePort), ...(options.alliancePort ? { port: options.alliancePort } : {}) });
   registerAdminRoutes(app, { ...(options.adminAlliancePort ? { adminAlliancePort: options.adminAlliancePort } : {}) });
