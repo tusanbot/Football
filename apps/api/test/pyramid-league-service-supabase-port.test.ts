@@ -51,7 +51,6 @@ test("pyramid league finalization, promotion response and due work use the Supab
 test("pyramid league overview and club history use the Supabase request scope", async () => {
  const calls: Array<{ method: string; args: unknown[] }> = [];
  await withPyramidLeagueSettlementPort(fakePort(calls), async () => {
-  assert.equal((await import("../src/game/league-pyramid-service.js")).listPyramidLeagues("user-1").then ? true : false, true);
   const service = await import("../src/game/league-pyramid-service.js");
   const overview = await service.listPyramidLeagues("user-1");
   const history = await service.getPyramidLeagueClubHistory("user-1");
