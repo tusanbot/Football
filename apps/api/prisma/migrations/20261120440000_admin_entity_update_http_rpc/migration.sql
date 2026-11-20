@@ -41,13 +41,13 @@ BEGIN
   END IF;
   IF (p_payload ? 'firstName' AND ((p_payload->>'firstName') IS NULL OR length(btrim(p_payload->>'firstName')) NOT BETWEEN 1 AND 60))
    OR (p_payload ? 'lastName' AND ((p_payload->>'lastName') IS NULL OR length(btrim(p_payload->>'lastName')) NOT BETWEEN 1 AND 60))
-   OR (p_payload ? 'age' AND ((p_payload->>'age') IS NULL OR p_payload->>'age' !~ '^[0-9]{1,2}$' OR (p_payload->>'age')::int NOT BETWEEN 15 AND 55)))
-   OR (p_payload ? 'overall' AND ((p_payload->>'overall') IS NULL OR p_payload->>'overall' !~ '^[0-9]{1,2}$' OR (p_payload->>'overall')::int NOT BETWEEN 1 AND 99)))
-   OR (p_payload ? 'potential' AND ((p_payload->>'potential') IS NULL OR p_payload->>'potential' !~ '^[0-9]{1,2}$' OR (p_payload->>'potential')::int NOT BETWEEN 1 AND 99)))
-   OR (p_payload ? 'wage' AND ((p_payload->>'wage') IS NULL OR p_payload->>'wage' !~ '^[0-9]{1,15}
-   OR (p_payload ? 'contractDays' AND ((p_payload->>'contractDays') IS NULL OR p_payload->>'contractDays' !~ '^[0-9]{1,4}$' OR (p_payload->>'contractDays')::int NOT BETWEEN 0 AND 3650)))
-   OR (p_payload ? 'fitness' AND ((p_payload->>'fitness') IS NULL OR p_payload->>'fitness' !~ '^[0-9]{1,3}$' OR (p_payload->>'fitness')::int NOT BETWEEN 0 AND 100)))
-   OR (p_payload ? 'morale' AND ((p_payload->>'morale') IS NULL OR p_payload->>'morale' !~ '^[0-9]{1,3}$' OR (p_payload->>'morale')::int NOT BETWEEN 0 AND 100))) THEN
+   OR (p_payload ? 'age' AND ((p_payload->>'age') IS NULL OR p_payload->>'age' !~ '^[0-9]{1,2}$' OR (p_payload->>'age')::int NOT BETWEEN 15 AND 55))
+   OR (p_payload ? 'overall' AND ((p_payload->>'overall') IS NULL OR p_payload->>'overall' !~ '^[0-9]{1,2}$' OR (p_payload->>'overall')::int NOT BETWEEN 1 AND 99))
+   OR (p_payload ? 'potential' AND ((p_payload->>'potential') IS NULL OR p_payload->>'potential' !~ '^[0-9]{1,2}$' OR (p_payload->>'potential')::int NOT BETWEEN 1 AND 99))
+   OR (p_payload ? 'wage' AND ((p_payload->>'wage') IS NULL OR p_payload->>'wage' !~ '^[0-9]{1,15}$'))
+   OR (p_payload ? 'contractDays' AND ((p_payload->>'contractDays') IS NULL OR p_payload->>'contractDays' !~ '^[0-9]{1,4}$' OR (p_payload->>'contractDays')::int NOT BETWEEN 0 AND 3650))
+   OR (p_payload ? 'fitness' AND ((p_payload->>'fitness') IS NULL OR p_payload->>'fitness' !~ '^[0-9]{1,3}$' OR (p_payload->>'fitness')::int NOT BETWEEN 0 AND 100))
+   OR (p_payload ? 'morale' AND ((p_payload->>'morale') IS NULL OR p_payload->>'morale' !~ '^[0-9]{1,3}$' OR (p_payload->>'morale')::int NOT BETWEEN 0 AND 100)) THEN
    RAISE EXCEPTION USING MESSAGE='INVALID_PLAYER_UPDATE',ERRCODE='22023';
   END IF;
   UPDATE public."Player" SET
@@ -68,12 +68,12 @@ BEGIN
    RAISE EXCEPTION USING MESSAGE='INVALID_CLUB_UPDATE',ERRCODE='22023';
   END IF;
   IF (p_payload ? 'clubName' AND ((p_payload->>'clubName') IS NULL OR length(btrim(p_payload->>'clubName')) NOT BETWEEN 2 AND 60))
-   OR (p_payload ? 'level' AND ((p_payload->>'level') IS NULL OR p_payload->>'level' !~ '^[0-9]{1,3}$' OR (p_payload->>'level')::int NOT BETWEEN 1 AND 100)))
-   OR (p_payload ? 'reputation' AND ((p_payload->>'reputation') IS NULL OR p_payload->>'reputation' !~ '^[0-9]{1,7}$' OR (p_payload->>'reputation')::int NOT BETWEEN 0 AND 1000000)))
-   OR (p_payload ? 'stadiumLevel' AND ((p_payload->>'stadiumLevel') IS NULL OR p_payload->>'stadiumLevel' !~ '^[0-9]{1,3}$' OR (p_payload->>'stadiumLevel')::int NOT BETWEEN 1 AND 100)))
-   OR (p_payload ? 'academyLevel' AND ((p_payload->>'academyLevel') IS NULL OR p_payload->>'academyLevel' !~ '^[0-9]{1,3}$' OR (p_payload->>'academyLevel')::int NOT BETWEEN 0 AND 100)))
-   OR (p_payload ? 'trainingGroundLevel' AND ((p_payload->>'trainingGroundLevel') IS NULL OR p_payload->>'trainingGroundLevel' !~ '^[0-9]{1,3}$' OR (p_payload->>'trainingGroundLevel')::int NOT BETWEEN 1 AND 100)))
-   OR (p_payload ? 'ticketPrice' AND ((p_payload->>'ticketPrice') IS NULL OR p_payload->>'ticketPrice' !~ '^[0-9]{1,15} THEN
+   OR (p_payload ? 'level' AND ((p_payload->>'level') IS NULL OR p_payload->>'level' !~ '^[0-9]{1,3}$' OR (p_payload->>'level')::int NOT BETWEEN 1 AND 100))
+   OR (p_payload ? 'reputation' AND ((p_payload->>'reputation') IS NULL OR p_payload->>'reputation' !~ '^[0-9]{1,7}$' OR (p_payload->>'reputation')::int NOT BETWEEN 0 AND 1000000))
+   OR (p_payload ? 'stadiumLevel' AND ((p_payload->>'stadiumLevel') IS NULL OR p_payload->>'stadiumLevel' !~ '^[0-9]{1,3}$' OR (p_payload->>'stadiumLevel')::int NOT BETWEEN 1 AND 100))
+   OR (p_payload ? 'academyLevel' AND ((p_payload->>'academyLevel') IS NULL OR p_payload->>'academyLevel' !~ '^[0-9]{1,3}$' OR (p_payload->>'academyLevel')::int NOT BETWEEN 0 AND 100))
+   OR (p_payload ? 'trainingGroundLevel' AND ((p_payload->>'trainingGroundLevel') IS NULL OR p_payload->>'trainingGroundLevel' !~ '^[0-9]{1,3}$' OR (p_payload->>'trainingGroundLevel')::int NOT BETWEEN 1 AND 100))
+   OR (p_payload ? 'ticketPrice' AND ((p_payload->>'ticketPrice') IS NULL OR p_payload->>'ticketPrice' !~ '^[0-9]{1,15}$')) THEN
    RAISE EXCEPTION USING MESSAGE='INVALID_CLUB_UPDATE',ERRCODE='22023';
   END IF;
   UPDATE public."Club" SET
