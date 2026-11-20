@@ -80,6 +80,7 @@ import { withAlliancePort } from "../../../apps/api/src/groups/alliance-context.
 import { SupabaseAllianceRepository } from "./repositories/alliance.js";
 import { SupabaseGroupMembershipRepository } from "./repositories/group-membership.js";
 import { SupabaseAdminFinancialAdjustmentsRepository } from "./repositories/admin-financial-adjustments.js";
+import { SupabaseAdminRoleLookupRepository } from "./repositories/admin-role-lookup.js";
 
 interface MatchCoordinatorNamespace { idFromName(name: string): unknown; get(id: unknown): { fetch(input: string, init?: RequestInit): Promise<Response> }; }
 interface MatchCoordinatorState { storage: { setAlarm(scheduledTime: number): Promise<void>; deleteAlarm(): Promise<void>; }; }
@@ -202,8 +203,9 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
       const botRuntimeLease = supabaseClient ? new SupabaseBotRuntimeLeaseRepository(supabaseClient) : undefined;
        const groupMembership = supabaseClient ? new SupabaseGroupMembershipRepository(supabaseClient) : undefined;
       const adminFinancialAdjustment = supabaseClient ? new SupabaseAdminFinancialAdjustmentsRepository(supabaseClient) : undefined;
+      const adminRoleLookup = supabaseClient ? new SupabaseAdminRoleLookupRepository(supabaseClient) : undefined;
         const alliance = supabaseClient ? new SupabaseAllianceRepository(supabaseClient) : undefined;
-       const router = createWorkersApiRouter({ publicPlayerRecords, publicClubRead, publicClubLogo, seasonAwards, specialPlayers, botRuntimeLease, groupMembership, alliance, adminFinancialAdjustmentPort: adminFinancialAdjustment });
+       const router = createWorkersApiRouter({ publicPlayerRecords, publicClubRead, publicClubLogo, seasonAwards, specialPlayers, botRuntimeLease, groupMembership, alliance, adminFinancialAdjustmentPort: adminFinancialAdjustment, adminRoleLookupPort: adminRoleLookup });
       const handle = async (): Promise<Response> => await router.fetch(request);
       const withGroupMembership = groupMembership ? () => withGroupMembershipPort(groupMembership, handle) : handle;
       const withActionRateLimit = actionRateLimit ? () => withActionRateLimitPort(actionRateLimit, withGroupMembership) : withGroupMembership;
