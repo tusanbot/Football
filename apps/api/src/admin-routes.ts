@@ -24,54 +24,26 @@ app.get("/v1/admin/group-targets",async(req,reply)=>{const actor=await authorize
 app.post("/v1/admin/group-broadcasts/:id/retry-failed",async(req,reply)=>{
 const actor=await authorizeAdmin(req,reply,"moderation");if(!actor)return;
 if(actor.adminRole!=="superadmin")return reply.code(403).send({error:"SUPERADMIN_REQUIRED"});
-if(!await consumeAllianceActionRateLimit({telegramUserId:actor.telegramId,telegramGroupId:"global",action:"admin-group-broadcast-retry",limit:10}))return reply.code(429).send({error:"ADMIN_RATE_LIMITED",retryAfterSeconds:60});
+if(!options.adminAlliancePort)throw new Error("ADMIN_ALLIANCE_SUPABASE_REPOSITORY_REQUIRED");
+if(!await options.adminAlliancePort.consumeRateLimit({telegramUserId:actor.telegramId,telegramGroupId:"global",action:"admin-group-broadcast-retry",limit:10,now:new Date().toISOString()}))return reply.code(429).send({error:"ADMIN_RATE_LIMITED",retryAfterSeconds:60});
 const params=z.object({id:z.string().min(1).max(128)}).safeParse(req.params);
 const body=z.object({idempotencyKey:z.string().min(12).max(128)}).safeParse(req.body);
 if(!params.success||!body.success)return reply.code(400).send({error:"INVALID_BROADCAST_RETRY"});
-try{
-if(options.adminBroadcastRetryPort){
- try{return await options.adminBroadcastRetryPort.retry("groups",params.data.id,actor.telegramId,body.data.idempotencyKey);}
- catch(error){const code=error instanceof Error?error.message:"ADMIN_BROADCAST_RETRY_FAILED";if(code.includes("NO_FAILED_DELIVERIES"))return reply.code(409).send({error:"NO_FAILED_DELIVERIES"});if(code.includes("IDEMPOTENCY_KEY_REUSED"))return reply.code(409).send({error:"DUPLICATE_OR_IDEMPOTENCY_CONFLICT"});throw error;}
-}
-if(process.env.NODE_ENV==="production"||process.env.ENVIRONMENT==="production")throw new Error("ADMIN_BROADCAST_SUPABASE_REPOSITORY_REQUIRED");
-const result=await prisma.$transaction(async tx=>{
-const updated=await tx.adminGroupBroadcastDelivery.updateMany({where:{broadcastId:params.data.id,deliveredAt:null,deliveryAttempts:{gte:8}},data:{deliveryAttempts:0,availableAt:new Date(),deliveryClaimToken:null,deliveryLockedUntil:null,deliveryLastError:null}});
-if(!updated.count)throw new Error("NO_FAILED_DELIVERIES");
-await tx.adminAuditLog.create({data:{actorTelegramId:actor.telegramId,action:"retry-group-broadcast",targetType:"group-broadcast",targetId:params.data.id,idempotencyKey:"admin-group-broadcast-retry:"+body.data.idempotencyKey,metadata:{retried:updated.count}}});
-return{retried:updated.count};
-});
-return result;
-}catch(error){
-if(error instanceof Error&&error.message==="NO_FAILED_DELIVERIES")return reply.code(409).send({error:error.message});
-if(typeof error==="object"&&error!==null&&"code"in error&&error.code==="P2002")return reply.code(409).send({error:"DUPLICATE_OR_IDEMPOTENCY_CONFLICT"});
-throw error;
-}
+if(!options.adminBroadcastRetryPort)throw new Error("ADMIN_BROADCAST_SUPABASE_REPOSITORY_REQUIRED");
+try{return await options.adminBroadcastRetryPort.retry("groups",params.data.id,actor.telegramId,body.data.idempotencyKey);}
+catch(error){const code=error instanceof Error?error.message:"ADMIN_BROADCAST_RETRY_FAILED";if(code.includes("NO_FAILED_DELIVERIES"))return reply.code(409).send({error:"NO_FAILED_DELIVERIES"});if(code.includes("IDEMPOTENCY_KEY_REUSED"))return reply.code(409).send({error:"DUPLICATE_OR_IDEMPOTENCY_CONFLICT"});throw error;}
 });
 app.post("/v1/admin/user-broadcasts/:id/retry-failed",async(req,reply)=>{
 const actor=await authorizeAdmin(req,reply,"moderation");if(!actor)return;
 if(actor.adminRole!=="superadmin")return reply.code(403).send({error:"SUPERADMIN_REQUIRED"});
-if(!await consumeAllianceActionRateLimit({telegramUserId:actor.telegramId,telegramGroupId:"global",action:"admin-user-broadcast-retry",limit:10}))return reply.code(429).send({error:"ADMIN_RATE_LIMITED",retryAfterSeconds:60});
+if(!options.adminAlliancePort)throw new Error("ADMIN_ALLIANCE_SUPABASE_REPOSITORY_REQUIRED");
+if(!await options.adminAlliancePort.consumeRateLimit({telegramUserId:actor.telegramId,telegramGroupId:"global",action:"admin-user-broadcast-retry",limit:10,now:new Date().toISOString()}))return reply.code(429).send({error:"ADMIN_RATE_LIMITED",retryAfterSeconds:60});
 const params=z.object({id:z.string().min(12).max(128)}).safeParse(req.params);
 const body=z.object({idempotencyKey:z.string().min(12).max(128)}).safeParse(req.body);
 if(!params.success||!body.success)return reply.code(400).send({error:"INVALID_BROADCAST_RETRY"});
-try{
-if(options.adminBroadcastRetryPort){
- try{return await options.adminBroadcastRetryPort.retry("users",params.data.id,actor.telegramId,body.data.idempotencyKey);}
- catch(error){const code=error instanceof Error?error.message:"ADMIN_BROADCAST_RETRY_FAILED";if(code.includes("NO_FAILED_DELIVERIES"))return reply.code(409).send({error:"NO_FAILED_DELIVERIES"});if(code.includes("IDEMPOTENCY_KEY_REUSED"))return reply.code(409).send({error:"DUPLICATE_OR_IDEMPOTENCY_CONFLICT"});throw error;}
-}
-if(process.env.NODE_ENV==="production"||process.env.ENVIRONMENT==="production")throw new Error("ADMIN_BROADCAST_SUPABASE_REPOSITORY_REQUIRED");
-const result=await prisma.$transaction(async tx=>{
-const updated=await tx.leagueNotice.updateMany({where:{referenceId:params.data.id,kind:"ADMIN_BROADCAST",deliveredAt:null,readAt:null,deliveryAttempts:{gte:8}},data:{deliveryAttempts:0,deliveryClaimToken:null,deliveryLockedUntil:null,deliveryLastError:null}});
-if(!updated.count)throw new Error("NO_FAILED_DELIVERIES");
-await tx.adminAuditLog.create({data:{actorTelegramId:actor.telegramId,action:"retry-user-broadcast",targetType:"user-broadcast",targetId:params.data.id,idempotencyKey:"admin-user-broadcast-retry:"+body.data.idempotencyKey,metadata:{retried:updated.count}}});
-return{retried:updated.count};
-});
-return result;
-}catch(error){
-if(error instanceof Error&&error.message==="NO_FAILED_DELIVERIES")return reply.code(409).send({error:error.message});
-if(typeof error==="object"&&error!==null&&"code"in error&&error.code==="P2002")return reply.code(409).send({error:"DUPLICATE_OR_IDEMPOTENCY_CONFLICT"});
-throw error;
-}
+if(!options.adminBroadcastRetryPort)throw new Error("ADMIN_BROADCAST_SUPABASE_REPOSITORY_REQUIRED");
+try{return await options.adminBroadcastRetryPort.retry("users",params.data.id,actor.telegramId,body.data.idempotencyKey);}
+catch(error){const code=error instanceof Error?error.message:"ADMIN_BROADCAST_RETRY_FAILED";if(code.includes("NO_FAILED_DELIVERIES"))return reply.code(409).send({error:"NO_FAILED_DELIVERIES"});if(code.includes("IDEMPOTENCY_KEY_REUSED"))return reply.code(409).send({error:"DUPLICATE_OR_IDEMPOTENCY_CONFLICT"});throw error;}
 });
 app.get("/v1/admin/group-broadcasts",async(req,reply)=>{
 const actor=await authorizeAdmin(req,reply,"moderation");if(!actor)return;
