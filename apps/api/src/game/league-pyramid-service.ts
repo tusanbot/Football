@@ -417,6 +417,8 @@ export async function processPyramidLeagueCompletion(competitionId: string, now 
 }
 
 export async function listLeagueNotices(userId: string) {
+  const port = getPyramidLeagueSettlementPort();
+  if (port) return port.listNotices(userId);
   const notices = await prisma.leagueNotice.findMany({ where: { userId, readAt: null }, select: { id: true, kind: true, title: true, body: true, referenceId: true, createdAt: true }, orderBy: { createdAt: "desc" }, take: 20 });
   return { notices };
 }
@@ -642,6 +644,8 @@ export async function getFriendlyChallengeInfo(token: string) {
 }
 
 export async function markLeagueNoticesRead(userId: string) {
+  const port = getPyramidLeagueSettlementPort();
+  if (port) return port.markNoticesRead(userId, new Date().toISOString());
   const result = await prisma.leagueNotice.updateMany({ where: { userId, readAt: null }, data: { readAt: new Date() } });
   return { markedRead: result.count };
 }
