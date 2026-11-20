@@ -82,6 +82,8 @@ import { SupabaseGroupMembershipRepository } from "./repositories/group-membersh
 import { SupabaseAdminFinancialAdjustmentsRepository } from "./repositories/admin-financial-adjustments.js";
 import { SupabaseAdminRoleLookupRepository } from "./repositories/admin-role-lookup.js";
 import { SupabaseAdminConfigurationRepository } from "./repositories/admin-configuration.js";
+import { SupabaseAdminConsoleReadRepository } from "./repositories/admin-console-read.js";
+import { SupabaseAdminBroadcastManagementRepository } from "./repositories/admin-broadcast-management.js";
 
 interface MatchCoordinatorNamespace { idFromName(name: string): unknown; get(id: unknown): { fetch(input: string, init?: RequestInit): Promise<Response> }; }
 interface MatchCoordinatorState { storage: { setAlarm(scheduledTime: number): Promise<void>; deleteAlarm(): Promise<void>; }; }
@@ -206,8 +208,10 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
       const adminFinancialAdjustment = supabaseClient ? new SupabaseAdminFinancialAdjustmentsRepository(supabaseClient) : undefined;
       const adminRoleLookup = supabaseClient ? new SupabaseAdminRoleLookupRepository(supabaseClient) : undefined;
       const adminConfiguration = supabaseClient ? new SupabaseAdminConfigurationRepository(supabaseClient) : undefined;
+       const adminConsoleRead = supabaseClient ? new SupabaseAdminConsoleReadRepository(supabaseClient) : undefined;
+       const adminBroadcastRetry = supabaseClient ? new SupabaseAdminBroadcastManagementRepository(supabaseClient) : undefined;
         const alliance = supabaseClient ? new SupabaseAllianceRepository(supabaseClient) : undefined;
-       const router = createWorkersApiRouter({ publicPlayerRecords, publicClubRead, publicClubLogo, seasonAwards, specialPlayers, botRuntimeLease, groupMembership, alliance, adminFinancialAdjustmentPort: adminFinancialAdjustment, adminRoleLookupPort: adminRoleLookup, adminConfigurationPort: adminConfiguration });
+       const router = createWorkersApiRouter({ publicPlayerRecords, publicClubRead, publicClubLogo, seasonAwards, specialPlayers, botRuntimeLease, groupMembership, alliance, adminFinancialAdjustmentPort: adminFinancialAdjustment, adminRoleLookupPort: adminRoleLookup, adminConfigurationPort: adminConfiguration, adminConsoleReadPort: adminConsoleRead, adminBroadcastRetryPort: adminBroadcastRetry });
       const handle = async (): Promise<Response> => await router.fetch(request);
       const withGroupMembership = groupMembership ? () => withGroupMembershipPort(groupMembership, handle) : handle;
       const withActionRateLimit = actionRateLimit ? () => withActionRateLimitPort(actionRateLimit, withGroupMembership) : withGroupMembership;
