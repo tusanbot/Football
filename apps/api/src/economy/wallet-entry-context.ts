@@ -32,5 +32,9 @@ export function withWalletEntryPort<T>(port: WalletEntryPort, operation: () => T
 }
 
 export function getWalletEntryPort(): WalletEntryPort | undefined {
-  return walletEntryScope.getStore();
+  const port = walletEntryScope.getStore();
+  if (!port && (process.env.NODE_ENV === "production" || process.env.ENVIRONMENT === "production")) {
+    throw new Error("WALLET_ENTRY_SUPABASE_REPOSITORY_REQUIRED");
+  }
+  return port;
 }
