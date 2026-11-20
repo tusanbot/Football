@@ -1,6 +1,6 @@
 CREATE OR REPLACE FUNCTION public.schedule_telegram_message_deletion_http(
   p_telegram_chat_id text,p_message_id integer,p_delete_at timestamptz
-) RETURNS TABLE(id text,status text,delete_at timestamptz)
+) RETURNS TABLE(id text,status text,delete_at timestamp without time zone)
 LANGUAGE plpgsql VOLATILE SECURITY INVOKER SET search_path=public,pg_temp AS $$
 BEGIN
  IF p_telegram_chat_id !~ '^-?[0-9]{1,20}$' OR p_message_id<=0 OR p_delete_at IS NULL THEN
