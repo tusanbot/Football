@@ -99,6 +99,7 @@ BEGIN
   IF p_payload ? 'matchStatus' AND p_payload->>'matchStatus'='COMPLETED' THEN
    RAISE EXCEPTION USING MESSAGE='MATCH_COMPLETION_AUTOMATIC_ONLY',ERRCODE='P0001';
   END IF;
+  UPDATE public."FootballMatch" SET
    "scheduledAt"=CASE WHEN p_payload ? 'scheduledAt' THEN (p_payload->>'scheduledAt')::timestamptz ELSE "scheduledAt" END,
    "homeScore"=CASE WHEN p_payload ? 'homeScore' THEN (p_payload->>'homeScore')::int ELSE "homeScore" END,
    "awayScore"=CASE WHEN p_payload ? 'awayScore' THEN (p_payload->>'awayScore')::int ELSE "awayScore" END,
