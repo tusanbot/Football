@@ -85,7 +85,7 @@ export function buildApp(options: { logger?: boolean; pluginTimeout?: number; gr
   if (process.env.NODE_ENV === "production" && (!options.matchPorts || !options.supabaseHttpClient)) {
     throw new Error("SUPABASE_MATCH_PORTS_REQUIRED: production API must use direct Supabase HTTP repositories and a Supabase readiness client.");
   }
-  const app = Fastify({{
+  const app = Fastify({
     logger: options.logger ?? process.env.NODE_ENV !== "test",
     pluginTimeout: options.pluginTimeout ?? 10_000,
     requestIdHeader: "x-request-id",
