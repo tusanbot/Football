@@ -192,42 +192,36 @@ export function registerEventTournamentRoutes(app: FastifyInstance) {
     const parsed = createSchema.safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ error: "INVALID_TOURNAMENT", issues: parsed.error.issues.map((issue) => ({ path: issue.path, message: issue.message })) });
     const value = parsed.data;
+    const port = getEventTournamentReadPort();
+    if (!port) return reply.code(503).send({ error: "SUPABASE_EVENT_TOURNAMENT_CREATE_UNAVAILABLE" });
     try {
-      const result = await prisma.$transaction(async (tx) => {
-        for (const prize of value.prizes) {
-          if (prize.type === "STORE_ITEM" && (!prize.itemKey || !getStoreItem(prize.itemKey))) throw new Error("STORE_ITEM_NOT_AVAILABLE");
-          if (prize.type === "SPECIAL_PLAYER") {
-            if (!prize.specialPlayerId) throw new Error("SPECIAL_PLAYER_NOT_AVAILABLE");
-            const special = await tx.specialPlayer.findUnique({ where: { id: prize.specialPlayerId }, select: { id: true, active: true } });
-            if (!special?.active) throw new Error("SPECIAL_PLAYER_NOT_AVAILABLE");
-          }
-        }
-        const tournament = await tx.eventTournament.create({
-          data: {
-            idempotencyKey: "event-tournament-create:" + value.idempotencyKey,
-            title: value.title, description: value.description,
-            entryFeeAsset: value.entryFeeAsset ?? null, entryFeeAmount: BigInt(value.entryFeeAmount),
-            maxParticipants: value.maxParticipants, registrationEndsAt: new Date(value.registrationEndsAt),
-            startsAt: new Date(value.startsAt), endsAt: value.endsAt ? new Date(value.endsAt) : null,
-            createdByTelegramId: actor.telegramId,
-            prizes: { create: value.prizes.map((prize) => ({
-              placement: prize.placement, type: prize.type, amount: BigInt(prize.amount ?? "0"),
-              itemKey: prize.itemKey ?? null, specialPlayerId: prize.specialPlayerId ?? null,
-            })) },
-          },
-          include: { prizes: true },
-        });
-        await tx.adminAuditLog.create({ data: {
-          actorTelegramId: actor.telegramId, action: "create-event-tournament", targetType: "event-tournament",
-          targetId: tournament.id, idempotencyKey: "event-tournament-audit:" + value.idempotencyKey,
-          metadata: { title: value.title, prizeCount: value.prizes.length },
-        } });
-        return tournament;
-      }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
-      return reply.code(201).send({ tournament: { id: result.id, title: result.title, status: result.status, participantCount: 0 } });
+      const result = await port.create({
+        telegramUserId: actor.telegramId,
+        idempotencyKey: value.idempotencyKey,
+        title: value.title,
+        description: value.description,
+        entryFeeAsset: value.entryFeeAsset ?? null,
+        entryFeeAmount: value.entryFeeAmount,
+        maxParticipants: value.maxParticipants,
+        registrationEndsAt: value.registrationEndsAt,
+        startsAt: value.startsAt,
+        endsAt: value.endsAt ?? null,
+        prizes: value.prizes.map((prize) => ({
+          placement: prize.placement, type: prize.type, amount: prize.amount ?? "0",
+          itemKey: prize.itemKey ?? null, specialPlayerId: prize.specialPlayerId ?? null,
+        })),
+      });
+      const tournament = result.tournament;
+      return reply.code(result.replayed ? 200 : 201).send({
+        tournament: { id: tournament.id, title: tournament.title, status: tournament.status, participantCount: 0 },
+        replayed: result.replayed,
+      });
     } catch (error) {
-      if (error instanceof Error && ["SPECIAL_PLAYER_NOT_AVAILABLE", "STORE_ITEM_NOT_AVAILABLE"].includes(error.message)) return reply.code(409).send({ error: error.message });
-      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") return reply.code(409).send({ error: "DUPLICATE_OR_IDEMPOTENCY_CONFLICT" });
+      const code = error instanceof Error ? error.message : "TOURNAMENT_CREATE_FAILED";
+      if (["SPECIAL_PLAYER_NOT_AVAILABLE", "STORE_ITEM_NOT_AVAILABLE", "IDEMPOTENCY_CONFLICT"].includes(code))
+        return reply.code(409).send({ error: code });
+      if (["INVALID_EVENT_TOURNAMENT", "INVALID_TOURNAMENT_PRIZE", "INVALID_TOURNAMENT_PRIZE_AMOUNT"].includes(code))
+        return reply.code(400).send({ error: code });
       throw error;
     }
   });
