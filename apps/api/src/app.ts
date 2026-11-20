@@ -15,6 +15,8 @@ import { registerMatchNotificationRoutes } from "./game/match-notification-route
 import { registerGroupRoutes } from "./groups/group-routes.js";
 import type { GroupMembershipPort } from "./groups/group-membership-context.js";
 import { withGroupMembershipPort } from "./groups/group-membership-context.js";
+import type { ActionRateLimitPort } from "./groups/action-rate-limit-context.js";
+import { withActionRateLimitPort } from "./groups/action-rate-limit-context.js";
 import { registerAllianceRoutes } from "./groups/alliance-routes.js";
 import type { AlliancePort } from "./groups/alliance-context.js";
 import { withAlliancePort } from "./groups/alliance-context.js";
@@ -73,7 +75,7 @@ const healthResponse = z.object({
   version: z.string(),
 });
 
-export function buildApp(options: { logger?: boolean; pluginTimeout?: number; groupMembershipPort?: GroupMembershipPort; alliancePort?: AlliancePort; adminAlliancePort?: AdminAlliancePort; telegramUserLookupPort?: TelegramUserLookupPort; storePurchasePort?: StorePurchasePort; storeItemUsePort?: StoreItemUsePort; walletEntryPort?: WalletEntryPort; marketListingPort?: MarketListingPort; marketPurchasePort?: MarketPurchasePort; storeSnapshotPort?: StoreSnapshotPort; playerDevelopmentPort?: PlayerDevelopmentPort; clubEconomySettlementPort?: ClubEconomySettlementPort; clubManagementPort?: ClubManagementPort; specialAcquisitionPort?: SpecialAcquisitionPort; giftCodeRedemptionPort?: GiftCodeRedemptionPort; botRuntimeLeasePort?: BotRuntimeLeasePort; matchPorts?: NodeSupabaseMatchPorts; gameDashboardPort?: GameDashboardPort; walletReadPort?: WalletReadPort; clubLineupPort?: ClubLineupPort; publicPlayerRecordRepository?: PublicPlayerRecordRepository; publicClubLogoRepository?: PublicClubLogoRepository; publicClubReadRepository?: PublicClubReadRepository; eventTournamentSettlementPort?: EventTournamentSettlementPort } = {}) {
+export function buildApp(options: { logger?: boolean; pluginTimeout?: number; groupMembershipPort?: GroupMembershipPort; alliancePort?: AlliancePort; adminAlliancePort?: AdminAlliancePort; telegramUserLookupPort?: TelegramUserLookupPort; storePurchasePort?: StorePurchasePort; storeItemUsePort?: StoreItemUsePort; walletEntryPort?: WalletEntryPort; marketListingPort?: MarketListingPort; marketPurchasePort?: MarketPurchasePort; storeSnapshotPort?: StoreSnapshotPort; playerDevelopmentPort?: PlayerDevelopmentPort; clubEconomySettlementPort?: ClubEconomySettlementPort; clubManagementPort?: ClubManagementPort; specialAcquisitionPort?: SpecialAcquisitionPort; giftCodeRedemptionPort?: GiftCodeRedemptionPort; botRuntimeLeasePort?: BotRuntimeLeasePort; matchPorts?: NodeSupabaseMatchPorts; gameDashboardPort?: GameDashboardPort; walletReadPort?: WalletReadPort; clubLineupPort?: ClubLineupPort; publicPlayerRecordRepository?: PublicPlayerRecordRepository; publicClubLogoRepository?: PublicClubLogoRepository; publicClubReadRepository?: PublicClubReadRepository; eventTournamentSettlementPort?: EventTournamentSettlementPort; actionRateLimitPort?: ActionRateLimitPort } = {}) {
   const app = Fastify({
     logger: options.logger ?? process.env.NODE_ENV !== "test",
     pluginTimeout: options.pluginTimeout ?? 10_000,
@@ -104,6 +106,12 @@ export function buildApp(options: { logger?: boolean; pluginTimeout?: number; gr
   if (options.groupMembershipPort) {
     app.addHook("onRequest", (_request, _reply, done) => {
       withGroupMembershipPort(options.groupMembershipPort!, () => done());
+    });
+  }
+
+  if (options.actionRateLimitPort) {
+    app.addHook("onRequest", (_request, _reply, done) => {
+      withActionRateLimitPort(options.actionRateLimitPort!, () => done());
     });
   }
 
