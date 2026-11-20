@@ -65,6 +65,7 @@ test("event tournament auto-starts at capacity and creates a valid round-robin f
     logger: false,
     actionRateLimitPort: { async consume() { return true; } },
     eventTournamentReadPort: {
+      async getAdminRole() { return null; },
       async join(input) {
         return prisma.$transaction(async (tx) => {
           const existing = await tx.eventTournamentParticipant.findUnique({
