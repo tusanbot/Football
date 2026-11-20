@@ -8,4 +8,10 @@ export interface PlayerDevelopmentPort {
 }
 const scope=new AsyncLocalStorage<PlayerDevelopmentPort>();
 export const withPlayerDevelopmentPort=<T>(port:PlayerDevelopmentPort,fn:()=>Promise<T>)=>scope.run(port,fn);
-export const getPlayerDevelopmentPort=()=>scope.getStore();
+export const getPlayerDevelopmentPort = () => {
+  const port = scope.getStore();
+  if (!port && (process.env.NODE_ENV === "production" || process.env.ENVIRONMENT === "production")) {
+    throw new Error("PLAYER_DEVELOPMENT_SUPABASE_REPOSITORY_REQUIRED");
+  }
+  return port;
+};
