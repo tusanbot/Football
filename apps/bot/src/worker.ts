@@ -50,6 +50,15 @@ export class BotUpdateGuard {
       await this.state.storage.setAlarm(now + 24 * 60 * 60 * 1000);
       return Response.json(claim, { status: claim.result === "busy" ? 409 : 200 });
     }
+    if (action === "/heartbeat") {
+      const renewed = await this.state.storage.transaction(async transaction => {
+        const current = await transaction.get<GuardRecord>(key);
+        if (current?.state !== "processing" || current.claimToken !== payload.claimToken) return false;
+        await transaction.put(key, { ...current, updatedAt: now } satisfies GuardRecord);
+        return true;
+      });
+      return Response.json({ renewed }, { status: renewed ? 200 : 409 });
+    }
     if (action === "/complete") {
       const completed = await this.state.storage.transaction(async transaction => {
         const current = await transaction.get<GuardRecord>(key);
@@ -274,10 +283,30 @@ export default {
     const claimResult = await claim.json() as { result: string; claimToken?: string };
     if (claimResult.result === "duplicate") return new Response("ok", { status: 200 });
     if (claimResult.result !== "claimed" || !claimResult.claimToken) return new Response("Could not claim update", { status: 503 });
+    let heartbeatStopped = false;
+    let heartbeatError: Error | null = null;
+    const heartbeatTask = (async () => {
+      while (!heartbeatStopped) {
+        await new Promise<void>(resolve => setTimeout(resolve, 20_000));
+        if (heartbeatStopped) return;
+        try {
+          const renewed = await guard.fetch(new Request("https://bot-update-guard/heartbeat", {
+            method: "POST", body: JSON.stringify({ updateId, claimToken: claimResult.claimToken }),
+          }));
+          if (!renewed.ok) throw new Error("Telegram update claim heartbeat was rejected.");
+        } catch (error) {
+          heartbeatError = error instanceof Error ? error : new Error("Telegram update claim heartbeat failed.");
+          return;
+        }
+      }
+    })();
     try {
       await ensureApiReady(env);
       const { bot } = await prepareBot(env);
       await bot.handleUpdate(update as never);
+      heartbeatStopped = true;
+      await heartbeatTask;
+      if (heartbeatError) throw heartbeatError;
       // Count successfully handled updates only; failed handlers are retried by Telegram.
       schedulePilotAnalytics(recordPilotEvent(update, env), context);
       const completed = await guard.fetch(new Request("https://bot-update-guard/complete", {
@@ -286,6 +315,8 @@ export default {
       if (!completed.ok) throw new Error("Telegram update claim was lost before completion.");
       return new Response("ok", { status: 200 });
     } catch (error) {
+      heartbeatStopped = true;
+      await heartbeatTask;
       await guard.fetch(new Request("https://bot-update-guard/release", {
         method: "POST", body: JSON.stringify({ updateId, claimToken: claimResult.claimToken }),
       })).catch(() => undefined);

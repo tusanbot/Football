@@ -78,6 +78,28 @@ test("update guard fences an expired worker from completing or releasing a newer
   assert.equal((await guard.fetch(guardRequest("/complete", 456, second.claimToken))).status, 200);
 });
 
+test("update guard renews an active claim and rejects stale heartbeat tokens", async () => {
+  const storage = new MemoryStorage();
+  const guard = new BotUpdateGuard({ storage } as never);
+  const firstResponse = await guard.fetch(guardRequest("/claim", 654));
+  const first = await firstResponse.json() as { claimToken: string };
+  const initial = await storage.get<{ updatedAt: number }>("update:654");
+  await new Promise(resolve => setTimeout(resolve, 2));
+  const renewed = await guard.fetch(guardRequest("/heartbeat", 654, first.claimToken));
+  assert.equal(renewed.status, 200);
+  const afterRenewal = await storage.get<{ updatedAt: number }>("update:654");
+  assert.ok(afterRenewal!.updatedAt > initial!.updatedAt);
+
+  await storage.put("update:654", {
+    state: "processing", updatedAt: Date.now() - 60_001, claimToken: first.claimToken,
+  });
+  const takeoverResponse = await guard.fetch(guardRequest("/claim", 654));
+  const takeover = await takeoverResponse.json() as { claimToken: string };
+  assert.notEqual(takeover.claimToken, first.claimToken);
+  assert.equal((await guard.fetch(guardRequest("/heartbeat", 654, first.claimToken))).status, 409);
+  assert.equal((await guard.fetch(guardRequest("/heartbeat", 654, takeover.claimToken))).status, 200);
+});
+
 test("update guard releases failed updates only for the owning claim token", async () => {
   const storage = new MemoryStorage();
   const guard = new BotUpdateGuard({ storage } as never);
