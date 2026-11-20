@@ -2,6 +2,12 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { buildApp } from "../src/app.js";
 import { MatchServiceError, processDueMatchRuntimes } from "../src/game/match-service.js";
+import { getMatchOpponentPort } from "../src/game/match-opponents-context.js";
+import { getFriendlyMatchCreationPort } from "../src/game/friendly-match-creation-context.js";
+import { getCompetitionCreationPort } from "../src/game/competition-creation-context.js";
+import { getCompetitionReadPort } from "../src/game/competition-read-context.js";
+import { getClubMatchReadPort } from "../src/game/club-match-read-context.js";
+import { getCompetitionAdvancementPort } from "../src/game/competition-advancement-context.js";
 
 test("production API refuses to start without direct Supabase match repositories", () => {
   const previous = process.env.NODE_ENV;
@@ -49,13 +55,6 @@ test("production match worker refuses to use Prisma when Supabase runtime ports 
     else process.env.ENVIRONMENT = previousEnvironment;
   }
 });
-
-import { getMatchOpponentPort } from "../src/game/match-opponents-context.js";
-import { getFriendlyMatchCreationPort } from "../src/game/friendly-match-creation-context.js";
-import { getCompetitionCreationPort } from "../src/game/competition-creation-context.js";
-import { getCompetitionReadPort } from "../src/game/competition-read-context.js";
-import { getClubMatchReadPort } from "../src/game/club-match-read-context.js";
-import { getCompetitionAdvancementPort } from "../src/game/competition-advancement-context.js";
 
 test("production match service scopes fail closed when any request-scoped Supabase repository is missing", () => {
   const previous = process.env.NODE_ENV;
