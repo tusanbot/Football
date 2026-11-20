@@ -114,3 +114,29 @@ test("pyramid league notice operations use the atomic Supabase RPCs", async () =
  ]);
  assert.deepEqual(calls[2]?.body, { p_limit: 25, p_now: now });
 });
+
+test("friendly challenge RPC adapters cover creation, acceptance, info and credits", async () => {
+ const calls: string[] = [];
+ const responses = [
+  { challenge: { id: "challenge-1" }, asset: "FREE", goldCost: "0", remaining: { free: 2, gold: 2, purchased: 0 }, replayed: false },
+  { match: { id: "match-1" }, replayed: false },
+  { id: "challenge-1", token: "token", creatorClub: { name: "Club" }, creatorTelegramId: "123", groupTitle: null, groupTelegramId: null },
+  { userId: "user-1", purchasedCredits: 3 },
+ ];
+ const client = new SupabaseHttpClient({ url: "https://example.supabase.co", serviceRoleKey: "service-role-key-that-is-long-enough", fetchImpl: async (input) => {
+  calls.push(new URL(String(input)).pathname);
+  return new Response(JSON.stringify(responses.shift()), { status: 200, headers: { "content-type": "application/json" } });
+ }});
+ const repository = new SupabasePyramidLeagueSettlementRepository(client);
+ const now = "2026-11-20T12:34:56.789Z";
+ assert.equal((await repository.createFriendlyChallenge("user-1", "100", now, null, "challenge-key-0001")).asset, "FREE");
+ assert.equal((await repository.acceptFriendlyChallenge("user-2", "token", now)).replayed, false);
+ assert.equal((await repository.getFriendlyChallengeInfo("token", now)).id, "challenge-1");
+ assert.equal((await repository.grantPurchasedChallengeCredits("user-1", 3, now)).purchasedCredits, 3);
+ assert.deepEqual(calls, [
+  "/rest/v1/rpc/create_friendly_challenge_http",
+  "/rest/v1/rpc/accept_friendly_challenge_http",
+  "/rest/v1/rpc/get_friendly_challenge_info_http",
+  "/rest/v1/rpc/grant_friendly_challenge_credits_http",
+ ]);
+});
