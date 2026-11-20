@@ -37,7 +37,9 @@ import { registerAdminLeagueRoutes } from "../../../apps/api/src/admin-league-ro
 import { registerGiftCodeRoutes } from "../../../apps/api/src/gift-code-routes.js";
 import { registerTelegramMessageDeletionRoutes } from "../../../apps/api/src/telegram-message-deletion-routes.js";
 import { registerLeagueNoticeRoutes } from "../../../apps/api/src/league-notice-routes.js";
-import { registerAdminGroupBroadcastRoutes } from "../../../apps/api/src/admin-group-broadcast-routes.js";
+import { registerAdminGroupBroadcastRoutes, type AdminGroupBroadcastPort } from "../../../apps/api/src/admin-group-broadcast-routes.js";
+import type { AdminSeasonAwardActionPort } from "../../../apps/api/src/node-supabase-admin-season-awards.js";
+import type { AdminBroadcastCreatePort } from "../../../apps/api/src/node-supabase-admin-broadcast-create.js";
 import { registerBotRuntimeRoutes } from "../../../apps/api/src/bot-runtime-routes.js";
 import type { BotRuntimeLeasePort } from "../../../apps/api/src/bot-runtime-lease-context.js";
 import type { GroupMembershipPort } from "../../../apps/api/src/groups/group-membership-context.js";
@@ -98,7 +100,7 @@ function queryObject(url: URL): Record<string, string | string[]> {
   return query;
 }
 
-export function createWorkersApiRouter(dependencies: { publicPlayerRecords?: PublicPlayerRecordRepository; seasonAwards?: SeasonAwardRepository; publicClubRead?: PublicClubReadRepository; publicClubLogo?: PublicClubLogoRepository; specialPlayers?: SpecialPlayerCatalogRepository; botRuntimeLease?: BotRuntimeLeasePort; groupMembership?: GroupMembershipPort; alliance?: AlliancePort; adminFinancialAdjustmentPort?: AdminFinancialAdjustmentPort; adminRoleLookupPort?: AdminRoleLookupPort; adminConfigurationPort?: AdminConfigurationPort; adminConsoleReadPort?: AdminConsoleReadPort; adminBroadcastRetryPort?: AdminBroadcastRetryPort; adminModerationActionPort?: AdminModerationActionPort; adminCatalogActionPort?: AdminCatalogActionPort; adminEntityUpdatePort?: AdminEntityUpdatePort; adminAlliancePort?: AdminAlliancePort; adminPyramidLeagueActionsPort?: AdminPyramidLeagueActionsPort; adminPyramidLeagueReadPort?: AdminPyramidLeagueReadPort; adminPyramidLeagueReportsPort?: AdminPyramidLeagueReportsPort } = {}) {
+export function createWorkersApiRouter(dependencies: { publicPlayerRecords?: PublicPlayerRecordRepository; seasonAwards?: SeasonAwardRepository; publicClubRead?: PublicClubReadRepository; publicClubLogo?: PublicClubLogoRepository; specialPlayers?: SpecialPlayerCatalogRepository; botRuntimeLease?: BotRuntimeLeasePort; groupMembership?: GroupMembershipPort; alliance?: AlliancePort; adminFinancialAdjustmentPort?: AdminFinancialAdjustmentPort; adminRoleLookupPort?: AdminRoleLookupPort; adminConfigurationPort?: AdminConfigurationPort; adminConsoleReadPort?: AdminConsoleReadPort; adminBroadcastRetryPort?: AdminBroadcastRetryPort; adminModerationActionPort?: AdminModerationActionPort; adminCatalogActionPort?: AdminCatalogActionPort; adminEntityUpdatePort?: AdminEntityUpdatePort; adminAlliancePort?: AdminAlliancePort; adminPyramidLeagueActionsPort?: AdminPyramidLeagueActionsPort; adminPyramidLeagueReadPort?: AdminPyramidLeagueReadPort; adminPyramidLeagueReportsPort?: AdminPyramidLeagueReportsPort; adminGroupBroadcastPort?: AdminGroupBroadcastPort; adminSeasonAwardActionPort?: AdminSeasonAwardActionPort; adminBroadcastCreatePort?: AdminBroadcastCreatePort } = {}) {
   const registry = new RouteRegistry();
   const registrar = registry as unknown as Parameters<typeof registerTelegramAuthRoutes>[0];
   registerTelegramAuthRoutes(registrar);
@@ -111,12 +113,12 @@ export function createWorkersApiRouter(dependencies: { publicPlayerRecords?: Pub
   registerMatchNotificationRoutes(registrar);
   registerGroupRoutes(registrar, { requireMembershipPort: true });
   registerAllianceRoutes(registrar, { requirePort: true, port: dependencies.alliance });
-  registerAdminRoutes(registrar, { adminAlliancePort: dependencies.adminAlliancePort, adminFinancialAdjustmentPort: dependencies.adminFinancialAdjustmentPort, adminRoleLookupPort: dependencies.adminRoleLookupPort, adminConfigurationPort: dependencies.adminConfigurationPort, adminConsoleReadPort: dependencies.adminConsoleReadPort, adminBroadcastRetryPort: dependencies.adminBroadcastRetryPort, adminModerationActionPort: dependencies.adminModerationActionPort, adminCatalogActionPort: dependencies.adminCatalogActionPort, adminEntityUpdatePort: dependencies.adminEntityUpdatePort });
+  registerAdminRoutes(registrar, { adminAlliancePort: dependencies.adminAlliancePort, adminFinancialAdjustmentPort: dependencies.adminFinancialAdjustmentPort, adminRoleLookupPort: dependencies.adminRoleLookupPort, adminConfigurationPort: dependencies.adminConfigurationPort, adminConsoleReadPort: dependencies.adminConsoleReadPort, adminBroadcastRetryPort: dependencies.adminBroadcastRetryPort, adminModerationActionPort: dependencies.adminModerationActionPort, adminCatalogActionPort: dependencies.adminCatalogActionPort, adminEntityUpdatePort: dependencies.adminEntityUpdatePort, adminSeasonAwardActionPort: dependencies.adminSeasonAwardActionPort, adminBroadcastCreatePort: dependencies.adminBroadcastCreatePort });
   registerAdminLeagueRoutes(registrar, { adminAlliancePort: dependencies.adminAlliancePort, adminRoleLookupPort: dependencies.adminRoleLookupPort, adminPyramidLeagueActionsPort: dependencies.adminPyramidLeagueActionsPort, adminPyramidLeagueReadPort: dependencies.adminPyramidLeagueReadPort, adminPyramidLeagueReportsPort: dependencies.adminPyramidLeagueReportsPort });
   registerGiftCodeRoutes(registrar);
   registerTelegramMessageDeletionRoutes(registrar);
   registerLeagueNoticeRoutes(registrar);
-  registerAdminGroupBroadcastRoutes(registrar);
+  registerAdminGroupBroadcastRoutes(registrar, dependencies.adminGroupBroadcastPort);
   registerBotRuntimeRoutes(registrar, { leasePort: dependencies.botRuntimeLease, requireLeasePort: true });
   registerPublicClubRoutes(registrar, dependencies.publicClubLogo, dependencies.publicClubRead);
   registerPublicPlayerRecordRoutes(registrar, dependencies.publicPlayerRecords);
