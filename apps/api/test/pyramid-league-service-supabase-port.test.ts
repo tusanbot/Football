@@ -29,10 +29,10 @@ function fakePort(calls: Array<{ method: string; args: unknown[] }>): PyramidLea
     async claimNotices(...args) { calls.push({ method: "claimNotices", args }); return { notices: [] }; },
     async completeNotice(...args) { calls.push({ method: "completeNotice", args }); return { completed: true }; },
     async failNotice(...args) { calls.push({ method: "failNotice", args }); return { owned: true, rescheduled: true, attempts: 1 }; },
-    async createFriendlyChallenge(...args) { calls.push({ method: "createFriendlyChallenge", args }); return { challenge: {}, asset: "FREE", goldCost: "0", remaining: {}, replayed: false }; },
-    async acceptFriendlyChallenge(...args) { calls.push({ method: "acceptFriendlyChallenge", args }); return { match: {}, replayed: false }; },
-    async getFriendlyChallengeInfo(...args) { calls.push({ method: "getFriendlyChallengeInfo", args }); return { id: "challenge-1", token: "token", creatorClub: {} }; },
-    async grantPurchasedChallengeCredits(...args) { calls.push({ method: "grantPurchasedChallengeCredits", args }); return { userId: "user-1", purchasedCredits: 1 }; },
+    async createFriendlyChallenge(...args) { calls.push({ method: "createFriendlyChallenge", args }); return { challenge: { id: "challenge-1", token: "token", status: "OPEN", expiresAt: "2026-11-21T12:00:00.000Z", creatorUserId: "user-1", creatorClubId: "club-1", groupId: null, idempotencyKey: "challenge-key-0001", chargeAsset: "FREE", goldCost: "0", createdAt: "2026-11-20T12:00:00.000Z", matchId: null }, asset: "FREE", goldCost: "0", remaining: { free: 2, gold: 2, purchased: 0 }, replayed: false }; },
+    async acceptFriendlyChallenge(...args) { calls.push({ method: "acceptFriendlyChallenge", args }); return { match: { id: "match-1", homeClubId: "club-1", awayClubId: "club-2" }, replayed: false }; },
+    async getFriendlyChallengeInfo(...args) { calls.push({ method: "getFriendlyChallengeInfo", args }); return { id: "challenge-1", token: "token", status: "OPEN", expiresAt: "2026-11-21T12:00:00.000Z", creatorClub: { name: "Club", level: 1, reputation: 0 }, creatorTelegramId: "123", groupTitle: null, groupTelegramId: null }; },
+    async grantPurchasedChallengeCredits(...args) { calls.push({ method: "grantPurchasedChallengeCredits", args }); return { id: "usage-1", userId: "user-1", usageDate: "2026-11-20", freeUsed: 0, goldUsed: 0, purchasedCredits: 1 }; },
   };
 }
 
