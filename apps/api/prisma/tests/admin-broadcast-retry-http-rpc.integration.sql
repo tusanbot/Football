@@ -2,7 +2,7 @@ BEGIN;
 DO $test$
 DECLARE v jsonb; actor text:='919900096';
 BEGIN
- INSERT INTO public."User"(id,"telegramId") VALUES('ci-admin-broadcast-user','919900096002');
+ INSERT INTO public."User"(id,"telegramId","updatedAt") VALUES('ci-admin-broadcast-user','919900096002',clock_timestamp());
  INSERT INTO public."TelegramGroup"(id,"telegramId",title) VALUES('ci-admin-broadcast-group','-100919900096002','CI broadcast group');
  INSERT INTO public."AdminGroupBroadcast"(id,"idempotencyKey",message,"createdByTelegramId")
  VALUES('ci-admin-broadcast-id','ci-admin-broadcast-key-001','CI retry','919900096');
