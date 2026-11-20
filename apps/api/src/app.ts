@@ -37,7 +37,6 @@ import type { PlayerDevelopmentPort } from "./players/player-development-context
 import { withPlayerDevelopmentPort } from "./players/player-development-context.js";
 import type { ClubEconomySettlementPort } from "./game/club-economy-settlement-context.js";
 import { withClubEconomySettlementPort } from "./game/club-economy-settlement-context.js";
-import { prisma } from "./db.js";
 import { parseAdminTelegramIds, parseCorsOrigins } from "./runtime-config.js";
 import { registerAdminRoutes } from "./admin-routes.js";
 import type { AdminAlliancePort } from "./groups/node-supabase-alliance.js";
@@ -196,7 +195,6 @@ export function buildApp(options: { logger?: boolean; pluginTimeout?: number; gr
 
   app.get("/ready", async (request, reply) => {
     const missing = [
-      ...(!process.env.DATABASE_URL ? ["DATABASE_URL"] : []),
       ...(!process.env.TELEGRAM_BOT_TOKEN ? ["TELEGRAM_BOT_TOKEN"] : []),
       ...(!process.env.BOT_API_SECRET || process.env.BOT_API_SECRET.length < 32 ? ["BOT_API_SECRET"] : []),
       ...(!process.env.CORS_ORIGIN?.split(",").some((origin) => origin.trim()) ? ["CORS_ORIGIN"] : []),
@@ -204,12 +202,6 @@ export function buildApp(options: { logger?: boolean; pluginTimeout?: number; gr
       ...(/^(replace-with|change-me|your-)/i.test(process.env.BOT_API_SECRET ?? "") ? ["BOT_API_SECRET"] : []),
     ];
     if (missing.length) return reply.code(503).send({ status: "not_ready", missing });
-    try {
-      await prisma.$queryRaw`SELECT 1`;
-    } catch (error) {
-      request.log.error({ error }, "Readiness PostgreSQL compatibility check failed");
-      return reply.code(503).send({ status: "not_ready", missing: ["DATABASE_CONNECTION"] });
-    }
     if (!options.supabaseHttpClient) {
       return reply.code(503).send({ status: "not_ready", missing: ["SUPABASE_HTTP_CLIENT"] });
     }
@@ -233,10 +225,6 @@ export function buildApp(options: { logger?: boolean; pluginTimeout?: number; gr
       }),
     ),
   );
-
-  app.addHook("onClose", async () => {
-    await prisma.$disconnect();
-  });
 
   // Route registration is synchronous; handlers perform their own async work.
   registerTelegramAuthRoutes(app);
