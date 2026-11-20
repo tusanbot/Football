@@ -1,4 +1,5 @@
 import { AsyncLocalStorage } from "node:async_hooks";
+import type { CompetitionAdvancementResult } from "./competition-advancement-context.js";
 
 export interface MatchRuntimeSettlementCommand {
   matchId: string;
@@ -28,6 +29,7 @@ export interface MatchRuntimeSettlementResult {
   attendance: number;
   ticketRevenue: string;
   events: Array<Record<string, unknown>>;
+  advancement: CompetitionAdvancementResult | null;
 }
 export interface MatchRuntimeSettlementPort {
   settle(input: MatchRuntimeSettlementCommand): Promise<MatchRuntimeSettlementResult>;
