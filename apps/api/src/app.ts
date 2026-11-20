@@ -82,7 +82,7 @@ export function buildApp(options: { logger?: boolean; pluginTimeout?: number; gr
   // The match service still contains Prisma compatibility paths for isolated legacy
   // tests and migration parity. Never allow production HTTP routes to reach those
   // paths: the complete direct-HTTPS Supabase match repository set is mandatory.
-  if (process.env.NODE_ENV === "production" && (!options.matchPorts || !options.supabaseHttpClient)) {
+  if ((process.env.NODE_ENV === "production" || process.env.ENVIRONMENT === "production") && (!options.matchPorts || !options.supabaseHttpClient)) {
     throw new Error("SUPABASE_MATCH_PORTS_REQUIRED: production API must use direct Supabase HTTP repositories and a Supabase readiness client.");
   }
   const app = Fastify({
