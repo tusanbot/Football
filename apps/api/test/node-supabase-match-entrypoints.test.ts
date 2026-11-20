@@ -18,7 +18,7 @@ function client(responses:unknown[]){
  }});
  return {http,calls};
 }
-const match={id:"match-1",idempotencyKey:"friendly-key-123",type:"FRIENDLY",status:"SCHEDULED",homeClubId:"home",awayClubId:"away",competitionId:null,rulesSnapshot:{},tieId:null,leg:1,round:null,scheduledAt:"2026-11-21T12:00:00.000Z",startedAt:null,completedAt:null,seed:"seed-1",simulationVersion:1,homeScore:null,awayScore:null,homePenalties:null,awayPenalties:null,winnerClubId:null,attendance:0,ticketRevenue:"0",homeExpectedGoals:null,awayExpectedGoals:null,createdAt:"2026-11-20T12:00:00.000Z",updatedAt:"2026-11-20T12:00:00.000Z"};
+const match={id:"match-1",idempotencyKey:"friendly-key-123",type:"FRIENDLY" as const,status:"SCHEDULED" as const,homeClubId:"home",awayClubId:"away",competitionId:null,rulesSnapshot:{},tieId:null,leg:1,round:null,scheduledAt:"2026-11-21T12:00:00.000Z",startedAt:null,completedAt:null,seed:"seed-1",simulationVersion:1,homeScore:null,awayScore:null,homePenalties:null,awayPenalties:null,winnerClubId:null,attendance:0,ticketRevenue:"0",homeExpectedGoals:null,awayExpectedGoals:null,createdAt:"2026-11-20T12:00:00.000Z",updatedAt:"2026-11-20T12:00:00.000Z"};
 const competition={id:"competition-1",idempotencyKey:"league-key-123",name:"Autumn League",season:2026,format:"LEAGUE",status:"REGISTRATION",maxTeams:4,cupLegs:1,rules:{penaltiesOnDraw:false},createdByClubId:"home",groupId:null,allianceId:null,allianceSeasonId:null,startsAt:null,completedAt:null,createdAt:"2026-11-20T12:00:00.000Z",updatedAt:"2026-11-20T12:00:00.000Z"};
 
 test("opponent discovery uses authenticated HTTP RPC, bounds search and validates response",async()=>{
