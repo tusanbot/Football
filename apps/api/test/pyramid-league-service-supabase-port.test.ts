@@ -21,6 +21,8 @@ function fakePort(calls: Array<{ method: string; args: unknown[] }>): PyramidLea
       calls.push({ method: "processDue", args });
       return { completedLeagues: 1, processed: 2, accepted: 2 };
     },
+    async listLeagues(...args) { calls.push({ method: "listLeagues", args }); return { season: 2027, tiers: [], history: [], promotionOffers: [] }; },
+    async getClubHistory(...args) { calls.push({ method: "getClubHistory", args }); return { club: {}, stats: {}, tiers: [], movements: [], leagues: [] }; },
   };
 }
 
@@ -44,4 +46,17 @@ test("pyramid league finalization, promotion response and due work use the Supab
   assert.deepEqual(calls[0]?.args, ["competition-1", now.toISOString()]);
   assert.deepEqual(calls[1]?.args, ["user-1", "offer-1", true, now.toISOString()]);
   assert.deepEqual(calls[2]?.args, [now.toISOString(), 10]);
+});
+
+test("pyramid league overview and club history use the Supabase request scope", async () => {
+ const calls: Array<{ method: string; args: unknown[] }> = [];
+ await withPyramidLeagueSettlementPort(fakePort(calls), async () => {
+  assert.equal((await import("../src/game/league-pyramid-service.js")).listPyramidLeagues("user-1").then ? true : false, true);
+  const service = await import("../src/game/league-pyramid-service.js");
+  const overview = await service.listPyramidLeagues("user-1");
+  const history = await service.getPyramidLeagueClubHistory("user-1");
+  assert.equal(overview.season, 2027);
+  assert.ok(history.stats);
+ });
+ assert.deepEqual(calls.map((call) => call.method), ["listLeagues", "getClubHistory"]);
 });
