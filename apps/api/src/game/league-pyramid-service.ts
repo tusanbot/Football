@@ -659,7 +659,7 @@ export async function markLeagueNoticesRead(userId: string) {
 }
 
 
-export async function processDuePromotionOffers(now = new Date(), limit = 50) {
+export async function processDuePromotionOffers(now = new Date(), limit = 50): Promise<{completedLeagues:number;processed:number;accepted:number;failed:number}> {
   const settlementPort=getPyramidLeagueSettlementPort();
   if(settlementPort)return settlementPort.processDue(now.toISOString(),limit);
   const pendingLeagues = await prisma.pyramidLeague.findMany({
@@ -667,11 +667,13 @@ export async function processDuePromotionOffers(now = new Date(), limit = 50) {
     orderBy: { createdAt: "asc" }, take: limit, select: { competitionId: true },
   });
   let completedLeagues = 0;
+  let failed = 0;
   for (const pending of pendingLeagues) {
     try {
       const result = await processPyramidLeagueCompletion(pending.competitionId, now);
       if (result.processed) completedLeagues += 1;
     } catch (error) {
+      failed += 1;
       console.warn("Could not finalize pyramid league:", pending.competitionId, error);
     }
   }
@@ -682,7 +684,8 @@ export async function processDuePromotionOffers(now = new Date(), limit = 50) {
   });
   let accepted = 0;
   for (const item of due) {
-    const didAccept = await prisma.$transaction(async (tx) => {
+    try {
+      const didAccept = await prisma.$transaction(async (tx) => {
       const offer = await tx.leaguePromotionOffer.findUnique({
         where: { id: item.id },
         include: { league: true, club: { select: { id: true, ownerId: true } } },
@@ -704,7 +707,11 @@ export async function processDuePromotionOffers(now = new Date(), limit = 50) {
       await assignQueueIfReady(tx, offer.targetTier, season, now);
       return true;
     }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
-    if (didAccept) accepted += 1;
+      if (didAccept) accepted += 1;
+    } catch (error) {
+      failed += 1;
+      console.warn("Could not process expired pyramid promotion offer:", item.id, error);
+    }
   }
-  return { completedLeagues, processed: due.length, accepted };
+  return { completedLeagues, processed: due.length, accepted, failed };
 }
