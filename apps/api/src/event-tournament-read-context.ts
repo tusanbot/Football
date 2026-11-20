@@ -11,6 +11,7 @@ export interface EventTournamentJoinResult {
  fixturesCreated?:number; rounds?:number; startsAt?:string; competitionId?:string;
 }
 export interface EventTournamentReadPort {
+ getAdminRole(telegramId:string):Promise<{role:string;active:boolean}|null>;
  join(input:EventTournamentJoinInput):Promise<EventTournamentJoinResult>;
  create(input:EventTournamentCreateInput):Promise<{tournament:Record<string,unknown>;replayed:boolean}>;
  listForUser(userId:string):Promise<Record<string, unknown>[]>;
