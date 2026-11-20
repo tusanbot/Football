@@ -98,6 +98,8 @@ jobs:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/football_empire
       - name: Test match runtime snapshot RPC and access controls
         run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f apps/api/prisma/tests/match-runtime-snapshot-rpc.integration.sql
+      - name: Test match runtime coordination RPC atomicity, lease ownership and grants
+        run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f apps/api/prisma/tests/match-runtime-coordination-rpc.integration.sql
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/football_empire
       - name: Test pyramid league application, queue assignment and idempotency
