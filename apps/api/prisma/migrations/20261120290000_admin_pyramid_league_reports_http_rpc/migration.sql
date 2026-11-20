@@ -105,8 +105,10 @@ BEGIN
  SELECT jsonb_build_object(
   'totals',(SELECT to_jsonb(totals) FROM totals),
   'seasons',COALESCE((SELECT jsonb_agg(to_jsonb(s) ORDER BY season DESC) FROM season_rows s),'[]'::jsonb),
-  'clubRankings',COALESCE((SELECT jsonb_agg(jsonb_build_object('clubId',club_id,'clubName',club_name,'seasons',seasons,'championships',championships,'podiums',podiums,'promotions',promotions,'relegations',relegations,'leagueEntries',"leagueEntries")
-    ORDER BY championships DESC,podiums DESC,promotions DESC,relegations,club_name LIMIT 50) FROM club_rankings),'[]'::jsonb),
+  'clubRankings',COALESCE((SELECT jsonb_agg(to_jsonb(r)) FROM (
+    SELECT jsonb_build_object('clubId',club_id,'clubName',club_name,'seasons',seasons,'championships',championships,'podiums',podiums,'promotions',promotions,'relegations',relegations,'leagueEntries',"leagueEntries") value
+    FROM club_rankings ORDER BY championships DESC,podiums DESC,promotions DESC,relegations,club_name LIMIT 50
+   ) r),'[]'::jsonb),
   'movements',COALESCE((SELECT jsonb_agg(to_jsonb(m) ORDER BY season DESC,tier,position) FROM (SELECT * FROM movements ORDER BY season DESC,tier,position LIMIT 200) m),'[]'::jsonb),
   'leagueHistory',COALESCE((SELECT value FROM history),'[]'::jsonb),
   'auditLogs',(SELECT value FROM audit),
