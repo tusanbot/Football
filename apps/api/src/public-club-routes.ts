@@ -1,7 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { requireTelegramUser } from "./auth/require-telegram-user.js";
-import { prisma } from "./db.js";
 import { consumeAllianceActionRateLimit } from "./groups/alliance-rate-limit.js";
 import type { PublicClubLogoRepository } from "./node-supabase-public-club-logo.js";
 
@@ -79,32 +78,14 @@ function statsFor(entries: Array<{ finalPosition: number | null; league: { seaso
 function toIso(value: Date | string) { return value instanceof Date ? value.toISOString() : new Date(value).toISOString(); }
 function tierName(tier: number) { return ["", "سطح اول", "سطح دوم", "سطح سوم", "سطح چهارم", "سطح پنجم", "سطح ششم", "سطح هفتم"][tier] ?? "سطح " + tier; }
 
-const completedEntries = {
-  where: { finalPosition: { not: null } },
-  include: {
-    league: {
-      include: {
-        competition: { select: { status: true } },
-        awards: { select: { clubId: true, placement: true, awardName: true, awardType: true } },
-        promotionOffers: { select: { clubId: true, status: true, targetTier: true, finalPosition: true, resolvedAt: true } },
-      },
-    },
-  },
-  orderBy: { joinedAt: "desc" as const },
-};
+
 
 export function registerPublicClubRoutes(app: FastifyInstance, logoRepository?: PublicClubLogoRepository, readRepository?: PublicClubReadRepository) {
   app.get("/v1/clubs/public", async (request, reply) => {
     const query = z.object({ q: z.string().trim().max(40).optional(), limit: z.coerce.number().int().min(1).max(100).default(50) }).safeParse(request.query);
     if (!query.success) return reply.code(400).send({ error: "INVALID_CLUB_QUERY" });
-    const clubs = readRepository ? await readRepository.list(query.data.q ?? null) : await prisma.club.findMany({
-      ...(query.data.q ? { where: { name: { contains: query.data.q } } } : {}),
-      take: 200,
-      select: {
-        id: true, name: true, level: true, reputation: true, logoMime: true,
-        pyramidLeagueEntries: completedEntries,
-      },
-    });
+    if (!readRepository) return reply.code(503).send({ error: "SUPABASE_PUBLIC_CLUB_READ_UNAVAILABLE" });
+    const clubs = await readRepository.list(query.data.q ?? null);
     const ranked = clubs.map((club) => {
       const history = statsFor(club.pyramidLeagueEntries, club.id);
       return { id: club.id, name: club.name, level: club.level, reputation: club.reputation,
@@ -116,10 +97,8 @@ export function registerPublicClubRoutes(app: FastifyInstance, logoRepository?: 
   app.get("/v1/clubs/:clubId/profile", async (request, reply) => {
     const params = z.object({ clubId: z.string().min(1).max(64) }).safeParse(request.params);
     if (!params.success) return reply.code(400).send({ error: "INVALID_CLUB_ID" });
-    const club = readRepository ? await readRepository.profile(params.data.clubId) : await prisma.club.findUnique({
-      where: { id: params.data.clubId },
-      include: { pyramidLeagueEntries: completedEntries },
-    });
+    if (!readRepository) return reply.code(503).send({ error: "SUPABASE_PUBLIC_CLUB_READ_UNAVAILABLE" });
+    const club = await readRepository.profile(params.data.clubId);
     if (!club) return reply.code(404).send({ error: "CLUB_NOT_FOUND" });
     const history = statsFor(club.pyramidLeagueEntries, club.id);
     return {
@@ -143,29 +122,11 @@ export function registerPublicClubRoutes(app: FastifyInstance, logoRepository?: 
     if (!query.success || query.data.first === query.data.second) {
       return reply.code(400).send({ error: "INVALID_CLUB_COMPARISON" });
     }
-    const comparison = readRepository ? await readRepository.compare(query.data.first, query.data.second) : null;
-    if (readRepository && !comparison) return reply.code(404).send({ error: "CLUB_NOT_FOUND" });
-    const [first, second] = comparison ? comparison.clubs : await Promise.all([
-      prisma.club.findUnique({ where: { id: query.data.first }, select: { id: true, name: true, level: true, reputation: true, logoMime: true } }),
-      prisma.club.findUnique({ where: { id: query.data.second }, select: { id: true, name: true, level: true, reputation: true, logoMime: true } }),
-    ]);
-    if (!first || !second) return reply.code(404).send({ error: "CLUB_NOT_FOUND" });
-    const matches = comparison ? comparison.matches : await prisma.footballMatch.findMany({
-      where: {
-        status: "COMPLETED",
-        OR: [
-          { homeClubId: first.id, awayClubId: second.id },
-          { homeClubId: second.id, awayClubId: first.id },
-        ],
-      },
-      orderBy: [{ completedAt: "desc" }, { scheduledAt: "desc" }],
-      select: {
-        id: true, scheduledAt: true, completedAt: true, homeClubId: true, awayClubId: true,
-        homeScore: true, awayScore: true, type: true,
-        homeClub: { select: { name: true } }, awayClub: { select: { name: true } },
-        competition: { select: { name: true, season: true } },
-      },
-    });
+    if (!readRepository) return reply.code(503).send({ error: "SUPABASE_PUBLIC_CLUB_READ_UNAVAILABLE" });
+    const comparison = await readRepository.compare(query.data.first, query.data.second);
+    if (!comparison) return reply.code(404).send({ error: "CLUB_NOT_FOUND" });
+    const [first, second] = comparison.clubs;
+    const matches = comparison.matches;
     const summarize = (clubId: string) => {
       const summary = { played: 0, won: 0, drawn: 0, lost: 0, goalsFor: 0, goalsAgainst: 0, homePlayed: 0, awayPlayed: 0, biggestWin: null as null | { margin: number; score: string; opponent: string } };
       for (const match of matches) {
@@ -207,9 +168,8 @@ export function registerPublicClubRoutes(app: FastifyInstance, logoRepository?: 
   app.get("/v1/clubs/:clubId/logo", async (request, reply) => {
     const params = z.object({ clubId: z.string().min(1).max(64) }).safeParse(request.params);
     if (!params.success) return reply.code(400).send({ error: "INVALID_CLUB_ID" });
-    const club = logoRepository
-      ? await logoRepository.getLogo(params.data.clubId)
-      : await prisma.club.findUnique({ where: { id: params.data.clubId }, select: { logoData: true, logoMime: true } });
+    if (!logoRepository) return reply.code(503).send({ error: "SUPABASE_CLUB_LOGO_UNAVAILABLE" });
+    const club = await logoRepository.getLogo(params.data.clubId);
     if (!club?.logoData || !club.logoMime) return reply.code(404).send({ error: "CLUB_LOGO_NOT_FOUND" });
     return reply.header("content-type", club.logoMime).header("cache-control", "public, max-age=300").send(Buffer.from(club.logoData, "base64"));
   });
@@ -223,35 +183,8 @@ export function registerPublicClubRoutes(app: FastifyInstance, logoRepository?: 
     const bytes = Buffer.from(body.data.base64, "base64");
     if (bytes.length > MAX_LOGO_BYTES || bytes.toString("base64").replace(/=+$/, "") !== body.data.base64.replace(/=+$/, "")
       || !isValidImage(bytes, body.data.mimeType)) return reply.code(400).send({ error: "INVALID_CLUB_LOGO" });
-    const result = logoRepository
-      ? await logoRepository.manageLogo(user.id, "upload", body.data.base64, body.data.mimeType)
-      : await prisma.$transaction(async (tx) => {
-      const current = await tx.club.findUnique({
-        where: { ownerId: user.id },
-        select: {
-          id: true,
-          competitionEntries: {
-            where: { competition: { status: "ACTIVE" } }, take: 1,
-            select: { competition: { select: { id: true, name: true } } },
-          },
-          pyramidLeagueEntries: {
-            where: { league: { competition: { status: "ACTIVE" } } }, take: 1,
-            select: { league: { select: { competition: { select: { id: true, name: true } } } } },
-          },
-        },
-      });
-      if (!current) return { kind: "NOT_FOUND" as const };
-      const activeCompetition = current.competitionEntries[0]?.competition
-        ?? current.pyramidLeagueEntries[0]?.league.competition
-        ?? null;
-      if (activeCompetition) return { kind: "LOCKED" as const, activeCompetition };
-      const club = await tx.club.update({
-        where: { id: current.id },
-        data: { logoData: body.data.base64, logoMime: body.data.mimeType },
-        select: { id: true, name: true },
-      });
-      return { kind: "UPDATED" as const, club };
-    }, { isolationLevel: "Serializable" });
+    if (!logoRepository) return reply.code(503).send({ error: "SUPABASE_CLUB_LOGO_UNAVAILABLE" });
+    const result = await logoRepository.manageLogo(user.id, "upload", body.data.base64, body.data.mimeType);
     if (result.kind === "NOT_FOUND") return reply.code(404).send({ error: "CLUB_NOT_FOUND" });
     if (result.kind === "LOCKED") return reply.code(409).send({ error: "CLUB_EDIT_LOCKED_ACTIVE_LEAGUE", activeCompetition: result.activeCompetition });
     if (!result.club) return reply.code(500).send({ error: "CLUB_LOGO_UPDATE_FAILED" });
@@ -262,31 +195,8 @@ export function registerPublicClubRoutes(app: FastifyInstance, logoRepository?: 
     const user = await requireTelegramUser(request);
     if (!user) return reply.code(401).send({ error: "UNAUTHENTICATED" });
     if (!await consumeAllianceActionRateLimit({ telegramUserId: user.telegramId, telegramGroupId: "global", action: "club-logo-delete", limit: 5 })) return reply.code(429).send({ error: "CLUB_LOGO_RATE_LIMITED", retryAfterSeconds: 60 });
-    const result = logoRepository
-      ? await logoRepository.manageLogo(user.id, "delete")
-      : await prisma.$transaction(async (tx) => {
-      const current = await tx.club.findUnique({
-        where: { ownerId: user.id },
-        select: {
-          id: true,
-          competitionEntries: {
-            where: { competition: { status: "ACTIVE" } }, take: 1,
-            select: { competition: { select: { id: true, name: true } } },
-          },
-          pyramidLeagueEntries: {
-            where: { league: { competition: { status: "ACTIVE" } } }, take: 1,
-            select: { league: { select: { competition: { select: { id: true, name: true } } } } },
-          },
-        },
-      });
-      if (!current) return { kind: "NOT_FOUND" as const };
-      const activeCompetition = current.competitionEntries[0]?.competition
-        ?? current.pyramidLeagueEntries[0]?.league.competition
-        ?? null;
-      if (activeCompetition) return { kind: "LOCKED" as const, activeCompetition };
-      await tx.club.update({ where: { id: current.id }, data: { logoData: null, logoMime: null }, select: { id: true } });
-      return { kind: "UPDATED" as const };
-    }, { isolationLevel: "Serializable" });
+    if (!logoRepository) return reply.code(503).send({ error: "SUPABASE_CLUB_LOGO_UNAVAILABLE" });
+    const result = await logoRepository.manageLogo(user.id, "delete");
     if (result.kind === "NOT_FOUND") return reply.code(404).send({ error: "CLUB_NOT_FOUND" });
     if (result.kind === "LOCKED") return reply.code(409).send({ error: "CLUB_EDIT_LOCKED_ACTIVE_LEAGUE", activeCompetition: result.activeCompetition });
     return { updated: true, removed: true };
