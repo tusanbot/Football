@@ -1,7 +1,14 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { buildApp } from "../src/app.js";
-import { MatchServiceError, processDueMatchRuntimes } from "../src/game/match-service.js";
+import {
+  MatchServiceError,
+  claimDueMatchRuntimes,
+  enqueueDueMatchRuntimes,
+  processDueMatchRuntimes,
+  releaseMatchRuntimeLease,
+  simulateScheduledMatch,
+} from "../src/game/match-service.js";
 import { getMatchOpponentPort } from "../src/game/match-opponents-context.js";
 import { getFriendlyMatchCreationPort } from "../src/game/friendly-match-creation-context.js";
 import { getCompetitionCreationPort } from "../src/game/competition-creation-context.js";
@@ -118,6 +125,44 @@ test("production match worker refuses to start without event tournament settleme
       ),
       (error: unknown) => error instanceof MatchServiceError
         && error.code === "WORKER_MATCH_RUNTIME_REPOSITORY_SET_INCOMPLETE",
+    );
+  } finally {
+    if (previousNodeEnv === undefined) delete process.env.NODE_ENV;
+    else process.env.NODE_ENV = previousNodeEnv;
+    if (previousEnvironment === undefined) delete process.env.ENVIRONMENT;
+    else process.env.ENVIRONMENT = previousEnvironment;
+  }
+});
+
+
+test("every exported production match worker entry point fails closed without Supabase repositories", async () => {
+  const previousNodeEnv = process.env.NODE_ENV;
+  const previousEnvironment = process.env.ENVIRONMENT;
+  process.env.NODE_ENV = "production";
+  delete process.env.ENVIRONMENT;
+  const expected = (error: unknown) => error instanceof MatchServiceError
+    && error.code === "WORKER_MATCH_RUNTIME_REPOSITORY_SET_INCOMPLETE";
+  try {
+    await assert.rejects(enqueueDueMatchRuntimes(), expected);
+    await assert.rejects(claimDueMatchRuntimes("test-worker"), expected);
+    await assert.rejects(releaseMatchRuntimeLease("runtime-id", "lease-token", null), expected);
+  } finally {
+    if (previousNodeEnv === undefined) delete process.env.NODE_ENV;
+    else process.env.NODE_ENV = previousNodeEnv;
+    if (previousEnvironment === undefined) delete process.env.ENVIRONMENT;
+    else process.env.ENVIRONMENT = previousEnvironment;
+  }
+});
+
+test("production cannot invoke the legacy one-shot match simulation", async () => {
+  const previousNodeEnv = process.env.NODE_ENV;
+  const previousEnvironment = process.env.ENVIRONMENT;
+  process.env.NODE_ENV = "production";
+  delete process.env.ENVIRONMENT;
+  try {
+    await assert.rejects(
+      simulateScheduledMatch("user-id", "match-id"),
+      (error: unknown) => error instanceof MatchServiceError && error.code === "MATCH_RUNTIME_AUTOMATIC",
     );
   } finally {
     if (previousNodeEnv === undefined) delete process.env.NODE_ENV;
