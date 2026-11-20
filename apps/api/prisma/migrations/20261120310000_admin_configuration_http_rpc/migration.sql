@@ -44,7 +44,7 @@ BEGIN
    RAISE EXCEPTION USING MESSAGE='INVALID_ADMIN_ROLE',ERRCODE='22023';
   END IF;
   IF p_action='set-admin-role' THEN
-   IF p_role NOT IN ('football','economy','moderator') THEN
+   IF p_role IS NULL OR p_role NOT IN ('football','economy','moderator') THEN
     RAISE EXCEPTION USING MESSAGE='INVALID_ADMIN_ROLE',ERRCODE='22023';
    END IF;
    INSERT INTO public."AdminRoleAssignment"(id,"telegramId",role,active,"createdByTelegramId","updatedByTelegramId","createdAt","updatedAt")
