@@ -12,6 +12,30 @@ import { roundCompetitionKickoffToTehranHour } from "../src/game/match-schedule.
 import { acceptFriendlyChallenge, createFriendlyChallenge } from "../src/game/league-pyramid-service.js";
 
 
+test("production match execution fails closed without Supabase worker ports and rejects legacy simulation", async () => {
+  const previousNodeEnv = process.env.NODE_ENV;
+  const previousEnvironment = process.env.ENVIRONMENT;
+  process.env.NODE_ENV = "production";
+  delete process.env.ENVIRONMENT;
+  try {
+    await assert.rejects(
+      processDueMatchRuntimes("production-guard-test", new Date("2026-11-20T12:00:00.000Z")),
+      (error: unknown) => error instanceof Error
+        && error.message === "WORKER_MATCH_RUNTIME_REPOSITORY_SET_INCOMPLETE",
+    );
+    await assert.rejects(
+      simulateScheduledMatch("user-1", "match-1"),
+      (error: unknown) => error instanceof Error && "code" in error
+        && error.code === "MATCH_RUNTIME_AUTOMATIC",
+    );
+  } finally {
+    if (previousNodeEnv === undefined) delete process.env.NODE_ENV;
+    else process.env.NODE_ENV = previousNodeEnv;
+    if (previousEnvironment === undefined) delete process.env.ENVIRONMENT;
+    else process.env.ENVIRONMENT = previousEnvironment;
+  }
+});
+
 test("competition kickoffs round up to the next Tehran-local whole hour", () => {
   const cases = [
     ["2026-11-18T15:17:42.000Z", "2026-11-18T15:30:00.000Z"], // 18:47 -> 19:00 Tehran
