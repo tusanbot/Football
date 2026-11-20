@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { SupabaseMatchRuntimeSettlementRepository } from "../src/game/node-supabase-match-runtime-settlement.js";
 import { SupabaseCompetitionAdvancementRepository } from "../src/game/node-supabase-competition-advancement.js";
+import { SupabaseHttpClient } from "../src/node-supabase-http.js";
 
 function stubFetch(payload: unknown, status = 200) {
   const original = globalThis.fetch;
@@ -30,7 +31,7 @@ test("match runtime settlement delegates the complete financial and match result
   const stub = stubFetch(result);
   try {
     const repository = new SupabaseMatchRuntimeSettlementRepository(
-      new (await import("../src/node-supabase-http.js")).SupabaseHttpClient({ url, serviceRoleKey: key }),
+      new SupabaseHttpClient({ url, serviceRoleKey: key }),
     );
     const settled = await repository.settle({
       matchId: "match-1", runtimeId: "runtime-1", leaseToken: "lease-secret",
@@ -56,7 +57,6 @@ test("match runtime settlement delegates the complete financial and match result
 test("match runtime settlement rejects malformed RPC responses and preserves SQL business errors", async () => {
   const malformed = stubFetch([{ matchId: "match-1" }]);
   try {
-    const { SupabaseHttpClient } = await import("../src/node-supabase-http.js");
     const repository = new SupabaseMatchRuntimeSettlementRepository(new SupabaseHttpClient({ url, serviceRoleKey: key }));
     await assert.rejects(repository.settle({
       matchId: "match-1", runtimeId: "runtime-1", leaseToken: "lease-secret",
@@ -68,7 +68,6 @@ test("match runtime settlement rejects malformed RPC responses and preserves SQL
 
   const failed = stubFetch({ message: "MATCH_RUNTIME_LEASE_LOST", code: "P0001" }, 400);
   try {
-    const { SupabaseHttpClient } = await import("../src/node-supabase-http.js");
     const repository = new SupabaseMatchRuntimeSettlementRepository(new SupabaseHttpClient({ url, serviceRoleKey: key }));
     await assert.rejects(repository.settle({
       matchId: "match-1", runtimeId: "runtime-1", leaseToken: "lease-secret",
@@ -86,7 +85,6 @@ test("competition advancement uses the atomic Supabase RPC and validates its res
   };
   const stub = stubFetch(result);
   try {
-    const { SupabaseHttpClient } = await import("../src/node-supabase-http.js");
     const repository = new SupabaseCompetitionAdvancementRepository(new SupabaseHttpClient({ url, serviceRoleKey: key }));
     assert.deepEqual(await repository.advance({
       competitionId: "competition-1", round: 2, now: "2026-11-20T10:00:00.000Z",
@@ -99,7 +97,6 @@ test("competition advancement uses the atomic Supabase RPC and validates its res
 
   const malformed = stubFetch([{ competitionId: "other", format: "CUP" }]);
   try {
-    const { SupabaseHttpClient } = await import("../src/node-supabase-http.js");
     const repository = new SupabaseCompetitionAdvancementRepository(new SupabaseHttpClient({ url, serviceRoleKey: key }));
     await assert.rejects(repository.advance({
       competitionId: "competition-1", round: 2, now: "2026-11-20T10:00:00.000Z",
