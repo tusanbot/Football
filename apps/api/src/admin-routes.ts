@@ -112,20 +112,30 @@ if(code.startsWith("INVALID_"))return reply.code(400).send({error:code});
 throw error;
 }
 }
-if(["toggle-item","toggle-gift-code"].includes(x.action)&&options.adminCatalogActionPort){
+if(["toggle-item","toggle-gift-code","create-item","item-update","create-gift-code"].includes(x.action)&&options.adminCatalogActionPort){
  try{
-  if(!id||x.active===undefined)return reply.code(400).send({error:"INVALID_ADMIN_CATALOG_ACTION"});
-  const result=await options.adminCatalogActionPort.execute({action:x.action as import("./node-supabase-admin-catalog-actions.js").AdminCatalogToggleAction,targetId:id,active:x.active,actorTelegramId:actor.telegramId,idempotencyKey:x.idempotencyKey});
+  if((["toggle-item","toggle-gift-code","item-update"].includes(x.action)&&!id)
+   ||(["toggle-item","toggle-gift-code"].includes(x.action)&&x.active===undefined))return reply.code(400).send({error:"INVALID_ADMIN_CATALOG_ACTION"});
+  const result=await options.adminCatalogActionPort.execute({
+   action:x.action as import("./node-supabase-admin-catalog-actions.js").AdminCatalogAction,
+   ...(id?{targetId:id}:{}),...(x.active!==undefined?{active:x.active}:{}),actorTelegramId:actor.telegramId,idempotencyKey:x.idempotencyKey,
+   ...(x.itemSlug?{itemSlug:x.itemSlug}:{}),...(x.itemName?{itemName:x.itemName}:{}),...(x.itemDescription?{itemDescription:x.itemDescription}:{}),
+   ...(x.itemCost!==undefined?{itemCost:x.itemCost}:{}),...(x.itemScope?{itemScope:x.itemScope}:{}),
+   ...(x.code?{code:x.code}:{}),...(x.rewardType?{rewardType:x.rewardType}:{}),
+   ...(x.cashAmount!==undefined?{cashAmount:x.cashAmount}:{}),...(x.goldAmount!==undefined?{goldAmount:x.goldAmount}:{}),
+   ...(x.groupPoints!==undefined?{groupPoints:x.groupPoints}:{}),...(x.maxRedemptions!==undefined?{maxRedemptions:x.maxRedemptions}:{}),
+   ...(x.perUserLimit!==undefined?{perUserLimit:x.perUserLimit}:{}),...(x.expiresAt?{expiresAt:x.expiresAt}:{})
+  });
   return {ok:true,targetType:result.targetType,targetId:result.targetId,replayed:result.replay};
  }catch(error){
   const code=error instanceof Error?error.message:"ADMIN_CATALOG_ACTION_FAILED";
   if(code.includes("TARGET_NOT_FOUND"))return reply.code(404).send({error:code});
-  if(code.includes("IDEMPOTENCY_KEY_REUSED"))return reply.code(409).send({error:code});
+  if(code.includes("IDEMPOTENCY_KEY_REUSED")||code.includes("unique constraint")||code.includes("duplicate key"))return reply.code(409).send({error:code});
   if(code.startsWith("INVALID_"))return reply.code(400).send({error:code});
   throw error;
  }
 }
-if(["toggle-item","toggle-gift-code"].includes(x.action)&&(process.env.NODE_ENV==="production"||process.env.ENVIRONMENT==="production")&&!options.adminCatalogActionPort)throw new Error("ADMIN_CATALOG_SUPABASE_REPOSITORY_REQUIRED");
+if(["toggle-item","toggle-gift-code","create-item","item-update","create-gift-code"].includes(x.action)&&(process.env.NODE_ENV==="production"||process.env.ENVIRONMENT==="production")&&!options.adminCatalogActionPort)throw new Error("ADMIN_CATALOG_SUPABASE_REPOSITORY_REQUIRED");
 if(["suspend-user","restore-user","suspend-group","restore-group","cancel-challenge","league-status","competition-status"].includes(x.action)&&options.adminModerationActionPort){
 try{
  const result=await options.adminModerationActionPort.execute({action:x.action as import("./node-supabase-admin-moderation-actions.js").AdminModerationAction,targetId:id,actorTelegramId:actor.telegramId,idempotencyKey:x.idempotencyKey,...(x.reason?{reason:x.reason}:{})});
