@@ -6,7 +6,7 @@ export class SupabaseMatchRuntimeForfeitRepository implements MatchRuntimeForfei
   const result=await this.client.rpc<MatchRuntimeForfeitResult>("settle_invalid_match_fixture_and_advance_http",{p_match_id:matchId,p_now:now});
   if(!result||typeof result!=="object"||typeof result.settled!=="boolean"||typeof result.replayed!=="boolean"
    ||result.matchId!==matchId||(result.competitionId!==null&&typeof result.competitionId!=="string")
-   ||(result.round!==null&&!Number.isInteger(result.round))||!("advancement" in result))throw new Error("SUPABASE_MATCH_RUNTIME_FORFEIT_INVALID_RESPONSE");
+   ||(result.round!==null&&!Number.isInteger(result.round))||!("advancement" in result)||!("pyramidFinalization" in result)||!("eventTournamentFinalization" in result))throw new Error("SUPABASE_MATCH_RUNTIME_FORFEIT_INVALID_RESPONSE");
   if((result.settled||result.replayed)&&result.competitionId&&result.round!==null){
    const advancement=result.advancement;
    if(!advancement||advancement.competitionId!==result.competitionId
@@ -15,6 +15,8 @@ export class SupabaseMatchRuntimeForfeitRepository implements MatchRuntimeForfei
     ||typeof advancement.fixturesCreated!=="number"||typeof advancement.noticesCreated!=="number"
     ||typeof advancement.replayed!=="boolean")throw new Error("SUPABASE_MATCH_RUNTIME_FORFEIT_ADVANCEMENT_INVALID_RESPONSE");
   }else if(result.advancement!==null)throw new Error("SUPABASE_MATCH_RUNTIME_FORFEIT_ADVANCEMENT_INVALID_RESPONSE");
+  if(result.pyramidFinalization!==null&&(typeof result.pyramidFinalization!=="object"||typeof result.pyramidFinalization.processed!=="boolean"))throw new Error("SUPABASE_PYRAMID_FINALIZATION_INVALID_RESPONSE");
+  if(result.eventTournamentFinalization!==null&&(typeof result.eventTournamentFinalization!=="object"||typeof result.eventTournamentFinalization.finalized!=="boolean"))throw new Error("SUPABASE_EVENT_TOURNAMENT_FINALIZATION_INVALID_RESPONSE");
   return result;
  }
 }
