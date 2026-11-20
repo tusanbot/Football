@@ -2,13 +2,13 @@ BEGIN;
 DO $test$
 DECLARE v jsonb; u_id text:='ci-admin-mod-user'; g_id text:='ci-admin-mod-group'; c_id text:='ci-admin-mod-challenge'; club_id text:='ci-admin-mod-club'; comp_id text:='ci-admin-mod-competition';
 BEGIN
- INSERT INTO public."User"(id,"telegramId") VALUES(u_id,'919900096001');
+ INSERT INTO public."User"(id,"telegramId","updatedAt") VALUES(u_id,'919900096001',clock_timestamp());
  INSERT INTO public."TelegramGroup"(id,"telegramId",title,points,"isActive") VALUES(g_id,'-100919900096001','CI moderation group',100,true);
  INSERT INTO public."GroupChallenge"(id,"groupId",title,status,"rewardPoints","createdByUserId")
  VALUES(c_id,g_id,'CI moderation challenge','OPEN',7,u_id);
- INSERT INTO public."Club"(id,"ownerId",name,slug) VALUES(club_id,u_id,'CI moderation club','ci-admin-moderation-club');
- INSERT INTO public."Competition"(id,"idempotencyKey",name,season,"createdByClubId")
- VALUES(comp_id,'ci-admin-mod-competition-key','CI moderation competition',2026,club_id);
+ INSERT INTO public."Club"(id,"ownerId",name,slug,"updatedAt") VALUES(club_id,u_id,'CI moderation club','ci-admin-moderation-club',clock_timestamp());
+ INSERT INTO public."Competition"(id,"idempotencyKey",name,season,"createdByClubId","updatedAt")
+ VALUES(comp_id,'ci-admin-mod-competition-key','CI moderation competition',2026,club_id,clock_timestamp());
 
  v:=public.admin_moderation_action_http('suspend-user',u_id,'919900096','admin-mod-user-key-01','CI suspend');
  IF v->>'replay'<>'false' OR NOT (SELECT "isSuspended" FROM public."User" WHERE id=u_id) THEN RAISE EXCEPTION 'user suspend failed'; END IF;
