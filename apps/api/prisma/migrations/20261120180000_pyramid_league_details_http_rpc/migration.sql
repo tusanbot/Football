@@ -22,7 +22,7 @@ BEGIN
  SELECT jsonb_build_object(
   'id',l.id,'tier',l.tier,'tierName',public.pyramid_tier_name_http(l.tier),
   'season',l.season,'groupNumber',l."groupNumber",'name',c.name,
-  'status',c.status::text,'startsAt',c."startsAt"
+  'status',c.status::text,'startsAt',CASE WHEN c."startsAt" IS NULL THEN NULL ELSE to_char(c."startsAt",'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') END
  ),l."competitionId"
  INTO v_league,v_competition_id
  FROM public."PyramidLeague" l JOIN public."Competition" c ON c.id=l."competitionId"
@@ -41,7 +41,7 @@ BEGIN
  ) r;
 
  SELECT COALESCE(jsonb_agg(jsonb_build_object(
-  'id',m.id,'round',m.round,'scheduledAt',m."scheduledAt",'status',m.status::text,
+  'id',m.id,'round',m.round,'scheduledAt',to_char(m."scheduledAt",'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),'status',m.status::text,
   'homeClub',jsonb_build_object('id',hc.id,'name',hc.name),
   'awayClub',jsonb_build_object('id',ac.id,'name',ac.name),
   'homeScore',m."homeScore",'awayScore',m."awayScore"
