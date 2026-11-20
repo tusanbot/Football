@@ -73,6 +73,8 @@ import { SupabaseClubEconomySettlementRepository } from "./repositories/club-eco
 import { SupabaseClubTicketPriceRepository } from "./repositories/club-ticket-price.js";
 import { SupabaseBotRuntimeLeaseRepository } from "./repositories/bot-runtime-lease.js";
 import { withGroupMembershipPort } from "../../../apps/api/src/groups/group-membership-context.js";
+import { withActionRateLimitPort } from "../../../apps/api/src/groups/action-rate-limit-context.js";
+import { SupabaseActionRateLimitRepository } from "./repositories/action-rate-limit.js";
 import { withAlliancePort } from "../../../apps/api/src/groups/alliance-context.js";
 import { SupabaseAllianceRepository } from "./repositories/alliance.js";
 import { SupabaseGroupMembershipRepository } from "./repositories/group-membership.js";
@@ -173,6 +175,7 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
       const clubManagement = supabaseClient ? new SupabaseClubManagementRepository(supabaseClient) : undefined;
       const clubLineup = supabaseClient ? new SupabaseClubLineupRepository(supabaseClient) : undefined;
       const playerDevelopment = supabaseClient ? new SupabasePlayerDevelopmentRepository(supabaseClient) : undefined;
+      const actionRateLimit = supabaseClient ? new SupabaseActionRateLimitRepository(supabaseClient) : undefined;
       const seasonAwards = supabaseClient ? new SupabaseSeasonAwardRepository(supabaseClient) : undefined;
       const walletEntry = supabaseClient ? new SupabaseWalletEntryRepository(supabaseClient) : undefined;
       const storePurchase = supabaseClient ? new SupabaseStorePurchaseRepository(supabaseClient) : undefined;
@@ -198,7 +201,8 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
        const router = createWorkersApiRouter({ publicPlayerRecords, seasonAwards, specialPlayers, botRuntimeLease, groupMembership, alliance });
       const handle = async (): Promise<Response> => await router.fetch(request);
       const withGroupMembership = groupMembership ? () => withGroupMembershipPort(groupMembership, handle) : handle;
-       const withAlliance = alliance ? () => withAlliancePort(alliance, withGroupMembership) : withGroupMembership;
+      const withActionRateLimit = actionRateLimit ? () => withActionRateLimitPort(actionRateLimit, withGroupMembership) : withGroupMembership;
+       const withAlliance = alliance ? () => withAlliancePort(alliance, withActionRateLimit) : withActionRateLimit;
       const withCompetitionCreation = competitionCreation ? () => withCompetitionCreationPort(competitionCreation, withAlliance) : withAlliance;
       const withClubMatchRead = clubMatchRead ? () => withClubMatchReadPort(clubMatchRead, withCompetitionCreation) : withCompetitionCreation;
       const withCompetitionAdvancement = competitionAdvancement ? () => withCompetitionAdvancementPort(competitionAdvancement, withClubMatchRead) : withClubMatchRead;
