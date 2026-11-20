@@ -411,3 +411,8 @@ This tranche migrates only role lookup. Administrative dashboard aggregates, res
 ## Admin pyramid league dashboard reads moved to Supabase HTTP (2026-11-20)
 
 The `GET /v1/admin/pyramid-leagues` dashboard read now uses the Node direct-HTTPS Supabase repository in production. The `get_admin_pyramid_leagues_http` RPC returns the filtered league standings, teams, awards, promotion offers, queued applications and application counts in one read-only request. The function is SECURITY INVOKER and executable only by service_role; the API requires the repository in production and retains Prisma compatibility only for non-production migration tests. The reports endpoint and admin mutations remain a separate migration tranche.
+
+
+## Admin pyramid league reports moved to Supabase HTTP (2026-11-20)
+
+The `GET /v1/admin/pyramid-leagues/reports` endpoint now uses the Node direct-HTTPS Supabase repository in Production. The `get_admin_pyramid_league_reports_http` read-only RPC produces season totals, club rankings, promotion/relegation movements, league history, award summaries, filtered audit history, and application counts in one bounded response. The function is SECURITY INVOKER and service_role-only. The legacy Prisma report implementation remains available only in non-production compatibility tests; league administrative mutations are still a separate migration tranche.
