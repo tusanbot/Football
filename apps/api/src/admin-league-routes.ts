@@ -5,6 +5,7 @@ import { requireTelegramUser } from "./auth/require-telegram-user.js";
 import { consumeAllianceActionRateLimit } from "./groups/alliance-rate-limit.js";
 import { parseAdminTelegramIds } from "./runtime-config.js";
 import type { AdminRoleAssignment, AdminRoleLookupPort } from "./admin-role-context.js";
+import type { AdminPyramidLeagueReadPort } from "./node-supabase-admin-pyramid-league-read.js";
 
 type Permission = "read" | "competitions";
 const ROLE_PERMISSIONS: Record<string, Permission[]> = {
@@ -60,7 +61,7 @@ const filters = z.object({
   limit: z.coerce.number().int().min(1).max(100).default(60),
 });
 
-export function registerAdminLeagueRoutes(app: FastifyInstance, options: { adminRoleLookupPort?: AdminRoleLookupPort } = {}) {
+export function registerAdminLeagueRoutes(app: FastifyInstance, options: { adminRoleLookupPort?: AdminRoleLookupPort; adminPyramidLeagueReadPort?: AdminPyramidLeagueReadPort } = {}) {
   const authorizeAdmin = (request: FastifyRequest, reply: FastifyReply, permission: Permission) => authorize(request, reply, permission, options.adminRoleLookupPort);
   app.get("/v1/admin/pyramid-leagues", async (request, reply) => {
     const actor = await authorizeAdmin(request, reply, "read");
@@ -68,6 +69,10 @@ export function registerAdminLeagueRoutes(app: FastifyInstance, options: { admin
     const parsed = filters.safeParse(request.query);
     if (!parsed.success) return reply.code(400).send({ error: "INVALID_QUERY" });
     const { season, tier, status, q, limit } = parsed.data;
+    if (options.adminPyramidLeagueReadPort) return options.adminPyramidLeagueReadPort.list({ season, tier, status, q, limit });
+    if (process.env.NODE_ENV === "production" || process.env.ENVIRONMENT === "production") {
+      throw new Error("ADMIN_PYRAMID_LEAGUE_READ_SUPABASE_REPOSITORY_REQUIRED");
+    }
     const where = {
       ...(season ? { season } : {}),
       ...(tier ? { tier } : {}),
