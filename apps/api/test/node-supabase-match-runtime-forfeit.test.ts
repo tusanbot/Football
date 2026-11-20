@@ -21,6 +21,8 @@ test("invalid-lineup forfeit uses one RPC that also advances its competition", a
   const payload = {
     settled: true, replayed: false, matchId: "match-1",
     competitionId: "competition-1", round: 2, competitionFormat: "CUP",
+    pyramidFinalization: { processed: false, replayed: true },
+    eventTournamentFinalization: { finalized: false, replayed: true, participants: 0, awards: 0 },
     advancement: {
       competitionId: "competition-1", format: "CUP", completed: false,
       roundComplete: true, nextRound: 3, fixturesCreated: 2, noticesCreated: 0, replayed: false,
@@ -44,7 +46,7 @@ test("invalid-lineup forfeit uses one RPC that also advances its competition", a
 test("invalid-lineup forfeit rejects a completed competition settlement without its advancement result", async () => {
   const stub = stubFetch({
     settled: true, replayed: false, matchId: "match-1",
-    competitionId: "competition-1", round: 2, competitionFormat: "CUP", advancement: null,
+    competitionId: "competition-1", round: 2, competitionFormat: "CUP", advancement: null, pyramidFinalization: null, eventTournamentFinalization: null,
   });
   try {
     const repository = new SupabaseMatchRuntimeForfeitRepository(
