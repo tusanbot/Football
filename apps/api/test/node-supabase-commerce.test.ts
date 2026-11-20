@@ -39,3 +39,67 @@ test("commerce adapters reject unsafe Supabase origins",()=>{
  assert.throws(()=>new NodeSupabaseMarketRepository("https://attacker.example",key));
  assert.throws(()=>new NodeSupabaseStoreSnapshotRepository(url,"short"));
 });
+
+test("wallet entry recovers a committed RPC after its HTTP response is lost without applying the ledger entry twice", async () => {
+  const originalFetch = globalThis.fetch;
+  const calls: Array<{ url: string; body: Record<string, unknown> }> = [];
+  let durableLedgerWrites = 0;
+  globalThis.fetch = (async (input, init) => {
+    calls.push({ url: String(input), body: JSON.parse(String(init?.body)) as Record<string, unknown> });
+    if (calls.length === 1) {
+      durableLedgerWrites++;
+      throw new TypeError("socket closed after server commit");
+    }
+    return new Response(JSON.stringify([{
+      ledger_id: "ledger-wallet-replay", balance: "875", version: 12, replayed: true,
+    }]), { status: 200, headers: { "content-type": "application/json" } });
+  }) as typeof fetch;
+  try {
+    const repo = new NodeSupabaseWalletEntryRepository(url, key);
+    const command = {
+      userId: "user-wallet-replay", asset: "CASH" as const, direction: "DEBIT" as const,
+      amount: 125n, idempotencyKey: "wallet-lost-response-001", reason: "TEST_PURCHASE",
+      referenceType: "TEST", referenceId: "purchase-1",
+    };
+    await assert.rejects(repo.applyWalletEntry(command), /Supabase RPC request failed/);
+    assert.equal(calls.length, 1, "the transport must not retry a mutation automatically");
+    const replay = await repo.applyWalletEntry(command);
+    assert.equal(calls.length, 2);
+    assert.deepEqual(calls[1]!.body, calls[0]!.body);
+    assert.equal(replay.replayed, true);
+    assert.equal(replay.ledgerId, "ledger-wallet-replay");
+    assert.equal(replay.balance, "875");
+    assert.equal(durableLedgerWrites, 1);
+  } finally { globalThis.fetch = originalFetch; }
+});
+
+test("market purchase recovers a lost committed response through the sold-listing replay path", async () => {
+  const originalFetch = globalThis.fetch;
+  const calls: Array<{ url: string; body: Record<string, unknown> }> = [];
+  let durableTransfers = 0;
+  globalThis.fetch = (async (input, init) => {
+    calls.push({ url: String(input), body: JSON.parse(String(init?.body)) as Record<string, unknown> });
+    if (calls.length === 1) {
+      durableTransfers++;
+      throw new TypeError("socket closed after market purchase commit");
+    }
+    return new Response(JSON.stringify([{
+      listing_id: "listing-lost-response", player_id: "player-transferred",
+      price: "450", replayed: true, error_code: null,
+    }]), { status: 200, headers: { "content-type": "application/json" } });
+  }) as typeof fetch;
+  try {
+    const repo = new NodeSupabaseMarketRepository(url, key);
+    const command = { userId: "buyer-replay", listingId: "listing-lost-response" };
+    await assert.rejects(repo.purchase(command), /Supabase RPC request failed/);
+    assert.equal(calls.length, 1);
+    const replay = await repo.purchase(command);
+    assert.equal(calls.length, 2);
+    assert.deepEqual(calls[1]!.body, calls[0]!.body);
+    assert.deepEqual(replay, {
+      listingId: "listing-lost-response", playerId: "player-transferred", price: "450", replayed: true,
+    });
+    assert.equal(durableTransfers, 1);
+  } finally { globalThis.fetch = originalFetch; }
+});
+

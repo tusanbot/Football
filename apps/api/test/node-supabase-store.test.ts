@@ -90,3 +90,36 @@ test("Node store adapters reject unsafe origins and weak service-role credential
   assert.throws(() => new NodeSupabaseStoreItemUseRepository("https://attacker.example", "node-store-service-role-test-key"));
   assert.throws(() => new NodeSupabaseStorePurchaseRepository("https://example.supabase.co", "short"));
 });
+
+test("store purchase recovers a committed RPC after the HTTP response is lost without duplicating debit or inventory", async () => {
+  const originalFetch = globalThis.fetch;
+  const calls: Array<{ url: string; body: Record<string, unknown> }> = [];
+  let durablePurchases = 0;
+  globalThis.fetch = (async (input, init) => {
+    calls.push({ url: String(input), body: JSON.parse(String(init?.body)) as Record<string, unknown> });
+    if (calls.length === 1) {
+      durablePurchases++;
+      throw new TypeError("socket closed after store purchase commit");
+    }
+    return new Response(JSON.stringify([{
+      item_key: "recovery_kit", purchased_quantity: 2, balance: "7600", inventory: 4, replayed: true,
+    }]), { status: 200, headers: { "content-type": "application/json" } });
+  }) as typeof fetch;
+  try {
+    const repo = new NodeSupabaseStorePurchaseRepository("https://example.supabase.co", "node-store-service-role-test-key");
+    const command = {
+      userId: "user-store-replay", itemKey: "recovery_kit", asset: "CASH" as const,
+      unitPrice: "1200", quantity: 2, idempotencyKey: "store-lost-response-001",
+    };
+    await assert.rejects(repo.purchase(command), /Supabase store RPC request failed/);
+    assert.equal(calls.length, 1, "the transport must not automatically retry a store mutation");
+    const replay = await repo.purchase(command);
+    assert.equal(calls.length, 2);
+    assert.deepEqual(calls[1]!.body, calls[0]!.body);
+    assert.equal(replay.replayed, true);
+    assert.equal(replay.balance, "7600");
+    assert.equal(replay.inventory, 4);
+    assert.equal(durablePurchases, 1);
+  } finally { globalThis.fetch = originalFetch; }
+});
+
