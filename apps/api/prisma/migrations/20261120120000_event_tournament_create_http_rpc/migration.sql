@@ -15,7 +15,7 @@ BEGIN
   OR p_title IS NULL OR length(btrim(p_title)) NOT BETWEEN 3 AND 100
   OR p_description IS NULL OR length(btrim(p_description)) NOT BETWEEN 5 AND 2000
   OR p_entry_fee_amount IS NULL OR p_entry_fee_amount<0
-  OR (p_entry_fee_amount>0 AND p_entry_fee_asset NOT IN('CASH','GOLD','HONOR'))
+  OR (p_entry_fee_amount>0 AND (p_entry_fee_asset IS NULL OR p_entry_fee_asset NOT IN('CASH','GOLD','HONOR')))
   OR (p_entry_fee_asset IS NOT NULL AND p_entry_fee_asset NOT IN('CASH','GOLD','HONOR'))
   OR p_max_participants IS NULL OR p_max_participants NOT BETWEEN 4 AND 16
   OR p_registration_ends_at IS NULL OR p_starts_at IS NULL OR p_now IS NULL
