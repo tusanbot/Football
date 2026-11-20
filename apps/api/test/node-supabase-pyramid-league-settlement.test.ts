@@ -58,3 +58,19 @@ test("pyramid league application rejects incomplete assigned league payloads", a
     /SUPABASE_PYRAMID_APPLICATION_INVALID_ASSIGNMENT/,
   );
 });
+
+test("pyramid league overview and history invoke their dedicated read RPCs", async () => {
+ const calls: string[] = [];
+ const payloads = [
+  { season: 2027, tiers: [], history: [], promotionOffers: [] },
+  { club: { id: "club-1", name: "Club" }, stats: {}, tiers: [], movements: [], leagues: [] },
+ ];
+ const client = new SupabaseHttpClient({ url: "https://example.supabase.co", serviceRoleKey: "service-role-key-that-is-long-enough", fetchImpl: async (input) => {
+  calls.push(new URL(String(input)).pathname);
+  return new Response(JSON.stringify(payloads.shift()), { status: 200, headers: { "content-type": "application/json" } });
+ }});
+ const repository = new SupabasePyramidLeagueSettlementRepository(client);
+ assert.equal((await repository.listLeagues("user-1")).season, 2027);
+ assert.equal((await repository.getClubHistory("user-1")).club !== undefined, true);
+ assert.deepEqual(calls, ["/rest/v1/rpc/get_pyramid_league_overview_http", "/rest/v1/rpc/get_pyramid_league_history_http"]);
+});
