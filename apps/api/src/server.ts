@@ -138,11 +138,11 @@ try {
           const result = await processDueMatchRuntimes("api-match-worker", now, 10);
           const promotions = await processDuePromotionOffers(now, 50);
           const tournaments = await processDueEventTournamentFinalizations(now, 10);
-          if (result.advanced || result.settled || result.failed || promotions.accepted || promotions.completedLeagues || tournaments.finalized || tournaments.failed) app.log.info({ ...result, promotions, tournaments }, "Game worker tick");
+          if (result.advanced || result.settled || result.failed || promotions.accepted || promotions.completedLeagues || promotions.failed || tournaments.finalized || tournaments.failed) app.log.info({ ...result, promotions, tournaments }, "Game worker tick");
         })))
       : processDueMatchRuntimes("api-match-worker", new Date(), 10).then(async (result) => {
           const promotions = await processDuePromotionOffers(new Date(), 50);
-          if (result.advanced || result.settled || result.failed || promotions.accepted || promotions.completedLeagues) app.log.info({ ...result, promotions }, "Game worker tick");
+          if (result.advanced || result.settled || result.failed || promotions.accepted || promotions.completedLeagues || promotions.failed) app.log.info({ ...result, promotions }, "Game worker tick");
         }))
       .catch((error: unknown) => app.log.error({ error }, "Match runtime worker failed"))
       .finally(() => { workerRunning = false; workerTask = null; });
