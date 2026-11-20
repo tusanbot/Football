@@ -166,6 +166,8 @@ jobs:
         run: pnpm --filter @football/api exec tsx --test --test-concurrency=1 test/node-supabase-match-runtime-coordination.test.ts
       - name: Test match worker Supabase service orchestration
         run: pnpm --filter @football/api exec tsx --test --test-concurrency=1 test/match-runtime-supabase-worker.test.ts
+      - name: Test match worker Supabase checkpoint orchestration
+        run: pnpm --filter @football/api exec tsx --test --test-concurrency=1 test/match-runtime-supabase-worker.test.ts
       - name: Test pyramid league notice list, claim, complete and retry RPCs
         run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f apps/api/prisma/tests/pyramid-league-notices-http-rpc.integration.sql
         env:
