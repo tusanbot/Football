@@ -77,18 +77,21 @@ BEGIN
   JOIN public."PyramidLeague" l ON l.id=o."leagueId"
   WHERE o."clubId"=v_club.id AND o.status::text='PENDING';
 
-  SELECT COALESCE(jsonb_agg(jsonb_build_object(
-    'id',l.id,'tier',l.tier,'tierName',public.pyramid_tier_name_http(l.tier),
-    'season',l.season,'groupNumber',l."groupNumber",'name',c.name,
-    'status',c.status::text,'teams',COALESCE(ec.team_count,0)
-  ) ORDER BY l.season DESC,l.tier,l."groupNumber"),'[]'::jsonb)
+  SELECT COALESCE(jsonb_agg(x.item ORDER BY x.season DESC,x.tier,x.group_number),'[]'::jsonb)
   INTO v_history
-  FROM public."PyramidLeague" l
-  JOIN public."Competition" c ON c.id=l."competitionId"
-  LEFT JOIN LATERAL (SELECT count(*)::integer AS team_count FROM public."PyramidLeagueEntry" e WHERE e."leagueId"=l.id) ec ON true
-  WHERE l.season<v_season
-  ORDER BY l.season DESC,l.tier ASC,l."groupNumber" ASC
-  LIMIT 100;
+  FROM (
+    SELECT jsonb_build_object(
+      'id',l.id,'tier',l.tier,'tierName',public.pyramid_tier_name_http(l.tier),
+      'season',l.season,'groupNumber',l."groupNumber",'name',c.name,
+      'status',c.status::text,'teams',COALESCE(ec.team_count,0)
+    ) AS item,l.season,l.tier,l."groupNumber" AS group_number
+    FROM public."PyramidLeague" l
+    JOIN public."Competition" c ON c.id=l."competitionId"
+    LEFT JOIN LATERAL (SELECT count(*)::integer AS team_count FROM public."PyramidLeagueEntry" e WHERE e."leagueId"=l.id) ec ON true
+    WHERE l.season<v_season
+    ORDER BY l.season DESC,l.tier ASC,l."groupNumber" ASC
+    LIMIT 100
+  ) x;
 
   RETURN jsonb_build_object(
     'season',v_season,'tiers',v_tiers,'currentLeagueId',v_current_league_id,
