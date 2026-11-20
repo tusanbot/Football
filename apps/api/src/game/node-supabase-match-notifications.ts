@@ -45,11 +45,11 @@ export class NodeSupabaseMatchNotificationRepository implements MatchNotificatio
    checkpointId:str(row.checkpoint_id,"CHECKPOINT_ID"),matchId:str(row.match_id,"MATCH_ID"),checkpointKey:str(row.checkpoint_key,"CHECKPOINT_KEY"),
    minute:int(row.minute,"MINUTE"),deadlineAt:str(row.deadline_at,"DEADLINE_AT"),clubId:str(row.club_id,"CLUB_ID"),
    clubName:str(row.club_name,"CLUB_NAME"),opponentName:str(row.opponent_name,"OPPONENT_NAME"),
-   telegramUserId:str(row.telegram_user_id,"TELEGRAM_USER_ID"),side:str(row.side,"SIDE") as "HOME"|"AWAY",attempt:int(row.attempt,"ATTEMPT")
+   telegramUserId:str(row.telegram_user_id,"TELEGRAM_USER_ID"),side:str(row.side,"SIDE") as "HOME"|"AWAY",attempt:int(row.attempt,"ATTEMPT"),claimToken:str(row.claim_token,"CLAIM_TOKEN")
   }));
  }
- async acknowledgeCheckpoint(checkpointId:string,side:"HOME"|"AWAY",delivered:boolean,error:string|null):Promise<boolean>{
-  const value=await this.client.rpc<unknown>("ack_match_checkpoint_notification_node_http",{p_checkpoint_id:checkpointId,p_side:side,p_delivered:delivered,p_error:error});
+ async acknowledgeCheckpoint(checkpointId:string,side:"HOME"|"AWAY",claimToken:string,delivered:boolean,error:string|null):Promise<boolean>{
+  const value=await this.client.rpc<unknown>("ack_match_checkpoint_notification_node_http",{p_checkpoint_id:checkpointId,p_side:side,p_claim_token:claimToken,p_delivered:delivered,p_error:error});
   if(typeof value!=="boolean")throw new Error("SUPABASE_MATCH_NOTIFICATION_INVALID_CHECKPOINT_ACK");
   return value;
  }

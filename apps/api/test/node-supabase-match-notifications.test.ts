@@ -17,15 +17,16 @@ test("match result notification adapter maps statistics, scorers, and claim meta
 test("lifecycle and tactical checkpoint adapters validate the RPC row shapes",async()=>{
  const repository=new NodeSupabaseMatchNotificationRepository({rpc:async(name:string)=>name.includes("lifecycle")?
   [{id:"l1",channel:"HOME",telegram_chat_id:"123",claim_token:"c",attempt:1,kind:"GOAL",minute:30,home_score:1,away_score:0,payload:{goal:true},match_id:"m",home_club_name:"H",away_club_name:"A"}]:
-  [{checkpoint_id:"cp",match_id:"m",checkpoint_key:"minute-45",minute:45,deadline_at:"2026-11-20T10:00:00Z",club_id:"h",club_name:"Home",opponent_name:"Away",telegram_user_id:"123",side:"HOME",attempt:1}],
+  [{checkpoint_id:"cp",match_id:"m",checkpoint_key:"minute-45",minute:45,deadline_at:"2026-11-20T10:00:00Z",club_id:"h",club_name:"Home",opponent_name:"Away",telegram_user_id:"123",side:"HOME",attempt:1,claim_token:"checkpoint-claim"}],
  } as never);
  assert.equal((await repository.claimLifecycle(5))[0]?.payload?.goal,true);
- assert.equal((await repository.claimCheckpoints(5,"cp"))[0]?.side,"HOME");
+ const checkpoint=(await repository.claimCheckpoints(5,"cp"))[0];
+ assert.equal(checkpoint?.side,"HOME");assert.equal(checkpoint?.claimToken,"checkpoint-claim");
 });
 test("notification completion and checkpoint acknowledgement use their atomic RPCs",async()=>{
  const calls:string[]=[];
  const repository=new NodeSupabaseMatchNotificationRepository({rpc:async(name:string)=>{calls.push(name);return true;}} as never);
  assert.equal(await repository.complete("RESULT","n","claim",true,null,30),true);
- assert.equal(await repository.acknowledgeCheckpoint("cp","AWAY",true,null),true);
+ assert.equal(await repository.acknowledgeCheckpoint("cp","AWAY","claim-token",true,null),true);
  assert.deepEqual(calls,["complete_match_notification_delivery","ack_match_checkpoint_notification_node_http"]);
 });

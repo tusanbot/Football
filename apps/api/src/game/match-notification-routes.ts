@@ -15,14 +15,14 @@ export interface MatchLifecycleNotification {
 }
 export interface MatchCheckpointNotification {
   checkpointId:string; matchId:string; checkpointKey:string; minute:number; deadlineAt:string;
-  clubId:string; clubName:string; opponentName:string; telegramUserId:string; side:"HOME"|"AWAY"; attempt:number;
+  clubId:string; clubName:string; opponentName:string; telegramUserId:string; side:"HOME"|"AWAY"; attempt:number; claimToken:string;
 }
 export interface MatchNotificationPort {
   claimResults(limit:number): Promise<MatchResultNotification[]>;
   claimLifecycle(limit:number): Promise<MatchLifecycleNotification[]>;
   complete(type:"RESULT"|"LIFECYCLE",id:string,claimToken:string,delivered:boolean,error:string|null,retrySeconds:number): Promise<boolean>;
   claimCheckpoints(limit:number,checkpointId?:string): Promise<MatchCheckpointNotification[]>;
-  acknowledgeCheckpoint(checkpointId:string,side:"HOME"|"AWAY",delivered:boolean,error:string|null): Promise<boolean>;
+  acknowledgeCheckpoint(checkpointId:string,side:"HOME"|"AWAY",claimToken:string,delivered:boolean,error:string|null): Promise<boolean>;
 }
 function authenticateSystemBot(request: FastifyRequest, reply: FastifyReply): boolean {
   const expected=process.env.BOT_API_SECRET; const received=request.headers["x-football-bot-secret"];
@@ -72,10 +72,10 @@ export function registerMatchNotificationRoutes(app:FastifyInstance,repository?:
  });
  app.post("/v1/bot/match-checkpoints/ack",async(request,reply)=>{
   if(!authenticateSystemBot(request,reply))return;
-  const parsed=z.object({checkpointId:z.string().min(1).max(64),side:z.enum(["HOME","AWAY"]),delivered:z.boolean(),error:z.string().max(500).optional()}).strict().safeParse(request.body);
+  const parsed=z.object({checkpointId:z.string().min(1).max(64),side:z.enum(["HOME","AWAY"]),claimToken:z.string().uuid(),delivered:z.boolean(),error:z.string().max(500).optional()}).strict().safeParse(request.body);
   if(!parsed.success)return reply.code(400).send({error:"INVALID_MATCH_NOTIFICATION_ACK"});
   const repo=getRepository();if(!repo)return reply.code(503).send({error:"MATCH_NOTIFICATION_REPOSITORY_REQUIRED"});
-  if(!await repo.acknowledgeCheckpoint(parsed.data.checkpointId,parsed.data.side,parsed.data.delivered,parsed.data.error??null))return reply.code(409).send({error:"MATCH_NOTIFICATION_CLAIM_EXPIRED"});
+  if(!await repo.acknowledgeCheckpoint(parsed.data.checkpointId,parsed.data.side,parsed.data.claimToken,parsed.data.delivered,parsed.data.error??null))return reply.code(409).send({error:"MATCH_NOTIFICATION_CLAIM_EXPIRED"});
   return {acknowledged:true,delivered:parsed.data.delivered};
  });
 }

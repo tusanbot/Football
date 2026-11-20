@@ -15,8 +15,8 @@ function fixture() {
   async complete(_type,id,token,delivered,_error,_retry){return id==="result-1"&&token.length>0&&delivered;},
   async claimCheckpoints(_limit,checkpointId):Promise<MatchCheckpointNotification[]>{if(checkpointId==="cp-1"&&!checkpointClaims.has("HOME")){
    checkpointClaims.set("HOME","claimed");return [{checkpointId:"cp-1",matchId:"match-1",checkpointKey:"minute-45",minute:45,deadlineAt:"2026-11-20T10:01:00Z",
-    clubId:"home",clubName:"Home FC",opponentName:"Away FC",telegramUserId:"12345",side:"HOME",attempt:1}];}return [];},
-  async acknowledgeCheckpoint(id,side,delivered){if(id!=="cp-1"||!checkpointClaims.has(side))return false;if(delivered)checkpointClaims.set(side,"delivered");return true;},
+    clubId:"home",clubName:"Home FC",opponentName:"Away FC",telegramUserId:"12345",side:"HOME",attempt:1,claimToken:randomUUID()}];}return [];},
+  async acknowledgeCheckpoint(id,side,claimToken,delivered){if(id!=="cp-1"||!claimToken||!checkpointClaims.has(side))return false;if(delivered)checkpointClaims.set(side,"delivered");return true;},
  };
  return port;
 }
@@ -49,6 +49,6 @@ test("tactical checkpoint notifications are claimed and acknowledged through the
  const headers={"x-football-bot-secret":"test-match-notification-secret"};
  const claim=await app.inject({method:"POST",url:"/v1/bot/match-checkpoints/claim",headers,payload:{limit:10,checkpointId:"cp-1"}});
  assert.equal(claim.statusCode,200);assert.equal(claim.json().notifications[0].side,"HOME");
- const ack=await app.inject({method:"POST",url:"/v1/bot/match-checkpoints/ack",headers,payload:{checkpointId:"cp-1",side:"HOME",delivered:true}});
+ const ack=await app.inject({method:"POST",url:"/v1/bot/match-checkpoints/ack",headers,payload:{checkpointId:"cp-1",side:"HOME",claimToken:randomUUID(),delivered:true}});
  assert.equal(ack.statusCode,200);assert.deepEqual((await app.inject({method:"POST",url:"/v1/bot/match-checkpoints/claim",headers,payload:{limit:10,checkpointId:"cp-1"}})).json(),{notifications:[]});
 });

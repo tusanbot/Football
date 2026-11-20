@@ -366,12 +366,12 @@ async function pollMatchCheckpointNotifications() {
   try {
     const result = await apiSystem<{ notifications: Array<{
       checkpointId:string; matchId:string; checkpointKey:string; minute:number; deadlineAt:string;
-      clubName:string; opponentName:string; telegramUserId:string; side:"HOME"|"AWAY"; attempt:number;
+      clubName:string; opponentName:string; telegramUserId:string; side:"HOME"|"AWAY"; attempt:number; claimToken:string;
     }> }>("/v1/bot/match-checkpoints/claim", { limit: 25 });
     for (const notification of result.notifications) {
       const acknowledge = (delivered:boolean, error?:string) => apiSystem(
         "/v1/bot/match-checkpoints/ack",
-        { checkpointId: notification.checkpointId, side: notification.side, delivered, ...(error ? { error } : {}) },
+        { checkpointId: notification.checkpointId, side: notification.side, claimToken: notification.claimToken, delivered, ...(error ? { error } : {}) },
       );
       const telegramId = Number(notification.telegramUserId);
       if (!Number.isSafeInteger(telegramId)) {
@@ -390,12 +390,22 @@ async function pollMatchCheckpointNotifications() {
           + "\nدقیقه " + notification.minute + " · مهلت تا " + new Date(notification.deadlineAt).toLocaleTimeString("fa-IR", { timeZone: "Asia/Tehran" })
           + "\nبرای انتخاب سریع ذهنیت یکی از گزینه‌ها را بزنید. برای سایر تنظیمات از /tactic و برای تعویض از /sub استفاده کنید.",
           { reply_markup: keyboard });
-        await acknowledge(true);
       } catch (sendError) {
         const message = sendError instanceof Error ? sendError.message : "TELEGRAM_SEND_FAILED";
         await acknowledge(false, message.slice(0, 500)).catch((ackError:unknown) =>
           console.warn("Could not persist failed match notification:", ackError instanceof Error ? ackError.message : ackError));
         console.warn("Match checkpoint notification could not be delivered:", message);
+        continue;
+      }
+      try {
+        await acknowledge(true);
+      } catch {
+        try {
+          await acknowledge(true);
+        } catch (ackError) {
+          console.warn("Could not acknowledge delivered match checkpoint notification; lease recovery will retry:",
+            ackError instanceof Error ? ackError.message : ackError);
+        }
       }
     }
   } catch (error) {
@@ -404,7 +414,6 @@ async function pollMatchCheckpointNotifications() {
     matchNotificationWorkerBusy = false;
   }
 }
-
 let matchLifecycleNotificationWorkerBusy = false;
 async function pollMatchLifecycleNotifications() {
   if (matchLifecycleNotificationWorkerBusy || !apiUrl || !botApiSecret) return;
