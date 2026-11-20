@@ -242,6 +242,8 @@ export async function getPyramidLeagueClubHistory(userId: string) {
 }
 
 export async function getPyramidLeagueDetails(userId: string, leagueId: string) {
+  const port = getPyramidLeagueSettlementPort();
+  if (port) return port.getLeagueDetails(userId, leagueId);
   await ownedClub(userId);
   const league = await prisma.pyramidLeague.findUnique({
     where: { id: leagueId },
