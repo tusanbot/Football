@@ -14,5 +14,9 @@ export function withActionRateLimitPort<T>(port: ActionRateLimitPort, operation:
   return scope.run(port, operation);
 }
 export function getActionRateLimitPort(): ActionRateLimitPort | undefined {
-  return scope.getStore();
+  const port = scope.getStore();
+  if (!port && (process.env.NODE_ENV === "production" || process.env.ENVIRONMENT === "production")) {
+    throw new Error("ACTION_RATE_LIMIT_SUPABASE_REPOSITORY_REQUIRED");
+  }
+  return port;
 }
