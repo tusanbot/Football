@@ -13,3 +13,12 @@ test("catalog toggle rejects invalid input and malformed RPC responses",async()=
  const malformed=repository({ok:true,targetType:"item"});
  await assert.rejects(malformed.repo.execute({action:"toggle-gift-code",targetId:"gift-1",active:true,actorTelegramId:"910000001",idempotencyKey:"catalog-toggle-003"}),/SUPABASE_ADMIN_CATALOG_INVALID_RESPONSE/);
 });
+
+test("catalog create and edit use the Supabase management RPC",async()=>{
+ const {repo,calls}=repository({ok:true,targetType:"gift-code",targetId:"gift-created",replay:false});
+ const created=await repo.execute({action:"create-gift-code",actorTelegramId:"910000001",idempotencyKey:"catalog-gift-cf-001",code:"WELCOME",rewardType:"WALLET",cashAmount:"1000",goldAmount:"5",maxRedemptions:20,perUserLimit:2});
+ assert.deepEqual(created,{ok:true,targetType:"gift-code",targetId:"gift-created",replay:false});
+ assert.equal(calls[0]?.name,"admin_catalog_manage_http");
+ assert.equal(calls[0]?.args.p_action,"create-gift-code");
+ assert.equal(calls[0]?.args.p_code,"WELCOME");
+});
