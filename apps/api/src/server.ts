@@ -96,6 +96,7 @@ const app = buildApp({
   ...(giftCodeRedemptionPort ? { giftCodeRedemptionPort } : {}),
   ...(botRuntimeLeasePort ? { botRuntimeLeasePort } : {}),
   ...(matchPorts ? { matchPorts } : {}),
+  ...(supabaseHttp ? { supabaseHttpClient: supabaseHttp } : {}),
   ...(gameDashboardPort ? { gameDashboardPort } : {}),
   ...(walletReadPort ? { walletReadPort } : {}),
   ...(clubLineupPort ? { clubLineupPort } : {}),
