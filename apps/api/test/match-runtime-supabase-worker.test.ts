@@ -86,3 +86,75 @@ test("match worker routes invalid kickoff snapshots to the Supabase forfeit port
     assert.deepEqual(result, { enqueued: 0, claimed: 0, advanced: 0, waiting: 0, settled: 0, failed: 0 });
   });
 });
+
+test("match worker advances a due kickoff through the Supabase first-half RPC and releases its lease", async () => {
+  await withTestEnvironment(async () => {
+    const calls: string[] = [];
+    const now = new Date("2026-11-20T12:00:00.000Z");
+    const makeSide = (id: string) => ({
+      clubId: id, clubName: id, formation: "4-3-3",
+      tactics: { mentality: "BALANCED", pressing: "NORMAL", tempo: "NORMAL", passingStyle: "MIXED" },
+      stadiumCapacity: 20_000, ticketPrice: "250", reputation: 100, coachMedicalSkill: 0,
+      players: Array.from({ length: 11 }, (_, index) => ({
+        id: id + "-player-" + index, name: "Player " + index,
+        position: index === 0 ? "GK" : index === 1 ? "CB" : "ST",
+        overall: 70, morale: 80, fitness: 95,
+        attributes: { pace: 70, shooting: 70, passing: 70, dribbling: 70, defending: 70, physical: 70, goalkeeping: index === 0 ? 75 : 20 },
+      })),
+      bench: [],
+    });
+    const snapshot = {
+      id: "runtime-kickoff", matchId: "match-kickoff", status: "PENDING",
+      currentMinute: 0, stateVersion: 7, leaseToken: "lease-kickoff",
+      simulationState: null, startedAt: null, fallbackPlan: null,
+      kickoffSnapshot: { home: makeSide("home"), away: makeSide("away") },
+      match: {
+        id: "match-kickoff", status: "SCHEDULED", seed: "stable-seed",
+        type: "FRIENDLY", rulesSnapshot: null, homeClubId: "home", awayClubId: "away",
+        startedAt: null, competition: null, firstLeg: null,
+      },
+    };
+    const result = await withMatchRuntimeEnqueuePort({
+      async enqueue() { calls.push("enqueue"); return { enqueued: 0, invalidFixtures: [] }; },
+    }, () => withMatchRuntimeLeasePort({
+      async claim(input) {
+        calls.push("claim");
+        assert.equal(input.workerId, "supabase-worker-test");
+        return [{
+          runtime: { id: "runtime-kickoff" },
+          lease: { owner: input.workerId, token: "lease-kickoff", expiresAt: new Date(now.getTime() + 60_000) },
+        }];
+      },
+      async release(input) {
+        calls.push("release");
+        assert.equal(input.runtimeId, "runtime-kickoff");
+        assert.equal(input.leaseToken, "lease-kickoff");
+        assert.equal(input.nextActionAt, new Date(now.getTime() + 5_000).toISOString());
+        assert.equal(input.lastError, null);
+        return true;
+      },
+    }, () => withMatchRuntimeSnapshotPort({
+      async get(runtimeId) {
+        calls.push("snapshot");
+        assert.equal(runtimeId, "runtime-kickoff");
+        return snapshot;
+      },
+    }, () => withMatchRuntimeAdvancePort({
+      async advanceFirstHalf(input) {
+        calls.push("advance-first-half");
+        assert.equal(input.runtimeId, "runtime-kickoff");
+        assert.equal(input.expectedStateVersion, 7);
+        assert.equal(input.leaseToken, "lease-kickoff");
+        assert.equal(input.startedAt, now.toISOString());
+        assert.equal(input.checkpointAt, new Date(now.getTime() + 45_000).toISOString());
+        assert.equal(input.decisionDeadlineAt, new Date(now.getTime() + 50_000).toISOString());
+        assert.equal((input.simulationState as { segment: { currentMinute: number } }).segment.currentMinute, 45);
+        assert.equal(input.events.some(event => event.eventKey === "kickoff" && event.kind === "KICKOFF"), true);
+        return true;
+      },
+    }, () => processDueMatchRuntimes("supabase-worker-test", now, 1, { enqueue: false }))))));
+
+    assert.deepEqual(calls, ["claim", "snapshot", "advance-first-half", "release"]);
+    assert.deepEqual(result, { enqueued: 0, claimed: 1, advanced: 1, waiting: 0, settled: 0, failed: 0 });
+  });
+});
