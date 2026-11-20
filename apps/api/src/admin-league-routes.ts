@@ -7,6 +7,7 @@ import { parseAdminTelegramIds } from "./runtime-config.js";
 import type { AdminRoleAssignment, AdminRoleLookupPort } from "./admin-role-context.js";
 import type { AdminPyramidLeagueReadPort } from "./node-supabase-admin-pyramid-league-read.js";
 import type { AdminPyramidLeagueReportsPort } from "./node-supabase-admin-pyramid-league-reports.js";
+import type { AdminPyramidLeagueActionsPort } from "./node-supabase-admin-pyramid-league-actions.js";
 
 type Permission = "read" | "competitions";
 const ROLE_PERMISSIONS: Record<string, Permission[]> = {
@@ -62,7 +63,7 @@ const filters = z.object({
   limit: z.coerce.number().int().min(1).max(100).default(60),
 });
 
-export function registerAdminLeagueRoutes(app: FastifyInstance, options: { adminRoleLookupPort?: AdminRoleLookupPort; adminPyramidLeagueReadPort?: AdminPyramidLeagueReadPort; adminPyramidLeagueReportsPort?: AdminPyramidLeagueReportsPort } = {}) {
+export function registerAdminLeagueRoutes(app: FastifyInstance, options: { adminRoleLookupPort?: AdminRoleLookupPort; adminPyramidLeagueReadPort?: AdminPyramidLeagueReadPort; adminPyramidLeagueReportsPort?: AdminPyramidLeagueReportsPort; adminPyramidLeagueActionsPort?: AdminPyramidLeagueActionsPort } = {}) {
   const authorizeAdmin = (request: FastifyRequest, reply: FastifyReply, permission: Permission) => authorize(request, reply, permission, options.adminRoleLookupPort);
   app.get("/v1/admin/pyramid-leagues", async (request, reply) => {
     const actor = await authorizeAdmin(request, reply, "read");
@@ -275,6 +276,28 @@ export function registerAdminLeagueRoutes(app: FastifyInstance, options: { admin
     }).safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ error: "INVALID_ADMIN_ACTION" });
     const input = parsed.data;
+    if (options.adminPyramidLeagueActionsPort) {
+      try {
+        return await options.adminPyramidLeagueActionsPort.execute({
+          action: input.action, targetId: input.targetId, actorTelegramId: actor.telegramId,
+          idempotencyKey: input.idempotencyKey,
+          ...(input.reason !== undefined ? { reason: input.reason } : {}),
+          ...(input.status !== undefined ? { status: input.status } : {}),
+          ...(input.hours !== undefined ? { hours: input.hours } : {}),
+          ...(input.awardName !== undefined ? { awardName: input.awardName } : {}),
+          ...(input.awardType !== undefined ? { awardType: input.awardType } : {}),
+        });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "ADMIN_ACTION_FAILED";
+        if (message.includes("TARGET_NOT_FOUND") || message.includes("PENDING_OFFER_NOT_FOUND")) return reply.code(404).send({ error: message });
+        if (["STATUS_REQUIRED","HOURS_REQUIRED","AWARD_FIELDS_REQUIRED","COMPLETED_LEAGUE_LOCKED","QUEUED_APPLICATION_NOT_FOUND","PYRAMID_LEAGUE_STATUS_MANAGED_AUTOMATICALLY","IDEMPOTENCY_KEY_REUSED"].some(code=>message.includes(code))) return reply.code(409).send({ error: message });
+        if (message.includes("INVALID_ADMIN_ACTION")) return reply.code(400).send({ error: message });
+        throw error;
+      }
+    }
+    if (process.env.NODE_ENV === "production" || process.env.ENVIRONMENT === "production") {
+      throw new Error("ADMIN_PYRAMID_LEAGUE_ACTIONS_SUPABASE_REPOSITORY_REQUIRED");
+    }
     try {
       const result = await prisma.$transaction(async (tx) => {
         let targetType = "";
