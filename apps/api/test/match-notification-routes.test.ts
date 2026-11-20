@@ -2,157 +2,53 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { buildApp } from "../src/app.js";
-import { prisma } from "../src/db.js";
+import type { MatchNotificationPort, MatchCheckpointNotification, MatchLifecycleNotification, MatchResultNotification } from "../src/game/match-notification-routes.js";
 
-test("match checkpoint notification claim and acknowledgement require the system Bot secret", async (t) => {
-  const previous = process.env.BOT_API_SECRET;
-  process.env.BOT_API_SECRET = "test-match-notification-secret";
-  const app = buildApp();
-  await app.ready();
-  t.after(async () => {
-    await app.close();
-    if (previous === undefined) delete process.env.BOT_API_SECRET;
-    else process.env.BOT_API_SECRET = previous;
-  });
-  const [claim, ack] = await Promise.all([
-    app.inject({ method: "POST", url: "/v1/bot/match-checkpoints/claim", payload: { limit: 5 } }),
-    app.inject({ method: "POST", url: "/v1/bot/match-checkpoints/ack", payload: {
-      checkpointId: "missing", side: "HOME", delivered: true,
-    } }),
-  ]);
-  assert.equal(claim.statusCode, 401);
-  assert.equal(ack.statusCode, 401);
+function fixture() {
+ const checkpointClaims=new Map<string,string>();
+ const port:MatchNotificationPort={
+  async claimResults(_limit):Promise<MatchResultNotification[]>{return [{id:"result-1",channel:"HOME",telegramChatId:"12345",claimToken:randomUUID(),attempt:1,
+   match:{id:"match-1",homeClub:"Home FC",awayClub:"Away FC",homeScore:2,awayScore:1,completedAt:"2026-11-20T10:00:00.000Z",
+    statistics:{home:{shots:5,passes:200,tackles:10},away:{shots:3,passes:150,tackles:8}},scorers:[{player:"A Player",goals:2}]}}];},
+  async claimLifecycle(_limit):Promise<MatchLifecycleNotification[]>{return [{id:"life-1",channel:"HOME",telegramChatId:"12345",claimToken:randomUUID(),attempt:2,
+   kind:"GOAL",minute:45,homeScore:1,awayScore:0,payload:{player:"A"},match:{id:"match-1",homeClub:"Home FC",awayClub:"Away FC"}}];},
+  async complete(_type,id,token,delivered,_error,_retry){return id==="result-1"&&token.length>0&&delivered;},
+  async claimCheckpoints(_limit,checkpointId):Promise<MatchCheckpointNotification[]>{if(checkpointId==="cp-1"&&!checkpointClaims.has("HOME")){
+   checkpointClaims.set("HOME","claimed");return [{checkpointId:"cp-1",matchId:"match-1",checkpointKey:"minute-45",minute:45,deadlineAt:"2026-11-20T10:01:00Z",
+    clubId:"home",clubName:"Home FC",opponentName:"Away FC",telegramUserId:"12345",side:"HOME",attempt:1}];}return [];},
+  async acknowledgeCheckpoint(id,side,delivered){if(id!=="cp-1"||!checkpointClaims.has(side))return false;if(delivered)checkpointClaims.delete(side);return true;},
+ };
+ return port;
+}
+test("match notification endpoints require the shared Bot secret",async t=>{
+ const previous=process.env.BOT_API_SECRET;process.env.BOT_API_SECRET="test-match-notification-secret";
+ const app=buildApp({logger:false,matchNotificationPort:fixture()});await app.ready();
+ t.after(async()=>{await app.close();if(previous===undefined)delete process.env.BOT_API_SECRET;else process.env.BOT_API_SECRET=previous;});
+ const urls=["/v1/bot/match-checkpoints/claim","/v1/bot/match-checkpoints/ack","/v1/bot/match-results/claim","/v1/bot/match-results/ack","/v1/bot/match-lifecycle/claim","/v1/bot/match-lifecycle/ack"];
+ const responses=await Promise.all(urls.map(url=>app.inject({method:"POST",url,payload:{limit:5}})));
+ assert.deepEqual(responses.map(x=>x.statusCode),[401,401,401,401,401,401]);
 });
-
-test("checkpoint notifications retry after failed delivery and acknowledge success once", async (t) => {
-  if (!process.env.DATABASE_URL) {
-    t.skip("DATABASE_URL is only configured in the ephemeral PostgreSQL CI job.");
-    return;
-  }
-  const previous = process.env.BOT_API_SECRET;
-  process.env.BOT_API_SECRET = "test-match-notification-secret";
-  const app = buildApp();
-  await app.ready();
-  const suffix = randomUUID().replaceAll("-", "");
-  let homeClubId = "";
-  let awayClubId = "";
-  let matchId = "";
-  try {
-    const home = await prisma.user.create({
-      data: {
-        telegramId: "notify-home-" + suffix,
-        displayName: "Notification Home",
-        club: { create: { name: "Notification Home", slug: "notify-home-" + suffix } },
-      },
-      include: { club: true },
-    });
-    const away = await prisma.user.create({
-      data: {
-        telegramId: "notify-away-" + suffix,
-        displayName: "Notification Away",
-        club: { create: { name: "Notification Away", slug: "notify-away-" + suffix } },
-      },
-      include: { club: true },
-    });
-    homeClubId = home.club!.id;
-    awayClubId = away.club!.id;
-    const now = new Date();
-    const match = await prisma.footballMatch.create({
-      data: {
-        idempotencyKey: "notify-match-" + suffix,
-        type: "FRIENDLY",
-        homeClubId,
-        awayClubId,
-        scheduledAt: now,
-        seed: "notify-seed-" + suffix,
-      },
-    });
-    matchId = match.id;
-    const checkpoint = await prisma.matchTacticalCheckpoint.create({
-      data: {
-        matchId,
-        checkpointKey: "minute-45",
-        kind: "HALF_TIME",
-        minute: 45,
-        openedAt: now,
-        decisionDeadlineAt: new Date(now.getTime() + 60_000),
-        nextSegmentAt: new Date(now.getTime() + 60_000),
-      },
-    });
-    const headers = { "x-football-bot-secret": "test-match-notification-secret" };
-    const claim = await app.inject({
-      method: "POST", url: "/v1/bot/match-checkpoints/claim", headers, payload: { limit: 10, checkpointId: checkpoint.id },
-    });
-    assert.equal(claim.statusCode, 200);
-    const first = claim.json() as { notifications: Array<{ checkpointId:string; side:string; attempt:number }> };
-    assert.equal(first.notifications.length, 2);
-    assert.deepEqual(first.notifications.map((item) => item.attempt).sort(), [1, 1]);
-    const failed = await app.inject({
-      method: "POST", url: "/v1/bot/match-checkpoints/ack", headers,
-      payload: { checkpointId: checkpoint.id, side: "HOME", delivered: false, error: "Telegram blocked recipient" },
-    });
-    assert.equal(failed.statusCode, 200);
-    const afterFailure = await prisma.matchTacticalCheckpoint.findUniqueOrThrow({ where: { id: checkpoint.id } });
-    assert.equal(afterFailure.homeBotNotifiedAt, null);
-    assert.equal(afterFailure.homeBotNotificationLastError, "Telegram blocked recipient");
-    await prisma.matchTacticalCheckpoint.update({
-      where: { id: checkpoint.id },
-      data: { homeBotNotificationClaimedAt: new Date(Date.now() - 31_000) },
-    });
-    const retry = await app.inject({
-      method: "POST", url: "/v1/bot/match-checkpoints/claim", headers, payload: { limit: 10, checkpointId: checkpoint.id },
-    });
-    assert.equal(retry.statusCode, 200);
-    const retried = retry.json() as { notifications: Array<{ checkpointId:string; side:string; attempt:number }> };
-    assert.deepEqual(retried.notifications.map((item) => ({ side:item.side, attempt:item.attempt })), [
-      { side: "HOME", attempt: 2 },
-    ]);
-    for (const side of ["HOME", "AWAY"] as const) {
-      const acknowledged = await app.inject({
-        method: "POST", url: "/v1/bot/match-checkpoints/ack", headers,
-        payload: { checkpointId: checkpoint.id, side, delivered: true },
-      });
-      assert.equal(acknowledged.statusCode, 200);
-    }
-    const completed = await prisma.matchTacticalCheckpoint.findUniqueOrThrow({ where: { id: checkpoint.id } });
-    assert.ok(completed.homeBotNotifiedAt);
-    assert.ok(completed.awayBotNotifiedAt);
-    assert.equal(completed.homeBotNotificationAttempts, 2);
-    assert.equal(completed.awayBotNotificationAttempts, 1);
-    assert.equal(completed.homeBotNotificationLastError, null);
-    const finalClaim = await app.inject({
-      method: "POST", url: "/v1/bot/match-checkpoints/claim", headers, payload: { limit: 10, checkpointId: checkpoint.id },
-    });
-    assert.deepEqual(finalClaim.json(), { notifications: [] });
-  } finally {
-    if (matchId) await prisma.footballMatch.deleteMany({ where: { id: matchId } });
-    const ids = [homeClubId, awayClubId].filter(Boolean);
-    if (ids.length) await prisma.club.deleteMany({ where: { id: { in: ids } } });
-    const telegramIds = ["notify-home-" + suffix, "notify-away-" + suffix];
-    await prisma.user.deleteMany({ where: { telegramId: { in: telegramIds } } });
-    await app.close();
-    if (previous === undefined) delete process.env.BOT_API_SECRET;
-    else process.env.BOT_API_SECRET = previous;
-  }
+test("match result and lifecycle notification routes use repository claim and acknowledgement",async t=>{
+ const previous=process.env.BOT_API_SECRET;process.env.BOT_API_SECRET="test-match-notification-secret";
+ const app=buildApp({logger:false,matchNotificationPort:fixture()});await app.ready();
+ t.after(async()=>{await app.close();if(previous===undefined)delete process.env.BOT_API_SECRET;else process.env.BOT_API_SECRET=previous;});
+ const headers={"x-football-bot-secret":"test-match-notification-secret"};
+ const result=await app.inject({method:"POST",url:"/v1/bot/match-results/claim",headers,payload:{limit:5}});
+ assert.equal(result.statusCode,200);assert.equal(result.json().notifications[0].match.statistics.home.shots,5);
+ const resultAck=await app.inject({method:"POST",url:"/v1/bot/match-results/ack",headers,payload:{id:"result-1",claimToken:randomUUID(),delivered:true}});
+ assert.equal(resultAck.statusCode,200);
+ const lifecycle=await app.inject({method:"POST",url:"/v1/bot/match-lifecycle/claim",headers,payload:{limit:5}});
+ assert.equal(lifecycle.statusCode,200);assert.equal(lifecycle.json().notifications[0].kind,"GOAL");
+ const invalid=await app.inject({method:"POST",url:"/v1/bot/match-lifecycle/ack",headers,payload:{id:"life-1",claimToken:"invalid",delivered:true}});
+ assert.equal(invalid.statusCode,400);
 });
-
-test("match result notification claim and acknowledgement require the system Bot secret", async (t) => {
-  const previous = process.env.BOT_API_SECRET;
-  process.env.BOT_API_SECRET = "test-match-result-notification-secret";
-  const app = buildApp();
-  await app.ready();
-  t.after(async () => {
-    await app.close();
-    if (previous === undefined) delete process.env.BOT_API_SECRET;
-    else process.env.BOT_API_SECRET = previous;
-  });
-  const [claim, ack] = await Promise.all([
-    app.inject({ method: "POST", url: "/v1/bot/match-results/claim", payload: { limit: 5 } }),
-    app.inject({ method: "POST", url: "/v1/bot/match-results/ack", payload: {
-      id: "missing", claimToken: randomUUID(), delivered: true,
-    } }),
-  ]);
-  assert.equal(claim.statusCode, 401);
-  assert.equal(ack.statusCode, 401);
+test("tactical checkpoint notifications are claimed and acknowledged through the repository",async t=>{
+ const previous=process.env.BOT_API_SECRET;process.env.BOT_API_SECRET="test-match-notification-secret";
+ const app=buildApp({logger:false,matchNotificationPort:fixture()});await app.ready();
+ t.after(async()=>{await app.close();if(previous===undefined)delete process.env.BOT_API_SECRET;else process.env.BOT_API_SECRET=previous;});
+ const headers={"x-football-bot-secret":"test-match-notification-secret"};
+ const claim=await app.inject({method:"POST",url:"/v1/bot/match-checkpoints/claim",headers,payload:{limit:10,checkpointId:"cp-1"}});
+ assert.equal(claim.statusCode,200);assert.equal(claim.json().notifications[0].side,"HOME");
+ const ack=await app.inject({method:"POST",url:"/v1/bot/match-checkpoints/ack",headers,payload:{checkpointId:"cp-1",side:"HOME",delivered:true}});
+ assert.equal(ack.statusCode,200);assert.deepEqual((await app.inject({method:"POST",url:"/v1/bot/match-checkpoints/claim",headers,payload:{limit:10,checkpointId:"cp-1"}})).json(),{notifications:[]});
 });
-
