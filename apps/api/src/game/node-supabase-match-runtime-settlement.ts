@@ -19,7 +19,7 @@ export class SupabaseMatchRuntimeSettlementRepository implements MatchRuntimeSet
     });
     if (!result || typeof result !== "object" || typeof result.matchId !== "string"
       || result.matchId !== input.matchId || typeof result.replayed !== "boolean"
-      || !("advancement" in result)) {
+      || !("advancement" in result) || !("pyramidFinalization" in result) || !("eventTournamentFinalization" in result)) {
       throw new Error("SUPABASE_MATCH_RUNTIME_SETTLEMENT_REJECTED");
     }
     if (result.competitionId && result.round !== null && result.round !== undefined) {
@@ -37,6 +37,8 @@ export class SupabaseMatchRuntimeSettlementRepository implements MatchRuntimeSet
     } else if (result.advancement !== null) {
       throw new Error("SUPABASE_MATCH_RUNTIME_ADVANCEMENT_REJECTED");
     }
+    if (result.pyramidFinalization !== null && (typeof result.pyramidFinalization !== "object" || typeof result.pyramidFinalization.processed !== "boolean")) throw new Error("SUPABASE_PYRAMID_FINALIZATION_INVALID_RESPONSE");
+    if (result.eventTournamentFinalization !== null && (typeof result.eventTournamentFinalization !== "object" || typeof result.eventTournamentFinalization.finalized !== "boolean")) throw new Error("SUPABASE_EVENT_TOURNAMENT_FINALIZATION_INVALID_RESPONSE");
     return result;
   }
 }
