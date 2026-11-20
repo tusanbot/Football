@@ -32,6 +32,7 @@ import { NodeSupabaseMatchNotificationRepository } from "./game/node-supabase-ma
 import { NodeSupabaseAdminGroupBroadcastRepository } from "./node-supabase-admin-group-broadcast.js";
 import { NodeSupabaseAdminRoleRepository } from "./node-supabase-admin-role.js";
 import { NodeSupabaseAdminConfigurationRepository } from "./node-supabase-admin-configuration.js";
+import { NodeSupabaseAdminConsoleReadRepository } from "./node-supabase-admin-console-read.js";
 import { NodeSupabaseAdminPyramidLeagueReadRepository } from "./node-supabase-admin-pyramid-league-read.js";
 import { NodeSupabaseAdminPyramidLeagueReportsRepository } from "./node-supabase-admin-pyramid-league-reports.js";
 import { NodeSupabaseAdminPyramidLeagueActionsRepository } from "./node-supabase-admin-pyramid-league-actions.js";
@@ -96,6 +97,7 @@ const matchNotificationPort = supabaseHttp ? new NodeSupabaseMatchNotificationRe
 const adminGroupBroadcastPort = supabaseHttp ? new NodeSupabaseAdminGroupBroadcastRepository(supabaseHttp) : undefined;
 const adminRoleLookupPort = supabaseHttp ? new NodeSupabaseAdminRoleRepository(supabaseHttp) : undefined;
 const adminConfigurationPort = supabaseHttp ? new NodeSupabaseAdminConfigurationRepository(supabaseHttp) : undefined;
+const adminConsoleReadPort = supabaseHttp ? new NodeSupabaseAdminConsoleReadRepository(supabaseHttp) : undefined;
 const adminPyramidLeagueReadPort = supabaseHttp ? new NodeSupabaseAdminPyramidLeagueReadRepository(supabaseHttp) : undefined;
 const adminPyramidLeagueReportsPort = supabaseHttp ? new NodeSupabaseAdminPyramidLeagueReportsRepository(supabaseHttp) : undefined;
 const adminPyramidLeagueActionsPort = supabaseHttp ? new NodeSupabaseAdminPyramidLeagueActionsRepository(supabaseHttp) : undefined;
@@ -133,6 +135,7 @@ const app = buildApp({
   ...(adminGroupBroadcastPort ? { adminGroupBroadcastPort } : {}),
   ...(adminRoleLookupPort ? { adminRoleLookupPort } : {}),
   ...(adminConfigurationPort ? { adminConfigurationPort } : {}),
+  ...(adminConsoleReadPort ? { adminConsoleReadPort } : {}),
   ...(adminPyramidLeagueReadPort ? { adminPyramidLeagueReadPort } : {}),
   ...(adminPyramidLeagueReportsPort ? { adminPyramidLeagueReportsPort } : {}),
   ...(adminPyramidLeagueActionsPort ? { adminPyramidLeagueActionsPort } : {}),
