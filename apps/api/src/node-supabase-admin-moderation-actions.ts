@@ -1,5 +1,5 @@
 import { SupabaseHttpClient } from "./node-supabase-http.js";
-export type AdminModerationAction = "suspend-user"|"restore-user"|"suspend-group"|"restore-group"|"cancel-challenge"|"competition-status";
+export type AdminModerationAction = "suspend-user"|"restore-user"|"suspend-group"|"restore-group"|"cancel-challenge"|"league-status"|"competition-status";
 export interface AdminModerationActionInput { action:AdminModerationAction;targetId:string;actorTelegramId:string;idempotencyKey:string;reason?:string; }
 export interface AdminModerationActionPort { execute(input:AdminModerationActionInput):Promise<{ok:true;targetType:string;targetId:string;replay:boolean}>; }
 export class NodeSupabaseAdminModerationActionsRepository implements AdminModerationActionPort {
