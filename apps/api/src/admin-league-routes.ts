@@ -4,7 +4,7 @@ import { prisma } from "./db.js";
 import { requireTelegramUser } from "./auth/require-telegram-user.js";
 import { consumeAllianceActionRateLimit } from "./groups/alliance-rate-limit.js";
 import { parseAdminTelegramIds } from "./runtime-config.js";
-import type { AdminRoleLookupPort } from "./admin-role-context.js";
+import type { AdminRoleAssignment, AdminRoleLookupPort } from "./admin-role-context.js";
 
 type Permission = "read" | "competitions";
 const ROLE_PERMISSIONS: Record<string, Permission[]> = {
@@ -17,7 +17,7 @@ const ROLE_PERMISSIONS: Record<string, Permission[]> = {
 async function roleFor(telegramId: string, port?: AdminRoleLookupPort) {
   const superAdmins = parseAdminTelegramIds(process.env.GAME_ADMIN_TELEGRAM_IDS);
   if (superAdmins.includes(telegramId)) return "superadmin";
-  let assigned;
+  let assigned: AdminRoleAssignment | null;
   if (port) assigned = await port.getAssignment(telegramId);
   else {
     if (process.env.NODE_ENV === "production" || process.env.ENVIRONMENT === "production") {
