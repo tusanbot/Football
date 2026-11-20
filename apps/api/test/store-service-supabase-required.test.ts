@@ -11,9 +11,9 @@ test("store snapshot never falls back to Prisma", async () => {
 });
 
 test("store purchase never falls back to Prisma", async () => {
-  await expectUnavailable(purchaseStoreItem("user-1", "fitness_boost", 1, "store-test-key-0001"), "SUPABASE_STORE_PURCHASE_UNAVAILABLE");
+  await expectUnavailable(purchaseStoreItem("user-1", "recovery_kit", 1, "store-test-key-0001"), "SUPABASE_STORE_PURCHASE_UNAVAILABLE");
 });
 
 test("store item use never falls back to Prisma", async () => {
-  await expectUnavailable(useStoreItem("user-1", "fitness_boost", "player-1", "store-test-key-0002"), "SUPABASE_STORE_ITEM_USE_UNAVAILABLE");
+  await expectUnavailable(useStoreItem("user-1", "recovery_kit", "player-1", "store-test-key-0002"), "SUPABASE_STORE_ITEM_USE_UNAVAILABLE");
 });
