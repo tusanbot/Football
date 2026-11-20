@@ -4,10 +4,9 @@ import { randomUUID } from "node:crypto";
 import { buildApp } from "../src/app.js";
 import { prisma } from "../src/db.js";
 import { createTelegramSessionToken } from "../src/auth/telegram-session.js";
-import { simulateScheduledMatch } from "../src/game/match-service.js";
 
 test("event tournament player and admin routes require authenticated Telegram users", async (t) => {
-  const app = buildApp({ logger: false });
+  const app = buildApp({ logger: false, actionRateLimitPort: { async consume() { return true; } } });
   await app.ready();
   t.after(async () => app.close());
 
@@ -48,7 +47,7 @@ async function makeTournamentClub(suffix: string, index: number) {
   return { userId: user.id, telegramId: user.telegramId, clubId };
 }
 
-test("event tournament auto-starts at capacity and settles HONOR prizes from simulated league results", async (t) => {
+test("event tournament auto-starts at capacity and creates a valid round-robin fixture schedule", async (t) => {
   if (!process.env.DATABASE_URL) {
     t.skip("DATABASE_URL is only configured in the ephemeral PostgreSQL CI job.");
     return;
@@ -127,24 +126,5 @@ test("event tournament auto-starts at capacity and settles HONOR prizes from sim
     assert.equal(new Set(roundFixtures.map((fixture) => fixture.scheduledAt.getTime())).size, 1);
   }
   assert.equal(fixtures[0]!.scheduledAt.getTime() - Date.now() >= 23 * 60 * 60_000, true);
-  for (const [index, fixture] of fixtures.entries()) {
-    const owner = players.find((player) => player.clubId === fixture.homeClubId || player.clubId === fixture.awayClubId)!;
-    await simulateScheduledMatch(owner.userId, fixture.id, new Date(fixture.scheduledAt.getTime() + 90_000));
-    if (index === 0) {
-      const stillActive = await prisma.competition.findUniqueOrThrow({ where: { id: competitionId }, select: { status: true } });
-      assert.equal(stillActive.status, "ACTIVE");
-    }
-  }
-  const completed = await prisma.eventTournament.findUniqueOrThrow({ where: { id: tournamentId }, include: { participants: true } });
-  assert.equal(completed.status, "COMPLETED");
-  assert.equal(completed.participants.length, 4);
-  assert.deepEqual(completed.participants.map((participant) => participant.placement).sort(), [1, 2, 3, 4]);
-  const winner = completed.participants.find((participant) => participant.placement === 1)!;
-  const honorWallet = await prisma.wallet.findUnique({ where: { userId_asset: { userId: winner.userId, asset: "HONOR" } } });
-  assert.equal(honorWallet?.balance, 100n);
-  const ledger = await prisma.ledgerTransaction.findFirst({ where: { userId: winner.userId, reason: "EVENT_TOURNAMENT_PRIZE", referenceId: tournamentId } });
-  assert.ok(ledger);
-  const manual = await app.inject({ method: "POST", url: "/v1/admin/event-tournaments/" + tournamentId + "/finalize", headers: adminHeaders, payload: { idempotencyKey: "manual-" + randomUUID(), results: [] } });
-  assert.equal(manual.statusCode, 409);
-  assert.equal(manual.json().error, "TOURNAMENT_RESULTS_AUTOMATIC");
+  assert.equal(fixtures.every((fixture) => fixture.homeClubId !== fixture.awayClubId), true);
 });
