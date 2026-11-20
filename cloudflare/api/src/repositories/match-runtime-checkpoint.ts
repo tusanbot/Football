@@ -1,0 +1,63 @@
+import type { MatchRuntimeCheckpointCommand, MatchRuntimeCheckpointPort, MatchRuntimeCheckpointSnapshot, MatchRuntimeCheckpointDecisionCommand, MatchRuntimeCheckpointDecisionResult } from "../../../../apps/api/src/game/match-runtime-checkpoint-context.js";
+import { SupabaseHttpClient } from "../supabase-http.js";
+
+export class SupabaseMatchRuntimeCheckpointRepository implements MatchRuntimeCheckpointPort {
+  constructor(private readonly client: SupabaseHttpClient) {}
+  async enqueueLifecycleEvents(matchId: string, events: import("../../../../apps/api/src/game/match-runtime-checkpoint-context.js").MatchRuntimeCheckpointEvent[]): Promise<number> {
+    const result = await this.client.rpc<number>("enqueue_match_lifecycle_events", {
+      p_match_id: matchId,
+      p_events: events.map((event) => ({
+        event_key: event.eventKey, kind: event.kind, minute: event.minute,
+        home_score: event.homeScore, away_score: event.awayScore,
+        payload: event.payload, available_at: event.availableAt,
+      })),
+    });
+    if (!Number.isInteger(result) || result < 0) throw new Error("SUPABASE_MATCH_LIFECYCLE_ENQUEUE_REJECTED");
+    return result;
+  }
+  async submitDecision(input: MatchRuntimeCheckpointDecisionCommand): Promise<MatchRuntimeCheckpointDecisionResult> {
+    const result = await this.client.rpc<MatchRuntimeCheckpointDecisionResult>("submit_match_runtime_tactical_decision", {
+      p_user_id: input.userId, p_match_id: input.matchId, p_checkpoint_key: input.checkpointKey,
+      p_idempotency_key: input.idempotencyKey, p_instruction: input.instruction, p_submitted_at: input.submittedAt,
+    });
+    if (!result || typeof result !== "object" || !("decision" in result) || !("replayed" in result)) {
+      throw new Error("SUPABASE_MATCH_TACTICAL_DECISION_REJECTED");
+    }
+    return result;
+  }
+  async getOpenCheckpoint(matchId: string): Promise<MatchRuntimeCheckpointSnapshot | null> {
+    const result = await this.client.rpc<MatchRuntimeCheckpointSnapshot | null>("get_match_runtime_open_checkpoint", {
+      p_match_id: matchId,
+    });
+    return result;
+  }
+  async resolveCheckpoint(input: MatchRuntimeCheckpointCommand): Promise<boolean> {
+    const result = await this.client.rpc<unknown>("resolve_match_runtime_checkpoint", {
+      p_runtime_id: input.runtimeId,
+      p_checkpoint_id: input.checkpointId,
+      p_expected_state_version: input.expectedStateVersion,
+      p_lease_token: input.leaseToken,
+      p_resolution: input.resolution,
+      p_next_minute: input.nextMinute,
+      p_simulation_state: input.simulationState,
+      p_next_action_at: input.nextActionAt,
+      p_events: input.events.map((event) => ({
+        event_key: event.eventKey, kind: event.kind, minute: event.minute,
+        home_score: event.homeScore, away_score: event.awayScore,
+        payload: event.payload, available_at: event.availableAt,
+      })),
+      p_next_checkpoint: input.nextCheckpoint ? {
+        checkpoint_key: input.nextCheckpoint.checkpointKey,
+        kind: input.nextCheckpoint.kind,
+        minute: input.nextCheckpoint.minute,
+        opened_at: input.nextCheckpoint.openedAt,
+        decision_deadline_at: input.nextCheckpoint.decisionDeadlineAt,
+        next_segment_at: input.nextCheckpoint.nextSegmentAt,
+      } : null,
+    });
+    if (result !== true && !(Array.isArray(result) && result.length === 1 && result[0] === true)) {
+      throw new Error("SUPABASE_MATCH_RUNTIME_CHECKPOINT_REJECTED");
+    }
+    return true;
+  }
+}

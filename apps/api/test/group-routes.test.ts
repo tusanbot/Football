@@ -1,0 +1,226 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import { buildApp } from "../src/app.js";
+import { requiresGroupManagerVerification } from "../src/groups/group-routes.js";
+
+test("group endpoints require the authenticated Bot channel", async (t) => {
+  const previous = process.env.BOT_API_SECRET;
+  process.env.BOT_API_SECRET = "group-test-secret";
+  const app = buildApp();
+  await app.ready();
+  t.after(async () => {
+    await app.close();
+    if (previous === undefined) delete process.env.BOT_API_SECRET;
+    else process.env.BOT_API_SECRET = previous;
+  });
+
+  const responses = await Promise.all([
+    app.inject({ method: "POST", url: "/v1/groups/register", payload: { telegramGroupId: "-100123", title: "Test", role: "ADMIN" } }),
+    app.inject({ method: "POST", url: "/v1/groups/join", payload: { telegramGroupId: "-100123" } }),
+    app.inject({ method: "GET", url: "/v1/groups/-100123" }),
+  ]);
+  assert.deepEqual(responses.map((response) => response.statusCode), [401, 401, 401]);
+});
+
+test("group registration validates Telegram group identity and role", async (t) => {
+  const previous = process.env.BOT_API_SECRET;
+  process.env.BOT_API_SECRET = "group-test-secret";
+  const app = buildApp();
+  await app.ready();
+  t.after(async () => {
+    await app.close();
+    if (previous === undefined) delete process.env.BOT_API_SECRET;
+    else process.env.BOT_API_SECRET = previous;
+  });
+
+  const response = await app.inject({
+    method: "POST",
+    url: "/v1/groups/register",
+    headers: { "x-football-bot-secret": "group-test-secret", "x-telegram-user-id": "12345" },
+    payload: { telegramGroupId: "not-a-telegram-id", title: "Test", role: "MEMBER" },
+  });
+  assert.equal(response.statusCode, 400);
+  assert.equal(response.json().error, "INVALID_GROUP_REGISTRATION");
+});
+
+test("group registration refuses groups below the ten-member threshold", async (t) => {
+  const previous = process.env.BOT_API_SECRET;
+  const previousToken = process.env.TELEGRAM_BOT_TOKEN;
+  const previousFetch = globalThis.fetch;
+  process.env.BOT_API_SECRET = "group-test-secret";
+  process.env.TELEGRAM_BOT_TOKEN = "123456:test-token";
+  globalThis.fetch = async (_input, init) => {
+    const payload = JSON.parse(String(init?.body ?? "{}")) as { user_id: number };
+    const status = payload.user_id === 123456 ? "administrator" : "creator";
+    return new Response(JSON.stringify({ ok: true, result: { status } }), { status: 200 });
+  };
+  const app = buildApp();
+  await app.ready();
+  t.after(async () => {
+    await app.close();
+    globalThis.fetch = previousFetch;
+    if (previous === undefined) delete process.env.BOT_API_SECRET;
+    else process.env.BOT_API_SECRET = previous;
+    if (previousToken === undefined) delete process.env.TELEGRAM_BOT_TOKEN;
+    else process.env.TELEGRAM_BOT_TOKEN = previousToken;
+  });
+
+  const response = await app.inject({
+    method: "POST",
+    url: "/v1/groups/register",
+    headers: { "x-football-bot-secret": "group-test-secret", "x-telegram-user-id": "12345" },
+    payload: { telegramGroupId: "-100123", title: "Small group", role: "OWNER", memberCount: 9 },
+  });
+  assert.equal(response.statusCode, 422);
+  assert.equal(response.json().error, "GROUP_MINIMUM_MEMBERS_REQUIRED");
+  assert.equal(response.json().minimumMembers, 10);
+});
+
+test("group activity requires a valid Telegram group id", async (t) => {
+  const previous = process.env.BOT_API_SECRET;
+  process.env.BOT_API_SECRET = "group-test-secret";
+  const app = buildApp();
+  await app.ready();
+  t.after(async () => {
+    await app.close();
+    if (previous === undefined) delete process.env.BOT_API_SECRET;
+    else process.env.BOT_API_SECRET = previous;
+  });
+
+  const response = await app.inject({
+    method: "POST",
+    url: "/v1/groups/activity",
+    headers: { "x-football-bot-secret": "group-test-secret", "x-telegram-user-id": "12345" },
+    payload: { telegramGroupId: "invalid" },
+  });
+  assert.equal(response.statusCode, 400);
+  assert.equal(response.json().error, "INVALID_GROUP_ACTIVITY");
+});
+
+test("new group routes require Bot authentication",async t=>{
+ const old=process.env.BOT_API_SECRET;process.env.BOT_API_SECRET="group-test-secret";const app=buildApp();await app.ready();
+ t.after(async()=>{await app.close();if(old===undefined)delete process.env.BOT_API_SECRET;else process.env.BOT_API_SECRET=old;});
+ const rs=await Promise.all([app.inject({method:"GET",url:"/v1/groups/-100123/shop"}),app.inject({method:"POST",url:"/v1/groups/-100123/shop/purchase",payload:{}}),app.inject({method:"GET",url:"/v1/groups/-100123/challenges"}),app.inject({method:"POST",url:"/v1/groups/-100123/leagues",payload:{}})]);
+ assert.deepEqual(rs.map(r=>r.statusCode),[401,401,401,401]);
+});
+
+test("Mini App group workspace requires Telegram initData",async t=>{
+ const app=buildApp();await app.ready();t.after(async()=>app.close());
+ const [mine,workspace]=await Promise.all([
+  app.inject({method:"GET",url:"/v1/groups/mine"}),
+  app.inject({method:"GET",url:"/v1/groups/-100123/workspace"})
+ ]);
+ assert.equal(mine.statusCode,401);assert.equal(workspace.statusCode,401);
+});
+test("system group membership synchronization requires the Bot secret", async (t) => {
+  const previous = process.env.BOT_API_SECRET;
+  process.env.BOT_API_SECRET = "group-test-secret";
+  const app = buildApp();
+  await app.ready();
+  t.after(async () => {
+    await app.close();
+    if (previous === undefined) delete process.env.BOT_API_SECRET;
+    else process.env.BOT_API_SECRET = previous;
+  });
+  const response = await app.inject({
+    method: "POST", url: "/v1/groups/system/member-update",
+    payload: { telegramGroupId: "-100123", telegramUserId: "12345", isMember: true, role: "ADMIN" },
+  });
+  assert.equal(response.statusCode, 401);
+});
+
+test("group game activity validates its action payload",async t=>{
+ const old=process.env.BOT_API_SECRET;process.env.BOT_API_SECRET="group-test-secret";const app=buildApp();await app.ready();
+ t.after(async()=>{await app.close();if(old===undefined)delete process.env.BOT_API_SECRET;else process.env.BOT_API_SECRET=old;});
+ const response=await app.inject({method:"POST",url:"/v1/groups/-100123/activity/award",headers:{"x-football-bot-secret":"group-test-secret","x-telegram-user-id":"12345"},payload:{activityType:"MESSAGE_SPAM",referenceId:"x"}});
+ assert.equal(response.statusCode,400);assert.equal(response.json().error,"INVALID_GROUP_ACTIVITY");
+});
+
+test("alliance security review requires Telegram authentication", async t => {
+  const app = buildApp();
+  await app.ready();
+  t.after(async () => app.close());
+  const response = await app.inject({
+    method: "POST",
+    url: "/v1/alliances/-100123/seasons/season-123/review",
+    payload: { decision: "APPROVE" },
+  });
+  assert.equal(response.statusCode, 401);
+});
+
+test("system group membership synchronization accepts numeric Telegram IDs", async (t) => {
+  if (!process.env.DATABASE_URL) {
+    t.skip("DATABASE_URL is only configured in the ephemeral PostgreSQL CI job.");
+    return;
+  }
+  const previous = process.env.BOT_API_SECRET;
+  process.env.BOT_API_SECRET = "group-test-secret";
+  const app = buildApp();
+  await app.ready();
+  t.after(async () => {
+    await app.close();
+    if (previous === undefined) delete process.env.BOT_API_SECRET;
+    else process.env.BOT_API_SECRET = previous;
+  });
+
+  const response = await app.inject({
+    method: "POST",
+    url: "/v1/groups/system/member-update",
+    headers: { "x-football-bot-secret": "group-test-secret" },
+    payload: {
+      telegramGroupId: "-1009876543210",
+      telegramUserId: "987654321",
+      isMember: false,
+    },
+  });
+  assert.equal(response.statusCode, 200);
+  assert.deepEqual(response.json(), { updated: false });
+});
+
+test("Mini App verifies live Telegram manager status for every manager-only group action", () => {
+  for (const route of [
+    "/v1/groups/:telegramGroupId/challenges",
+    "/v1/groups/:telegramGroupId/challenges/:challengeId/cancel",
+    "/v1/groups/:telegramGroupId/challenges/:challengeId/complete",
+    "/v1/groups/:telegramGroupId/leagues",
+    "/v1/groups/:telegramGroupId/leagues/:competitionId/start",
+    "/v1/groups/:telegramGroupId/shop/purchase",
+    "/v1/groups/:telegramGroupId/check",
+  ]) {
+    assert.equal(requiresGroupManagerVerification("POST", route), true, route);
+  }
+  assert.equal(requiresGroupManagerVerification("POST", "/v1/groups/:telegramGroupId/leagues/:competitionId/join"), false);
+  assert.equal(requiresGroupManagerVerification("GET", "/v1/groups/:telegramGroupId/shop"), false);
+});
+
+test("Fastify group routes use the injected Supabase membership port", async (t) => {
+  const previous = process.env.BOT_API_SECRET;
+  process.env.BOT_API_SECRET = "group-test-secret";
+  const calls: string[] = [];
+  const port = {
+    getActorStatus: async (userId: string, groupId?: string) => {
+      calls.push("actor:" + userId + ":" + groupId);
+      return { userExists: true, userSuspended: false, groupExists: true, groupSuspended: false };
+    },
+    listLeagues: async (input: { telegramUserId: string; telegramGroupId: string }) => {
+      calls.push("leagues:" + input.telegramUserId + ":" + input.telegramGroupId);
+      return { leagues: [] };
+    },
+  } as unknown as import("../src/groups/group-membership-context.js").GroupMembershipPort;
+  const app = buildApp({ groupMembershipPort: port });
+  await app.ready();
+  t.after(async () => {
+    await app.close();
+    if (previous === undefined) delete process.env.BOT_API_SECRET;
+    else process.env.BOT_API_SECRET = previous;
+  });
+
+  const response = await app.inject({
+    method: "GET",
+    url: "/v1/groups/-100123/leagues",
+    headers: { "x-football-bot-secret": "group-test-secret", "x-telegram-user-id": "12345" },
+  });
+  assert.equal(response.statusCode, 200);
+  assert.deepEqual(response.json(), { leagues: [] });
+  assert.deepEqual(calls, ["actor:12345:-100123", "leagues:12345:-100123"]);
+});

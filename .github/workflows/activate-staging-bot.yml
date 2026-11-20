@@ -1,0 +1,89 @@
+name: Activate Football Empire staging Bot
+
+on:
+  push:
+    branches: ["feat/telegram-production-readiness"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: football-empire-staging-bot-activation
+  cancel-in-progress: false
+
+jobs:
+  activate-staging-bot:
+    if: github.ref == 'refs/heads/feat/telegram-production-readiness' && contains(github.event.head_commit.message, '[activate-staging-bot]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      STAGING_TELEGRAM_BOT_TOKEN: ${{ secrets.STAGING_TELEGRAM_BOT_TOKEN }}
+      BOT_WEBHOOK_URL: https://football-empire-bot-staging.mshmahyar9.workers.dev/telegram/webhook
+    steps:
+      - name: Checkout staging release branch
+        uses: actions/checkout@v4
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          package_json_file: package.json
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install dependencies
+        run: pnpm install --no-frozen-lockfile
+      - name: Verify staging-only credentials and endpoints
+        shell: bash
+        run: |
+          set -euo pipefail
+          for key in CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID STAGING_TELEGRAM_BOT_TOKEN; do
+            test -n "${!key}" || { echo "Missing required repository secret: $key"; exit 1; }
+          done
+          [[ "$STAGING_TELEGRAM_BOT_TOKEN" =~ ^[0-9]+:[A-Za-z0-9_-]{20,}$ ]] || { echo "Invalid staging Bot token format"; exit 1; }
+          test "$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' https://football-empire-bot-staging.mshmahyar9.workers.dev/health)" = "200"
+          response="$(curl --silent --show-error https://football-empire-api-staging.mshmahyar9.workers.dev/ready)"
+          echo "$response" | jq -e '.status == "ready" and .database == "connected" and .schema == "current"' >/dev/null
+      - name: Verify the staging Telegram Bot identity and current webhook
+        id: telegram
+        shell: bash
+        run: |
+          set -euo pipefail
+          me="$(curl --fail --silent --show-error --retry 5 --retry-all-errors --retry-delay 2 --connect-timeout 10 --max-time 30 "https://api.telegram.org/bot${STAGING_TELEGRAM_BOT_TOKEN}/getMe")"
+          echo "$me" | jq -e '.ok == true and .result.is_bot == true' >/dev/null
+          echo "Verified staging Bot identity: @$(echo "$me" | jq -r '.result.username')"
+          current="$(curl --fail --silent --show-error --retry 5 --retry-all-errors --retry-delay 2 --connect-timeout 10 --max-time 30 "https://api.telegram.org/bot${STAGING_TELEGRAM_BOT_TOKEN}/getWebhookInfo")"
+          current_url="$(echo "$current" | jq -r '.result.url // ""')"
+          if [[ -n "$current_url" && "$current_url" != "$BOT_WEBHOOK_URL" ]]; then
+            echo "Refusing to overwrite an unexpected webhook URL on the staging Bot."
+            exit 1
+          fi
+      - name: Create a fresh staging-only webhook secret
+        shell: bash
+        run: |
+          set -euo pipefail
+          secret="$(openssl rand -hex 32)"
+          echo "::add-mask::$secret"
+          printf '%s' "$secret" | pnpm --dir apps/web exec wrangler secret put TELEGRAM_WEBHOOK_SECRET --config ../bot/wrangler.jsonc
+          echo "STAGING_WEBHOOK_SECRET=$secret" >> "$GITHUB_ENV"
+      - name: Register Telegram webhook on the staging Bot only
+        shell: bash
+        run: |
+          set -euo pipefail
+          payload="$(curl --fail --silent --show-error --retry 5 --retry-all-errors --retry-delay 2 --connect-timeout 10 --max-time 30 --request POST "https://api.telegram.org/bot${STAGING_TELEGRAM_BOT_TOKEN}/setWebhook" \
+            --data-urlencode "url=$BOT_WEBHOOK_URL" \
+            --data-urlencode "secret_token=$STAGING_WEBHOOK_SECRET" \
+            --data-urlencode 'allowed_updates=["message","edited_message","callback_query","chat_member","my_chat_member"]' \
+            --data-urlencode "drop_pending_updates=false")"
+          echo "$payload" | jq -e '.ok == true and .result == true' >/dev/null
+          verified="$(curl --fail --silent --show-error --retry 5 --retry-all-errors --retry-delay 2 --connect-timeout 10 --max-time 30 "https://api.telegram.org/bot${STAGING_TELEGRAM_BOT_TOKEN}/getWebhookInfo")"
+          echo "$verified" | jq -e --arg url "$BOT_WEBHOOK_URL" '
+            .ok == true and
+            .result.url == $url and
+            ((.result.allowed_updates // []) | index("message") != null) and
+            ((.result.allowed_updates // []) | index("callback_query") != null) and
+            ((.result.allowed_updates // []) | index("chat_member") != null) and
+            ((.result.allowed_updates // []) | index("my_chat_member") != null)
+          ' >/dev/null
+          echo "Staging Telegram webhook is registered and verified. Pending updates were preserved."
