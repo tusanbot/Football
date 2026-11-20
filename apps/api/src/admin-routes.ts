@@ -90,6 +90,8 @@ app.get("/v1/admin/finance-summary",async(req,reply)=>{
 if(!await authorizeAdmin(req,reply,"economy"))return;
 const q=z.object({days:z.coerce.number().int().min(1).max(365).default(30)}).safeParse(req.query);
 if(!q.success)return reply.code(400).send({error:"INVALID_QUERY"});
+if(options.adminConsoleReadPort)return options.adminConsoleReadPort.financeSummary(q.data.days);
+if(process.env.NODE_ENV==="production"||process.env.ENVIRONMENT==="production")throw new Error("ADMIN_CONSOLE_SUPABASE_REPOSITORY_REQUIRED");
 const from=new Date(Date.now()-q.data.days*86400000);
 const [wallet,clubFinance,groupPoints,walletBalances,allWalletLedger,groupTreasury,allGroupLedger,arrears]=await Promise.all([
 prisma.ledgerTransaction.groupBy({by:["asset","direction"],where:{createdAt:{gte:from}},_sum:{amount:true},_count:{_all:true}}),
