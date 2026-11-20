@@ -32,7 +32,7 @@ export class BotUpdateGuard {
     let payload: { updateId?: unknown; claimToken?: unknown };
     try { payload = await request.json() as { updateId?: unknown; claimToken?: unknown }; } catch { return new Response("Invalid JSON", { status: 400 }); }
     if (!Number.isSafeInteger(payload.updateId) || (payload.updateId as number) < 0) return new Response("Invalid update id", { status: 400 });
-    if ((action === "/complete" || action === "/release")
+    if ((action === "/complete" || action === "/release" || action === "/heartbeat")
       && (typeof payload.claimToken !== "string" || !/^[0-9a-f-]{36}$/i.test(payload.claimToken))) {
       return new Response("Invalid claim token", { status: 400 });
     }
