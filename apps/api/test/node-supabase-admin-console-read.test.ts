@@ -50,3 +50,26 @@ test("admin broadcasts reject invalid limits and malformed rows", async () => {
   const malformed = new NodeSupabaseAdminConsoleReadRepository(clientWith([{ id: "b1", kind: "other" }]).client);
   await assert.rejects(malformed.broadcasts(10), /SUPABASE_ADMIN_CONSOLE_INVALID_BROADCAST/);
 });
+
+test("admin ledger entries read all supported ledger resources through bounded Supabase HTTP RPC", async () => {
+  const rows = [{ id: "row-1", createdAt: "2026-11-20T10:00:00.000Z", asset: "CASH", direction: "CREDIT", amount: "25", reason: "test", user: { telegramId: "123", displayName: "Player", username: null } }];
+  const { client, calls } = clientWith(rows);
+  const repo = new NodeSupabaseAdminConsoleReadRepository(client);
+  assert.deepEqual(await repo.ledgerEntries("wallet-ledger", 20, "Player"), rows);
+  assert.deepEqual(calls[0], { name: "get_admin_ledger_entries_http", args: { p_resource: "wallet-ledger", p_limit: 20, p_query: "Player" } });
+  const groupRows = [{ id: "row-2", createdAt: "2026-11-20T10:00:00.000Z", amount: "10", source: "ADMIN_ADJUSTMENT", description: "test", group: { title: "Group", telegramId: "-1001" }, user: null }];
+  const groupRepo = new NodeSupabaseAdminConsoleReadRepository(clientWith(groupRows).client);
+  assert.deepEqual(await groupRepo.ledgerEntries("group-ledger", 10), groupRows);
+  const auditRows = [{ id: "audit-1", createdAt: "2026-11-20T10:00:00.000Z", actorTelegramId: "123", action: "test", targetType: "user", targetId: "u1" }];
+  const auditRepo = new NodeSupabaseAdminConsoleReadRepository(clientWith(auditRows).client);
+  assert.deepEqual(await auditRepo.ledgerEntries("audit", 5), auditRows);
+});
+test("admin ledger entries reject invalid limits, queries and malformed responses", async () => {
+  const repo = new NodeSupabaseAdminConsoleReadRepository(clientWith([]).client);
+  await assert.rejects(repo.ledgerEntries("wallet-ledger", 0), /INVALID_ADMIN_LEDGER_LIMIT/);
+  await assert.rejects(repo.ledgerEntries("audit", 10, "x".repeat(101)), /INVALID_ADMIN_LEDGER_QUERY/);
+  const malformed = new NodeSupabaseAdminConsoleReadRepository(clientWith([{ id: "x", createdAt: "now" }]).client);
+  await assert.rejects(malformed.ledgerEntries("wallet-ledger", 10), /SUPABASE_ADMIN_LEDGER_INVALID_ROW/);
+  const invalidResponse = new NodeSupabaseAdminConsoleReadRepository(clientWith({ rows: [] }).client);
+  await assert.rejects(invalidResponse.ledgerEntries("audit", 10), /SUPABASE_ADMIN_LEDGER_INVALID_RESPONSE/);
+});
