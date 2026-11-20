@@ -5,6 +5,7 @@ import {requireTelegramUser} from "./auth/require-telegram-user.js";
 import {consumeAllianceActionRateLimit} from "./groups/alliance-rate-limit.js";
 import {parseAdminTelegramIds} from "./runtime-config.js";
 import type { AdminRoleAssignment, AdminRoleLookupPort } from "./admin-role-context.js";
+import type { AdminConfigurationPort } from "./node-supabase-admin-configuration.js";
 import {adminCloseAllianceSeasonInTransaction,adminReviewAllianceSeasonInTransaction,adminStartAllianceSeasonInTransaction} from "./groups/alliance-service.js";
 import type { AdminAlliancePort } from "./groups/node-supabase-alliance.js";
 type AdminPermission="read"|"players"|"clubs"|"matches"|"competitions"|"economy"|"groups"|"moderation"|"gifts";
@@ -13,7 +14,7 @@ async function adminRoleFor(telegramId:string,port?:AdminRoleLookupPort){const s
 async function authorize(req:FastifyRequest,reply:FastifyReply,permission:AdminPermission="read",port?:AdminRoleLookupPort){const u=await requireTelegramUser(req);if(!u){reply.code(401).send({error:"UNAUTHENTICATED"});return null;}const role=await adminRoleFor(u.telegramId,port);if(!role||!ROLE_PERMISSIONS[role]?.includes(permission)){reply.code(403).send({error:"ADMIN_PERMISSION_REQUIRED",permission});return null;}return {...u,adminRole:role};}
 const querySchema=z.object({q:z.string().trim().max(100).optional(),season:z.coerce.number().int().min(2020).max(2200).optional(),limit:z.coerce.number().int().min(1).max(100).default(40)});
 export function assertManualCompetitionStatus(status:string){if(status==="COMPLETED")throw new Error("COMPETITION_COMPLETION_AUTOMATIC_ONLY");if(status==="ACTIVE")throw new Error("COMPETITION_ACTIVATION_AUTOMATIC_ONLY");if(status!=="CANCELLED")throw new Error("COMPETITION_STATUS_MANUAL_CANCELLATION_ONLY");}
-export function registerAdminRoutes(app:FastifyInstance,options:{adminAlliancePort?:AdminAlliancePort;adminRoleLookupPort?:AdminRoleLookupPort}={}){
+export function registerAdminRoutes(app:FastifyInstance,options:{adminAlliancePort?:AdminAlliancePort;adminRoleLookupPort?:AdminRoleLookupPort;adminConfigurationPort?:AdminConfigurationPort}={}){
 const authorizeAdmin=(req:FastifyRequest,reply:FastifyReply,permission:AdminPermission="read")=>authorize(req,reply,permission,options.adminRoleLookupPort);
 app.get("/v1/admin/overview",async(req,reply)=>{if(!await authorizeAdmin(req,reply))return;const [users,clubs,players,groups,challenges,leagues,items,giftCodes,flags,alliances,matches,walletTransactions,groupTransactions]=await Promise.all([prisma.user.count(),prisma.club.count(),prisma.player.count(),prisma.telegramGroup.count(),prisma.groupChallenge.count(),prisma.competition.count(),prisma.groupRewardItem.count(),prisma.giftCode.count(),prisma.allianceSeason.count({where:{reviewStatus:"FLAGGED"}}),prisma.alliance.count(),prisma.footballMatch.count(),prisma.ledgerTransaction.count(),prisma.groupPointLedger.count()]);return{counts:{users,clubs,players,groups,challenges,leagues,items,giftCodes,flags,alliances,matches,walletTransactions,groupTransactions}};});
 app.get("/v1/admin/group-targets",async(req,reply)=>{const actor=await authorizeAdmin(req,reply);if(!actor)return;if(actor.adminRole!=="superadmin")return reply.code(403).send({error:"SUPERADMIN_REQUIRED"});const groups=await prisma.telegramGroup.findMany({where:{isActive:true,isSuspended:false},select:{telegramId:true,title:true},orderBy:{createdAt:"asc"},take:5000});return{groups};});
@@ -81,8 +82,8 @@ const groupRows=broadcasts.map(b=>({id:b.id,kind:"groups",name:"ارسال گر�
 const userRows=userAudits.map(a=>{const total=totalMap.get(a.targetId)??0,delivered=deliveredMap.get(a.targetId)??0,failed=failedMap.get(a.targetId)??0;return{id:a.targetId,kind:"users",name:"ارسال خصوصی به کاربران",createdByTelegramId:a.actorTelegramId,createdAt:a.createdAt.toISOString(),total,delivered,skipped:0,failed,pending:Math.max(0,total-delivered-failed)};});
 return [...groupRows,...userRows].sort((a,b)=>b.createdAt.localeCompare(a.createdAt)).slice(0,q.data.limit);
 });
-app.get("/v1/admin/roles",async(req,reply)=>{const actor=await authorizeAdmin(req,reply);if(!actor)return;if(actor.adminRole!=="superadmin")return reply.code(403).send({error:"SUPERADMIN_REQUIRED"});return prisma.adminRoleAssignment.findMany({orderBy:{updatedAt:"desc"}});});
-app.get("/v1/admin/settings",async(req,reply)=>{const actor=await authorizeAdmin(req,reply);if(!actor)return;if(actor.adminRole!=="superadmin")return reply.code(403).send({error:"SUPERADMIN_REQUIRED"});return prisma.gameSetting.findMany({orderBy:{key:"asc"}});});
+app.get("/v1/admin/roles",async(req,reply)=>{const actor=await authorizeAdmin(req,reply);if(!actor)return;if(actor.adminRole!=="superadmin")return reply.code(403).send({error:"SUPERADMIN_REQUIRED"});if(options.adminConfigurationPort)return (await options.adminConfigurationPort.list()).roles;if(process.env.NODE_ENV==="production"||process.env.ENVIRONMENT==="production")throw new Error("ADMIN_CONFIGURATION_SUPABASE_REPOSITORY_REQUIRED");return prisma.adminRoleAssignment.findMany({orderBy:{updatedAt:"desc"}});});
+app.get("/v1/admin/settings",async(req,reply)=>{const actor=await authorizeAdmin(req,reply);if(!actor)return;if(actor.adminRole!=="superadmin")return reply.code(403).send({error:"SUPERADMIN_REQUIRED"});if(options.adminConfigurationPort)return (await options.adminConfigurationPort.list()).settings;if(process.env.NODE_ENV==="production"||process.env.ENVIRONMENT==="production")throw new Error("ADMIN_CONFIGURATION_SUPABASE_REPOSITORY_REQUIRED");return prisma.gameSetting.findMany({orderBy:{key:"asc"}});});
 app.get("/v1/admin/finance-summary",async(req,reply)=>{
 if(!await authorizeAdmin(req,reply,"economy"))return;
 const q=z.object({days:z.coerce.number().int().min(1).max(365).default(30)}).safeParse(req.query);
@@ -173,6 +174,29 @@ if(["SEASON_NOT_FOUND","ALLIANCE_NOT_FOUND","ACCOUNT_NOT_FOUND"].includes(code))
 if(code.startsWith("INVALID_"))return reply.code(400).send({error:code});
 throw error;
 }
+}
+if(["set-admin-role","revoke-admin-role","set-game-setting"].includes(x.action)&&options.adminConfigurationPort){
+try{
+ const result=await options.adminConfigurationPort.execute({
+  action:x.action as "set-admin-role"|"revoke-admin-role"|"set-game-setting",
+  actorTelegramId:actor.telegramId,idempotencyKey:x.idempotencyKey,
+  ...(x.adminTelegramId?{adminTelegramId:x.adminTelegramId}:{}),
+  ...(x.adminRole?{adminRole:x.adminRole}:{}),
+  ...(x.settingKey?{settingKey:x.settingKey}:{}),
+  ...(x.settingValue!==undefined?{settingValue:x.settingValue}:{}),
+  ...(x.settingDescription!==undefined?{settingDescription:x.settingDescription}:{}),
+ });
+ return {ok:true,targetType:result.targetType,targetId:result.targetId,replayed:result.replay};
+}catch(error){
+ const message=error instanceof Error?error.message:"ADMIN_CONFIGURATION_ACTION_FAILED";
+ if(message.includes("ADMIN_ROLE_NOT_FOUND"))return reply.code(404).send({error:message});
+ if(["INVALID_ADMIN_ROLE","INVALID_SETTING","INVALID_ADMIN_CONFIGURATION_ACTION"].some(code=>message.includes(code)))return reply.code(400).send({error:message});
+ if(message.includes("IDEMPOTENCY_KEY_REUSED"))return reply.code(409).send({error:message});
+ throw error;
+}
+}
+if((x.action==="set-admin-role"||x.action==="revoke-admin-role"||x.action==="set-game-setting")&&(process.env.NODE_ENV==="production"||process.env.ENVIRONMENT==="production")){
+ throw new Error("ADMIN_CONFIGURATION_SUPABASE_REPOSITORY_REQUIRED");
 }
 try{await prisma.$transaction(async tx=>{switch(x.action){
 case"suspend-user":case"restore-user":if(!id)throw new Error("TARGET_REQUIRED");type="user";await tx.user.update({where:{id},data:{isSuspended:x.action==="suspend-user",suspendedAt:x.action==="suspend-user"?new Date():null,suspensionReason:x.action==="suspend-user"?(x.reason??"Administrative action"):null}});break;
