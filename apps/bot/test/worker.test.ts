@@ -15,8 +15,10 @@ class MemoryStorage {
   async transaction<T>(callback: (transaction: MemoryStorage) => Promise<T>): Promise<T> { return callback(this); }
 }
 
-function guardRequest(path: string, updateId: number) {
-  return new Request("https://guard" + path, { method: "POST", body: JSON.stringify({ updateId }) });
+function guardRequest(path: string, updateId: number, claimToken?: string) {
+  return new Request("https://guard" + path, {
+    method: "POST", body: JSON.stringify({ updateId, ...(claimToken ? { claimToken } : {}) }),
+  });
 }
 
 test("health route is available without Telegram secrets", async () => {
@@ -40,27 +42,50 @@ test("webhook rejects an invalid Telegram secret before parsing or dispatch", as
   assert.equal(response.status, 401);
 });
 
-test("update guard claims once and marks completed updates as duplicates", async () => {
+test("update guard claims once and makes completion idempotent for the owning claim token", async () => {
   const storage = new MemoryStorage();
   const guard = new BotUpdateGuard({ storage } as never);
   const first = await guard.fetch(guardRequest("/claim", 123));
   assert.equal(first.status, 200);
-  assert.deepEqual(await first.json(), { result: "claimed" });
+  const claim = await first.json() as { result: string; claimToken: string };
+  assert.equal(claim.result, "claimed");
+  assert.match(claim.claimToken, /^[0-9a-f-]{36}$/i);
   const concurrent = await guard.fetch(guardRequest("/claim", 123));
   assert.equal(concurrent.status, 409);
-  await guard.fetch(guardRequest("/complete", 123));
+  const completed = await guard.fetch(guardRequest("/complete", 123, claim.claimToken));
+  assert.equal(completed.status, 200);
+  const replay = await guard.fetch(guardRequest("/complete", 123, claim.claimToken));
+  assert.equal(replay.status, 200, "lost completion responses must be safely replayable");
   const duplicate = await guard.fetch(guardRequest("/claim", 123));
   assert.equal(duplicate.status, 200);
   assert.deepEqual(await duplicate.json(), { result: "duplicate" });
 });
 
-test("update guard releases failed updates so Telegram retries can process them", async () => {
+test("update guard fences an expired worker from completing or releasing a newer claim", async () => {
   const storage = new MemoryStorage();
   const guard = new BotUpdateGuard({ storage } as never);
-  await guard.fetch(guardRequest("/claim", 456));
-  await guard.fetch(guardRequest("/release", 456));
-  const retry = await guard.fetch(guardRequest("/claim", 456));
-  assert.deepEqual(await retry.json(), { result: "claimed" });
+  const firstResponse = await guard.fetch(guardRequest("/claim", 456));
+  const first = await firstResponse.json() as { claimToken: string };
+  await storage.put("update:456", {
+    state: "processing", updatedAt: Date.now() - 60_001, claimToken: first.claimToken,
+  });
+  const secondResponse = await guard.fetch(guardRequest("/claim", 456));
+  const second = await secondResponse.json() as { result: string; claimToken: string };
+  assert.equal(second.result, "claimed");
+  assert.notEqual(second.claimToken, first.claimToken);
+  assert.equal((await guard.fetch(guardRequest("/complete", 456, first.claimToken))).status, 409);
+  assert.equal((await guard.fetch(guardRequest("/release", 456, first.claimToken))).status, 409);
+  assert.equal((await guard.fetch(guardRequest("/complete", 456, second.claimToken))).status, 200);
+});
+
+test("update guard releases failed updates only for the owning claim token", async () => {
+  const storage = new MemoryStorage();
+  const guard = new BotUpdateGuard({ storage } as never);
+  const firstResponse = await guard.fetch(guardRequest("/claim", 789));
+  const first = await firstResponse.json() as { claimToken: string };
+  assert.equal((await guard.fetch(guardRequest("/release", 789, first.claimToken))).status, 200);
+  const retry = await guard.fetch(guardRequest("/claim", 789));
+  assert.equal((await retry.json() as { result: string }).result, "claimed");
 });
 
 async function hmac(keyBytes: Uint8Array, message: string): Promise<Uint8Array> {

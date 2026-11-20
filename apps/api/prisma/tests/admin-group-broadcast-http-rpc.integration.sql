@@ -10,7 +10,7 @@ BEGIN
  v_claim_def:=pg_get_functiondef(v_claim);v_fail_def:=pg_get_functiondef(v_fail);
  IF position('SKIP LOCKED' IN v_claim_def)=0 OR position('deliveryAttempts' IN v_claim_def)=0
   OR position('deliveryCompletedClaimToken' IN pg_get_functiondef(v_complete))=0
-  OR position('deliveryCompletedClaimToken' IN pg_get_functiondef(v_complete))=0
+  OR position('RETURN EXISTS' IN pg_get_functiondef(v_complete))=0
   OR position('FOR UPDATE' IN v_fail_def)=0 OR position('9999-12-31' IN v_fail_def)=0 THEN
   RAISE EXCEPTION 'admin group broadcast claim/retry policy is not concurrency-safe';
  END IF;

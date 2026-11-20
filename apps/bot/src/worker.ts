@@ -12,7 +12,7 @@ interface Env {
   BOT_UPDATE_GUARD: { idFromName(name: string): unknown; get(id: unknown): { fetch(request: Request): Promise<Response> } };
 }
 
-interface GuardRecord { state: "processing" | "complete"; updatedAt: number; }
+interface GuardRecord { state: "processing" | "complete"; updatedAt: number; claimToken: string; }
 interface StorageLike {
   get<T>(key: string): Promise<T | undefined>;
   put(key: string, value: unknown): Promise<void>;
@@ -29,35 +29,45 @@ export class BotUpdateGuard {
   async fetch(request: Request): Promise<Response> {
     if (request.method !== "POST") return new Response("Method not allowed", { status: 405 });
     const action = new URL(request.url).pathname;
-    let payload: { updateId?: unknown };
-    try { payload = await request.json() as { updateId?: unknown }; } catch { return new Response("Invalid JSON", { status: 400 }); }
+    let payload: { updateId?: unknown; claimToken?: unknown };
+    try { payload = await request.json() as { updateId?: unknown; claimToken?: unknown }; } catch { return new Response("Invalid JSON", { status: 400 }); }
     if (!Number.isSafeInteger(payload.updateId) || (payload.updateId as number) < 0) return new Response("Invalid update id", { status: 400 });
+    if ((action === "/complete" || action === "/release")
+      && (typeof payload.claimToken !== "string" || !/^[0-9a-f-]{36}$/i.test(payload.claimToken))) {
+      return new Response("Invalid claim token", { status: 400 });
+    }
     const key = "update:" + String(payload.updateId);
     const now = Date.now();
     if (action === "/claim") {
-      const result = await this.state.storage.transaction(async transaction => {
+      const claim = await this.state.storage.transaction(async transaction => {
         const current = await transaction.get<GuardRecord>(key);
-        if (current?.state === "complete" && now - current.updatedAt < 7 * 24 * 60 * 60 * 1000) return "duplicate";
-        if (current?.state === "processing" && now - current.updatedAt < 60_000) return "busy";
-        await transaction.put(key, { state: "processing", updatedAt: now } satisfies GuardRecord);
-        return "claimed";
+        if (current?.state === "complete" && now - current.updatedAt < 7 * 24 * 60 * 60 * 1000) return { result: "duplicate" as const };
+        if (current?.state === "processing" && now - current.updatedAt < 60_000) return { result: "busy" as const };
+        const claimToken = crypto.randomUUID();
+        await transaction.put(key, { state: "processing", updatedAt: now, claimToken } satisfies GuardRecord);
+        return { result: "claimed" as const, claimToken };
       });
       await this.state.storage.setAlarm(now + 24 * 60 * 60 * 1000);
-      return Response.json({ result }, { status: result === "busy" ? 409 : 200 });
+      return Response.json(claim, { status: claim.result === "busy" ? 409 : 200 });
     }
     if (action === "/complete") {
-      await this.state.storage.transaction(async transaction => {
+      const completed = await this.state.storage.transaction(async transaction => {
         const current = await transaction.get<GuardRecord>(key);
-        if (current?.state === "processing") await transaction.put(key, { state: "complete", updatedAt: now } satisfies GuardRecord);
+        if (current?.state === "complete" && current.claimToken === payload.claimToken) return true;
+        if (current?.state !== "processing" || current.claimToken !== payload.claimToken) return false;
+        await transaction.put(key, { ...current, state: "complete", updatedAt: now } satisfies GuardRecord);
+        return true;
       });
-      return new Response("ok");
+      return Response.json({ completed }, { status: completed ? 200 : 409 });
     }
     if (action === "/release") {
-      await this.state.storage.transaction(async transaction => {
+      const released = await this.state.storage.transaction(async transaction => {
         const current = await transaction.get<GuardRecord>(key);
-        if (current?.state === "processing") await transaction.delete(key);
+        if (current?.state !== "processing" || current.claimToken !== payload.claimToken) return false;
+        await transaction.delete(key);
+        return true;
       });
-      return new Response("ok");
+      return Response.json({ released }, { status: released ? 200 : 409 });
     }
     return new Response("Not found", { status: 404 });
   }
@@ -261,18 +271,24 @@ export default {
     const claim = await guard.fetch(new Request("https://bot-update-guard/claim", { method: "POST", body: JSON.stringify({ updateId }) }));
     if (claim.status === 409) return new Response("Update is already being processed; retry later", { status: 503 });
     if (!claim.ok) return new Response("Could not claim update", { status: 503 });
-    const claimResult = await claim.json() as { result: string };
+    const claimResult = await claim.json() as { result: string; claimToken?: string };
     if (claimResult.result === "duplicate") return new Response("ok", { status: 200 });
+    if (claimResult.result !== "claimed" || !claimResult.claimToken) return new Response("Could not claim update", { status: 503 });
     try {
       await ensureApiReady(env);
       const { bot } = await prepareBot(env);
       await bot.handleUpdate(update as never);
       // Count successfully handled updates only; failed handlers are retried by Telegram.
       schedulePilotAnalytics(recordPilotEvent(update, env), context);
-      await guard.fetch(new Request("https://bot-update-guard/complete", { method: "POST", body: JSON.stringify({ updateId }) }));
+      const completed = await guard.fetch(new Request("https://bot-update-guard/complete", {
+        method: "POST", body: JSON.stringify({ updateId, claimToken: claimResult.claimToken }),
+      }));
+      if (!completed.ok) throw new Error("Telegram update claim was lost before completion.");
       return new Response("ok", { status: 200 });
     } catch (error) {
-      await guard.fetch(new Request("https://bot-update-guard/release", { method: "POST", body: JSON.stringify({ updateId }) })).catch(() => undefined);
+      await guard.fetch(new Request("https://bot-update-guard/release", {
+        method: "POST", body: JSON.stringify({ updateId, claimToken: claimResult.claimToken }),
+      })).catch(() => undefined);
       console.error("Telegram webhook processing failed", error instanceof Error ? error.message : "unknown error");
       return new Response("Temporary processing failure", { status: 500 });
     }

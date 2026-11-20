@@ -223,9 +223,10 @@ async function scheduleGroupReplyDeletion(chatId: number, messageId: number) {
 
 
 type LeagueNoticeDelivery = { id: string; telegramId: string; title: string; body: string; kind: string; referenceId: string | null; claimToken: string };
-let leagueNoticeWorkerBusy = false;
+let adminGroupBroadcastWorkerBusy = false;
 async function pollAdminGroupBroadcastQueue() {
-  if (!apiUrl || !botApiSecret) return;
+  if (adminGroupBroadcastWorkerBusy || !apiUrl || !botApiSecret) return;
+  adminGroupBroadcastWorkerBusy = true;
   try {
     const result = await apiSystem<{ deliveries: Array<{ id: string; telegramGroupId: string; message: string; claimToken: string }> }>("/v1/bot/admin-group-broadcasts/claim", { limit: 20 });
     for (const delivery of result.deliveries) {
@@ -246,6 +247,8 @@ async function pollAdminGroupBroadcastQueue() {
     }
   } catch (error) {
     console.error("Admin group broadcast worker failed:", error);
+  } finally {
+    adminGroupBroadcastWorkerBusy = false;
   }
 }
 
