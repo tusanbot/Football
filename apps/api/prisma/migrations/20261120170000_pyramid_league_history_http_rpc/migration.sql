@@ -89,7 +89,7 @@ BEGIN
   FROM public."PyramidLeagueEntry" e
   JOIN public."PyramidLeague" l ON l.id=e."leagueId"
   JOIN public."Competition" c ON c.id=l."competitionId"
-  WHERE e."clubId"=v_club.id AND c.status::text='COMPLETED' AND e."finalPosition" IS NOT NULL;
+  WHERE e."clubId"=v_club.id AND c.status::text='COMPLETED';
 
   RETURN jsonb_build_object(
     'club',jsonb_build_object('id',v_club.id,'name',v_club.name),
