@@ -15,5 +15,9 @@ export function withClubEconomySettlementPort<T>(port: ClubEconomySettlementPort
   return scope.run(port, operation);
 }
 export function getClubEconomySettlementPort(): ClubEconomySettlementPort | undefined {
-  return scope.getStore();
+  const port = scope.getStore();
+  if (!port && (process.env.NODE_ENV === "production" || process.env.ENVIRONMENT === "production")) {
+    throw new Error("CLUB_ECONOMY_SETTLEMENT_SUPABASE_REPOSITORY_REQUIRED");
+  }
+  return port;
 }
