@@ -74,3 +74,13 @@ test("pyramid league overview and history invoke their dedicated read RPCs", asy
  assert.equal((await repository.getClubHistory("user-1")).club !== undefined, true);
  assert.deepEqual(calls, ["/rest/v1/rpc/get_pyramid_league_overview_http", "/rest/v1/rpc/get_pyramid_league_history_http"]);
 });
+
+test("pyramid league details call the read RPC and reject malformed payloads", async () => {
+ let called = "";
+ const payload = { league: { id: "league-1" }, standings: [], topScorers: [], topAssists: [], matches: [], nextRound: null, nextRoundMatches: [], awards: [] };
+ const client = new SupabaseHttpClient({ url: "https://example.supabase.co", serviceRoleKey: "service-role-key-that-is-long-enough", fetchImpl: async (input) => { called = String(input); return new Response(JSON.stringify(payload), { status: 200, headers: { "content-type": "application/json" } }); }});
+ const repository = new SupabasePyramidLeagueSettlementRepository(client);
+ const result = await repository.getLeagueDetails("user-1", "league-1");
+ assert.equal(new URL(called).pathname, "/rest/v1/rpc/get_pyramid_league_details_http");
+ assert.equal((result.league as { id: string }).id, "league-1");
+});
