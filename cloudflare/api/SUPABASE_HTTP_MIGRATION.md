@@ -386,3 +386,9 @@ The Fastify API now validates the full set of runtime repositories at constructi
 Telegram account provisioning is now wired in the Node API to the same `provision_telegram_account` Supabase RPC already used by the Cloudflare Worker. Both Bot and Mini App onboarding therefore use the atomic Supabase operation in Production. The Node adapter has dedicated tests for scalar/array response parsing, starter-player wage serialization, and malformed payload rejection.
 
 This is a runtime safety boundary, not a claim that Prisma or PostgreSQL has been removed. The Node process still initializes Prisma for legacy/non-production paths and the Cloudflare Worker still has a transitional Prisma compatibility client. Removal of `pg`, `DATABASE_URL`, and Prisma packages remains blocked on converting those remaining code paths and migration/seed workflows.
+
+## Season awards and remaining route audit (2026-11-20)
+
+The Node API season-awards endpoint now receives `NodeSupabaseSeasonAwardRepository` and calls the existing `get_season_award_data` RPC; its production wiring is mandatory. The adapter validates numeric and string fields before the route builds rankings and the Team of the Season.
+
+A route-level source audit still identifies non-migrated Prisma access in the administrative dashboard/role and league-management endpoints, admin group broadcast delivery, match notification claim/ack endpoints, and Telegram message-deletion queue. Group route compatibility branches remain guarded by the required production group-membership context. Season-award and match-service source files also retain non-production Prisma compatibility implementations. These remaining areas mean the project is not yet Prisma-free and are the next removal blockers; the Node startup `DATABASE_URL` check, Prisma connect/disconnect, `db.ts`, `pg`, and Prisma packages must not be removed yet.
