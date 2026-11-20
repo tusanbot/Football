@@ -119,6 +119,8 @@ BEGIN
  GET DIAGNOSTICS affected=ROW_COUNT;RETURN affected=1;
 END; $$;
 
+GRANT SELECT,UPDATE ON TABLE public."MatchLifecycleNotification",public."MatchResultNotification",public."MatchTacticalCheckpoint" TO service_role;
+GRANT SELECT ON TABLE public."MatchTacticalDecision",public."FootballMatch",public."Club",public."User",public."PlayerMatchPerformance",public."Player" TO service_role;
 REVOKE ALL ON FUNCTION public.claim_due_match_lifecycle_notifications_node_http(integer,integer) FROM PUBLIC,anon,authenticated;
 REVOKE ALL ON FUNCTION public.claim_due_match_result_notifications_node_http(integer,integer) FROM PUBLIC,anon,authenticated;
 REVOKE ALL ON FUNCTION public.claim_due_match_checkpoint_notifications_node_http(integer,text) FROM PUBLIC,anon,authenticated;
