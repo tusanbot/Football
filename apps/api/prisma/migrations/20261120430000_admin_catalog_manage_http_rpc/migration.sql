@@ -43,7 +43,7 @@ BEGIN
   v_target_type:='gift-code';
  END IF;
  v_metadata:=jsonb_build_object(
-  'itemSlug',p_item_slug,'itemName',p_item_name,'itemDescription',p_item_description,
+  'targetId',p_target_id,'itemSlug',p_item_slug,'itemName',p_item_name,'itemDescription',p_item_description,
   'itemCost',p_item_cost::text,'itemScope',p_item_scope,'code',upper(p_code),
   'rewardType',p_reward_type::text,'cashAmount',COALESCE(p_cash_amount,0)::text,
   'goldAmount',COALESCE(p_gold_amount,0)::text,'groupPoints',COALESCE(p_group_points,0)::text,
