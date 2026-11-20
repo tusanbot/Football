@@ -40,5 +40,7 @@ export function withFriendlyMatchCreationPort<T>(port: FriendlyMatchCreationPort
   return scope.run(port, operation);
 }
 export function getFriendlyMatchCreationPort(): FriendlyMatchCreationPort | undefined {
-  return scope.getStore();
+  const port = scope.getStore();
+  if (!port && process.env.NODE_ENV === "production") throw new Error("FRIENDLY_MATCH_SUPABASE_REPOSITORY_REQUIRED");
+  return port;
 }
