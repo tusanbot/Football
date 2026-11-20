@@ -11,7 +11,7 @@ DECLARE
  v_metadata jsonb;
  v_audit_key text;
 BEGIN
- IF p_action NOT IN ('set-season-player-award','remove-season-player-award')
+ IF p_action IS NULL OR p_action NOT IN ('set-season-player-award','remove-season-player-award')
   OR p_actor_telegram_id IS NULL OR p_actor_telegram_id !~ '^[0-9]{1,20}$'
   OR p_idempotency_key IS NULL OR p_idempotency_key !~ '^[A-Za-z0-9:_-]{12,128}$'
   OR (p_reason IS NOT NULL AND length(p_reason)>500) THEN
@@ -70,7 +70,7 @@ DECLARE
  v_count integer;
  v_group_count integer;
 BEGIN
- IF p_kind NOT IN ('users','groups') OR p_message IS NULL OR length(btrim(p_message)) NOT BETWEEN 2 AND 3000
+ IF p_kind IS NULL OR p_kind NOT IN ('users','groups') OR p_message IS NULL OR length(btrim(p_message)) NOT BETWEEN 2 AND 3000
   OR p_actor_telegram_id IS NULL OR p_actor_telegram_id !~ '^[0-9]{1,20}$'
   OR p_idempotency_key IS NULL OR p_idempotency_key !~ '^[A-Za-z0-9:_-]{12,128}$' THEN
   RAISE EXCEPTION USING MESSAGE='INVALID_ADMIN_BROADCAST',ERRCODE='22023';
@@ -80,8 +80,8 @@ BEGIN
  PERFORM pg_advisory_xact_lock(hashtextextended(v_audit_key,0));
  SELECT * INTO v_existing FROM public."AdminAuditLog" WHERE "idempotencyKey"=v_audit_key;
  IF FOUND THEN
-  IF v_existing."actorTelegramId"=p_actor_telegram_id AND v_existing.action='broadcast-'||p_kind
-   AND v_existing.metadata=v_metadata THEN
+  IF v_existing."actorTelegramId"=p_actor_telegram_id AND v_existing.action=CASE WHEN p_kind='users' THEN 'broadcast' ELSE 'broadcast-groups' END
+   AND v_existing.metadata->>'kind'=p_kind AND v_existing.metadata->>'message'=btrim(p_message) THEN
    RETURN jsonb_build_object('ok',true,'kind',p_kind,'targetId',v_existing."targetId",'recipients',COALESCE((v_existing.metadata->>'recipients')::integer,0),'replay',true);
   END IF;
   RAISE EXCEPTION USING MESSAGE='IDEMPOTENCY_KEY_REUSED',ERRCODE='23505';
@@ -96,7 +96,7 @@ BEGIN
   IF v_count=0 THEN RAISE EXCEPTION USING MESSAGE='NO_BROADCAST_RECIPIENTS',ERRCODE='P0001'; END IF;
   v_metadata:=v_metadata||jsonb_build_object('recipients',v_count);
   INSERT INTO public."AdminAuditLog"(id,"actorTelegramId",action,"targetType","targetId",metadata,"idempotencyKey","createdAt")
-  VALUES(gen_random_uuid()::text,p_actor_telegram_id,'broadcast-users','broadcast',v_target_id,v_metadata,v_audit_key,clock_timestamp());
+  VALUES(gen_random_uuid()::text,p_actor_telegram_id,'broadcast','broadcast',v_target_id,v_metadata,v_audit_key,clock_timestamp());
  ELSE
   v_target_id:=gen_random_uuid()::text;
   INSERT INTO public."AdminGroupBroadcast"(id,"idempotencyKey",message,"createdByTelegramId","createdAt")
@@ -115,7 +115,7 @@ BEGIN
 END;
 $fn$;
 
-REVOKE ALL ON FUNCTION public.admin_season_player_award_http(text,text,integer,text,text,text,text,text) FROM PUBLIC,anon,authenticated;
+REVOKE ALL ON FUNCTION public.admin_season_player_award_http(text,text,integer,text,text,text,text,text,text) FROM PUBLIC,anon,authenticated;
 REVOKE ALL ON FUNCTION public.admin_broadcast_create_http(text,text,text,text) FROM PUBLIC,anon,authenticated;
 DO $grant$
 BEGIN
