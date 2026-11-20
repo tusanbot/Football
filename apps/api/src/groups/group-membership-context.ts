@@ -41,4 +41,10 @@ const scope = new AsyncLocalStorage<GroupMembershipPort>();
 export function withGroupMembershipPort<T>(port: GroupMembershipPort, operation: () => T): T {
   return scope.run(port, operation);
 }
-export function getGroupMembershipPort(): GroupMembershipPort | undefined { return scope.getStore(); }
+export function getGroupMembershipPort(): GroupMembershipPort | undefined {
+  const port = scope.getStore();
+  if (!port && (process.env.NODE_ENV === "production" || process.env.ENVIRONMENT === "production")) {
+    throw new Error("GROUP_MEMBERSHIP_SUPABASE_REPOSITORY_REQUIRED");
+  }
+  return port;
+}
