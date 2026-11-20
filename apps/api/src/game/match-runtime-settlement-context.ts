@@ -30,6 +30,8 @@ export interface MatchRuntimeSettlementResult {
   ticketRevenue: string;
   events: Array<Record<string, unknown>>;
   advancement: CompetitionAdvancementResult | null;
+  pyramidFinalization: Record<string, unknown> | null;
+  eventTournamentFinalization: Record<string, unknown> | null;
 }
 export interface MatchRuntimeSettlementPort {
   settle(input: MatchRuntimeSettlementCommand): Promise<MatchRuntimeSettlementResult>;
