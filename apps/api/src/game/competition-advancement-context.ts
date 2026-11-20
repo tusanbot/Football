@@ -7,4 +7,8 @@ export interface CompetitionAdvancementResult {
 export interface CompetitionAdvancementPort { advance(input: CompetitionAdvancementCommand): Promise<CompetitionAdvancementResult>; }
 const scope=new AsyncLocalStorage<CompetitionAdvancementPort>();
 export function withCompetitionAdvancementPort<T>(port:CompetitionAdvancementPort,operation:()=>Promise<T>):Promise<T>{return scope.run(port,operation);}
-export function getCompetitionAdvancementPort():CompetitionAdvancementPort|undefined{return scope.getStore();}
+export function getCompetitionAdvancementPort():CompetitionAdvancementPort|undefined{
+ const port=scope.getStore();
+ if(!port&&process.env.NODE_ENV==="production") throw new Error("COMPETITION_ADVANCEMENT_SUPABASE_REPOSITORY_REQUIRED");
+ return port;
+}
