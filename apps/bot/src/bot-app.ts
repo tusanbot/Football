@@ -232,15 +232,29 @@ async function pollAdminGroupBroadcastQueue() {
     for (const delivery of result.deliveries) {
       try {
         await bot.api.sendMessage(Number(delivery.telegramGroupId), delivery.message);
-        await apiSystem("/v1/bot/admin-group-broadcasts/" + delivery.id + "/complete", { claimToken: delivery.claimToken });
-      } catch (error) {
+      } catch (sendError) {
         try {
           await apiSystem("/v1/bot/admin-group-broadcasts/" + delivery.id + "/fail", {
             claimToken: delivery.claimToken,
-            error: error instanceof Error ? error.message.slice(0, 500) : "Telegram delivery failed",
+            error: sendError instanceof Error ? sendError.message.slice(0, 500) : "Telegram delivery failed",
           });
         } catch (ackError) {
           console.error("Could not reschedule admin group broadcast:", ackError);
+        }
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        continue;
+      }
+      const completionPath = "/v1/bot/admin-group-broadcasts/" + delivery.id + "/complete";
+      const completionBody = { claimToken: delivery.claimToken };
+      try {
+        await apiSystem(completionPath, completionBody);
+      } catch (firstAckError) {
+        // Sending succeeded. Retry only the idempotent acknowledgement; never
+        // mark a possibly delivered Telegram message as a send failure.
+        try {
+          await apiSystem(completionPath, completionBody);
+        } catch (secondAckError) {
+          console.error("Could not acknowledge admin group broadcast; lease recovery will retry:", secondAckError);
         }
       }
       await new Promise((resolve) => setTimeout(resolve, 50));
@@ -424,10 +438,20 @@ async function pollMatchLifecycleNotifications() {
       }
       try {
         await bot.api.sendMessage(telegramId, message, { parse_mode: "HTML" });
-        await acknowledge(true);
       } catch (sendError) {
         const detail = sendError instanceof Error ? sendError.message : "TELEGRAM_SEND_FAILED";
         await acknowledge(false, detail.slice(0, 500)).catch(() => undefined);
+        continue;
+      }
+      try {
+        await acknowledge(true);
+      } catch (firstAckError) {
+        try {
+          await acknowledge(true);
+        } catch (secondAckError) {
+          console.warn("Could not acknowledge delivered match lifecycle notification; lease recovery will retry:",
+            secondAckError instanceof Error ? secondAckError.message : secondAckError);
+        }
       }
     }
   } catch (error) {
@@ -468,11 +492,21 @@ async function pollMatchResultNotifications() {
         + (match.completedAt ? "\n\nپایان: " + new Date(match.completedAt).toLocaleString("fa-IR", { timeZone: "Asia/Tehran" }) : "");
       try {
         await bot.api.sendMessage(telegramId, message, { parse_mode: "HTML" });
-        await acknowledge(true);
       } catch (sendError) {
         const detail = sendError instanceof Error ? sendError.message : "TELEGRAM_SEND_FAILED";
         await acknowledge(false, detail.slice(0, 500)).catch((ackError: unknown) =>
           console.warn("Could not persist failed match result delivery:", ackError instanceof Error ? ackError.message : ackError));
+        continue;
+      }
+      try {
+        await acknowledge(true);
+      } catch (firstAckError) {
+        try {
+          await acknowledge(true);
+        } catch (secondAckError) {
+          console.warn("Could not acknowledge delivered match result notification; lease recovery will retry:",
+            secondAckError instanceof Error ? secondAckError.message : secondAckError);
+        }
       }
     }
   } catch (error) {
