@@ -41,7 +41,7 @@ test("match runtime settlement delegates the complete financial and match result
       homeReward: "250", awayReward: "100",
     });
     assert.equal(stub.calls.length, 1);
-    assert.equal(stub.calls[0]!.url, url + "/rest/v1/rpc/settle_match_runtime_result");
+    assert.equal(stub.calls[0]!.url, url + "/rest/v1/rpc/settle_and_advance_match_runtime_http");
     assert.equal(stub.calls[0]!.headers.get("authorization"), "Bearer " + key);
     assert.deepEqual(stub.calls[0]!.body, {
       p_match_id: "match-1", p_runtime_id: "runtime-1", p_lease_token: "lease-secret",
