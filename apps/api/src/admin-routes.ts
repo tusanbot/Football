@@ -9,13 +9,14 @@ import type { AdminConfigurationPort } from "./node-supabase-admin-configuration
 import {adminCloseAllianceSeasonInTransaction,adminReviewAllianceSeasonInTransaction,adminStartAllianceSeasonInTransaction} from "./groups/alliance-service.js";
 import type { AdminAlliancePort } from "./groups/node-supabase-alliance.js";
 import type { AdminConsoleReadPort } from "./node-supabase-admin-console-read.js";
+import type { AdminModerationActionPort } from "./node-supabase-admin-moderation-actions.js";
 type AdminPermission="read"|"players"|"clubs"|"matches"|"competitions"|"economy"|"groups"|"moderation"|"gifts";
 const ROLE_PERMISSIONS:Record<string,AdminPermission[]>={superadmin:["read","players","clubs","matches","competitions","economy","groups","moderation","gifts"],football:["read","players","clubs","matches","competitions"],economy:["read","economy","gifts"],moderator:["read","groups","moderation"]};
 async function adminRoleFor(telegramId:string,port?:AdminRoleLookupPort){const superAdmins=parseAdminTelegramIds(process.env.GAME_ADMIN_TELEGRAM_IDS);if(superAdmins.includes(telegramId))return "superadmin";let assigned: AdminRoleAssignment | null;if(port)assigned=await port.getAssignment(telegramId);else{if(process.env.NODE_ENV==="production"||process.env.ENVIRONMENT==="production")throw new Error("ADMIN_ROLE_SUPABASE_REPOSITORY_REQUIRED");assigned=await prisma.adminRoleAssignment.findUnique({where:{telegramId},select:{role:true,active:true}});}if(assigned)return assigned.active&&Object.prototype.hasOwnProperty.call(ROLE_PERMISSIONS,assigned.role)?assigned.role:null;try{const map=JSON.parse(process.env.GAME_ADMIN_ROLE_MAP??"{}") as Record<string,string>;const role=map[telegramId];return role&&Object.prototype.hasOwnProperty.call(ROLE_PERMISSIONS,role)?role:null;}catch{return null;}}
 async function authorize(req:FastifyRequest,reply:FastifyReply,permission:AdminPermission="read",port?:AdminRoleLookupPort){const u=await requireTelegramUser(req);if(!u){reply.code(401).send({error:"UNAUTHENTICATED"});return null;}const role=await adminRoleFor(u.telegramId,port);if(!role||!ROLE_PERMISSIONS[role]?.includes(permission)){reply.code(403).send({error:"ADMIN_PERMISSION_REQUIRED",permission});return null;}return {...u,adminRole:role};}
 const querySchema=z.object({q:z.string().trim().max(100).optional(),season:z.coerce.number().int().min(2020).max(2200).optional(),limit:z.coerce.number().int().min(1).max(100).default(40)});
 export function assertManualCompetitionStatus(status:string){if(status==="COMPLETED")throw new Error("COMPETITION_COMPLETION_AUTOMATIC_ONLY");if(status==="ACTIVE")throw new Error("COMPETITION_ACTIVATION_AUTOMATIC_ONLY");if(status!=="CANCELLED")throw new Error("COMPETITION_STATUS_MANUAL_CANCELLATION_ONLY");}
-export function registerAdminRoutes(app:FastifyInstance,options:{adminAlliancePort?:AdminAlliancePort;adminRoleLookupPort?:AdminRoleLookupPort;adminConfigurationPort?:AdminConfigurationPort;adminConsoleReadPort?:AdminConsoleReadPort}={}){
+export function registerAdminRoutes(app:FastifyInstance,options:{adminAlliancePort?:AdminAlliancePort;adminRoleLookupPort?:AdminRoleLookupPort;adminConfigurationPort?:AdminConfigurationPort;adminConsoleReadPort?:AdminConsoleReadPort;adminModerationActionPort?:AdminModerationActionPort}={}){
 const authorizeAdmin=(req:FastifyRequest,reply:FastifyReply,permission:AdminPermission="read")=>authorize(req,reply,permission,options.adminRoleLookupPort);
 app.get("/v1/admin/overview",async(req,reply)=>{if(!await authorizeAdmin(req,reply))return;if(options.adminConsoleReadPort)return options.adminConsoleReadPort.overview();if(process.env.NODE_ENV==="production"||process.env.ENVIRONMENT==="production")throw new Error("ADMIN_CONSOLE_SUPABASE_REPOSITORY_REQUIRED");const [users,clubs,players,groups,challenges,leagues,items,giftCodes,flags,alliances,matches,walletTransactions,groupTransactions]=await Promise.all([prisma.user.count(),prisma.club.count(),prisma.player.count(),prisma.telegramGroup.count(),prisma.groupChallenge.count(),prisma.competition.count(),prisma.groupRewardItem.count(),prisma.giftCode.count(),prisma.allianceSeason.count({where:{reviewStatus:"FLAGGED"}}),prisma.alliance.count(),prisma.footballMatch.count(),prisma.ledgerTransaction.count(),prisma.groupPointLedger.count()]);return{counts:{users,clubs,players,groups,challenges,leagues,items,giftCodes,flags,alliances,matches,walletTransactions,groupTransactions}};});
 app.get("/v1/admin/group-targets",async(req,reply)=>{const actor=await authorizeAdmin(req,reply);if(!actor)return;if(actor.adminRole!=="superadmin")return reply.code(403).send({error:"SUPERADMIN_REQUIRED"});if(options.adminConsoleReadPort)return options.adminConsoleReadPort.groupTargets();if(process.env.NODE_ENV==="production"||process.env.ENVIRONMENT==="production")throw new Error("ADMIN_CONSOLE_SUPABASE_REPOSITORY_REQUIRED");const groups=await prisma.telegramGroup.findMany({where:{isActive:true,isSuspended:false},select:{telegramId:true,title:true},orderBy:{createdAt:"asc"},take:5000});return{groups};});
@@ -176,6 +177,19 @@ if(code.startsWith("INVALID_"))return reply.code(400).send({error:code});
 throw error;
 }
 }
+if(["suspend-user","restore-user","suspend-group","restore-group","cancel-challenge","competition-status"].includes(x.action)&&options.adminModerationActionPort){
+try{
+ const result=await options.adminModerationActionPort.execute({action:x.action as import("./node-supabase-admin-moderation-actions.js").AdminModerationAction,targetId:id,actorTelegramId:actor.telegramId,idempotencyKey:x.idempotencyKey,...(x.reason?{reason:x.reason}:{})});
+ return {ok:true,targetType:result.targetType,targetId:result.targetId,replayed:result.replay};
+}catch(error){
+ const code=error instanceof Error?error.message:"ADMIN_MODERATION_ACTION_FAILED";
+ if(code.includes("TARGET_NOT_FOUND"))return reply.code(404).send({error:code});
+ if(["IDEMPOTENCY_KEY_REUSED","CHALLENGE_ALREADY_SETTLED","PYRAMID_LEAGUE_STATUS_MANAGED_AUTOMATICALLY"].some(v=>code.includes(v)))return reply.code(409).send({error:code});
+ if(code.startsWith("INVALID_"))return reply.code(400).send({error:code});
+ throw error;
+}
+}
+if(["suspend-user","restore-user","suspend-group","restore-group","cancel-challenge","competition-status"].includes(x.action)&&(process.env.NODE_ENV==="production"||process.env.ENVIRONMENT==="production")&&!options.adminModerationActionPort)throw new Error("ADMIN_MODERATION_SUPABASE_REPOSITORY_REQUIRED");
 if(["set-admin-role","revoke-admin-role","set-game-setting"].includes(x.action)&&options.adminConfigurationPort){
 try{
  const result=await options.adminConfigurationPort.execute({
