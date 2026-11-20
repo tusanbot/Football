@@ -125,7 +125,9 @@ export function registerPublicClubRoutes(app: FastifyInstance, logoRepository?: 
     if (!readRepository) return reply.code(503).send({ error: "SUPABASE_PUBLIC_CLUB_READ_UNAVAILABLE" });
     const comparison = await readRepository.compare(query.data.first, query.data.second);
     if (!comparison) return reply.code(404).send({ error: "CLUB_NOT_FOUND" });
-    const [first, second] = comparison.clubs;
+    const first = comparison.clubs[0];
+    const second = comparison.clubs[1];
+    if (!first || !second) return reply.code(404).send({ error: "CLUB_NOT_FOUND" });
     const matches = comparison.matches;
     const summarize = (clubId: string) => {
       const summary = { played: 0, won: 0, drawn: 0, lost: 0, goalsFor: 0, goalsAgainst: 0, homePlayed: 0, awayPlayed: 0, biggestWin: null as null | { margin: number; score: string; opponent: string } };
