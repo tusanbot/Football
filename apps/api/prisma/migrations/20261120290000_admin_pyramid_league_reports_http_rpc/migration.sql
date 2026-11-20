@@ -105,7 +105,7 @@ BEGIN
  SELECT jsonb_build_object(
   'totals',(SELECT to_jsonb(totals) FROM totals),
   'seasons',COALESCE((SELECT jsonb_agg(to_jsonb(s) ORDER BY season DESC) FROM season_rows s),'[]'::jsonb),
-  'clubRankings',COALESCE((SELECT jsonb_agg(to_jsonb(r)) FROM (
+  'clubRankings',COALESCE((SELECT jsonb_agg(r.value) FROM (
     SELECT jsonb_build_object('clubId',club_id,'clubName',club_name,'seasons',seasons,'championships',championships,'podiums',podiums,'promotions',promotions,'relegations',relegations,'leagueEntries',"leagueEntries") value
     FROM club_rankings ORDER BY championships DESC,podiums DESC,promotions DESC,relegations,club_name LIMIT 50
    ) r),'[]'::jsonb),
