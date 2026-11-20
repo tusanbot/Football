@@ -27,6 +27,7 @@ import { NodeSupabasePublicPlayerRecordRepository } from "./players/node-supabas
 import { NodeSupabasePublicClubLogoRepository } from "./node-supabase-public-club-logo.js";
 import { NodeSupabasePublicClubRepository } from "./node-supabase-public-clubs.js";
 import { NodeSupabaseSeasonAwardRepository } from "./game/node-supabase-season-awards.js";
+import { NodeSupabaseTelegramMessageDeletionRepository } from "./node-supabase-telegram-message-deletions.js";
 import { SupabaseEventTournamentSettlementRepository } from "./game/node-supabase-event-tournament-settlement.js";
 import { NodeSupabaseEventTournamentReadRepository } from "./node-supabase-event-tournament-read.js";
 import { SupabasePyramidLeagueSettlementRepository } from "./game/node-supabase-pyramid-league-settlement.js";
@@ -83,6 +84,7 @@ const publicPlayerRecordRepository = supabaseHttp ? new NodeSupabasePublicPlayer
 const publicClubLogoRepository = supabaseHttp ? new NodeSupabasePublicClubLogoRepository(supabaseHttp) : undefined;
 const publicClubReadRepository = supabaseHttp ? new NodeSupabasePublicClubRepository(supabaseHttp) : undefined;
 const seasonAwardRepository = supabaseHttp ? new NodeSupabaseSeasonAwardRepository(supabaseHttp) : undefined;
+const telegramMessageDeletionPort = supabaseHttp ? new NodeSupabaseTelegramMessageDeletionRepository(supabaseHttp) : undefined;
 const eventTournamentSettlementPort = supabaseHttp ? new SupabaseEventTournamentSettlementRepository(supabaseHttp) : undefined;
 const eventTournamentReadPort = supabaseHttp ? new NodeSupabaseEventTournamentReadRepository(supabaseHttp) : undefined;
 const pyramidLeagueSettlementPort = supabaseHttp ? new SupabasePyramidLeagueSettlementRepository(supabaseHttp) : undefined;
@@ -112,6 +114,7 @@ const app = buildApp({
   ...(publicClubLogoRepository ? { publicClubLogoRepository } : {}),
   ...(publicClubReadRepository ? { publicClubReadRepository } : {}),
   ...(seasonAwardRepository ? { seasonAwardRepository } : {}),
+  ...(telegramMessageDeletionPort ? { telegramMessageDeletionPort } : {}),
   ...(eventTournamentSettlementPort ? { eventTournamentSettlementPort } : {}),
   ...(eventTournamentReadPort ? { eventTournamentReadPort } : {}),
   ...(pyramidLeagueSettlementPort ? { pyramidLeagueSettlementPort } : {}),
