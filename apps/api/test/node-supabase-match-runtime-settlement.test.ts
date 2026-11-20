@@ -27,6 +27,12 @@ test("match runtime settlement delegates the complete financial and match result
     homeClub: "Home", awayClub: "Away", homeScore: 2, awayScore: 1,
     homePenalties: null, awayPenalties: null, winnerClubId: "club-home",
     attendance: 1200, ticketRevenue: "60000", events: [],
+    advancement: {
+      competitionId: "competition-1", format: "LEAGUE", completed: true,
+      roundComplete: true, nextRound: null, fixturesCreated: 0, noticesCreated: 8, replayed: false,
+    },
+    pyramidFinalization: { processed: true, replayed: false },
+    eventTournamentFinalization: { finalized: false, replayed: true, participants: 0, awards: 0 },
   };
   const stub = stubFetch(result);
   try {
