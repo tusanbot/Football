@@ -1,5 +1,6 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 export interface PyramidLeagueSettlementPort {
+ apply(userId:string,tier:number,now:string):Promise<Record<string,unknown>>;
  finalize(competitionId:string,now:string):Promise<{processed:boolean;replayed?:boolean;leagueId?:string;champion?:string;runnerUp?:string;thirdPlace?:string}>;
  respond(userId:string,offerId:string,accept:boolean,now:string):Promise<Record<string,unknown>>;
  processDue(now:string,limit:number):Promise<{completedLeagues:number;processed:number;accepted:number}>;
