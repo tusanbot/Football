@@ -5,7 +5,13 @@ export interface EventTournamentCreateInput {
  registrationEndsAt:string; startsAt:string; endsAt:string|null;
  prizes:Array<{placement:number;type:string;amount:string;itemKey:string|null;specialPlayerId:string|null}>;
 }
+export interface EventTournamentJoinInput { telegramUserId:string; tournamentId:string; now:string; }
+export interface EventTournamentJoinResult {
+ participantId:string; replayed:boolean; autoStarted:boolean; participantCount?:number; requiredParticipants?:number;
+ fixturesCreated?:number; rounds?:number; startsAt?:string; competitionId?:string;
+}
 export interface EventTournamentReadPort {
+ join(input:EventTournamentJoinInput):Promise<EventTournamentJoinResult>;
  create(input:EventTournamentCreateInput):Promise<{tournament:Record<string,unknown>;replayed:boolean}>;
  listForUser(userId:string):Promise<Record<string, unknown>[]>;
  listForAdmin():Promise<Record<string, unknown>[]>;
