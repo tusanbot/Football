@@ -275,10 +275,15 @@ test("match worker resolves a tactical checkpoint from both clubs through one Su
         return true;
       },
       async submitDecision() { throw new Error("decision submission is not part of worker resolution"); },
-      async enqueueLifecycleEvents() { throw new Error("lifecycle enqueue should be included in atomic resolution"); },
+      async enqueueLifecycleEvents(matchId, events) {
+        calls.push("halftime-enqueue");
+        assert.equal(matchId, "match-checkpoint");
+        assert.deepEqual(events.map((event) => event.eventKey), ["halftime"]);
+        return 2;
+      },
     }, () => processDueMatchRuntimes("checkpoint-worker", checkpointNow, 1, { enqueue: false })))));
 
-    assert.deepEqual(calls, ["first-half", "claim", "snapshot", "checkpoint-read", "checkpoint-resolve", "release"]);
+    assert.deepEqual(calls, ["first-half", "claim", "snapshot", "checkpoint-read", "halftime-enqueue", "checkpoint-resolve", "release"]);
     assert.deepEqual(result, { enqueued: 0, claimed: 1, advanced: 1, waiting: 0, settled: 0, failed: 0 });
   });
 });
