@@ -88,7 +88,8 @@ export function registerPlayerMarketRoutes(app: FastifyInstance) {
   app.get("/v1/market/listings", async (request, reply) => {
     const user = await requireTelegramUser(request);
     if (!user) return reply.code(401).send({ error: "UNAUTHENTICATED" });
-    return { listings: await getOpenMarketListings() };
+    try { return { listings: await getOpenMarketListings() }; }
+    catch (error) { return sendMarketError(reply, error); }
   });
 
   app.post("/v1/market/listings", async (request, reply) => {
