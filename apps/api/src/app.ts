@@ -53,6 +53,8 @@ import { registerPublicPlayerRecordRoutes, type PublicPlayerRecordRepository } f
 import { registerSeasonAwardRoutes } from "./game/season-award-routes.js";
 import { registerStoreRoutes } from "./store/store-routes.js";
 import { registerEventTournamentRoutes } from "./event-tournament-routes.js";
+import type { EventTournamentReadPort } from "./event-tournament-read-context.js";
+import { withEventTournamentReadPort } from "./event-tournament-read-context.js";
 import type { ClubManagementPort } from "./game/club-management-context.js";
 import { withClubManagementPort } from "./game/club-management-context.js";
 import type { SpecialAcquisitionPort } from "./players/special-acquisition-context.js";
@@ -75,7 +77,7 @@ const healthResponse = z.object({
   version: z.string(),
 });
 
-export function buildApp(options: { logger?: boolean; pluginTimeout?: number; groupMembershipPort?: GroupMembershipPort; alliancePort?: AlliancePort; adminAlliancePort?: AdminAlliancePort; telegramUserLookupPort?: TelegramUserLookupPort; storePurchasePort?: StorePurchasePort; storeItemUsePort?: StoreItemUsePort; walletEntryPort?: WalletEntryPort; marketListingPort?: MarketListingPort; marketPurchasePort?: MarketPurchasePort; storeSnapshotPort?: StoreSnapshotPort; playerDevelopmentPort?: PlayerDevelopmentPort; clubEconomySettlementPort?: ClubEconomySettlementPort; clubManagementPort?: ClubManagementPort; specialAcquisitionPort?: SpecialAcquisitionPort; giftCodeRedemptionPort?: GiftCodeRedemptionPort; botRuntimeLeasePort?: BotRuntimeLeasePort; matchPorts?: NodeSupabaseMatchPorts; gameDashboardPort?: GameDashboardPort; walletReadPort?: WalletReadPort; clubLineupPort?: ClubLineupPort; publicPlayerRecordRepository?: PublicPlayerRecordRepository; publicClubLogoRepository?: PublicClubLogoRepository; publicClubReadRepository?: PublicClubReadRepository; eventTournamentSettlementPort?: EventTournamentSettlementPort; actionRateLimitPort?: ActionRateLimitPort } = {}) {
+export function buildApp(options: { logger?: boolean; pluginTimeout?: number; groupMembershipPort?: GroupMembershipPort; alliancePort?: AlliancePort; adminAlliancePort?: AdminAlliancePort; telegramUserLookupPort?: TelegramUserLookupPort; storePurchasePort?: StorePurchasePort; storeItemUsePort?: StoreItemUsePort; walletEntryPort?: WalletEntryPort; marketListingPort?: MarketListingPort; marketPurchasePort?: MarketPurchasePort; storeSnapshotPort?: StoreSnapshotPort; playerDevelopmentPort?: PlayerDevelopmentPort; clubEconomySettlementPort?: ClubEconomySettlementPort; clubManagementPort?: ClubManagementPort; specialAcquisitionPort?: SpecialAcquisitionPort; giftCodeRedemptionPort?: GiftCodeRedemptionPort; botRuntimeLeasePort?: BotRuntimeLeasePort; matchPorts?: NodeSupabaseMatchPorts; gameDashboardPort?: GameDashboardPort; walletReadPort?: WalletReadPort; clubLineupPort?: ClubLineupPort; publicPlayerRecordRepository?: PublicPlayerRecordRepository; publicClubLogoRepository?: PublicClubLogoRepository; publicClubReadRepository?: PublicClubReadRepository; eventTournamentSettlementPort?: EventTournamentSettlementPort; eventTournamentReadPort?: EventTournamentReadPort; actionRateLimitPort?: ActionRateLimitPort } = {}) {
   const app = Fastify({
     logger: options.logger ?? process.env.NODE_ENV !== "test",
     pluginTimeout: options.pluginTimeout ?? 10_000,
@@ -141,6 +143,7 @@ export function buildApp(options: { logger?: boolean; pluginTimeout?: number; gr
   if (options.specialAcquisitionPort) app.addHook("onRequest", (_request, _reply, done) => { void withSpecialAcquisitionPort(options.specialAcquisitionPort!, async () => done()); });
   if (options.giftCodeRedemptionPort) app.addHook("onRequest", (_request, _reply, done) => { void withGiftCodeRedemptionPort(options.giftCodeRedemptionPort!, async () => done()); });
   if (options.eventTournamentSettlementPort) app.addHook("onRequest", (_request, _reply, done) => { void withEventTournamentSettlementPort(options.eventTournamentSettlementPort!, async () => done()); });
+  if (options.eventTournamentReadPort) app.addHook("onRequest", (_request, _reply, done) => { void withEventTournamentReadPort(options.eventTournamentReadPort!, async () => done()); });
   if (options.matchPorts) app.addHook("onRequest", (_request, _reply, done) => { void withNodeSupabaseMatchPorts(options.matchPorts!, async () => done()); });
   if (options.gameDashboardPort) app.addHook("onRequest", (_request, _reply, done) => { void withGameDashboardPort(options.gameDashboardPort!, async () => done()); });
   if (options.walletReadPort) app.addHook("onRequest", (_request, _reply, done) => { void withWalletReadPort(options.walletReadPort!, async () => done()); });
