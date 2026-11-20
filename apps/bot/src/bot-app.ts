@@ -224,6 +224,7 @@ async function scheduleGroupReplyDeletion(chatId: number, messageId: number) {
 
 type LeagueNoticeDelivery = { id: string; telegramId: string; title: string; body: string; kind: string; referenceId: string | null; claimToken: string };
 let adminGroupBroadcastWorkerBusy = false;
+let leagueNoticeWorkerBusy = false;
 async function pollAdminGroupBroadcastQueue() {
   if (adminGroupBroadcastWorkerBusy || !apiUrl || !botApiSecret) return;
   adminGroupBroadcastWorkerBusy = true;
