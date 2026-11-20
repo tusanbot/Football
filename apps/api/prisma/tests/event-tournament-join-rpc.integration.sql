@@ -32,8 +32,8 @@ BEGIN
   v_now AT TIME ZONE 'UTC',v_now AT TIME ZONE 'UTC');
 
  v_result:=public.join_event_tournament_http(v_users[1],v_tournament_id,v_now);
- IF v_result->>'replayed'<>'false' OR v_result->>'autoStarted'<>'false'
-  OR v_result->>'participantCount'<>'1' OR v_result->>'requiredParticipants'<>'4' THEN
+ IF v_result->>'replayed' IS DISTINCT FROM 'false' OR v_result->>'autoStarted' IS DISTINCT FROM 'false'
+  OR v_result->>'participantCount' IS DISTINCT FROM '1' OR v_result->>'requiredParticipants' IS DISTINCT FROM '4' THEN
   RAISE EXCEPTION 'first tournament join response mismatch: %',v_result;
  END IF;
  v_participant_id:=v_result->>'participantId';
@@ -43,7 +43,7 @@ BEGIN
   RAISE EXCEPTION 'entry fee was not debited and ledgered exactly once';
  END IF;
  v_replay:=public.join_event_tournament_http(v_users[1],v_tournament_id,v_now+interval '1 minute');
- IF v_replay->>'replayed'<>'true' OR v_replay->>'participantId'<>v_participant_id THEN
+ IF v_replay->>'replayed' IS DISTINCT FROM 'true' OR v_replay->>'participantId'<>v_participant_id THEN
   RAISE EXCEPTION 'join replay did not return the original participant: %',v_replay;
  END IF;
  SELECT balance INTO v_balance FROM public."Wallet" WHERE "userId"=v_user_ids[1] AND asset='CASH';
@@ -54,8 +54,8 @@ BEGIN
  PERFORM public.join_event_tournament_http(v_users[2],v_tournament_id,v_now);
  PERFORM public.join_event_tournament_http(v_users[3],v_tournament_id,v_now);
  v_result:=public.join_event_tournament_http(v_users[4],v_tournament_id,v_now);
- IF v_result->>'autoStarted'<>'true' OR v_result->>'participantCount'<>'4'
-  OR v_result->>'fixturesCreated'<>'6' OR v_result->>'rounds'<>'3'
+ IF v_result->>'autoStarted' IS DISTINCT FROM 'true' OR v_result->>'participantCount' IS DISTINCT FROM '4'
+  OR v_result->>'fixturesCreated' IS DISTINCT FROM '6' OR v_result->>'rounds' IS DISTINCT FROM '3'
   OR COALESCE(v_result->>'competitionId','')='' THEN
   RAISE EXCEPTION 'tournament did not auto-start with a complete round robin: %',v_result;
  END IF;
