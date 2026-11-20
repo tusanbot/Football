@@ -406,3 +406,8 @@ Both Node administrative route families now share `NodeSupabaseAdminRoleReposito
 Production app construction now requires the admin-role repository, and both administrative route families fail closed rather than querying Prisma if the repository is absent. Dedicated adapter tests cover active, inactive, missing, and malformed role responses. The existing SQL integration test continues to verify the RPC's role and inactive-assignment semantics.
 
 This tranche migrates only role lookup. Administrative dashboard aggregates, resource browsing, league reports and league mutations still contain Prisma operations and remain explicit migration work; this does not make either administrative console Prisma-free.
+
+
+## Admin pyramid league dashboard reads moved to Supabase HTTP (2026-11-20)
+
+The `GET /v1/admin/pyramid-leagues` dashboard read now uses the Node direct-HTTPS Supabase repository in production. The `get_admin_pyramid_leagues_http` RPC returns the filtered league standings, teams, awards, promotion offers, queued applications and application counts in one read-only request. The function is SECURITY INVOKER and executable only by service_role; the API requires the repository in production and retains Prisma compatibility only for non-production migration tests. The reports endpoint and admin mutations remain a separate migration tranche.
