@@ -3,7 +3,8 @@ RETURNS TABLE(id text,channel text,telegram_chat_id text,claim_token text,attemp
 LANGUAGE sql VOLATILE SECURITY INVOKER SET search_path=public,pg_temp AS $$
  WITH candidates AS (
   SELECT n."id" FROM public."MatchLifecycleNotification" n
-  WHERE n."status"='PENDING' AND n."availableAt"<=NOW()
+  JOIN public."FootballMatch" m ON m."id"=n."matchId"
+  WHERE n."status"='PENDING' AND m."status"::text IN ('IN_PROGRESS','COMPLETED') AND n."availableAt"<=NOW()
    AND (n."lockedUntil" IS NULL OR n."lockedUntil"<NOW()-INTERVAL '30 seconds')
   ORDER BY n."availableAt",n."createdAt" FOR UPDATE SKIP LOCKED
   LIMIT LEAST(GREATEST(COALESCE(p_limit,50),1),100)
