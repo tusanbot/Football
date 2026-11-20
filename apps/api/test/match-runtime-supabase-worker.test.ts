@@ -5,6 +5,8 @@ import { withMatchRuntimeEnqueuePort } from "../src/game/match-runtime-enqueue-c
 import { withMatchRuntimeLeasePort } from "../src/game/match-runtime-lease-context.js";
 import { withMatchRuntimeSnapshotPort } from "../src/game/match-runtime-snapshot-context.js";
 import { withMatchRuntimeForfeitPort } from "../src/game/match-runtime-forfeit-context.js";
+import { withMatchRuntimeAdvancePort } from "../src/game/match-runtime-advance-context.js";
+import { withMatchRuntimeCheckpointPort } from "../src/game/match-runtime-checkpoint-context.js";
 
 async function withTestEnvironment<T>(operation: () => Promise<T>): Promise<T> {
   const previousNodeEnv = process.env.NODE_ENV;
