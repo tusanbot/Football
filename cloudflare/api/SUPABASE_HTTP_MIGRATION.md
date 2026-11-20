@@ -421,3 +421,8 @@ The `GET /v1/admin/pyramid-leagues/reports` endpoint now uses the Node direct-HT
 ## Admin pyramid league actions moved to atomic Supabase HTTP RPC (2026-11-20)
 
 The `POST /v1/admin/pyramid-leagues/actions` route now uses `admin_pyramid_league_action_http` in Production. Queued application withdrawal, pending promotion deadline extension, and award updates execute with their audit row in one database transaction. The RPC serializes idempotency keys with a transaction-scoped advisory lock, returns the original outcome for a matching replay, and rejects key reuse across different actor/action/target tuples. Pyramid league status remains system-managed and is rejected rather than allowing manual cancellation. Only service_role can execute the SECURITY INVOKER RPC; route-level role authorization remains mandatory. The Prisma transaction fallback is restricted to non-production.
+
+
+## Admin roles and game settings moved to Supabase HTTP (2026-11-20)
+
+The admin roles and settings read endpoints now use `get_admin_configuration_http` in Production. Role assignment, revocation, and bounded game-setting updates use `admin_configuration_action_http`; each mutation and its audit record commit atomically with idempotency protection. The RPCs are `SECURITY INVOKER` and executable only by `service_role`. Production fails closed if the repository is missing; Prisma remains only as a non-production compatibility fallback.
