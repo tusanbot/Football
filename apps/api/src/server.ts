@@ -26,6 +26,7 @@ import { NodeSupabasePublicPlayerRecordRepository } from "./players/node-supabas
 import { NodeSupabasePublicClubLogoRepository } from "./node-supabase-public-club-logo.js";
 import { NodeSupabasePublicClubRepository } from "./node-supabase-public-clubs.js";
 import { SupabaseEventTournamentSettlementRepository } from "./game/node-supabase-event-tournament-settlement.js";
+import { NodeSupabaseEventTournamentReadRepository } from "./node-supabase-event-tournament-read.js";
 import { isValidTelegramBotToken, parseAdminTelegramIds, parseCorsOrigins } from "./runtime-config.js";
 const required = ["DATABASE_URL", "TELEGRAM_BOT_TOKEN", "BOT_API_SECRET", "CORS_ORIGIN", "GAME_ADMIN_TELEGRAM_IDS"] as const;
 const missing = required.filter((key) => !process.env[key]?.trim());
@@ -77,6 +78,7 @@ const publicPlayerRecordRepository = supabaseHttp ? new NodeSupabasePublicPlayer
 const publicClubLogoRepository = supabaseHttp ? new NodeSupabasePublicClubLogoRepository(supabaseHttp) : undefined;
 const publicClubReadRepository = supabaseHttp ? new NodeSupabasePublicClubRepository(supabaseHttp) : undefined;
 const eventTournamentSettlementPort = supabaseHttp ? new SupabaseEventTournamentSettlementRepository(supabaseHttp) : undefined;
+const eventTournamentReadPort = supabaseHttp ? new NodeSupabaseEventTournamentReadRepository(supabaseHttp) : undefined;
 const app = buildApp({
   ...(groupMembershipPort ? { groupMembershipPort } : {}),
   ...(actionRateLimitPort ? { actionRateLimitPort } : {}),
@@ -101,6 +103,7 @@ const app = buildApp({
   ...(publicClubLogoRepository ? { publicClubLogoRepository } : {}),
   ...(publicClubReadRepository ? { publicClubReadRepository } : {}),
   ...(eventTournamentSettlementPort ? { eventTournamentSettlementPort } : {}),
+  ...(eventTournamentReadPort ? { eventTournamentReadPort } : {}),
 });
 let matchWorker: NodeJS.Timeout | undefined;
 let workerTask: Promise<void> | null = null;
