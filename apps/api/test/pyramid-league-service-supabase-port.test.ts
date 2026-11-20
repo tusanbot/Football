@@ -29,6 +29,10 @@ function fakePort(calls: Array<{ method: string; args: unknown[] }>): PyramidLea
     async claimNotices(...args) { calls.push({ method: "claimNotices", args }); return { notices: [] }; },
     async completeNotice(...args) { calls.push({ method: "completeNotice", args }); return { completed: true }; },
     async failNotice(...args) { calls.push({ method: "failNotice", args }); return { owned: true, rescheduled: true, attempts: 1 }; },
+    async createFriendlyChallenge(...args) { calls.push({ method: "createFriendlyChallenge", args }); return { challenge: {}, asset: "FREE", goldCost: "0", remaining: {}, replayed: false }; },
+    async acceptFriendlyChallenge(...args) { calls.push({ method: "acceptFriendlyChallenge", args }); return { match: {}, replayed: false }; },
+    async getFriendlyChallengeInfo(...args) { calls.push({ method: "getFriendlyChallengeInfo", args }); return { id: "challenge-1", token: "token", creatorClub: {} }; },
+    async grantPurchasedChallengeCredits(...args) { calls.push({ method: "grantPurchasedChallengeCredits", args }); return { userId: "user-1", purchasedCredits: 1 }; },
   };
 }
 
@@ -77,4 +81,19 @@ test("pyramid league details and notice operations use the Supabase request scop
  assert.deepEqual(calls.map((call) => call.method), ["getLeagueDetails", "listNotices", "markNoticesRead"]);
  assert.deepEqual(calls[0]?.args, ["user-1", "league-1"]);
  assert.equal((calls[2]?.args[1] as string).length, 24);
+});
+
+test("friendly challenge lifecycle uses the Supabase request-scoped repository", async () => {
+ const calls: Array<{ method: string; args: unknown[] }> = [];
+ const service = await import("../src/game/league-pyramid-service.js");
+ const now = new Date("2026-11-20T12:34:56.789Z");
+ await withPyramidLeagueSettlementPort(fakePort(calls), async () => {
+  await service.createFriendlyChallenge("user-1", 100n, now, undefined, "challenge-key-0001");
+  await service.acceptFriendlyChallenge("user-2", "challenge-token", now);
+  await service.getFriendlyChallengeInfo("challenge-token");
+  await service.grantPurchasedChallengeCredits("user-1", 3, now);
+ });
+ assert.deepEqual(calls.map((call) => call.method), ["createFriendlyChallenge", "acceptFriendlyChallenge", "getFriendlyChallengeInfo", "grantPurchasedChallengeCredits"]);
+ assert.deepEqual(calls[0]?.args, ["user-1", "100", now.toISOString(), null, "challenge-key-0001"]);
+ assert.deepEqual(calls[1]?.args, ["user-2", "challenge-token", now.toISOString()]);
 });
