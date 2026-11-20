@@ -5,7 +5,8 @@ import worker, { MatchCoordinator } from "../src/index.js";
 const pending: Promise<unknown>[] = [];
 const context = { waitUntil(promise: Promise<unknown>) { pending.push(promise); } };
 const configuredEnv = {
-  DATABASE_URL: "postgresql://postgres:postgres@127.0.0.1:5432/football_empire",
+  SUPABASE_URL: "https://example-project.supabase.co",
+  SUPABASE_SERVICE_ROLE_KEY: "service-role-key-that-is-long-enough-for-tests",
   TELEGRAM_BOT_TOKEN: "123456:abcdefghijklmnopqrstuvwxyz0123456789",
   BOT_API_SECRET: "test-secret-".padEnd(40, "x"),
   CORS_ORIGIN: "https://web.example.test",
@@ -32,7 +33,7 @@ test("health endpoint works without database configuration", async () => {
   assert.deepEqual(await response.json(), {
     status: "ok",
     service: "football-empire-cloudflare-api",
-    mode: "hono-prisma-runtime",
+    mode: "supabase-http-runtime",
     build: "2026-11-16-hono-router-1",
   });
 });
@@ -101,20 +102,7 @@ test("the Worker dispatches Fetch requests through the shared API route handlers
   await Promise.all(pending.splice(0));
 });
 
-test("readiness requires the legacy database URL while Prisma-backed routes remain", async () => {
-  const response = await worker.fetch(new Request("https://api.example.test/ready"), {
-    ...configuredEnv,
-    DATABASE_URL: undefined,
-    SUPABASE_URL: "https://example-project.supabase.co",
-    SUPABASE_SERVICE_ROLE_KEY: "service-role-key-that-is-long-enough-for-tests",
-  }, context);
-  assert.equal(response.status, 503);
-  const body = await response.json() as { status: string; missing: string[] };
-  assert.equal(body.status, "not_ready");
-  assert.ok(body.missing.includes("DATABASE_URL"));
-});
-
-test("readiness checks schema through Supabase HTTPS when legacy route fallback is configured", async () => {
+test("readiness checks schema through Supabase HTTPS without DATABASE_URL", async () => {
   const originalFetch = globalThis.fetch;
   let requestedUrl: URL | undefined;
   let requestedHeaders: Headers | undefined;
@@ -182,7 +170,6 @@ test("production Worker requests receive strict transport security headers", asy
     {
       ...configuredEnv,
       ENVIRONMENT: "production",
-      DATABASE_URL: "postgresql://postgres:postgres@aws-0-test.pooler.supabase.com:6543/postgres?pgbouncer=true&sslmode=require",
     },
     context,
   );

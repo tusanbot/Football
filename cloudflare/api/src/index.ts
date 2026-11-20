@@ -456,9 +456,8 @@ export default {
     configureEnv(env);
     if (request.method === "OPTIONS") return createWorkersApiRouter().fetch(request);
     if (request.method === "GET" && url.pathname === "/ready") {
-      // The Worker still has Prisma-backed route fallbacks. Until those routes are
-      // migrated, readiness must require the legacy pooler URL as well as the
-      // Supabase HTTPS transport; otherwise the Bot can start against a partial API.
+      // The Worker API uses Supabase HTTPS/PostgREST only. Readiness verifies
+      // the deployed RPC schema and does not depend on PostgreSQL connection URLs.
       const missing = missingConfig(env);
       if (!env.SUPABASE_URL) missing.push("SUPABASE_URL");
       if (!env.SUPABASE_SERVICE_ROLE_KEY || env.SUPABASE_SERVICE_ROLE_KEY.length < 32) missing.push("SUPABASE_SERVICE_ROLE_KEY");
