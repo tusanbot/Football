@@ -34,7 +34,7 @@ BEGIN
       WHEN 4 THEN 'SEMI_PRO' WHEN 5 THEN 'PRO' WHEN 6 THEN 'ELITE' ELSE 'CHAMPIONS' END;
     SELECT COALESCE(jsonb_agg(jsonb_build_object(
       'id',l.id,'competitionId',c.id,'name',c.name,'status',c.status::text,
-      'startsAt',c."startsAt",'teams',COALESCE(ec.team_count,0),
+      'startsAt',CASE WHEN c."startsAt" IS NULL THEN NULL ELSE to_char(c."startsAt",'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') END,'teams',COALESCE(ec.team_count,0),
       'clubs',COALESCE(ec.clubs,'[]'::jsonb),'isMyLeague',COALESCE(ec.is_mine,false)
     ) ORDER BY l."groupNumber"),'[]'::jsonb)
     INTO v_leagues
