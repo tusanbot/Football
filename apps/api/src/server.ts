@@ -31,6 +31,7 @@ import { NodeSupabaseTelegramMessageDeletionRepository } from "./node-supabase-t
 import { NodeSupabaseMatchNotificationRepository } from "./game/node-supabase-match-notifications.js";
 import { NodeSupabaseAdminGroupBroadcastRepository } from "./node-supabase-admin-group-broadcast.js";
 import { NodeSupabaseAdminRoleRepository } from "./node-supabase-admin-role.js";
+import { NodeSupabaseAdminPyramidLeagueReadRepository } from "./node-supabase-admin-pyramid-league-read.js";
 import { SupabaseEventTournamentSettlementRepository } from "./game/node-supabase-event-tournament-settlement.js";
 import { NodeSupabaseEventTournamentReadRepository } from "./node-supabase-event-tournament-read.js";
 import { SupabasePyramidLeagueSettlementRepository } from "./game/node-supabase-pyramid-league-settlement.js";
@@ -91,6 +92,7 @@ const telegramMessageDeletionPort = supabaseHttp ? new NodeSupabaseTelegramMessa
 const matchNotificationPort = supabaseHttp ? new NodeSupabaseMatchNotificationRepository(supabaseHttp) : undefined;
 const adminGroupBroadcastPort = supabaseHttp ? new NodeSupabaseAdminGroupBroadcastRepository(supabaseHttp) : undefined;
 const adminRoleLookupPort = supabaseHttp ? new NodeSupabaseAdminRoleRepository(supabaseHttp) : undefined;
+const adminPyramidLeagueReadPort = supabaseHttp ? new NodeSupabaseAdminPyramidLeagueReadRepository(supabaseHttp) : undefined;
 const eventTournamentSettlementPort = supabaseHttp ? new SupabaseEventTournamentSettlementRepository(supabaseHttp) : undefined;
 const eventTournamentReadPort = supabaseHttp ? new NodeSupabaseEventTournamentReadRepository(supabaseHttp) : undefined;
 const pyramidLeagueSettlementPort = supabaseHttp ? new SupabasePyramidLeagueSettlementRepository(supabaseHttp) : undefined;
@@ -124,6 +126,7 @@ const app = buildApp({
   ...(matchNotificationPort ? { matchNotificationPort } : {}),
   ...(adminGroupBroadcastPort ? { adminGroupBroadcastPort } : {}),
   ...(adminRoleLookupPort ? { adminRoleLookupPort } : {}),
+  ...(adminPyramidLeagueReadPort ? { adminPyramidLeagueReadPort } : {}),
   ...(eventTournamentSettlementPort ? { eventTournamentSettlementPort } : {}),
   ...(eventTournamentReadPort ? { eventTournamentReadPort } : {}),
   ...(pyramidLeagueSettlementPort ? { pyramidLeagueSettlementPort } : {}),
