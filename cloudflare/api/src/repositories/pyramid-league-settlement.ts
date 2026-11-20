@@ -2,6 +2,20 @@ import type { PyramidLeagueSettlementPort } from "../../../../apps/api/src/game/
 import { SupabaseHttpClient } from "../supabase-http.js";
 export class SupabasePyramidLeagueSettlementRepository implements PyramidLeagueSettlementPort {
  constructor(private readonly client:SupabaseHttpClient){}
+ async apply(userId:string,tier:number,now:string){
+  const result=await this.client.rpc<Record<string,unknown>>("apply_pyramid_league_http",{
+   p_user_id:userId,p_tier:tier,p_now:now
+  });
+  if(!result||result.applied!==true||typeof result.replayed!=="boolean"
+   ||typeof result.status!=="string"||typeof result.waitingTeams!=="number"){
+   throw new Error("SUPABASE_PYRAMID_APPLICATION_INVALID_RESPONSE");
+  }
+  if(result.status==="ASSIGNED"&&(typeof result.leagueId!=="string"||typeof result.competitionId!=="string"
+   ||typeof result.fixturesCreated!=="number"||typeof result.teams!=="number")){
+   throw new Error("SUPABASE_PYRAMID_APPLICATION_INVALID_ASSIGNMENT");
+  }
+  return result;
+ }
  async finalize(competitionId:string,now:string){
   const result=await this.client.rpc<Awaited<ReturnType<PyramidLeagueSettlementPort["finalize"]>>>("finalize_pyramid_league_http",{p_competition_id:competitionId,p_now:now});
   if(!result||typeof result.processed!=="boolean")throw new Error("SUPABASE_PYRAMID_FINALIZATION_REJECTED");
