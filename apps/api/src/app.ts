@@ -53,6 +53,7 @@ import type { PublicClubLogoRepository } from "./node-supabase-public-club-logo.
 import type { PublicClubReadRepository } from "./public-club-routes.js";
 import { registerPublicPlayerRecordRoutes, type PublicPlayerRecordRepository } from "./players/public-record-routes.js";
 import { registerSeasonAwardRoutes } from "./game/season-award-routes.js";
+import type { SeasonAwardRepository } from "./game/season-award-routes.js";
 import { registerStoreRoutes } from "./store/store-routes.js";
 import { registerEventTournamentRoutes } from "./event-tournament-routes.js";
 import type { EventTournamentReadPort } from "./event-tournament-read-context.js";
@@ -81,7 +82,7 @@ const healthResponse = z.object({
   version: z.string(),
 });
 
-export function buildApp(options: { logger?: boolean; pluginTimeout?: number; groupMembershipPort?: GroupMembershipPort; alliancePort?: AlliancePort; adminAlliancePort?: AdminAlliancePort; telegramUserLookupPort?: TelegramUserLookupPort; accountProvisioningPort?: TelegramAccountProvisioningPort; storePurchasePort?: StorePurchasePort; storeItemUsePort?: StoreItemUsePort; walletEntryPort?: WalletEntryPort; marketListingPort?: MarketListingPort; marketPurchasePort?: MarketPurchasePort; storeSnapshotPort?: StoreSnapshotPort; playerDevelopmentPort?: PlayerDevelopmentPort; clubEconomySettlementPort?: ClubEconomySettlementPort; clubManagementPort?: ClubManagementPort; specialAcquisitionPort?: SpecialAcquisitionPort; giftCodeRedemptionPort?: GiftCodeRedemptionPort; botRuntimeLeasePort?: BotRuntimeLeasePort; matchPorts?: NodeSupabaseMatchPorts; supabaseHttpClient?: SupabaseHttpClient; gameDashboardPort?: GameDashboardPort; walletReadPort?: WalletReadPort; clubLineupPort?: ClubLineupPort; publicPlayerRecordRepository?: PublicPlayerRecordRepository; publicClubLogoRepository?: PublicClubLogoRepository; publicClubReadRepository?: PublicClubReadRepository; eventTournamentSettlementPort?: EventTournamentSettlementPort; eventTournamentReadPort?: EventTournamentReadPort; pyramidLeagueSettlementPort?: PyramidLeagueSettlementPort; actionRateLimitPort?: ActionRateLimitPort } = {}) {
+export function buildApp(options: { logger?: boolean; pluginTimeout?: number; groupMembershipPort?: GroupMembershipPort; alliancePort?: AlliancePort; adminAlliancePort?: AdminAlliancePort; telegramUserLookupPort?: TelegramUserLookupPort; accountProvisioningPort?: TelegramAccountProvisioningPort; storePurchasePort?: StorePurchasePort; storeItemUsePort?: StoreItemUsePort; walletEntryPort?: WalletEntryPort; marketListingPort?: MarketListingPort; marketPurchasePort?: MarketPurchasePort; storeSnapshotPort?: StoreSnapshotPort; playerDevelopmentPort?: PlayerDevelopmentPort; clubEconomySettlementPort?: ClubEconomySettlementPort; clubManagementPort?: ClubManagementPort; specialAcquisitionPort?: SpecialAcquisitionPort; giftCodeRedemptionPort?: GiftCodeRedemptionPort; botRuntimeLeasePort?: BotRuntimeLeasePort; matchPorts?: NodeSupabaseMatchPorts; supabaseHttpClient?: SupabaseHttpClient; gameDashboardPort?: GameDashboardPort; walletReadPort?: WalletReadPort; clubLineupPort?: ClubLineupPort; publicPlayerRecordRepository?: PublicPlayerRecordRepository; publicClubLogoRepository?: PublicClubLogoRepository; publicClubReadRepository?: PublicClubReadRepository; seasonAwardRepository?: SeasonAwardRepository; eventTournamentSettlementPort?: EventTournamentSettlementPort; eventTournamentReadPort?: EventTournamentReadPort; pyramidLeagueSettlementPort?: PyramidLeagueSettlementPort; actionRateLimitPort?: ActionRateLimitPort } = {}) {
   // Production HTTP routes must use direct-HTTPS Supabase repositories for the
   // match runtime and Telegram onboarding. Prisma compatibility remains isolated
   // to non-production migration tests and service families not yet migrated.
@@ -113,6 +114,7 @@ export function buildApp(options: { logger?: boolean; pluginTimeout?: number; gr
       ["PUBLIC_PLAYER_RECORDS", options.publicPlayerRecordRepository],
       ["PUBLIC_CLUB_LOGO", options.publicClubLogoRepository],
       ["PUBLIC_CLUB_READ", options.publicClubReadRepository],
+      ["SEASON_AWARDS", options.seasonAwardRepository],
       ["EVENT_TOURNAMENT_READ", options.eventTournamentReadPort],
       ["EVENT_TOURNAMENT_SETTLEMENT", options.eventTournamentSettlementPort],
       ["PYRAMID_LEAGUE_SETTLEMENT", options.pyramidLeagueSettlementPort],
@@ -288,7 +290,7 @@ export function buildApp(options: { logger?: boolean; pluginTimeout?: number; gr
   registerBotRuntimeRoutes(app, { ...(options.botRuntimeLeasePort ? { leasePort: options.botRuntimeLeasePort } : {}), requireLeasePort: true });
   registerPublicClubRoutes(app, options.publicClubLogoRepository, options.publicClubReadRepository);
   registerPublicPlayerRecordRoutes(app, options.publicPlayerRecordRepository);
-  registerSeasonAwardRoutes(app);
+  registerSeasonAwardRoutes(app, options.seasonAwardRepository);
   registerStoreRoutes(app);
   registerEventTournamentRoutes(app);
 
