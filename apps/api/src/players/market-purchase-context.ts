@@ -22,5 +22,9 @@ export function withMarketPurchasePort<T>(port: MarketPurchasePort, operation: (
 }
 
 export function getMarketPurchasePort(): MarketPurchasePort | undefined {
-  return marketPurchaseScope.getStore();
+  const port = marketPurchaseScope.getStore();
+  if (!port && (process.env.NODE_ENV === "production" || process.env.ENVIRONMENT === "production")) {
+    throw new Error("MARKET_PURCHASE_SUPABASE_REPOSITORY_REQUIRED");
+  }
+  return port;
 }
