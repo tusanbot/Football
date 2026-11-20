@@ -73,3 +73,16 @@ test("admin ledger entries reject invalid limits, queries and malformed response
   const invalidResponse = new NodeSupabaseAdminConsoleReadRepository(clientWith({ rows: [] }).client);
   await assert.rejects(invalidResponse.ledgerEntries("audit", 10), /SUPABASE_ADMIN_LEDGER_INVALID_RESPONSE/);
 });
+
+test("admin resource lists use the allowlisted Supabase RPC with bounded filters", async () => {
+  const rows = [{ id: "club-1", name: "Tosan", owner: { telegramId: "123", displayName: "Owner" }, _count: { players: 1, homeMatches: 2, awayMatches: 1 } }];
+  const { client, calls } = clientWith(rows);
+  const repo = new NodeSupabaseAdminConsoleReadRepository(client);
+  assert.deepEqual(await repo.resourceList("clubs", 25, "Tosan", 2040), rows);
+  assert.deepEqual(calls[0], { name: "get_admin_resource_list_http", args: { p_resource: "clubs", p_limit: 25, p_query: "Tosan", p_season: 2040 } });
+  await assert.rejects(repo.resourceList("clubs", 0), /INVALID_ADMIN_RESOURCE_LIMIT/);
+  await assert.rejects(repo.resourceList("users", 10, "x".repeat(101)), /INVALID_ADMIN_RESOURCE_QUERY/);
+  await assert.rejects(repo.resourceList("users", 10, undefined, 2019), /INVALID_ADMIN_RESOURCE_SEASON/);
+  const malformed = new NodeSupabaseAdminConsoleReadRepository(clientWith([{ name: "missing-id" }]).client);
+  await assert.rejects(malformed.resourceList("clubs", 10), /SUPABASE_ADMIN_RESOURCE_INVALID_ROW/);
+});
