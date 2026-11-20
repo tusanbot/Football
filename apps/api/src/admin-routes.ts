@@ -179,7 +179,7 @@ if(code.startsWith("INVALID_"))return reply.code(400).send({error:code});
 throw error;
 }
 }
-if(["suspend-user","restore-user","suspend-group","restore-group","cancel-challenge","competition-status"].includes(x.action)&&options.adminModerationActionPort){
+if(["suspend-user","restore-user","suspend-group","restore-group","cancel-challenge","league-status","competition-status"].includes(x.action)&&options.adminModerationActionPort){
 try{
  const result=await options.adminModerationActionPort.execute({action:x.action as import("./node-supabase-admin-moderation-actions.js").AdminModerationAction,targetId:id,actorTelegramId:actor.telegramId,idempotencyKey:x.idempotencyKey,...(x.reason?{reason:x.reason}:{})});
  return {ok:true,targetType:result.targetType,targetId:result.targetId,replayed:result.replay};
