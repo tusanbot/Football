@@ -78,6 +78,8 @@ const actor=await authorizeAdmin(req,reply,"moderation");if(!actor)return;
 if(actor.adminRole!=="superadmin")return reply.code(403).send({error:"SUPERADMIN_REQUIRED"});
 const q=z.object({limit:z.coerce.number().int().min(1).max(100).default(40)}).safeParse(req.query);
 if(!q.success)return reply.code(400).send({error:"INVALID_QUERY"});
+if(options.adminConsoleReadPort)return options.adminConsoleReadPort.broadcasts(q.data.limit);
+if(process.env.NODE_ENV==="production"||process.env.ENVIRONMENT==="production")throw new Error("ADMIN_CONSOLE_SUPABASE_REPOSITORY_REQUIRED");
 const [broadcasts,userAudits]=await Promise.all([
 prisma.adminGroupBroadcast.findMany({take:q.data.limit,orderBy:{createdAt:"desc"},include:{deliveries:{select:{deliveredAt:true,deliveryAttempts:true,deliveryLastError:true}}}}),
 prisma.adminAuditLog.findMany({where:{action:"broadcast",targetType:"broadcast"},take:q.data.limit,orderBy:{createdAt:"desc"},select:{targetId:true,createdAt:true,actorTelegramId:true}}),
