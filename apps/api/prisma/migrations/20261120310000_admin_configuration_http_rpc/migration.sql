@@ -20,6 +20,7 @@ DECLARE
  v_existing public."AdminAuditLog"%ROWTYPE;
  v_id text;
  v_metadata jsonb;
+ v_expected_metadata jsonb;
  v_limits jsonb;
  v_min numeric;
  v_max numeric;
@@ -30,14 +31,15 @@ BEGIN
   OR p_idempotency_key IS NULL OR length(p_idempotency_key)<12 OR length(p_idempotency_key)>160 THEN
   RAISE EXCEPTION USING MESSAGE='INVALID_ADMIN_CONFIGURATION_ACTION',ERRCODE='22023';
  END IF;
+ v_expected_metadata:=CASE
+  WHEN p_action IN ('set-admin-role','revoke-admin-role') THEN jsonb_build_object('telegramId',p_target_telegram_id,'role',p_role)
+  ELSE jsonb_build_object('key',p_setting_key,'value',p_setting_value) END;
  PERFORM pg_advisory_xact_lock(hashtextextended(p_idempotency_key,0));
  SELECT * INTO v_existing FROM public."AdminAuditLog" WHERE "idempotencyKey"=p_idempotency_key;
  IF FOUND THEN
   IF v_existing."actorTelegramId"=p_actor_telegram_id AND v_existing.action=p_action
    AND v_existing."targetId"=COALESCE(p_target_telegram_id,p_setting_key,'')
-   AND v_existing.metadata IS NOT DISTINCT FROM CASE
-    WHEN p_action IN ('set-admin-role','revoke-admin-role') THEN jsonb_build_object('telegramId',p_target_telegram_id,'role',p_role)
-    ELSE jsonb_build_object('key',p_setting_key,'value',p_setting_value) END THEN
+   AND v_existing.metadata IS NOT DISTINCT FROM v_expected_metadata THEN
    RETURN jsonb_build_object('ok',true,'targetType',v_existing."targetType",'targetId',v_existing."targetId",'replay',true);
   END IF;
   RAISE EXCEPTION USING MESSAGE='IDEMPOTENCY_KEY_REUSED',ERRCODE='23505';
