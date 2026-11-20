@@ -10,6 +10,8 @@ DECLARE
  v_advancement jsonb:=NULL;
  v_competition_id text;
  v_round integer;
+ v_pyramid_finalization jsonb:=NULL;
+ v_event_finalization jsonb:=NULL;
 BEGIN
  IF p_now IS NULL THEN
   RAISE EXCEPTION USING MESSAGE='INVALID_MATCH_FORFEIT_INPUT',ERRCODE='P0001';
@@ -21,8 +23,13 @@ BEGIN
    OR COALESCE((v_settlement->>'replayed')::boolean,false))
   AND v_competition_id IS NOT NULL AND v_round IS NOT NULL THEN
   v_advancement:=public.advance_competition_after_match_http(v_competition_id,v_round,p_now);
+  IF COALESCE((v_advancement->>'completed')::boolean,false) THEN
+   v_pyramid_finalization:=public.finalize_pyramid_league_http(v_competition_id,p_now);
+   v_event_finalization:=public.finalize_event_tournament_http(v_competition_id,p_now);
+  END IF;
  END IF;
- RETURN v_settlement||jsonb_build_object('advancement',v_advancement);
+ RETURN v_settlement||jsonb_build_object('advancement',v_advancement,
+  'pyramidFinalization',v_pyramid_finalization,'eventTournamentFinalization',v_event_finalization);
 END;
 $function$;
 REVOKE ALL ON FUNCTION public.settle_invalid_match_fixture_and_advance_http(text,timestamptz) FROM PUBLIC,anon,authenticated;
