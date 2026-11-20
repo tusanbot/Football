@@ -13,7 +13,7 @@ BEGIN
  INSERT INTO public."LeagueAward"(id,"leagueId","clubId",season,tier,placement,"awardName","awardType")
  VALUES('ci-admin-report-award','ci-admin-report-league','ci-admin-report-club',2027,2,1,'Champion','TROPHY');
  INSERT INTO public."AdminAuditLog"(id,"actorTelegramId",action,"targetType","targetId",reason,"idempotencyKey")
- VALUES('ci-admin-report-audit','919900098','pyramid-update-award','league-award','ci-admin-report-award','verified','ci-admin-report-audit-key');
+ VALUES('ci-admin-report-audit','919900098','pyramid-update-award','league-award','ci-admin-report-award','Report verified','ci-admin-report-audit-key');
  v_result:=public.get_admin_pyramid_league_reports_http(2027,2,'Report',100);
  IF (v_result->'totals'->>'leagues')::integer<>1
   OR (v_result->'totals'->>'completedLeagues')::integer<>1
