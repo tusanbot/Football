@@ -37,23 +37,29 @@ BEGIN
   ORDER BY l.season DESC,l.tier,l."groupNumber" LIMIT p_limit
  ) rows;
  SELECT COALESCE(jsonb_agg(jsonb_build_object('id',a.id,'tier',a.tier,'season',a.season,'appliedAt',a."appliedAt",
-  'club',jsonb_build_object('id',cl.id,'name',cl.name),
-  'user',jsonb_build_object('displayName',u."displayName",'telegramId',u."telegramId")) ORDER BY a."appliedAt",a.id),'[]'::jsonb)
- INTO v_queues FROM public."PyramidLeagueApplication" a
- JOIN public."Club" cl ON cl.id=a."clubId" JOIN public."User" u ON u.id=a."userId"
- WHERE a.status::text='QUEUED' AND (p_season IS NULL OR a.season=p_season) AND (p_tier IS NULL OR a.tier=p_tier)
-  AND (p_query IS NULL OR cl.name ILIKE '%'||p_query||'%')
- ORDER BY a."appliedAt",a.id LIMIT p_limit;
- SELECT COALESCE(jsonb_agg(jsonb_build_object('id',o.id,'club',jsonb_build_object('id',cl.id,'name',cl.name),
-  'tier',l.tier,'season',l.season,'groupNumber',l."groupNumber",'leagueName',c.name,
-  'targetTier',o."targetTier",'finalPosition',o."finalPosition",'status',o.status::text,
+  'club',jsonb_build_object('id',a."clubId",'name',a.club_name),
+  'user',jsonb_build_object('displayName',a.display_name,'telegramId',a.telegram_id)) ORDER BY a."appliedAt",a.id),'[]'::jsonb)
+ INTO v_queues FROM (
+  SELECT app.id,app.tier,app.season,app."appliedAt",app."clubId",cl.name club_name,u."displayName" display_name,u."telegramId" telegram_id
+  FROM public."PyramidLeagueApplication" app JOIN public."Club" cl ON cl.id=app."clubId"
+  JOIN public."User" u ON u.id=app."userId"
+  WHERE app.status::text='QUEUED' AND (p_season IS NULL OR app.season=p_season) AND (p_tier IS NULL OR app.tier=p_tier)
+   AND (p_query IS NULL OR cl.name ILIKE '%'||p_query||'%')
+  ORDER BY app."appliedAt",app.id LIMIT p_limit
+ ) a;
+ SELECT COALESCE(jsonb_agg(jsonb_build_object('id',o.id,'club',jsonb_build_object('id',o."clubId",'name',o.club_name),
+  'tier',o.tier,'season',o.season,'groupNumber',o.group_number,'leagueName',o.league_name,
+  'targetTier',o."targetTier",'finalPosition',o."finalPosition",'status',o.status,
   'offeredAt',o."offeredAt",'expiresAt',o."expiresAt") ORDER BY o."offeredAt" DESC),'[]'::jsonb)
- INTO v_offers FROM public."LeaguePromotionOffer" o
- JOIN public."Club" cl ON cl.id=o."clubId" JOIN public."PyramidLeague" l ON l.id=o."leagueId"
- JOIN public."Competition" c ON c.id=l."competitionId"
- WHERE (p_season IS NULL OR l.season=p_season) AND (p_tier IS NULL OR l.tier=p_tier)
-  AND (p_query IS NULL OR cl.name ILIKE '%'||p_query||'%')
- ORDER BY o."offeredAt" DESC LIMIT p_limit;
+ INTO v_offers FROM (
+  SELECT offer.id,offer."clubId",cl.name club_name,l.tier,l.season,l."groupNumber" group_number,c.name league_name,
+   offer."targetTier",offer."finalPosition",offer.status::text status,offer."offeredAt",offer."expiresAt"
+  FROM public."LeaguePromotionOffer" offer JOIN public."Club" cl ON cl.id=offer."clubId"
+  JOIN public."PyramidLeague" l ON l.id=offer."leagueId" JOIN public."Competition" c ON c.id=l."competitionId"
+  WHERE (p_season IS NULL OR l.season=p_season) AND (p_tier IS NULL OR l.tier=p_tier)
+   AND (p_query IS NULL OR cl.name ILIKE '%'||p_query||'%')
+  ORDER BY offer."offeredAt" DESC LIMIT p_limit
+ ) o;
  SELECT COALESCE(jsonb_object_agg(status,total),'{}'::jsonb) INTO v_counts FROM (
   SELECT status::text status,count(*)::integer total FROM public."PyramidLeagueApplication"
   WHERE (p_season IS NULL OR season=p_season) AND (p_tier IS NULL OR tier=p_tier) GROUP BY status
