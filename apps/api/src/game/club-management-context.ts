@@ -23,4 +23,10 @@ export interface ClubFinanceReport {
 }
 const scope = new AsyncLocalStorage<ClubManagementPort>();
 export function withClubManagementPort<T>(port: ClubManagementPort, operation: () => Promise<T>): Promise<T> { return scope.run(port, operation); }
-export function getClubManagementPort(): ClubManagementPort | undefined { return scope.getStore(); }
+export function getClubManagementPort(): ClubManagementPort | undefined {
+  const port = scope.getStore();
+  if (!port && (process.env.NODE_ENV === "production" || process.env.ENVIRONMENT === "production")) {
+    throw new Error("CLUB_MANAGEMENT_SUPABASE_REPOSITORY_REQUIRED");
+  }
+  return port;
+}
