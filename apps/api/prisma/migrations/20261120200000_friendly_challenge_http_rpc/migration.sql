@@ -90,7 +90,13 @@ BEGIN
  IF NOT FOUND THEN RAISE EXCEPTION USING MESSAGE='FRIENDLY_CHALLENGE_NOT_FOUND',ERRCODE='P0001'; END IF;
  IF v_challenge."creatorUserId"=p_user_id THEN RAISE EXCEPTION USING MESSAGE='CANNOT_ACCEPT_OWN_CHALLENGE',ERRCODE='P0001'; END IF;
  IF v_challenge.status::text='ACCEPTED' AND v_challenge."matchId" IS NOT NULL THEN
-  SELECT to_jsonb(m),m."awayClubId" INTO v_match,v_match_id FROM public."FootballMatch" m WHERE m.id=v_challenge."matchId";
+  SELECT to_jsonb(m)||jsonb_build_object(
+   'scheduledAt',to_char(m."scheduledAt",'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),
+   'startedAt',CASE WHEN m."startedAt" IS NULL THEN NULL ELSE to_char(m."startedAt",'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') END,
+   'completedAt',CASE WHEN m."completedAt" IS NULL THEN NULL ELSE to_char(m."completedAt",'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') END,
+   'createdAt',to_char(m."createdAt",'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),
+   'updatedAt',to_char(m."updatedAt",'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')
+  ),m."awayClubId" INTO v_match,v_match_id FROM public."FootballMatch" m WHERE m.id=v_challenge."matchId";
   IF v_match IS NULL OR v_match_id<>v_opponent_id THEN RAISE EXCEPTION USING MESSAGE='FRIENDLY_CHALLENGE_ALREADY_ACCEPTED',ERRCODE='P0001'; END IF;
   RETURN jsonb_build_object('match',v_match,'replayed',true);
  END IF;
