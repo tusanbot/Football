@@ -526,6 +526,10 @@ test("durable match worker advances checkpoints, resumes on two early decisions 
       "test-runtime-worker", new Date(kickoff.getTime() + 90_000), 5,
     );
     assert.equal(fullTimeTick.settled, 0);
+    await assert.rejects(
+      simulateScheduledMatch(clubs[0]!.userId, created.match.id),
+      (error: unknown) => error instanceof Error && error.message === "MATCH_RUNTIME_AUTOMATIC",
+    );
     const settlementTick = await processDueMatchRuntimes(
       "test-runtime-worker", new Date(kickoff.getTime() + 105_000), 5,
     );
