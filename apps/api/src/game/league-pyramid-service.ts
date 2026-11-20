@@ -108,6 +108,8 @@ async function assignQueueIfReady(tx: Prisma.TransactionClient, tier: number, se
 }
 
 export async function applyForPyramidLeague(userId: string, tier: number, now = new Date()) {
+  const settlementPort = getPyramidLeagueSettlementPort();
+  if (settlementPort) return settlementPort.apply(userId, tier, now.toISOString());
   const club = await ownedClub(userId);
   leagueTier(tier);
   if (tier !== 1) throw new PyramidLeagueError("DIRECT_TIER_ENTRY_NOT_ALLOWED");
