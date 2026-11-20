@@ -92,8 +92,10 @@ BEGIN
    RAISE EXCEPTION USING MESSAGE='INVALID_MATCH_UPDATE',ERRCODE='22023';
   END IF;
   IF (p_payload ? 'scheduledAt' AND (p_payload->>'scheduledAt') IS NULL)
-   OR (p_payload ? 'homeScore' AND ((p_payload->>'homeScore') IS NULL OR p_payload->>'homeScore' !~ '^[0-9]{1,2}
-   RAISE EXCEPTION USING MESSAGE='INVALID_MATCH_UPDATE',ERRCODE='22023';
+   OR (p_payload ? 'homeScore' AND ((p_payload->>'homeScore') IS NULL OR p_payload->>'homeScore' !~ '^[0-9]{1,2}$' OR (p_payload->>'homeScore')::int NOT BETWEEN 0 AND 99))
+   OR (p_payload ? 'awayScore' AND ((p_payload->>'awayScore') IS NULL OR p_payload->>'awayScore' !~ '^[0-9]{1,2}$' OR (p_payload->>'awayScore')::int NOT BETWEEN 0 AND 99))
+   OR (p_payload ? 'matchStatus' AND p_payload->>'matchStatus'='COMPLETED') THEN
+    RAISE EXCEPTION USING MESSAGE='MATCH_COMPLETION_AUTOMATIC_ONLY',ERRCODE='P0001';
   END IF;
   UPDATE public."FootballMatch" SET
    "scheduledAt"=CASE WHEN p_payload ? 'scheduledAt' THEN (p_payload->>'scheduledAt')::timestamptz ELSE "scheduledAt" END,
