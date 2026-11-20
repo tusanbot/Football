@@ -60,9 +60,10 @@ const filters = z.object({
   limit: z.coerce.number().int().min(1).max(100).default(60),
 });
 
-export function registerAdminLeagueRoutes(app: FastifyInstance, options: { adminRoleLookupPort?: AdminRoleLookupPort } = {}) {\n  const authorizeAdmin = (request: FastifyRequest, reply: FastifyReply, permission: Permission) => authorize(request, reply, permission, options.adminRoleLookupPort);
+export function registerAdminLeagueRoutes(app: FastifyInstance, options: { adminRoleLookupPort?: AdminRoleLookupPort } = {}) {
+  const authorizeAdmin = (request: FastifyRequest, reply: FastifyReply, permission: Permission) => authorize(request, reply, permission, options.adminRoleLookupPort);
   app.get("/v1/admin/pyramid-leagues", async (request, reply) => {
-    const actor = await authorize(request, reply, "read");
+    const actor = await authorizeAdmin(request, reply, "read");
     if (!actor) return;
     const parsed = filters.safeParse(request.query);
     if (!parsed.success) return reply.code(400).send({ error: "INVALID_QUERY" });
@@ -121,7 +122,7 @@ export function registerAdminLeagueRoutes(app: FastifyInstance, options: { admin
 
 
   app.get("/v1/admin/pyramid-leagues/reports", async (request, reply) => {
-    const actor = await authorize(request, reply, "read");
+    const actor = await authorizeAdmin(request, reply, "read");
     if (!actor) return;
     const parsed = z.object({
       season: z.coerce.number().int().min(2020).max(2200).optional(),
@@ -249,7 +250,7 @@ export function registerAdminLeagueRoutes(app: FastifyInstance, options: { admin
   });
 
   app.post("/v1/admin/pyramid-leagues/actions", async (request, reply) => {
-    const actor = await authorize(request, reply, "competitions");
+    const actor = await authorizeAdmin(request, reply, "competitions");
     if (!actor) return;
     if (!await consumeAllianceActionRateLimit({ telegramUserId: actor.telegramId, telegramGroupId: "global", action: "admin-pyramid-actions", limit: 20 })) return reply.code(429).send({ error: "ADMIN_RATE_LIMITED", retryAfterSeconds: 60 });
     const parsed = z.object({
