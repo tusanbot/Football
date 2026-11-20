@@ -280,3 +280,53 @@ test("match worker resolves a tactical checkpoint from both clubs through one Su
     assert.deepEqual(result, { enqueued: 0, claimed: 1, advanced: 1, waiting: 0, settled: 0, failed: 0 });
   });
 });
+
+test("match worker releases a failed runtime lease and continues processing later claimed runtimes", async () => {
+  await withTestEnvironment(async () => {
+    const calls: string[] = [];
+    const now = new Date("2026-11-20T12:00:00.000Z");
+    const result = await withMatchRuntimeEnqueuePort({
+      async enqueue() { calls.push("enqueue"); return { enqueued: 0, invalidFixtures: [] }; },
+    }, () => withMatchRuntimeLeasePort({
+      async claim(input) {
+        calls.push("claim");
+        return [
+          { runtime: { id: "runtime-transient-failure" }, lease: {
+            owner: input.workerId, token: "lease-failure", expiresAt: new Date(now.getTime() + 60_000),
+          } },
+          { runtime: { id: "runtime-after-failure" }, lease: {
+            owner: input.workerId, token: "lease-after-failure", expiresAt: new Date(now.getTime() + 60_000),
+          } },
+        ];
+      },
+      async release(input) {
+        calls.push("release:" + input.runtimeId);
+        assert.equal(input.runtimeId, "runtime-transient-failure");
+        assert.equal(input.leaseToken, "lease-failure");
+        assert.equal(input.nextActionAt, new Date(now.getTime() + 10_000).toISOString());
+        assert.equal(input.lastError, "TRANSIENT_SNAPSHOT_FAILURE");
+        return true;
+      },
+    }, () => withMatchRuntimeSnapshotPort({
+      async get(runtimeId) {
+        calls.push("snapshot:" + runtimeId);
+        if (runtimeId === "runtime-transient-failure") {
+          throw new Error("TRANSIENT_SNAPSHOT_FAILURE");
+        }
+        return null;
+      },
+    }, () => processDueMatchRuntimes("recovery-worker", now, 2))));
+
+    assert.deepEqual(calls, [
+      "enqueue",
+      "claim",
+      "snapshot:runtime-transient-failure",
+      "release:runtime-transient-failure",
+      "snapshot:runtime-after-failure",
+    ]);
+    assert.deepEqual(result, {
+      enqueued: 0, claimed: 2, advanced: 0, waiting: 0, settled: 1, failed: 1,
+    });
+  });
+});
+
