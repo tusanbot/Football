@@ -1,3 +1,4 @@
+import { defaultMatchRules } from "@football/domain";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { SupabaseHttpClient } from "../src/node-supabase-http.js";
@@ -14,7 +15,7 @@ function client(responses:unknown[]){
  const calls:Array<{path:string;body:Record<string,unknown>;authorization:string|null}>=[];
  const http=new SupabaseHttpClient({url,serviceRoleKey:key,fetchImpl:async(input,init)=>{
   calls.push({path:new URL(String(input)).pathname,body:JSON.parse(String(init?.body)) as Record<string,unknown>,authorization:new Headers(init?.headers).get("authorization")});
-  return new Response(JSON.stringify(responses.shift()),{status:200,headers:{"content-type":"application/json"}});
+  return new Response(JSON.stringify(responses.shift() ?? null),{status:200,headers:{"content-type":"application/json"}});
  }});
  return {http,calls};
 }
@@ -77,7 +78,7 @@ test("match service delegates all entrypoint mutations and opponent discovery to
  };
  await withCompetitionCreationPort(port,async()=>{
   assert.equal((await createLeague("user-1","Autumn League",4,"league-key-123")).replayed,false);
-  await updateCompetitionRules("user-1","competition-1",{penaltiesOnDraw:false});
+  await updateCompetitionRules("user-1","competition-1",defaultMatchRules("LEAGUE"));
   await joinLeague("user-2","competition-1");
   await startLeague("user-1","competition-1");
  });
