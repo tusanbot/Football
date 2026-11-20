@@ -16,8 +16,9 @@ const useSchema = z.object({
 
 function sendStoreError(reply: FastifyReply, error: unknown) {
   if (!(error instanceof StoreError)) throw error;
-  const status = ["INSUFFICIENT_FUNDS", "WALLET_NOT_FOUND", "CONCURRENT_MODIFICATION", "ITEM_NOT_IN_INVENTORY", "IDEMPOTENCY_CONFLICT"].includes(error.code) ? 409
-    : ["CLUB_NOT_FOUND", "PLAYER_NOT_FOUND", "STORE_ITEM_NOT_FOUND"].includes(error.code) ? 404 : 400;
+  const status = error.code.startsWith("SUPABASE_") ? 503
+    : ["INSUFFICIENT_FUNDS", "WALLET_NOT_FOUND", "CONCURRENT_MODIFICATION", "ITEM_NOT_IN_INVENTORY", "IDEMPOTENCY_CONFLICT"].includes(error.code) ? 409
+      : ["CLUB_NOT_FOUND", "PLAYER_NOT_FOUND", "STORE_ITEM_NOT_FOUND"].includes(error.code) ? 404 : 400;
   return reply.code(status).send({ error: error.code });
 }
 
