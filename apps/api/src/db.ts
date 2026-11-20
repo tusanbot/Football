@@ -85,6 +85,12 @@ export function releaseWorkerPrismaRequest(requestId: string): void {
 function currentPrisma(): PrismaClient {
   const scoped = requestPrisma.getStore();
   if (scoped) return scoped;
+  // Production API and Worker runtimes are Supabase HTTP-only. Prisma remains
+  // available solely to legacy tests and local migration tooling; it must never
+  // establish a PostgreSQL connection in a production process.
+  if (process.env.NODE_ENV === "production" || process.env.ENVIRONMENT === "production") {
+    throw new Error("PRISMA_RUNTIME_DISABLED_SUPABASE_HTTP_REQUIRED");
+  }
   if (requestScopeRequired) throw new Error("Prisma access outside the Worker request context is blocked.");
   defaultPrisma ??= createPrismaClient();
   return defaultPrisma;

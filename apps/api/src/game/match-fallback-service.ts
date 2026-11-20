@@ -1,5 +1,4 @@
-import { Prisma } from "@prisma/client";
-import { prisma } from "../db.js";
+import { SupabaseHttpClient } from "../node-supabase-http.js";
 
 export type MatchFallbackPlan = {
   formation: string;
@@ -16,13 +15,31 @@ export class MatchFallbackPlanError extends Error {
   }
 }
 
-const defaultPlan = (club: {
+type ClubFallbackRow = {
+  id: string;
   formation: string;
   mentality: string;
   pressing: string;
   tempo: string;
   passingStyle: string;
-}): MatchFallbackPlan => ({
+  matchFallbackPlan: unknown | null;
+  matchFallbackPlanVersion: number;
+};
+
+const allowedFormations = ["4-3-3", "4-4-2", "3-5-2", "4-2-3-1"];
+const allowedMentalities = ["DEFENSIVE", "BALANCED", "ATTACKING"];
+const allowedPressing = ["LOW_BLOCK", "MID_BLOCK", "HIGH_PRESS"];
+const allowedTempos = ["SLOW", "NORMAL", "FAST"];
+const allowedPassingStyles = ["SHORT", "MIXED", "DIRECT"];
+
+function client(): SupabaseHttpClient {
+  const url = process.env.SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) throw new Error("SUPABASE_HTTP_CONFIGURATION_REQUIRED");
+  return new SupabaseHttpClient({ url, serviceRoleKey: key });
+}
+
+const defaultPlan = (club: Pick<ClubFallbackRow, "formation" | "mentality" | "pressing" | "tempo" | "passingStyle">): MatchFallbackPlan => ({
   formation: club.formation,
   mentality: club.mentality as MatchFallbackPlan["mentality"],
   pressing: club.pressing as MatchFallbackPlan["pressing"],
@@ -30,15 +47,14 @@ const defaultPlan = (club: {
   passingStyle: club.passingStyle as MatchFallbackPlan["passingStyle"],
 });
 
-function parseStoredPlan(value: Prisma.JsonValue | null, fallback: MatchFallbackPlan): MatchFallbackPlan {
+function parseStoredPlan(value: unknown, fallback: MatchFallbackPlan): MatchFallbackPlan {
   if (!value || typeof value !== "object" || Array.isArray(value)) return fallback;
-  const item = value as Record<string, Prisma.JsonValue>;
-  const allowedFormation = ["4-3-3", "4-4-2", "3-5-2", "4-2-3-1"];
-  const valid = allowedFormation.includes(String(item.formation))
-    && ["DEFENSIVE", "BALANCED", "ATTACKING"].includes(String(item.mentality))
-    && ["LOW_BLOCK", "MID_BLOCK", "HIGH_PRESS"].includes(String(item.pressing))
-    && ["SLOW", "NORMAL", "FAST"].includes(String(item.tempo))
-    && ["SHORT", "MIXED", "DIRECT"].includes(String(item.passingStyle));
+  const item = value as Record<string, unknown>;
+  const valid = allowedFormations.includes(String(item.formation))
+    && allowedMentalities.includes(String(item.mentality))
+    && allowedPressing.includes(String(item.pressing))
+    && allowedTempos.includes(String(item.tempo))
+    && allowedPassingStyles.includes(String(item.passingStyle));
   if (!valid) return fallback;
   return {
     formation: String(item.formation),
@@ -49,14 +65,15 @@ function parseStoredPlan(value: Prisma.JsonValue | null, fallback: MatchFallback
   };
 }
 
-export async function getMatchFallbackPlan(userId: string) {
-  const club = await prisma.club.findUnique({
-    where: { ownerId: userId },
-    select: {
-      id: true, formation: true, mentality: true, pressing: true, tempo: true,
-      passingStyle: true, matchFallbackPlan: true, matchFallbackPlanVersion: true,
-    },
+async function loadClub(userId: string, select: string): Promise<ClubFallbackRow | null> {
+  const rows = await client().select<ClubFallbackRow[]>("Club", {
+    select, ownerId: "eq." + userId, limit: "1",
   });
+  return rows[0] ?? null;
+}
+
+export async function getMatchFallbackPlan(userId: string) {
+  const club = await loadClub(userId, "id,formation,mentality,pressing,tempo,passingStyle,matchFallbackPlan,matchFallbackPlanVersion");
   if (!club) throw new MatchFallbackPlanError("CLUB_NOT_FOUND");
   const fallback = defaultPlan(club);
   return {
@@ -70,18 +87,18 @@ export async function saveMatchFallbackPlan(userId: string, plan: MatchFallbackP
   if (!Number.isInteger(expectedVersion) || expectedVersion < 1) {
     throw new MatchFallbackPlanError("INVALID_FALLBACK_PLAN_VERSION");
   }
-  const club = await prisma.club.findUnique({
-    where: { ownerId: userId },
-    select: { id: true, matchFallbackPlanVersion: true },
-  });
+  const club = await loadClub(userId, "id,matchFallbackPlanVersion");
   if (!club) throw new MatchFallbackPlanError("CLUB_NOT_FOUND");
-  const result = await prisma.club.updateMany({
-    where: { id: club.id, matchFallbackPlanVersion: expectedVersion },
-    data: {
-      matchFallbackPlan: plan as unknown as Prisma.InputJsonValue,
-      matchFallbackPlanVersion: { increment: 1 },
-    },
+  const updated = await client().update<ClubFallbackRow[]>("Club", {
+    id: "eq." + club.id,
+    ownerId: "eq." + userId,
+    matchFallbackPlanVersion: "eq." + expectedVersion,
+  }, {
+    matchFallbackPlan: plan,
+    matchFallbackPlanVersion: expectedVersion + 1,
   });
-  if (result.count !== 1) throw new MatchFallbackPlanError("FALLBACK_PLAN_VERSION_CONFLICT");
+  if (!Array.isArray(updated) || updated.length !== 1) {
+    throw new MatchFallbackPlanError("FALLBACK_PLAN_VERSION_CONFLICT");
+  }
   return { plan, version: expectedVersion + 1, isCustom: true };
 }

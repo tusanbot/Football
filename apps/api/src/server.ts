@@ -4,7 +4,6 @@ import { processDueMatchRuntimes } from "./game/match-service.js";
 import { processDuePromotionOffers } from "./game/league-pyramid-service.js";
 import { processDueEventTournamentFinalizations } from "./event-tournament-service.js";
 import { withEventTournamentSettlementPort } from "./event-tournament-settlement-context.js";
-import { prisma } from "./db.js";
 import { NodeSupabaseGroupMembershipRepository } from "./groups/node-supabase-group-membership.js";
 import { NodeSupabaseActionRateLimitRepository } from "./groups/node-supabase-action-rate-limit.js";
 import { NodeSupabaseAllianceRepository } from "./groups/node-supabase-alliance.js";
@@ -46,14 +45,13 @@ import { NodeSupabaseEventTournamentReadRepository } from "./node-supabase-event
 import { SupabasePyramidLeagueSettlementRepository } from "./game/node-supabase-pyramid-league-settlement.js";
 import { withPyramidLeagueSettlementPort } from "./game/pyramid-league-settlement-context.js";
 import { isValidTelegramBotToken, parseAdminTelegramIds, parseCorsOrigins } from "./runtime-config.js";
-const required = ["DATABASE_URL", "TELEGRAM_BOT_TOKEN", "BOT_API_SECRET", "CORS_ORIGIN", "GAME_ADMIN_TELEGRAM_IDS"] as const;
+const required = ["SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY", "TELEGRAM_BOT_TOKEN", "BOT_API_SECRET", "CORS_ORIGIN", "GAME_ADMIN_TELEGRAM_IDS"] as const;
 const missing = required.filter((key) => !process.env[key]?.trim());
 if (missing.length) throw new Error("Missing required runtime configuration: " + missing.join(", "));
 if ((process.env.BOT_API_SECRET ?? "").length < 32 || /^(replace-with|change-me|your-)/i.test(process.env.BOT_API_SECRET ?? "")) throw new Error("BOT_API_SECRET must be a unique random secret of at least 32 characters; replace the example value.");
 if (!isValidTelegramBotToken(process.env.TELEGRAM_BOT_TOKEN ?? "")) throw new Error("TELEGRAM_BOT_TOKEN does not look like a valid BotFather token.");
 const adminIds = parseAdminTelegramIds(process.env.GAME_ADMIN_TELEGRAM_IDS);
 if (!adminIds.length) throw new Error("GAME_ADMIN_TELEGRAM_IDS must contain at least one numeric Telegram user ID.");
-if (!(process.env.DATABASE_URL?.startsWith("postgres://") || process.env.DATABASE_URL?.startsWith("postgresql://"))) throw new Error("DATABASE_URL must use PostgreSQL.");
 const corsOrigins = parseCorsOrigins(process.env.CORS_ORIGIN);
 if (!corsOrigins.length) throw new Error("CORS_ORIGIN must contain at least one allowed origin.");
 const port = Number(process.env.API_PORT ?? 4000);
@@ -168,13 +166,10 @@ async function shutdown(signal: string) {
   if (matchWorker) clearInterval(matchWorker);
   if (workerTask) await workerTask;
   await app.close();
-  await prisma.$disconnect();
 }
 process.once("SIGTERM", () => { void shutdown("SIGTERM").catch((error) => { app.log.error(error); process.exitCode = 1; }); });
 process.once("SIGINT", () => { void shutdown("SIGINT").catch((error) => { app.log.error(error); process.exitCode = 1; }); });
 try {
-  await prisma.$connect();
-  await prisma.$queryRaw`SELECT 1`;
   await app.listen({ port, host });
   app.log.info({ host, port }, "Football Empire API is running");
   let workerRunning = false;
@@ -216,4 +211,4 @@ try {
   }, 5_000);
   matchWorker.unref();
 }
-catch (error) { app.log.error(error); await prisma.$disconnect(); process.exit(1); }
+catch (error) { app.log.error(error); process.exit(1); }

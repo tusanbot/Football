@@ -179,7 +179,7 @@ try{
  throw error;
 }
 }
-if(["suspend-user","restore-user","suspend-group","restore-group","cancel-challenge","competition-status"].includes(x.action)&&(process.env.NODE_ENV==="production"||process.env.ENVIRONMENT==="production")&&!options.adminModerationActionPort)throw new Error("ADMIN_MODERATION_SUPABASE_REPOSITORY_REQUIRED");
+if(["suspend-user","restore-user","suspend-group","restore-group","cancel-challenge","league-status","competition-status"].includes(x.action)&&(process.env.NODE_ENV==="production"||process.env.ENVIRONMENT==="production")&&!options.adminModerationActionPort)throw new Error("ADMIN_MODERATION_SUPABASE_REPOSITORY_REQUIRED");
 if(["set-admin-role","revoke-admin-role","set-game-setting"].includes(x.action)&&options.adminConfigurationPort){
 try{
  const result=await options.adminConfigurationPort.execute({
