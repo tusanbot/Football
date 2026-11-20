@@ -1,10 +1,10 @@
 BEGIN;
 INSERT INTO public."User"(id,"telegramId","updatedAt") VALUES('admin-entity-user-1','990000001',clock_timestamp()),('admin-entity-user-2','990000002',clock_timestamp());
-INSERT INTO public."Club"(id,"ownerId",name,slug) VALUES('admin-entity-club-1','admin-entity-user-1','Club One','admin-entity-club-one'),('admin-entity-club-2','admin-entity-user-2','Club Two','admin-entity-club-two');
-INSERT INTO public."Player"(id,"clubId","firstName","lastName",nationality,age,position,overall,potential,attributes,wage,"contractDays")
-VALUES('admin-entity-player-1','admin-entity-club-1','Test','Player','IR',20,'ST',60,75,'{}'::jsonb,100,365);
-INSERT INTO public."FootballMatch"(id,"idempotencyKey","homeClubId","awayClubId","scheduledAt",seed)
-VALUES('admin-entity-match-1','admin-entity-match-key-1','admin-entity-club-1','admin-entity-club-2',now()+interval '1 day','admin-entity-seed-1');
+INSERT INTO public."Club"(id,"ownerId",name,slug,"updatedAt") VALUES('admin-entity-club-1','admin-entity-user-1','Club One','admin-entity-club-one',clock_timestamp()),('admin-entity-club-2','admin-entity-user-2','Club Two','admin-entity-club-two',clock_timestamp());
+INSERT INTO public."Player"(id,"clubId","firstName","lastName",nationality,age,position,overall,potential,attributes,wage,"contractDays","updatedAt")
+VALUES('admin-entity-player-1','admin-entity-club-1','Test','Player','IR',20,'ST',60,75,'{}'::jsonb,100,365,clock_timestamp());
+INSERT INTO public."FootballMatch"(id,"idempotencyKey","homeClubId","awayClubId","scheduledAt",seed,"updatedAt")
+VALUES('admin-entity-match-1','admin-entity-match-key-1','admin-entity-club-1','admin-entity-club-2',now()+interval '1 day','admin-entity-seed-1',clock_timestamp());
 DO $$
 DECLARE r jsonb; n integer;
 BEGIN
