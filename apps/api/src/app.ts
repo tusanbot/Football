@@ -1,4 +1,5 @@
 import Fastify from "fastify";
+import type { SupabaseHttpClient } from "./node-supabase-http.js";
 import { z } from "zod";
 import { registerTelegramAuthRoutes } from "./auth/routes.js";
 import type { TelegramUserLookupPort } from "./auth/telegram-user-lookup-context.js";
@@ -77,12 +78,12 @@ const healthResponse = z.object({
   version: z.string(),
 });
 
-export function buildApp(options: { logger?: boolean; pluginTimeout?: number; groupMembershipPort?: GroupMembershipPort; alliancePort?: AlliancePort; adminAlliancePort?: AdminAlliancePort; telegramUserLookupPort?: TelegramUserLookupPort; storePurchasePort?: StorePurchasePort; storeItemUsePort?: StoreItemUsePort; walletEntryPort?: WalletEntryPort; marketListingPort?: MarketListingPort; marketPurchasePort?: MarketPurchasePort; storeSnapshotPort?: StoreSnapshotPort; playerDevelopmentPort?: PlayerDevelopmentPort; clubEconomySettlementPort?: ClubEconomySettlementPort; clubManagementPort?: ClubManagementPort; specialAcquisitionPort?: SpecialAcquisitionPort; giftCodeRedemptionPort?: GiftCodeRedemptionPort; botRuntimeLeasePort?: BotRuntimeLeasePort; matchPorts?: NodeSupabaseMatchPorts; gameDashboardPort?: GameDashboardPort; walletReadPort?: WalletReadPort; clubLineupPort?: ClubLineupPort; publicPlayerRecordRepository?: PublicPlayerRecordRepository; publicClubLogoRepository?: PublicClubLogoRepository; publicClubReadRepository?: PublicClubReadRepository; eventTournamentSettlementPort?: EventTournamentSettlementPort; eventTournamentReadPort?: EventTournamentReadPort; actionRateLimitPort?: ActionRateLimitPort } = {}) {
+export function buildApp(options: { logger?: boolean; pluginTimeout?: number; groupMembershipPort?: GroupMembershipPort; alliancePort?: AlliancePort; adminAlliancePort?: AdminAlliancePort; telegramUserLookupPort?: TelegramUserLookupPort; storePurchasePort?: StorePurchasePort; storeItemUsePort?: StoreItemUsePort; walletEntryPort?: WalletEntryPort; marketListingPort?: MarketListingPort; marketPurchasePort?: MarketPurchasePort; storeSnapshotPort?: StoreSnapshotPort; playerDevelopmentPort?: PlayerDevelopmentPort; clubEconomySettlementPort?: ClubEconomySettlementPort; clubManagementPort?: ClubManagementPort; specialAcquisitionPort?: SpecialAcquisitionPort; giftCodeRedemptionPort?: GiftCodeRedemptionPort; botRuntimeLeasePort?: BotRuntimeLeasePort; matchPorts?: NodeSupabaseMatchPorts; supabaseHttpClient?: SupabaseHttpClient; gameDashboardPort?: GameDashboardPort; walletReadPort?: WalletReadPort; clubLineupPort?: ClubLineupPort; publicPlayerRecordRepository?: PublicPlayerRecordRepository; publicClubLogoRepository?: PublicClubLogoRepository; publicClubReadRepository?: PublicClubReadRepository; eventTournamentSettlementPort?: EventTournamentSettlementPort; eventTournamentReadPort?: EventTournamentReadPort; actionRateLimitPort?: ActionRateLimitPort } = {}) {
   // The match service still contains Prisma compatibility paths for isolated legacy
   // tests and migration parity. Never allow production HTTP routes to reach those
   // paths: the complete direct-HTTPS Supabase match repository set is mandatory.
-  if (process.env.NODE_ENV === "production" && !options.matchPorts) {
-    throw new Error("SUPABASE_MATCH_PORTS_REQUIRED: production API must use direct Supabase HTTP repositories.");
+  if (process.env.NODE_ENV === "production" && (!options.matchPorts || !options.supabaseHttpClient)) {
+    throw new Error("SUPABASE_MATCH_PORTS_REQUIRED: production API must use direct Supabase HTTP repositories and a Supabase readiness client.");
   }
   const app = Fastify({{
     logger: options.logger ?? process.env.NODE_ENV !== "test",
@@ -202,11 +203,22 @@ export function buildApp(options: { logger?: boolean; pluginTimeout?: number; gr
     if (missing.length) return reply.code(503).send({ status: "not_ready", missing });
     try {
       await prisma.$queryRaw`SELECT 1`;
-      return { status: "ready", service: "football-empire-api" };
     } catch (error) {
-      request.log.error({ error }, "Readiness database check failed");
+      request.log.error({ error }, "Readiness PostgreSQL compatibility check failed");
       return reply.code(503).send({ status: "not_ready", missing: ["DATABASE_CONNECTION"] });
     }
+    if (!options.supabaseHttpClient) {
+      return reply.code(503).send({ status: "not_ready", missing: ["SUPABASE_HTTP_CLIENT"] });
+    }
+    try {
+      // A zero-row select validates HTTPS transport, credentials, PostgREST schema
+      // exposure and database reachability without reading user data.
+      await options.supabaseHttpClient.select("User", { select: "id", limit: "0" });
+    } catch (error) {
+      request.log.error({ error }, "Readiness Supabase HTTP check failed");
+      return reply.code(503).send({ status: "not_ready", missing: ["SUPABASE_CONNECTION"] });
+    }
+    return { status: "ready", service: "football-empire-api" };
   });
 
   app.get("/health", async (_request, reply) =>
