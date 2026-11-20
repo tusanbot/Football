@@ -73,4 +73,56 @@ BEGIN
  END IF;
 END;
 $test$;
+
+-- Exercise the actual wrapper transaction boundary with controlled dependency
+-- failures. The settlement stub writes a marker; advancement then raises.
+-- The wrapper must roll the marker back together with settlement work.
+CREATE TEMP TABLE atomic_settlement_effects(id integer PRIMARY KEY) ON COMMIT DROP;
+
+CREATE OR REPLACE FUNCTION public.settle_match_runtime_result(
+ p_match_id text,p_runtime_id text,p_lease_token text,p_now timestamp without time zone,
+ p_result jsonb,p_injury_duration_days integer,p_red_card_suspension_matches integer,
+ p_yellow_cards_to_suspend integer,p_yellow_card_suspension_matches integer,
+ p_home_reward bigint,p_away_reward bigint
+) RETURNS jsonb LANGUAGE plpgsql VOLATILE SECURITY INVOKER
+SET search_path=public,pg_temp
+AS $stub$
+BEGIN
+ INSERT INTO pg_temp.atomic_settlement_effects(id) VALUES(1);
+ RETURN jsonb_build_object('matchId',p_match_id,'competitionId','atomic-test-competition','round',1);
+END;
+$stub$;
+
+CREATE OR REPLACE FUNCTION public.advance_competition_after_match_http(
+ p_competition_id text,p_round integer,p_now timestamptz
+) RETURNS jsonb LANGUAGE plpgsql VOLATILE SECURITY INVOKER
+SET search_path=public,pg_temp
+AS $stub$
+BEGIN
+ RAISE EXCEPTION USING MESSAGE='ATOMIC_TEST_ADVANCEMENT_FAILURE',ERRCODE='P0001';
+END;
+$stub$;
+
+DO $atomic_test$
+DECLARE
+ v_failed boolean:=false;
+ v_effects integer;
+BEGIN
+ BEGIN
+  PERFORM public.settle_and_advance_match_runtime_http(
+   'atomic-test-match','atomic-test-runtime','atomic-test-lease',now(),'{}'::jsonb,
+   0,0,0,0,0,0
+  );
+ EXCEPTION WHEN OTHERS THEN
+  v_failed:=true;
+ END;
+ IF NOT v_failed THEN
+  RAISE EXCEPTION 'atomic settlement wrapper unexpectedly succeeded';
+ END IF;
+ SELECT count(*) INTO v_effects FROM pg_temp.atomic_settlement_effects;
+ IF v_effects<>0 THEN
+  RAISE EXCEPTION 'settlement side effects survived advancement failure: %',v_effects;
+ END IF;
+END;
+$atomic_test$;
 ROLLBACK;
