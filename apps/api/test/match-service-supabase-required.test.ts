@@ -17,6 +17,9 @@ import { getCompetitionReadPort } from "../src/game/competition-read-context.js"
 import { getClubMatchReadPort } from "../src/game/club-match-read-context.js";
 import { getCompetitionAdvancementPort } from "../src/game/competition-advancement-context.js";
 import { getMatchRuntimeCheckpointPort } from "../src/game/match-runtime-checkpoint-context.js";
+import { getMatchRuntimeSnapshotPort } from "../src/game/match-runtime-snapshot-context.js";
+import { getMatchRuntimeAdvancePort } from "../src/game/match-runtime-advance-context.js";
+import { getMatchRuntimeSettlementPort } from "../src/game/match-runtime-settlement-context.js";
 import { withMatchRuntimeSnapshotPort } from "../src/game/match-runtime-snapshot-context.js";
 import { withMatchRuntimeLeasePort } from "../src/game/match-runtime-lease-context.js";
 import { withMatchRuntimeEnqueuePort } from "../src/game/match-runtime-enqueue-context.js";
@@ -86,6 +89,9 @@ test("production match service scopes fail closed when any request-scoped Supaba
       [getClubMatchReadPort, "CLUB_MATCH_READ_SUPABASE_REPOSITORY_REQUIRED"],
       [getCompetitionAdvancementPort, "COMPETITION_ADVANCEMENT_SUPABASE_REPOSITORY_REQUIRED"],
       [getMatchRuntimeCheckpointPort, "MATCH_CHECKPOINT_SUPABASE_REPOSITORY_REQUIRED"],
+      [getMatchRuntimeSnapshotPort, "MATCH_RUNTIME_SNAPSHOT_SUPABASE_REPOSITORY_REQUIRED"],
+      [getMatchRuntimeAdvancePort, "MATCH_RUNTIME_ADVANCE_SUPABASE_REPOSITORY_REQUIRED"],
+      [getMatchRuntimeSettlementPort, "MATCH_RUNTIME_SETTLEMENT_SUPABASE_REPOSITORY_REQUIRED"],
     ] as const;
 
     for (const [getRepository, expectedCode] of requiredRepositories) {
