@@ -80,7 +80,7 @@ BEGIN
  PERFORM pg_advisory_xact_lock(hashtextextended(v_audit_key,0));
  SELECT * INTO v_existing FROM public."AdminAuditLog" WHERE "idempotencyKey"=v_audit_key;
  IF FOUND THEN
-  IF v_existing."actorTelegramId"=p_actor_telegram_id AND v_existing.action=CASE WHEN p_kind='users' THEN 'broadcast' ELSE 'broadcast-groups' END
+  IF v_existing."actorTelegramId"=p_actor_telegram_id AND v_existing.action=(CASE WHEN p_kind='users' THEN 'broadcast' ELSE 'broadcast-groups' END)
    AND v_existing.metadata->>'kind'=p_kind AND v_existing.metadata->>'message'=btrim(p_message) THEN
    RETURN jsonb_build_object('ok',true,'kind',p_kind,'targetId',v_existing."targetId",'recipients',COALESCE((v_existing.metadata->>'recipients')::integer,0),'replay',true);
   END IF;
@@ -120,7 +120,7 @@ REVOKE ALL ON FUNCTION public.admin_broadcast_create_http(text,text,text,text) F
 DO $grant$
 BEGIN
  IF EXISTS(SELECT 1 FROM pg_roles WHERE rolname='service_role') THEN
-  GRANT EXECUTE ON FUNCTION public.admin_season_player_award_http(text,text,integer,text,text,text,text,text) TO service_role;
+  GRANT EXECUTE ON FUNCTION public.admin_season_player_award_http(text,text,integer,text,text,text,text,text,text) TO service_role;
   GRANT EXECUTE ON FUNCTION public.admin_broadcast_create_http(text,text,text,text) TO service_role;
  END IF;
 END;
