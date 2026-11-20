@@ -20,9 +20,21 @@ function validCompetitionList(value: unknown): value is Array<Record<string, unk
 function validCompetitionDetail(value: unknown): value is Record<string, unknown> {
   if (!isRecord(value) || !isRecord(value.competition)
     || typeof value.competition.id !== "string" || typeof value.competition.name !== "string"
+    || (value.competition.format !== "LEAGUE" && value.competition.format !== "CUP")
     || !Array.isArray(value.standings) || !Array.isArray(value.matches)
     || !Array.isArray(value.nextRoundMatches) || !Array.isArray(value.topScorers)
     || (value.nextRound !== null && !Number.isInteger(value.nextRound))) return false;
+  if (value.standings.some((row) => !isRecord(row) || typeof row.clubId !== "string"
+    || typeof row.clubName !== "string" || !Number.isInteger(row.position)
+    || !Number.isInteger(row.points) || !Number.isInteger(row.played))) return false;
+  if (value.matches.some((row) => !isRecord(row) || typeof row.id !== "string"
+    || (row.type !== "FRIENDLY" && row.type !== "LEAGUE" && row.type !== "CUP")
+    || typeof row.status !== "string" || typeof row.scheduledAt !== "string" || !Number.isFinite(Date.parse(row.scheduledAt))
+    || !isRecord(row.homeClub) || typeof row.homeClub.id !== "string" || typeof row.homeClub.name !== "string"
+    || !isRecord(row.awayClub) || typeof row.awayClub.id !== "string" || typeof row.awayClub.name !== "string")) return false;
+  if (value.topScorers.some((row) => !isRecord(row) || typeof row.playerId !== "string"
+    || typeof row.playerName !== "string" || typeof row.clubId !== "string" || typeof row.clubName !== "string"
+    || !Number.isInteger(row.goals) || !Number.isInteger(row.assists))) return false;
   return true;
 }
 export class SupabaseCompetitionReadRepository implements CompetitionReadPort {
