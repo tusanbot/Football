@@ -11,6 +11,11 @@ BEGIN
   RAISE EXCEPTION 'Node match notification RPC set is incomplete';
  END IF;
  v_lifecycle_def:=pg_get_functiondef(v_lifecycle);v_result_def:=pg_get_functiondef(v_result);v_checkpoint_def:=pg_get_functiondef(v_checkpoint);
+ IF NOT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='MatchLifecycleNotification' AND column_name='completedClaimToken')
+  OR NOT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='MatchResultNotification' AND column_name='completedClaimToken')
+  OR position('completedClaimToken' IN pg_get_functiondef(to_regprocedure('public.complete_match_notification_delivery(text,text,text,boolean,text,integer)')))=0 THEN
+  RAISE EXCEPTION 'match notification acknowledgement replay support is missing';
+ END IF;
  IF position('FOR UPDATE' IN v_lifecycle_def)=0 OR position('SKIP LOCKED' IN v_lifecycle_def)=0
   OR position('claimToken' IN v_lifecycle_def)=0 THEN RAISE EXCEPTION 'lifecycle notification claim is not concurrency-safe';END IF;
  IF position('FOR UPDATE' IN v_result_def)=0 OR position('SKIP LOCKED' IN v_result_def)=0

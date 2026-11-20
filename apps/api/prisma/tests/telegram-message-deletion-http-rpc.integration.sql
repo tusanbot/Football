@@ -11,7 +11,8 @@ BEGIN
  IF v_status<>'PENDING' THEN RAISE EXCEPTION 'message deletion upsert failed'; END IF;
  SELECT * INTO v_claim FROM public.claim_due_telegram_message_deletions_http(100) WHERE telegram_chat_id=v_chat::text AND message_id=v_message;
  IF v_claim.id IS NULL OR NOT public.complete_telegram_message_deletion_http(v_claim.id,v_claim.claim_token) THEN RAISE EXCEPTION 'message deletion claim/complete failed'; END IF;
- IF public.complete_telegram_message_deletion_http(v_claim.id,v_claim.claim_token) THEN RAISE EXCEPTION 'stale deletion claim completed twice'; END IF;
+ IF NOT public.complete_telegram_message_deletion_http(v_claim.id,v_claim.claim_token) THEN RAISE EXCEPTION 'same completed deletion claim must be safely replayable'; END IF;
+ IF public.complete_telegram_message_deletion_http(v_claim.id,gen_random_uuid()::text) THEN RAISE EXCEPTION 'unrelated stale deletion token was accepted'; END IF;
  SELECT * INTO v_id,v_status,v_delete_at FROM public.schedule_telegram_message_deletion_http(v_chat::text,v_message+1,NOW()-INTERVAL '1 second');
  FOR v_i IN 1..8 LOOP
   UPDATE public."TelegramMessageDeletion" SET "availableAt"=NOW()-INTERVAL '1 second',"lockedUntil"=NULL WHERE "id"=v_id;
