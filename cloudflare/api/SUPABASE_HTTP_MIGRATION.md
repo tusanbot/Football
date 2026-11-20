@@ -352,7 +352,7 @@ The leased Node match worker now settles a completed runtime and advances its co
 - The Node repositories validate the nested advancement result. The match worker no longer makes a second HTTP request for normal match settlement or invalid-lineup forfeit progression.
 - The new migrations are `20261120210000_match_settlement_advancement_atomic_http_rpc` and `20261120220000_invalid_match_settlement_advancement_atomic_http_rpc`. CI runs a SQL contract test for function composition and service-role-only execution, alongside Node adapter tests.
 
-Pyramid-league and event-tournament finalization still run as follow-up operations after the atomic match/competition transaction. Those workflows remain a separate retry/durability item. This change does not remove Prisma from `match-service.ts`; the legacy simulation and non-production compatibility paths remain until their callers and tests are migrated. No live database migration or production deployment was performed.
+Pyramid-league and event-tournament finalization are now invoked inside the same transaction as match settlement and competition advancement. Existing scheduled recovery sweeps remain available for older completed competitions and operational retries. This change does not remove Prisma from `match-service.ts`; legacy simulation and non-production compatibility paths remain until their callers and tests are migrated. No live database migration or production deployment was performed.
 
 ## Atomic tournament finalization and retry behavior
 
