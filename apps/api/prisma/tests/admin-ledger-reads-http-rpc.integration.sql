@@ -17,6 +17,11 @@ BEGIN
  EXCEPTION WHEN SQLSTATE '22023' THEN NULL;
  END;
  BEGIN
+  PERFORM public.get_admin_ledger_entries_http(NULL,10,NULL);
+  RAISE EXCEPTION 'null admin ledger resource must fail';
+ EXCEPTION WHEN SQLSTATE '22023' THEN NULL;
+ END;
+ BEGIN
   PERFORM public.get_admin_ledger_entries_http('audit',101,NULL);
   RAISE EXCEPTION 'oversized admin ledger limit must fail';
  EXCEPTION WHEN SQLSTATE '22023' THEN NULL;
