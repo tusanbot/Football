@@ -1576,12 +1576,11 @@ async function settleClaimedMatchRuntime(runtime: LoadedMatchRuntime, now: Date)
     yellowCardSuspensionMatches: matchRules.yellowCardSuspensionMatches,
     homeReward: homeReward.toString(), awayReward: awayReward.toString(),
   });
-  if (settlement.competitionId && settlement.round !== null) {
-    const advancementPort = getCompetitionAdvancementPort();
-    if (!advancementPort) throw new MatchServiceError("WORKER_COMPETITION_ADVANCEMENT_REPOSITORY_REQUIRED");
-    const advancement = await advancementPort.advance({
-      competitionId: settlement.competitionId, round: settlement.round, now: now.toISOString(),
-    });
+  // Competition advancement is part of the same Supabase transaction as
+  // settlement. A failed cup/league progression therefore rolls back financial
+  // settlement too, allowing the leased runtime to retry safely.
+  const advancement = settlement.advancement;
+  if (settlement.competitionId && settlement.round !== null && advancement) {
     if (advancement.completed && advancement.format === "LEAGUE") {
       const pyramidPort = getPyramidLeagueSettlementPort();
       if (!pyramidPort) throw new MatchServiceError("WORKER_PYRAMID_SETTLEMENT_REPOSITORY_REQUIRED");
