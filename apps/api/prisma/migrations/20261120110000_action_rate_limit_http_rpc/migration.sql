@@ -29,8 +29,8 @@ BEGIN
         ELSE 1
       END,
       "updatedAt" = EXCLUDED."updatedAt"
-  WHERE public."AllianceActionThrottle"."windowStart" <> EXCLUDED."windowStart"
-     OR public."AllianceActionThrottle"."count" < p_limit;
+  WHERE throttle."windowStart" <> EXCLUDED."windowStart"
+     OR throttle."count" < p_limit;
 
   GET DIAGNOSTICS v_affected = ROW_COUNT;
   RETURN v_affected = 1;
