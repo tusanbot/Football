@@ -13,5 +13,9 @@ export function withClubTicketPricePort<T>(port: ClubTicketPricePort, operation:
   return scope.run(port, operation);
 }
 export function getClubTicketPricePort(): ClubTicketPricePort | undefined {
-  return scope.getStore();
+  const port = scope.getStore();
+  if (!port && (process.env.NODE_ENV === "production" || process.env.ENVIRONMENT === "production")) {
+    throw new Error("CLUB_TICKET_PRICE_SUPABASE_REPOSITORY_REQUIRED");
+  }
+  return port;
 }
