@@ -84,6 +84,10 @@ import { SupabaseAdminRoleLookupRepository } from "./repositories/admin-role-loo
 import { SupabaseAdminConfigurationRepository } from "./repositories/admin-configuration.js";
 import { SupabaseAdminConsoleReadRepository } from "./repositories/admin-console-read.js";
 import { SupabaseAdminBroadcastManagementRepository } from "./repositories/admin-broadcast-management.js";
+import { SupabaseAdminModerationActionsRepository } from "./repositories/admin-moderation-actions.js";
+import { SupabaseAdminPyramidLeagueActionsRepository } from "./repositories/admin-pyramid-league-actions.js";
+import { SupabaseAdminPyramidLeagueReadRepository } from "./repositories/admin-pyramid-league-read.js";
+import { SupabaseAdminPyramidLeagueReportsRepository } from "./repositories/admin-pyramid-league-reports.js";
 
 interface MatchCoordinatorNamespace { idFromName(name: string): unknown; get(id: unknown): { fetch(input: string, init?: RequestInit): Promise<Response> }; }
 interface MatchCoordinatorState { storage: { setAlarm(scheduledTime: number): Promise<void>; deleteAlarm(): Promise<void>; }; }
@@ -210,8 +214,12 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
       const adminConfiguration = supabaseClient ? new SupabaseAdminConfigurationRepository(supabaseClient) : undefined;
        const adminConsoleRead = supabaseClient ? new SupabaseAdminConsoleReadRepository(supabaseClient) : undefined;
        const adminBroadcastRetry = supabaseClient ? new SupabaseAdminBroadcastManagementRepository(supabaseClient) : undefined;
+       const adminModerationActions = supabaseClient ? new SupabaseAdminModerationActionsRepository(supabaseClient) : undefined;
+       const adminPyramidLeagueActions = supabaseClient ? new SupabaseAdminPyramidLeagueActionsRepository(supabaseClient) : undefined;
+       const adminPyramidLeagueRead = supabaseClient ? new SupabaseAdminPyramidLeagueReadRepository(supabaseClient) : undefined;
+       const adminPyramidLeagueReports = supabaseClient ? new SupabaseAdminPyramidLeagueReportsRepository(supabaseClient) : undefined;
         const alliance = supabaseClient ? new SupabaseAllianceRepository(supabaseClient) : undefined;
-       const router = createWorkersApiRouter({ publicPlayerRecords, publicClubRead, publicClubLogo, seasonAwards, specialPlayers, botRuntimeLease, groupMembership, alliance, adminFinancialAdjustmentPort: adminFinancialAdjustment, adminRoleLookupPort: adminRoleLookup, adminConfigurationPort: adminConfiguration, adminConsoleReadPort: adminConsoleRead, adminBroadcastRetryPort: adminBroadcastRetry });
+       const router = createWorkersApiRouter({ publicPlayerRecords, publicClubRead, publicClubLogo, seasonAwards, specialPlayers, botRuntimeLease, groupMembership, alliance, adminFinancialAdjustmentPort: adminFinancialAdjustment, adminRoleLookupPort: adminRoleLookup, adminConfigurationPort: adminConfiguration, adminConsoleReadPort: adminConsoleRead, adminBroadcastRetryPort: adminBroadcastRetry, adminModerationActionPort: adminModerationActions, adminAlliancePort: alliance, adminPyramidLeagueActionsPort: adminPyramidLeagueActions, adminPyramidLeagueReadPort: adminPyramidLeagueRead, adminPyramidLeagueReportsPort: adminPyramidLeagueReports });
       const handle = async (): Promise<Response> => await router.fetch(request);
       const withGroupMembership = groupMembership ? () => withGroupMembershipPort(groupMembership, handle) : handle;
       const withActionRateLimit = actionRateLimit ? () => withActionRateLimitPort(actionRateLimit, withGroupMembership) : withGroupMembership;
