@@ -25,7 +25,10 @@ BEGIN
   OR position('awayBotNotificationAttempts' IN v_checkpoint_def)=0
   OR position('NotificationClaimToken' IN v_checkpoint_def)=0
   OR position('p_claim_token' IN v_ack_def)=0 OR position('NotificationClaimToken' IN v_ack_def)=0
-  OR position('DEAD_LETTER' IN v_checkpoint_def)=0 THEN
+  OR position('homeBotNotificationDeadLetteredAt' IN v_checkpoint_def)=0
+  OR position('awayBotNotificationDeadLetteredAt' IN v_checkpoint_def)=0
+  OR position('homeBotNotificationAttempts' IN v_checkpoint_def)=0
+  OR position('awayBotNotificationAttempts' IN v_checkpoint_def)=0 THEN
   RAISE EXCEPTION 'checkpoint notification claim is missing fencing or dead-letter handling';END IF;
  IF position('DEAD_LETTER' IN v_lifecycle_def)=0 OR position('DEAD_LETTER' IN v_result_def)=0
   OR position('attempts' IN v_lifecycle_def)=0 OR position('attempts' IN v_result_def)=0 THEN
