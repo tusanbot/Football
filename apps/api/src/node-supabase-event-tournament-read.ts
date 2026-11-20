@@ -1,5 +1,5 @@
 import type { EventTournamentCreateInput, EventTournamentJoinInput, EventTournamentJoinResult, EventTournamentReadPort } from "./event-tournament-read-context.js";
-import { SupabaseHttpClient } from "./node-supabase-http.js";
+import { SupabaseHttpClient, SupabaseHttpError } from "./node-supabase-http.js";
 type Tournament={id:string;title:string;description:string;status:string;competitionId?:string|null;entryFeeAsset:string|null;entryFeeAmount:string|number;maxParticipants:number;registrationEndsAt:string;startsAt:string;endsAt:string|null;createdAt?:string};
 type Participant={id:string;tournamentId:string;userId:string;clubId:string;placement:number|null;score:number;joinedAt:string};
 type Prize={id:string;tournamentId:string;placement:number;type:string;amount:string|number;itemKey:string|null;specialPlayerId:string|null};
