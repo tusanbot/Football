@@ -4,7 +4,7 @@ DO $test$
 DECLARE
  v_now timestamptz:=now()+interval '1 minute';
  v_create jsonb; v_replay jsonb; v_info jsonb; v_accept jsonb; v_accept_replay jsonb; v_credits jsonb;
- v_token text; v_match_id text; i integer; n integer;
+ v_token text; v_match_id text; v_group_id text; i integer; n integer;
  v_home_positions text[]:=ARRAY['GK','RB','CB','CB','LB','CDM','CM','CM','RW','LW','ST'];
 BEGIN
  INSERT INTO public."User"(id,"telegramId","updatedAt") VALUES
@@ -60,7 +60,26 @@ BEGIN
   RAISE EXCEPTION 'friendly challenge acceptance replay mismatch: %',v_accept_replay;
  END IF;
 
+ v_create:=public.create_friendly_challenge_http('ci-challenge-home-user',100,v_now,NULL,'friendly-key-0005');
+ IF v_create->>'asset' IS DISTINCT FROM 'GOLD' OR (SELECT balance FROM public."Wallet" WHERE id='ci-challenge-wallet')<>9800 THEN
+  RAISE EXCEPTION 'second Gold challenge charge mismatch: %',v_create;
+ END IF;
  v_credits:=public.grant_friendly_challenge_credits_http('ci-challenge-home-user',5,v_now);
+ v_create:=public.create_friendly_challenge_http('ci-challenge-home-user',100,v_now,NULL,'friendly-key-0006');
+ IF v_create->>'asset' IS DISTINCT FROM 'PURCHASED' OR (v_create->'remaining'->>'purchased')::integer<>4 THEN
+  RAISE EXCEPTION 'purchased challenge credit was not consumed: %',v_create;
+ END IF;
+ IF (v_credits->>'purchasedCredits')::integer<>5 THEN RAISE EXCEPTION 'friendly challenge credits mismatch: %',v_credits; END IF;
+
+ INSERT INTO public."TelegramGroup"(id,"telegramId",title,"isActive")
+ VALUES('ci-challenge-group','-1001234567890','Challenge Group',true);
+ INSERT INTO public."GroupMembership"(id,"groupId","userId",role)
+ VALUES('ci-challenge-group-membership','ci-challenge-group','ci-challenge-home-user','MEMBER');
+ v_group_id:=public.create_friendly_challenge_http('ci-challenge-home-user',100,v_now,'-1001234567890','friendly-group-key-01')->'challenge'->>'groupId';
+ IF v_group_id IS DISTINCT FROM 'ci-challenge-group' THEN
+  RAISE EXCEPTION 'group friendly challenge scope mismatch: %',v_group_id;
+ END IF;
+
  IF (v_credits->>'purchasedCredits')::integer<>5 THEN RAISE EXCEPTION 'friendly challenge credits mismatch: %',v_credits; END IF;
 END;
 $test$;
