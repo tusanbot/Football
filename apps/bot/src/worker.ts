@@ -285,9 +285,14 @@ export default {
     if (claimResult.result !== "claimed" || !claimResult.claimToken) return new Response("Could not claim update", { status: 503 });
     let heartbeatStopped = false;
     let heartbeatError: Error | null = null;
+    let wakeHeartbeat!: () => void;
+    const heartbeatStopSignal = new Promise<void>(resolve => { wakeHeartbeat = resolve; });
     const heartbeatTask = (async () => {
       while (!heartbeatStopped) {
-        await new Promise<void>(resolve => setTimeout(resolve, 20_000));
+        await Promise.race([
+          new Promise<void>(resolve => setTimeout(resolve, 20_000)),
+          heartbeatStopSignal,
+        ]);
         if (heartbeatStopped) return;
         try {
           const renewed = await guard.fetch(new Request("https://bot-update-guard/heartbeat", {
@@ -305,6 +310,7 @@ export default {
       const { bot } = await prepareBot(env);
       await bot.handleUpdate(update as never);
       heartbeatStopped = true;
+      wakeHeartbeat();
       await heartbeatTask;
       if (heartbeatError) throw heartbeatError;
       // Count successfully handled updates only; failed handlers are retried by Telegram.
