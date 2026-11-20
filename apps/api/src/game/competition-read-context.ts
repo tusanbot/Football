@@ -10,6 +10,6 @@ export function withCompetitionReadPort<T>(port: CompetitionReadPort, operation:
 }
 export function getCompetitionReadPort(): CompetitionReadPort | undefined {
   const port = scope.getStore();
-  if (!port && process.env.NODE_ENV === "production") throw new Error("COMPETITION_READ_SUPABASE_REPOSITORY_REQUIRED");
+  if (!port && (process.env.NODE_ENV === "production" || process.env.ENVIRONMENT === "production")) throw new Error("COMPETITION_READ_SUPABASE_REPOSITORY_REQUIRED");
   return port;
 }
