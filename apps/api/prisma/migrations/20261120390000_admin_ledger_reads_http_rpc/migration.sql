@@ -6,7 +6,7 @@ SET search_path=public,pg_temp
 AS $fn$
 DECLARE v_result jsonb;
 BEGIN
- IF p_resource NOT IN ('wallet-ledger','group-ledger','audit')
+ IF p_resource IS NULL OR p_resource NOT IN ('wallet-ledger','group-ledger','audit')
   OR p_limit IS NULL OR p_limit<1 OR p_limit>100
   OR (p_query IS NOT NULL AND length(p_query)>100) THEN
   RAISE EXCEPTION USING MESSAGE='INVALID_ADMIN_LEDGER_QUERY',ERRCODE='22023';
