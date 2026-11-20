@@ -24,10 +24,10 @@ BEGIN
   VALUES
     ('ci-pyramid-details-pyramid-entry-a','ci-pyramid-details-league','ci-pyramid-details-club-a'),
     ('ci-pyramid-details-pyramid-entry-b','ci-pyramid-details-league','ci-pyramid-details-club-b');
-  INSERT INTO public."FootballMatch"(id,"idempotencyKey",type,status,"homeClubId","awayClubId","competitionId",round,"scheduledAt",seed,"homeScore","awayScore")
+  INSERT INTO public."FootballMatch"(id,"idempotencyKey",type,status,"homeClubId","awayClubId","competitionId",round,"scheduledAt",seed,"homeScore","awayScore","updatedAt")
   VALUES('ci-pyramid-details-match','ci-pyramid-details-match-key','LEAGUE','SCHEDULED',
     'ci-pyramid-details-club-a','ci-pyramid-details-club-b','ci-pyramid-details-competition',1,
-    v_now AT TIME ZONE 'UTC','ci-pyramid-details-seed',2,0);
+    v_now AT TIME ZONE 'UTC','ci-pyramid-details-seed',2,0,v_now AT TIME ZONE 'UTC');
   INSERT INTO public."LeagueAward"(id,"leagueId","clubId",season,tier,placement,"awardName","awardType")
   VALUES('ci-pyramid-details-award','ci-pyramid-details-league','ci-pyramid-details-club-a',2027,1,1,'Details Champion','TROPHY_GOLD');
 
