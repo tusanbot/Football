@@ -140,3 +140,23 @@ test("friendly challenge RPC adapters cover creation, acceptance, info and credi
   "/rest/v1/rpc/grant_friendly_challenge_credits_http",
  ]);
 });
+
+test("pyramid scheduled work reports isolated per-item failures", async () => {
+  const client = new SupabaseHttpClient({
+    url: "https://example.supabase.co",
+    serviceRoleKey: "service-role-key-that-is-long-enough",
+    fetchImpl: async (input, init) => {
+      assert.equal(new URL(String(input)).pathname, "/rest/v1/rpc/process_due_pyramid_work_http");
+      assert.deepEqual(JSON.parse(String(init?.body)), {
+        p_now: "2026-11-20T12:34:56.789Z", p_limit: 25,
+      });
+      return new Response(JSON.stringify({ completedLeagues: 2, processed: 3, accepted: 3, failed: 1 }), {
+        status: 200, headers: { "content-type": "application/json" },
+      });
+    },
+  });
+  const repository = new SupabasePyramidLeagueSettlementRepository(client);
+  assert.deepEqual(await repository.processDue("2026-11-20T12:34:56.789Z", 25), {
+    completedLeagues: 2, processed: 3, accepted: 3, failed: 1,
+  });
+});
