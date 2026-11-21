@@ -160,6 +160,8 @@ export default function LegendsDraftPage() {
       <h2>ساخت دعوت درفت</h2>
       <label>شناسه عددی تلگرام حریف</label>
       <input value={telegramId} onChange={(e) => setTelegramId(e.target.value)} inputMode="numeric" placeholder="مثلاً 123456789" style={field}/>
+      <label>شناسه گروه تلگرام (اختیاری؛ برای ثبت آخرین نتیجه در گروه)</label>
+      <input value={groupId} onChange={(e) => setGroupId(e.target.value)} inputMode="numeric" placeholder="مثلاً -1001234567890" style={field}/>
       <button disabled={busy} onClick={() => void run(createDraft)} style={button}>ساخت دعوت</button>
       <hr/>
       <label>یا شناسهٔ درفت دریافتی را وارد کن</label>
