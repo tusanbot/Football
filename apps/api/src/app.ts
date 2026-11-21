@@ -21,6 +21,7 @@ import { registerClubOperationsRoutes } from "./game/club-operations-routes.js";
 import { registerPlayerMarketRoutes } from "./players/market-routes.js";
 import { registerPlayerDevelopmentRoutes } from "./players/player-development-routes.js";
 import { registerMatchRoutes } from "./game/match-routes.js";
+import { registerLegendsDraftRoutes } from "./game/legends-draft-routes.js";
 import { registerMatchNotificationRoutes, type MatchNotificationPort } from "./game/match-notification-routes.js";
 import { registerGroupRoutes } from "./groups/group-routes.js";
 import type { GroupMembershipPort } from "./groups/group-membership-context.js";
@@ -307,6 +308,7 @@ export function buildApp(options: { logger?: boolean; pluginTimeout?: number; gr
   registerPlayerMarketRoutes(app);
   registerPlayerDevelopmentRoutes(app);
   registerMatchRoutes(app);
+  if (options.supabaseHttpClient) registerLegendsDraftRoutes(app, options.supabaseHttpClient);
   registerMatchNotificationRoutes(app, options.matchNotificationPort);
   registerGroupRoutes(app, { requireMembershipPort: Boolean(options.groupMembershipPort) });
   registerAllianceRoutes(app, { requirePort: Boolean(options.alliancePort), ...(options.alliancePort ? { port: options.alliancePort } : {}) });
