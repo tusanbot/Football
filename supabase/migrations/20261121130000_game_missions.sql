@@ -2,10 +2,11 @@
 create table if not exists public.game_mission_progress (
   user_id text not null references public."User"(id) on delete cascade,
   mission_id text not null,
+  mission_date date not null default (now() at time zone 'UTC')::date,
   progress integer not null default 0 check (progress >= 0),
   claimed_at timestamptz,
   updated_at timestamptz not null default now(),
-  primary key (user_id, mission_id)
+  primary key (user_id, mission_id, mission_date)
 );
 
 alter table public.game_mission_progress enable row level security;
@@ -31,13 +32,14 @@ begin
     raise exception 'MISSION_INVALID_CLAIM' using errcode = '22023';
   end if;
 
-  insert into public.game_mission_progress(user_id, mission_id)
-  values (p_user_id, p_mission_id)
+  insert into public.game_mission_progress(user_id, mission_id, mission_date)
+  values (p_user_id, p_mission_id, (now() at time zone 'UTC')::date)
   on conflict (user_id, mission_id) do nothing;
 
   select * into v_progress
   from public.game_mission_progress
   where user_id = p_user_id and mission_id = p_mission_id
+    and mission_date = (now() at time zone 'UTC')::date
   for update;
 
   if v_progress.progress < case p_mission_id
@@ -61,7 +63,8 @@ begin
 
   update public.game_mission_progress
   set claimed_at = now(), updated_at = now()
-  where user_id = p_user_id and mission_id = p_mission_id;
+  where user_id = p_user_id and mission_id = p_mission_id
+    and mission_date = (now() at time zone 'UTC')::date;
 
   return jsonb_build_object('missionId', p_mission_id, 'claimed', true, 'asset', v_asset, 'amount', v_amount);
 end;
