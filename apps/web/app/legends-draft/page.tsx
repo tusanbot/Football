@@ -21,6 +21,7 @@ type Draft = {
 };
 type DraftData = { challenge: Draft; picks: Pick[] };
 type RecordData = { wins: number; losses: number; draws: number; matches: number };
+type HistoryResult = { id: string; challenge_id: string; creator_user_id: string; opponent_user_id: string; home_score: number; away_score: number; completed_at: string };
 
 const formations = ["2-2", "1-2-1", "1-1-2", "2-1-1"];
 
@@ -33,6 +34,7 @@ export default function LegendsDraftPage() {
   const [groupId, setGroupId] = useState("");
   const [data, setData] = useState<DraftData | null>(null);
   const [records, setRecords] = useState<RecordData | null>(null);
+  const [history, setHistory] = useState<HistoryResult[]>([]);
   const [formation, setFormation] = useState("2-2");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -74,11 +76,12 @@ export default function LegendsDraftPage() {
   useEffect(() => {
     if (!token) return;
     let active = true;
-    void request<{ userId: string; records: RecordData }>("/v1/legends-draft/me/records")
+    void request<{ userId: string; records: RecordData; history: HistoryResult[] }>("/v1/legends-draft/me/records")
       .then((result) => {
         if (!active) return;
         setUserId(result.userId);
         setRecords(result.records);
+        setHistory(result.history ?? []);
       })
       .catch((e) => { if (active) setError(e instanceof Error ? e.message : "بارگذاری رکوردها ناموفق بود."); });
     return () => { active = false; };
@@ -194,7 +197,15 @@ export default function LegendsDraftPage() {
       {challenge.status === "COMPLETED" && <div><h3>نتیجه نهایی</h3><pre style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{JSON.stringify(challenge.match_result ?? {}, null, 2)}</pre><p>شناسه مسابقه: {challenge.match_id}</p></div>}
       <button disabled={busy} style={button} onClick={() => void run(() => load(challenge.id))}>به‌روزرسانی وضعیت</button>
     </section>}
-    {records && <section style={panel}><h2>رکوردها</h2><p>بازی {records.matches} · برد {records.wins} · مساوی {records.draws} · باخت {records.losses}</p></section>}
+    {records && <section style={panel}>
+      <h2>رکوردهای درفت</h2><p>بازی {records.matches} · برد {records.wins} · مساوی {records.draws} · باخت {records.losses}</p>
+      <h3>تاریخچهٔ ۲۰ نتیجهٔ اخیر</h3>
+      {history.length ? history.map((item) => <p key={item.id}>
+        {new Date(item.completed_at).toLocaleString("fa-IR", { timeZone: "Asia/Tehran" })} ·
+        {item.creator_user_id === userId ? " شما " : " حریف "} {item.home_score}–{item.away_score}
+        {item.opponent_user_id === userId ? " · شما تیم مهمان بودید" : ""}
+      </p>) : <p>هنوز نتیجه‌ای برای نمایش وجود ندارد.</p>}
+    </section>}
     {error && <p role="alert" style={{ color: "#ff8b8b" }}>{error}</p>}
     {notice && <p role="status">{notice}</p>}
   </main>;
