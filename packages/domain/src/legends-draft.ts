@@ -32,11 +32,16 @@ export function createLegendsDraft(users: readonly [string, string], pool: reado
   if (!users[0] || !users[1] || users[0] === users[1]) throw new Error("DRAFT_USERS_MUST_DIFFER");
   if (pool.length < 10) throw new Error("DRAFT_POOL_REQUIRES_TEN_PLAYERS");
   const ids = new Set<string>();
+  let goalkeepers = 0;
+  let outfieldPlayers = 0;
   for (const player of pool) {
     if (!player.id || ids.has(player.id)) throw new Error("DRAFT_POOL_PLAYER_IDS_MUST_BE_UNIQUE");
     if (!player.name || !Number.isFinite(player.overall) || player.overall < 0) throw new Error("DRAFT_POOL_PLAYER_INVALID");
+    if (player.line === "GK") goalkeepers += 1;
+    else outfieldPlayers += 1;
     ids.add(player.id);
   }
+  if (goalkeepers < 2 || outfieldPlayers < 8) throw new Error("DRAFT_POOL_REQUIRES_TWO_GOALKEEPERS_AND_EIGHT_OUTFIELD_PLAYERS");
   return { users, pool: pool.map((player) => ({ ...player })), picks: [], status: "DRAFTING" };
 }
 
