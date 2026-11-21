@@ -178,7 +178,9 @@ export default function LegendsDraftPage() {
       <h2>وضعیت: {challenge.status}</h2>
       <p>شناسه: <code>{challenge.id}</code></p>
       <p>نوبت انتخاب: {challenge.current_pick_number} از ۱۰ · نسخه {challenge.version}</p>
-      {challenge.status === "INVITED" && <button disabled={busy} style={button} onClick={() => void run(acceptDraft)}>پذیرش دعوت</button>}
+      {challenge.status === "INVITED" && (userId === challenge.opponent_user_id
+        ? <button disabled={busy} style={button} onClick={() => void run(acceptDraft)}>پذیرش دعوت</button>
+        : <p>در انتظار پذیرش دعوت توسط حریف… شناسهٔ درفت را برای او بفرست.</p>)}
       {challenge.status === "DRAFTING" && <div>
         <h3>بازیکنان قابل انتخاب</h3>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(145px,1fr))", gap: 8 }}>
