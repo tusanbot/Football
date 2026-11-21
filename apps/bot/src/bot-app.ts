@@ -2707,11 +2707,11 @@ bot.command("draftview", async (ctx) => {
   const id = String(ctx.match ?? "").trim().split(/\s+/)[0];
   if (!id) return ctx.reply("روش استفاده: /draftview DRAFT_ID");
   try {
-    const data = await api<{ challenge: { id: string; status: string; current_pick_number: number; creator_user_id: string; opponent_user_id: string; player_pool: Array<{ id: string; name: string; line: string; overall: number }> }; picks: Array<{ pick_number: number; user_id: string; player_snapshot: { name: string; line: string; overall: number } }> }>(
+    const data = await api<{ challenge: { id: string; status: string; current_pick_number: number; creator_user_id: string; opponent_user_id: string; player_pool: Array<{ id: string; name: string; line: string; overall: number }> }; picks: Array<{ pick_number: number; user_id: string; player_id: string; player_snapshot: { name: string; line: string; overall: number } }> }>(
       "/v1/legends-draft/" + encodeURIComponent(id), ctx.from.id,
     );
     const picks = data.picks.map((pick) => pick.pick_number + ". " + pick.player_snapshot.name + " (" + pick.player_snapshot.line + ")").join("\n");
-    const pool = data.challenge.player_pool.filter((player) => !data.picks.some((pick) => pick.player_snapshot.name === player.name)).slice(0, 20)
+    const pool = data.challenge.player_pool.filter((player) => !data.picks.some((pick) => pick.player_id === player.id)).slice(0, 20)
       .map((player) => player.name + " · " + player.line + " · " + player.overall + " · " + player.id).join("\n");
     await ctx.reply("🏆 درفت اسطوره‌ها\nوضعیت: " + data.challenge.status + " · نوبت " + data.challenge.current_pick_number + "/10\n\nانتخاب‌ها:\n"
       + (picks || "هنوز انتخابی ثبت نشده") + "\n\nبازیکنان قابل مشاهده:\n" + (pool || "بازیکنی باقی نمانده")
