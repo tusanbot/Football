@@ -2681,7 +2681,7 @@ bot.command("friendly", async (ctx) => {
 bot.command("legendsdraft", async (ctx) => {
   if (!ctx.from) return;
   const opponentTelegramId = String(ctx.match ?? "").trim().split(/\s+/)[0];
-  if (!/^\d{1,20}$/.test(opponentTelegramId)) {
+  if (!opponentTelegramId || !/^\d{1,20}$/.test(opponentTelegramId)) {
     return ctx.reply("روش استفاده: /legendsdraft TELEGRAM_USER_ID\nشناسه عددی تلگرام حریف را وارد کن. هر دو نفر برای انتخاب بازیکنان و ثبت نتیجه باید در Mini App وارد شوند.");
   }
   const inGroup = ctx.chat.type === "group" || ctx.chat.type === "supergroup";
