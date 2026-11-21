@@ -82,7 +82,11 @@ export function arrangeLegendsDraftLineup(
   const order = ["DEF", "MID", "ATT"] as const;
   const capacities = LEGENDS_DRAFT_FORMATIONS[formation];
   const lines: Record<Exclude<DraftLine, "GK">, DraftPoolPlayer[]> = { DEF: [], MID: [], ATT: [] };
-  for (const player of players.filter((item) => item.line !== "GK")) lines[player.line].push(player);
+  for (const player of players) {
+    if (player.line === "DEF" || player.line === "MID" || player.line === "ATT") {
+      lines[player.line].push(player);
+    }
+  }
 
   const distance = (from: typeof order[number], to: typeof order[number]) => Math.abs(order.indexOf(from) - order.indexOf(to));
   while (order.some((line) => lines[line].length > capacities[line])) {
