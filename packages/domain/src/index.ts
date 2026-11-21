@@ -26,3 +26,5 @@ export * from "./match-segments.js";
 
 export * from "./league-pyramid.js";
 export * from "./league-pyramid-registration.js";
+
+export * from "./legends-draft.js";
