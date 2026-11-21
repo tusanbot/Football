@@ -18,11 +18,17 @@ begin
   if p_user_id is null or btrim(p_user_id) = '' then
     raise exception 'DRAFT_NOT_PARTICIPANT' using errcode = '42501';
   end if;
-  if p_match_result is null or jsonb_typeof(p_match_result) <> 'object'
-    or jsonb_typeof(p_match_result->'homeScore') <> 'number'
-    or jsonb_typeof(p_match_result->'awayScore') <> 'number'
-    or jsonb_typeof(p_match_result->'events') <> 'array'
-    or jsonb_typeof(p_match_result->'performances') <> 'array' then
+  if p_match_result is null or jsonb_typeof(p_match_result) is distinct from 'object'
+    or jsonb_typeof(p_match_result->'homeScore') is distinct from 'number'
+    or jsonb_typeof(p_match_result->'awayScore') is distinct from 'number'
+    or jsonb_typeof(p_match_result->'events') is distinct from 'array'
+    or jsonb_typeof(p_match_result->'performances') is distinct from 'array' then
+    raise exception 'DRAFT_MATCH_RESULT_INVALID' using errcode = '22023';
+  end if;
+  if (p_match_result->>'homeScore')::numeric < 0
+    or (p_match_result->>'awayScore')::numeric < 0
+    or (p_match_result->>'homeScore')::numeric <> trunc((p_match_result->>'homeScore')::numeric)
+    or (p_match_result->>'awayScore')::numeric <> trunc((p_match_result->>'awayScore')::numeric) then
     raise exception 'DRAFT_MATCH_RESULT_INVALID' using errcode = '22023';
   end if;
 
