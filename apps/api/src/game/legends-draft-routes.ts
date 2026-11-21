@@ -28,7 +28,7 @@ export function registerLegendsDraftRoutes(app: FastifyInstance, client: Supabas
     if (!user) return reply.code(401).send({ error: "UNAUTHENTICATED" });
     const parsed = z.object({
       opponentUserId: z.string().min(1).max(128).optional(),
-      opponentTelegramId: z.string().regex(/^\\d{1,20}$/).optional(),
+      opponentTelegramId: z.string().regex(/^\d{1,20}$/).optional(),
       telegramGroupId: z.string().min(1).max(128).optional(),
       expiresAt: z.string().datetime().optional(),
     }).strict().safeParse(request.body);
