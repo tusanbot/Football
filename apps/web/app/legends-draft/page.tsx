@@ -28,6 +28,7 @@ export default function LegendsDraftPage() {
   const params = useSearchParams();
   const [initData, setInitData] = useState("");
   const [token, setToken] = useState("");
+  const [userId, setUserId] = useState("");
   const [telegramId, setTelegramId] = useState("");
   const [draftId, setDraftId] = useState(params.get("draft") ?? "");
   const [data, setData] = useState<DraftData | null>(null);
@@ -58,6 +59,19 @@ export default function LegendsDraftPage() {
     return () => { active = false; };
   }, [initData]);
 
+  useEffect(() => {
+    if (!token) return;
+    let active = true;
+    void fetch(API + "/v1/me", { headers: { authorization: "Bearer " + token } })
+      .then((response) => response.json())
+      .then((payload: { user?: { id?: string }; id?: string }) => {
+        const id = payload.user?.id ?? payload.id;
+        if (active && typeof id === "string") setUserId(id);
+      })
+      .catch(() => undefined);
+    return () => { active = false; };
+  }, [token]);
+
   const request = useCallback(async <T,>(path: string, method = "GET", body?: unknown): Promise<T> => {
     const response = await fetch(API + path, {
       method, headers, ...(body === undefined ? {} : { body: JSON.stringify(body) }),
@@ -71,11 +85,11 @@ export default function LegendsDraftPage() {
     if (!id) return;
     const result = await request<DraftData>("/v1/legends-draft/" + encodeURIComponent(id));
     setData(result);
-    if (result.challenge.creator_user_id) {
-      const r = await request<{ records: RecordData }>("/v1/legends-draft/players/" + encodeURIComponent(result.challenge.creator_user_id) + "/records");
-      if (result.challenge.creator_user_id === result.challenge.opponent_user_id) setRecords(r.records);
+    if (userId) {
+      const r = await request<{ records: RecordData }>("/v1/legends-draft/players/" + encodeURIComponent(userId) + "/records");
+      setRecords(r.records);
     }
-  }, [draftId, request]);
+  }, [draftId, request, userId]);
 
   useEffect(() => { if (token && draftId) void load().catch((e) => setError(e instanceof Error ? e.message : "بارگذاری درفت ناموفق بود.")); }, [token, draftId, load]);
 
@@ -87,11 +101,9 @@ export default function LegendsDraftPage() {
 
   const challenge = data?.challenge;
   const picks = data?.picks ?? [];
-  const currentUserId = challenge?.creator_user_id;
   const myPick = challenge && (challenge.current_pick_number % 2 === 1
     ? challenge.creator_user_id : challenge.opponent_user_id);
-  const isParticipant = Boolean(challenge && (challenge.creator_user_id || challenge.opponent_user_id));
-  const myTurn = Boolean(challenge && myPick && (challenge.status === "DRAFTING"));
+  const myTurn = Boolean(challenge && userId && myPick === userId && challenge.status === "DRAFTING");
   const selectedIds = new Set(picks.map((pick) => pick.player_id));
 
   async function createDraft() {
