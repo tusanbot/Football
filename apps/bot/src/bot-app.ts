@@ -999,14 +999,15 @@ bot.command("draftresult", async (ctx) => {
   }
   try {
     const groupId = String(ctx.chat.id);
-    const response = await api<{ latest: { updated_at?: string }; result: Record<string, unknown> }>(
+    const response = await api<{ latest: { updated_at?: string }; result: { home_score?: number; away_score?: number; challenge_id?: string; result?: Record<string, unknown> } }>(
       "/v1/legends-draft/groups/" + encodeURIComponent(groupId) + "/latest", ctx.from.id,
     );
-    const compact = JSON.stringify(response.result);
-    const rendered = compact.length > 2800 ? compact.slice(0, 2800) + "…" : compact;
-    await ctx.reply("🏆 آخرین نتیجهٔ درفت این گروه\n" +
-      (response.latest.updated_at ? new Date(response.latest.updated_at).toLocaleString("fa-IR", { timeZone: "Asia/Tehran" }) + "\n" : "") +
-      rendered);
+    const score = typeof response.result.home_score === "number" && typeof response.result.away_score === "number"
+      ? "نتیجه: " + response.result.home_score + "–" + response.result.away_score + "\\n"
+      : "";
+    await ctx.reply("🏆 آخرین نتیجهٔ درفت این گروه\\n" +
+      (response.latest.updated_at ? new Date(response.latest.updated_at).toLocaleString("fa-IR", { timeZone: "Asia/Tehran" }) + "\\n" : "") +
+      score + "شناسه درفت: " + (response.result.challenge_id ?? "—"));
   } catch (error) {
     const message = error instanceof Error ? error.message : "خطای نامشخص";
     await ctx.reply(message.includes("NO_LATEST_DRAFT_RESULT")
