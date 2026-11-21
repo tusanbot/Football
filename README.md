@@ -2,6 +2,12 @@
 
 A Telegram-first football management MMO. Telegram Bot, Telegram Mini App and Telegram group competitions are clients of one game platform.
 
+## Architecture decision (mandatory)
+
+**Supabase PostgreSQL is the independent database platform for this project. Prisma and Cloudflare Hyperdrive are not permitted in the bot, API, Mini App, persistence layer, migrations, or deployment architecture.** Do not introduce them in new code, dependencies, scripts, documentation, or infrastructure. The server-side API connects to Supabase directly using the supported PostgreSQL driver; Bot and Mini App use the same API and never connect to the database directly. Do not use a Cloudflare Worker/Hyperdrive path for database access.
+
+This is the target architecture and a binding rule for all future work. The current repository still contains legacy Prisma-based persistence and migration files; they are not evidence that Prisma remains approved. Complete removal and conversion to Supabase-native SQL/migrations and `pg`-based access is a required migration task. Until that migration is verified, do not claim the repository is fully Prisma-free or production-ready.
+
 ## Monorepo
 
 - `apps/api` — authoritative game API (Fastify) and server-side application services.
@@ -54,9 +60,9 @@ A Telegram-first football management MMO. Telegram Bot, Telegram Mini App and Te
 - Telegram polling is protected by a PostgreSQL lease: only one Bot process per database may own polling at a time; the lease is renewed every 15 seconds and expires automatically after process loss.
 - Both clients use the same authenticated API; the Bot does not implement game/economy rules.
 
-## Cloudflare migration
+## Infrastructure direction
 
-The approved target architecture and non-production Worker foundation are documented in [cloudflare/README.md](cloudflare/README.md). The API Worker reuses the complete Fastify route set and Prisma application services against PostgreSQL through a request-scoped client. D1 remains a separate, incomplete migration track and is not used for game traffic. The Node.js API and polling Bot remain supported development runtimes; no deployment or data cutover is performed by this repository change.
+The project uses Supabase PostgreSQL independently, without Cloudflare Hyperdrive. Cloudflare Worker/database connectivity is not part of the approved architecture. Existing legacy Cloudflare/Prisma references are historical and must not be used as implementation guidance; update or remove them as the Supabase-only migration is completed.
 
 ## Delivery status
 
@@ -84,14 +90,9 @@ Bot-to-API requests use BOT_API_SECRET plus the Telegram sender ID; keep the sec
 
 ## Database setup
 
-For Supabase PostgreSQL connection setup, security boundaries, and first initialization, see [docs/SUPABASE-POSTGRESQL.md](docs/SUPABASE-POSTGRESQL.md).
+Supabase PostgreSQL is the sole approved persistent database. The API connects server-side using the PostgreSQL `pg` driver and server-only credentials. The Mini App and Telegram Bot call the same API; neither client receives database credentials or connects directly to Supabase.
 
-
-1. Configure `DATABASE_URL` for runtime traffic and `DIRECT_URL` for Prisma CLI migrations. For local PostgreSQL, both may use the same URL. For Supabase, use a runtime connection supported by `pg` and a direct or session-pooled connection for migrations; do not run schema migrations through a transaction pooler.
-2. Validate the schema and migration connection with `pnpm --filter @football/api exec prisma validate` and apply committed migrations with `pnpm db:migrate:deploy`.
-3. Seed the curated special-player catalog with `pnpm --filter @football/api db:seed:special`.
-
-The seed is safe to rerun: it upserts catalog records by stable slug. Run migrations and seed only against the intended development/staging database until a production rollout is explicitly approved.
+Use Supabase-native SQL migrations and reviewed SQL scripts as the schema source of truth. Do not use Prisma schema, Prisma Client, Prisma CLI, `DIRECT_URL` migration workflows, or Hyperdrive. Keep development/staging and production Supabase projects separate. The repository still has legacy Prisma artifacts that must be migrated and removed before the implementation can be described as fully converted.
 
 ## Local development
 
@@ -99,13 +100,12 @@ The seed is safe to rerun: it upserts catalog records by stable slug. Run migrat
 2. Copy `.env.example` to `.env`, configure the values above, and set a unique `BOT_API_SECRET`.
 3. Start infrastructure: `docker compose up -d`.
 4. Install dependencies: `pnpm install`.
-5. Generate Prisma Client: `pnpm db:generate`.
 6. Start services: `pnpm dev`.
 
 ## Pre-production checklist
 
-1. Set unique production values for DATABASE_URL, DIRECT_URL, TELEGRAM_BOT_TOKEN, BOT_API_SECRET, CORS_ORIGIN, GAME_ADMIN_TELEGRAM_IDS, FOOTBALL_API_URL, NEXT_PUBLIC_API_URL and TELEGRAM_WEB_APP_URL. Production web/API origins must use HTTPS.
-2. Apply migrations once to the intended database with pnpm db:migrate:deploy, then run pnpm --filter @football/api db:seed:special.
+1. Configure server-only Supabase PostgreSQL credentials and the required Telegram/API environment values. Never expose database credentials to the Mini App.
+2. Apply the reviewed Supabase-native SQL migrations to the intended non-production project; verify schema and seed procedures before any production rollout. Do not run Prisma commands.
 3. Start the API and confirm GET /ready returns HTTP 200 before starting the Bot.
 4. Start exactly one Bot process for that database. It verifies the Bot token against the API, confirms no webhook is configured, acquires the database polling lease, starts long polling, and renews the lease. Do not configure a webhook for this polling deployment; if one is already configured, resolve it explicitly in Telegram before starting the Bot.
 5. Open the Mini App through Telegram and test onboarding, wallet, player management, match checkpoints/fallback, competitions, group membership, gifts and admin permissions. Test Bot commands and Mini App actions against the same test accounts.

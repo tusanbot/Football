@@ -1,51 +1,39 @@
-# Supabase PostgreSQL setup for Football Empire
+# Supabase PostgreSQL — approved architecture
 
-Football Empire uses Supabase as a **managed PostgreSQL host**. Authentication, game rules, wallets, matches, leagues, group operations and administration remain in the Football Empire API. The Mini App must never connect directly to PostgreSQL.
+## Binding decision
 
-## Connection variables
+Football Empire uses **Supabase PostgreSQL independently**. Prisma and Cloudflare Hyperdrive are not approved anywhere in the bot, API, Mini App, persistence, schema management, or deployment architecture.
 
-Configure these only on the server:
+- The API is the only application tier that connects to Supabase, using the PostgreSQL `pg` driver and server-only credentials.
+- Telegram Bot and Mini App call the same authenticated API. Neither client connects directly to Supabase or receives database credentials.
+- Use reviewed, Supabase-native SQL migrations as the schema source of truth.
+- Do not add Prisma packages, Prisma schema/client/CLI, Prisma migrations, Hyperdrive, or database access through a Cloudflare Worker.
+- Keep non-production and production Supabase projects separate.
 
-- `DATABASE_URL`: runtime PostgreSQL connection used by the API / Prisma adapter.
-- `DIRECT_URL`: direct or session-pooled PostgreSQL connection used by Prisma CLI for schema validation and migrations.
+## Migration status
 
-For local development, both may point to the same local PostgreSQL database. In Supabase, copy the runtime and migration connection strings from the project's Connect panel and keep their roles separate. Prefer a direct connection for migrations; if the host cannot reach Supabase's IPv6 direct endpoint, use Supabase's session pooler for `DIRECT_URL`. Do not run Prisma schema migrations through a transaction pooler.
+This document records the approved target architecture; it does not claim that the existing repository has already completed the conversion. The current codebase still contains legacy Prisma-based persistence and migration artifacts. They must be migrated to direct `pg` access and Supabase-native SQL migrations, then removed, before the repository can be called Prisma-free.
 
-For the Cloudflare API Worker, set `DATABASE_URL` to the Supabase shared Transaction Pooler URI (port `6543`) with `pgbouncer=true&sslmode=require`. The Worker connects directly through Supavisor using Cloudflare's Node.js TCP/TLS compatibility APIs; Hyperdrive is not used. Keep `DIRECT_URL` in a trusted development/CI environment for Prisma migrations, using a direct or session-mode endpoint (port `5432`), never the transaction pooler.
+Until that work is verified, do not add new features using the legacy Prisma layer, do not run Prisma commands, and do not claim full migration or production readiness.
 
 ## Security boundaries
 
-- Never put either connection string in `NEXT_PUBLIC_*`, browser code, Mini App configuration, Telegram messages, or source control.
-- Do not expose the database to the browser. All reads and writes must pass through the authenticated Football Empire API.
-- Do not enable anonymous database access for game tables. Do not rely on client-side Row Level Security as a substitute for API authorization.
-- Use a dedicated database password and rotate it if it is exposed.
-- Keep production and development Supabase projects separate. Do not point development CI or local tests at production.
+- Keep Supabase connection credentials on the API/server only; never use `NEXT_PUBLIC_*` variables for secrets.
+- Do not expose game tables to direct browser access. All game reads and writes pass through the authenticated API.
+- Do not treat client-side Row Level Security as a replacement for API authorization.
+- Use dedicated credentials and rotate them if exposed.
+- Do not point development tests or CI at production data.
 
-This repository does not use Supabase Auth, the Supabase REST API, or an `anon` / `service_role` key for game operations. It connects to PostgreSQL through the server-side `pg` driver.
+## Migration and verification requirements
 
-## First database initialization
+The migration from the legacy persistence layer must:
 
-Run these commands from the repository root after setting both URLs in the local server environment:
+1. Inventory existing schema, constraints, indexes, triggers, transaction boundaries, and all Prisma-dependent services.
+2. Convert schema changes to reviewed Supabase-native SQL migrations without losing data or constraints.
+3. Replace Prisma Client usage with parameterized `pg` queries and explicit transaction handling.
+4. Preserve idempotency, concurrency protection, ledger atomicity, and existing API contracts.
+5. Remove Prisma packages, generated artifacts, schema/migration directories, scripts, and obsolete environment variables only after all call sites are converted.
+6. Update CI, setup instructions, deployment documentation, and tests so no Prisma or Hyperdrive path remains.
+7. Verify typecheck, unit/integration tests, migration application against a disposable Supabase-compatible PostgreSQL database, and both Bot/Mini App flows before declaring the conversion complete.
 
-```bash
-pnpm install
-pnpm db:generate
-pnpm --filter @football/api exec prisma validate
-pnpm db:migrate:deploy
-pnpm --filter @football/api db:seed:special
-```
-
-The migrations create the game schema. The seed command is idempotent and installs the curated special-player catalog. Do not use `prisma db push` against a shared or production database; committed migrations are the source of truth.
-
-Then start the API and verify:
-
-- `GET /health` returns HTTP 200.
-- `GET /ready` returns HTTP 200 only after required configuration and PostgreSQL connectivity are valid.
-- Bot startup succeeds only after API readiness and Bot-token identity verification.
-- The Bot and Mini App can create/load the same Telegram account and primary club.
-
-## Before real users
-
-Test both Telegram clients against the same non-production project and verify account provisioning, wallet ledger, transfers, match settlement, league progression, group rewards, gift redemption, admin audit events, and retry queues. Confirm backup restoration and monitoring before switching any real users to the database.
-
-The CI pipeline validates every committed Prisma migration against an ephemeral PostgreSQL 16 database. A successful CI run does not create a Supabase project, apply migrations to it, verify real Telegram credentials, or constitute production approval.
+No production database migration, data cutover, or deployment is implied by this architecture decision.
