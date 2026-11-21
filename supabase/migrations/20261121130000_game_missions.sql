@@ -15,8 +15,6 @@ grant select, insert, update, delete on public.game_mission_progress to service_
 create or replace function public.claim_game_mission(
   p_user_id text,
   p_mission_id text,
-  p_asset public."WalletAsset",
-  p_amount bigint,
   p_idempotency_key text
 ) returns jsonb
 language plpgsql
@@ -25,10 +23,10 @@ set search_path = ''
 as $$
 declare
   v_progress public.game_mission_progress%rowtype;
-  v_reward public."LedgerTransaction"%rowtype;
+  v_asset public."WalletAsset";
+  v_amount bigint;
 begin
   if p_mission_id not in ('daily_play_1','daily_win_1','daily_goals_3','daily_train_1')
-     or p_amount <= 0
      or p_idempotency_key !~ '^[A-Za-z0-9:_-]{12,128}$' then
     raise exception 'MISSION_INVALID_CLAIM' using errcode = '22023';
   end if;
@@ -51,8 +49,13 @@ begin
     raise exception 'MISSION_ALREADY_CLAIMED' using errcode = 'P0001';
   end if;
 
+  v_asset := case p_mission_id when 'daily_win_1' then 'GOLD'::public."WalletAsset"
+    when 'daily_goals_3' then 'HONOR'::public."WalletAsset" else 'CASH'::public."WalletAsset" end;
+  v_amount := case p_mission_id when 'daily_play_1' then 500
+    when 'daily_win_1' then 2 when 'daily_goals_3' then 10 else 300 end;
+
   perform public.apply_wallet_entry(
-    p_user_id, p_asset, 'CREDIT', p_amount, p_idempotency_key,
+    p_user_id, v_asset, 'CREDIT', v_amount, p_idempotency_key,
     'MISSION_REWARD', 'GAME_MISSION', p_mission_id
   );
 
@@ -60,9 +63,9 @@ begin
   set claimed_at = now(), updated_at = now()
   where user_id = p_user_id and mission_id = p_mission_id;
 
-  return jsonb_build_object('missionId', p_mission_id, 'claimed', true, 'asset', p_asset, 'amount', p_amount);
+  return jsonb_build_object('missionId', p_mission_id, 'claimed', true, 'asset', v_asset, 'amount', v_amount);
 end;
 $$;
 
-revoke all on function public.claim_game_mission(text,text,public."WalletAsset",bigint,text) from public, anon, authenticated;
+revoke all on function public.claim_game_mission(text,text,text) from public, anon, authenticated;
 grant execute on function public.claim_game_mission(text,text,public."WalletAsset",bigint,text) to service_role;
