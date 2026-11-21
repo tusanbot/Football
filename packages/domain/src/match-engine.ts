@@ -49,16 +49,18 @@ function random(seed: number) {
 const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
 const round = (value: number) => Math.round(value * 100) / 100;
 
-function sideStrength(side: MatchSide) {
-  if (side.players.length !== 11) throw new Error("MATCH_REQUIRES_ELEVEN_PLAYERS");
+function sideStrength(side: MatchSide, playersPerSide: 5 | 11) {
+  if (side.players.length !== playersPerSide) {
+    throw new Error(playersPerSide === 5 ? "MATCH_REQUIRES_FIVE_PLAYERS" : "MATCH_REQUIRES_ELEVEN_PLAYERS");
+  }
   const average = side.players.reduce((sum, player) =>
-    sum + player.overall * (0.72 + player.fitness / 250 + player.morale / 500), 0) / 11;
+    sum + player.overall * (0.72 + player.fitness / 250 + player.morale / 500), 0) / playersPerSide;
   const attack = side.players.reduce((sum, player) =>
     sum + (player.attributes.shooting * 0.45 + player.attributes.pace * 0.2 + player.attributes.dribbling * 0.2 + player.attributes.passing * 0.15)
-      * (player.position === "ST" || player.position === "RW" || player.position === "LW" ? 1.25 : 0.82), 0) / 11;
+      * (player.position === "ST" || player.position === "RW" || player.position === "LW" ? 1.25 : 0.82), 0) / playersPerSide;
   const defense = side.players.reduce((sum, player) =>
     sum + (player.attributes.defending * 0.55 + player.attributes.physical * 0.25 + player.attributes.pace * 0.2)
-      * (["CB", "LB", "RB", "CDM", "GK"].includes(player.position) ? 1.22 : 0.8), 0) / 11;
+      * (["CB", "LB", "RB", "CDM", "GK"].includes(player.position) ? 1.22 : 0.8), 0) / playersPerSide;
   const tactics = (side.tactics.mentality === "ATTACKING" ? 1.08 : side.tactics.mentality === "DEFENSIVE" ? 0.94 : 1)
     * (side.tactics.pressing === "HIGH_PRESS" ? 1.025 : side.tactics.pressing === "LOW_BLOCK" ? 0.985 : 1)
     * (side.tactics.tempo === "FAST" ? 1.025 : side.tactics.tempo === "SLOW" ? 0.985 : 1);
@@ -80,13 +82,14 @@ function weightedPlayer(players: MatchPlayer[], weight: (player: MatchPlayer) =>
 
 /** Deterministic, reproducible 90-minute match simulation. Persist the seed with the fixture. */
 export function simulateFootballMatch(input: {
-  seed: string; home: MatchSide; away: MatchSide; rules?: MatchRules;
+  seed: string; home: MatchSide; away: MatchSide; rules?: MatchRules; format?: "11v11" | "5v5";
 }): MatchSimulation {
   if (input.home.clubId === input.away.clubId) throw new Error("MATCH_TEAMS_MUST_DIFFER");
   const rng = random(hashSeed(input.seed));
   const rules = input.rules ?? DEFAULT_MATCH_RULES;
-  const homeStrength = sideStrength(input.home);
-  const awayStrength = sideStrength(input.away);
+  const playersPerSide = input.format === "5v5" ? 5 : 11;
+  const homeStrength = sideStrength(input.home, playersPerSide);
+  const awayStrength = sideStrength(input.away, playersPerSide);
   const homeXg = clamp(1.25 + (homeStrength.attack - awayStrength.defense) / 48 + (homeStrength.average - awayStrength.average) / 95 + 0.18, 0.25, 3.8);
   const awayXg = clamp(1.12 + (awayStrength.attack - homeStrength.defense) / 48 + (awayStrength.average - homeStrength.average) / 95, 0.2, 3.5);
   const homeShots = clamp(Math.round(8 + homeXg * 4 + rng() * 7), 5, 28);

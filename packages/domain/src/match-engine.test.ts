@@ -103,3 +103,27 @@ test("legacy simulation honors competition injury, substitution and window limit
     assert.ok(new Set(substitutions.map((event) => event.minute)).size <= 1);
   }
 });
+
+test("five-a-side format uses the same deterministic engine and accepts five players per side", () => {
+  const makeFive = (clubId: string, overall: number): MatchSide => {
+    const positions = ["GK", "CB", "CM", "ST", "LW"] as const;
+    return {
+      ...side(clubId, overall),
+      formation: "1-1-2",
+      players: positions.map((position, index) => ({
+        id: clubId + "-five-" + index, name: "Five player " + index, position,
+        overall, morale: 75, fitness: 95,
+        attributes: {
+          pace: overall, shooting: overall, passing: overall, dribbling: overall,
+          defending: overall, physical: overall, goalkeeping: position === "GK" ? overall + 5 : 25,
+        },
+      })),
+    };
+  };
+  const input = { seed: "legends-draft-five-a-side", home: makeFive("draft-home", 76), away: makeFive("draft-away", 73), format: "5v5" as const };
+  const first = simulateFootballMatch(input);
+  assert.deepEqual(first, simulateFootballMatch(input));
+  assert.equal(first.performances.length, 10);
+  assert.equal(first.performances.reduce((sum, row) => sum + row.goals, 0), first.homeScore + first.awayScore);
+  assert.throws(() => simulateFootballMatch({ ...input, format: "11v11" }), /MATCH_REQUIRES_ELEVEN_PLAYERS/);
+});
