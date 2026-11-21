@@ -64,7 +64,7 @@ test("2-1-1 shifts an excess defender into midfield for 1-2-1", () => {
 });
 
 test("lineup preserves every selected player and never moves the goalkeeper", () => {
-  const selected = [pool[0]!, pool[1]!, pool[2]!, pool[5]!, pool[6]!];
+  const selected = [pool[0]!, pool[2]!, pool[4]!, pool[6]!, pool[7]!];
   const lineup = arrangeLegendsDraftLineup(selected, "1-1-2");
   const assigned = [...lineup.lines.DEF, ...lineup.lines.MID, ...lineup.lines.ATT, lineup.goalkeeper];
   assert.deepEqual(new Set(assigned.map((p) => p.id)), new Set(selected.map((p) => p.id)));
