@@ -40,7 +40,7 @@ test("draft serializes picks, alternates users and rejects duplicate picks", () 
 
 test("draft rejects invalid users and duplicate pool identities", () => {
   assert.throws(() => createLegendsDraft(["u1", "u1"], pool), /DRAFT_USERS_MUST_DIFFER/);
-  assert.throws(() => createLegendsDraft(["u1", "u2"], [...pool, pool[0]!]), /DRAFT_POOL_PLAYER_IDS_MUST_BE_UNIQUE/);
+  assert.throws(() => createLegendsDraft(["u1", "u2"], [...pool, pool[0]!]), /DRAFT_POOL_PLAYER_IDS_MUST_BE_UNIQUE/);\n  assert.throws(() => createLegendsDraft(["u1", "u2"], pool.slice(0, 10).filter((player) => player.line !== "GK" || player.id === "gk")), /DRAFT_POOL_REQUIRES_TWO_GOALKEEPERS_AND_EIGHT_OUTFIELD_PLAYERS/);
   let state = createLegendsDraft(["u1", "u2"], pool);
   state = pickLegendsDraftPlayer(state, "u1", "gk");
   assert.throws(() => pickLegendsDraftPlayer(state, "u1", "gk2"), /DRAFT_NOT_YOUR_TURN/);
