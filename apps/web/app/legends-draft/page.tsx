@@ -31,6 +31,7 @@ export default function LegendsDraftPage() {
   const [userId, setUserId] = useState("");
   const [telegramId, setTelegramId] = useState("");
   const [draftId, setDraftId] = useState(params.get("draft") ?? "");
+  const groupId = params.get("group") ?? "";
   const [data, setData] = useState<DraftData | null>(null);
   const [records, setRecords] = useState<RecordData | null>(null);
   const [formation, setFormation] = useState("2-2");
@@ -109,7 +110,9 @@ export default function LegendsDraftPage() {
   async function createDraft() {
     const opponent = telegramId.trim();
     if (!/^\d{1,20}$/.test(opponent)) throw new Error("شناسه عددی تلگرام حریف را وارد کن.");
-    const result = await request<{ challenge: Draft }>("/v1/legends-draft", "POST", { opponentTelegramId: opponent });
+    const result = await request<{ challenge: Draft }>("/v1/legends-draft", "POST", {
+      opponentTelegramId: opponent, ...(groupId ? { telegramGroupId: groupId } : {}),
+    });
     setDraftId(result.challenge.id);
     setData({ challenge: result.challenge, picks: [] });
     setNotice("دعوت درفت ساخته شد؛ شناسه را برای حریف بفرست تا در Mini App وارد کند.");
@@ -152,6 +155,7 @@ export default function LegendsDraftPage() {
       <a href="/" style={{ color: "inherit" }}>← بازگشت</a>
       <h1>درفت اسطوره‌ها</h1>
       <p>دو نفر، ۱۰ انتخاب نوبتی، تیم‌های ۵ نفره و ثبت مستقل نتیجه و رکوردها.</p>
+      {groupId && <p>گروه تلگرام: {groupId} · نتیجهٔ این درفت به‌عنوان آخرین نتیجهٔ گروه ثبت می‌شود.</p>}
     </header>
     {!token && <p>{initData ? "در حال احراز هویت…" : "این بخش را از داخل تلگرام باز کن تا احراز هویت انجام شود."}</p>}
     {token && !challenge && <section style={panel}>
