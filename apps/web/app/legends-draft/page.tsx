@@ -148,6 +148,9 @@ export default function LegendsDraftPage() {
       "/v1/legends-draft/" + encodeURIComponent(challenge.id) + "/play", "POST", {},
     );
     await load(challenge.id);
+    const profile = await request<{ records: RecordData; history: HistoryResult[] }>("/v1/legends-draft/me/records");
+    setRecords(profile.records);
+    setHistory(profile.history ?? []);
     setNotice(result.replayed ? "نتیجه قبلاً ثبت شده بود." : "نتیجه مسابقه ثبت شد.");
   }
 
@@ -202,8 +205,8 @@ export default function LegendsDraftPage() {
       <h3>تاریخچهٔ ۲۰ نتیجهٔ اخیر</h3>
       {history.length ? history.map((item) => <p key={item.id}>
         {new Date(item.completed_at).toLocaleString("fa-IR", { timeZone: "Asia/Tehran" })} ·
-        {item.creator_user_id === userId ? " شما " : " حریف "} {item.home_score}–{item.away_score}
-        {item.opponent_user_id === userId ? " · شما تیم مهمان بودید" : ""}
+        {item.creator_user_id === userId ? "شما–حریف " : "حریف–شما "}
+        {item.creator_user_id === userId ? item.home_score : item.away_score}–{item.creator_user_id === userId ? item.away_score : item.home_score}
       </p>) : <p>هنوز نتیجه‌ای برای نمایش وجود ندارد.</p>}
     </section>}
     {error && <p role="alert" style={{ color: "#ff8b8b" }}>{error}</p>}
