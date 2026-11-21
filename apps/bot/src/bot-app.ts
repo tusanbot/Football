@@ -608,6 +608,35 @@ async function sendMiniAppEntry(ctx: Context) {
   });
 }
 
+bot.command("missions", async (ctx) => {
+  if (!ctx.from || ctx.chat.type !== "private") return;
+  try {
+    const data = await api<{ date: string; missions: Array<{ id: string; title: string; description: string; progress: number; target: number; completed: boolean; claimed: boolean; claimable: boolean; reward: { asset: string; amount: number } }> }>("/v1/missions", ctx.from.id);
+    const lines = data.missions.map((mission) => {
+      const status = mission.claimed ? "دریافت شد" : mission.claimable ? "آماده دریافت" : mission.progress + "/" + mission.target;
+      return "• " + mission.title + " — " + status + "\n  " + mission.description + "\n  پاداش: " + mission.reward.amount + " " + mission.reward.asset + (mission.claimable ? "\n  دریافت: /missionclaim " + mission.id : "");
+    });
+    await ctx.reply("🎯 مأموریت‌های روزانه\n" + lines.join("\n\n"));
+  } catch (error) {
+    await ctx.reply("دریافت مأموریت‌ها ناموفق بود: " + (error instanceof Error ? error.message : "خطای نامشخص"));
+  }
+});
+
+bot.command("missionclaim", async (ctx) => {
+  if (!ctx.from || ctx.chat.type !== "private") return;
+  const missionId = ctx.match.trim().split(/\\s+/)[0];
+  if (!missionId) return ctx.reply("شناسه مأموریت را وارد کن. نمونه: /missionclaim daily_play_1");
+  try {
+    const data = await api<{ result: { missionId: string; claimed: boolean; asset: string; amount: number } }>(
+      "/v1/missions/" + encodeURIComponent(missionId) + "/claim", ctx.from.id, "POST",
+      { idempotencyKey: "mission:" + ctx.from.id + ":" + missionId + ":" + new Date().toISOString().slice(0, 10) },
+    );
+    await ctx.reply("پاداش مأموریت دریافت شد: " + data.result.amount + " " + data.result.asset + "\nبرای دیدن مأموریت‌های امروز: /missions");
+  } catch (error) {
+    await ctx.reply("دریافت پاداش انجام نشد: " + (error instanceof Error ? error.message : "خطای نامشخص"));
+  }
+});
+
 bot.command("miniapp", async (ctx) => {
   if (!ctx.from || ctx.chat.type !== "private") return;
   if (!webAppUrl) return ctx.reply("آدرس مینی‌اپ هنوز در تنظیمات ربات ثبت نشده است.");
