@@ -1,0 +1,14 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import { TelegramGroupAuthorizationError, verifyTelegramGroupActor } from "../src/groups/telegram-group-authorization.js";
+const payload=(status:string)=>({ok:true,result:{status,...(status==="restricted"?{is_member:true}:{})}});
+const memberFetch=(actorStatus:string)=>async(_url:string,init?:RequestInit)=>{const body=JSON.parse(String(init?.body??"{}")) as {user_id:number};return new Response(JSON.stringify(payload(String(body.user_id)==="123456"?"administrator":actorStatus)),{status:200});};
+test("allows Telegram administrators and creators to manage alliances",async()=>{for(const status of ["creator","administrator"]){const r=await verifyTelegramGroupActor({telegramGroupId:"-100123",telegramUserId:"12345",requireManager:true},{botToken:"123456:test-token",fetchImpl:memberFetch(status)});assert.equal(r.isManager,true);}});
+test("allows regular members to view but denies managerial operations",async()=>{const f=memberFetch("member");assert.equal((await verifyTelegramGroupActor({telegramGroupId:"-100123",telegramUserId:"12345"},{botToken:"123456:test-token",fetchImpl:f})).isMember,true);await assert.rejects(verifyTelegramGroupActor({telegramGroupId:"-100123",telegramUserId:"12345",requireManager:true},{botToken:"123456:test-token",fetchImpl:f}),(e:unknown)=>e instanceof TelegramGroupAuthorizationError&&e.code==="TELEGRAM_GROUP_MANAGER_REQUIRED");});
+test("rejects removed members and Telegram verification failures",async()=>{await assert.rejects(verifyTelegramGroupActor({telegramGroupId:"-100123",telegramUserId:"12345"},{botToken:"123456:test-token",fetchImpl:memberFetch("left")}),(e:unknown)=>e instanceof TelegramGroupAuthorizationError&&e.code==="TELEGRAM_GROUP_ACCESS_REVOKED");await assert.rejects(verifyTelegramGroupActor({telegramGroupId:"-100123",telegramUserId:"12345"},{botToken:"123456:test-token",fetchImpl:async(_url:string,init?:RequestInit)=>{const body=JSON.parse(String(init?.body??"{}")) as {user_id:number};return new Response(JSON.stringify(String(body.user_id)==="123456"?payload("administrator"):{ok:false}),{status:200});}}),(e:unknown)=>e instanceof TelegramGroupAuthorizationError&&e.code==="TELEGRAM_GROUP_CHECK_FAILED");});
+test("fails closed without a Telegram bot token",async()=>{await assert.rejects(verifyTelegramGroupActor({telegramGroupId:"-100123",telegramUserId:"12345"},{botToken:""}),(e:unknown)=>e instanceof TelegramGroupAuthorizationError&&e.code==="TELEGRAM_BOT_TOKEN_NOT_CONFIGURED");});
+
+test("requires the Football Empire bot itself to be an administrator in the group",async()=>{
+ const f=async()=>new Response(JSON.stringify(payload("member")),{status:200});
+ await assert.rejects(verifyTelegramGroupActor({telegramGroupId:"-100123",telegramUserId:"12345"},{botToken:"123456:test-token",fetchImpl:f}),(e:unknown)=>e instanceof TelegramGroupAuthorizationError&&e.code==="TELEGRAM_BOT_NOT_GROUP_ADMIN");
+});

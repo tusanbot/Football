@@ -1,0 +1,27 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "football-empire-api-staging",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-11-17",
+  "compatibility_flags": ["nodejs_compat", "allow_eval_during_startup"],
+  "keep_vars": true,
+  "hyperdrive": [
+    {
+      "binding": "HYPERDRIVE",
+      "id": "3d3a95b34ee74952b551c0b28be61a00"
+    }
+  ],
+  "dev": { "port": 8788 },
+  "workers_dev": true,
+  "preview_urls": false,
+  "vars": {
+    "ENVIRONMENT": "staging",
+    "CORS_ORIGIN": "https://football-empire-web-staging.mshmahyar9.workers.dev"
+  },
+  "observability": { "enabled": true },
+  "durable_objects": {
+    "bindings": [{ "name": "MATCH_COORDINATOR", "class_name": "MatchCoordinator" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["MatchCoordinator"] }],
+  "triggers": { "crons": ["*/15 * * * *"] }
+}
