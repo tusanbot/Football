@@ -3,6 +3,7 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { requireTelegramUser } from "../auth/require-telegram-user.js";
 import type { SupabaseHttpClient } from "../node-supabase-http.js";
+import { simulateFootballMatch } from "@football/domain";
 
 type DraftLine = "GK" | "DEF" | "MID" | "ATT";
 function toDraftLine(positions: unknown): DraftLine | null {
@@ -150,6 +151,91 @@ export function registerLegendsDraftRoutes(app: FastifyInstance, client: Supabas
       const conflict = ["DRAFT_VERSION_CONFLICT", "DRAFT_NOT_READY_FOR_FORMATION",
         "DRAFT_NOT_PARTICIPANT", "DRAFT_EXPIRED"].includes(code);
       return reply.code(conflict ? 409 : 400).send({ error: code });
+    }
+  });
+
+
+  app.post("/v1/legends-draft/:id/play", async (request, reply) => {
+    const user = await requireTelegramUser(request);
+    if (!user) return reply.code(401).send({ error: "UNAUTHENTICATED" });
+    const params = z.object({ id: z.string().uuid() }).safeParse(request.params);
+    if (!params.success) return reply.code(400).send({ error: "INVALID_DRAFT_ID" });
+    try {
+      const rows = await client.select<Array<Record<string, unknown>>>("legends_draft_challenges", {
+        select: "*", id: "eq." + params.data.id, limit: "1",
+      });
+      const challenge = rows[0];
+      if (!challenge) return reply.code(404).send({ error: "DRAFT_NOT_FOUND" });
+      if (challenge.creator_user_id !== user.id && challenge.opponent_user_id !== user.id) {
+        return reply.code(403).send({ error: "NOT_DRAFT_PARTICIPANT" });
+      }
+      if (challenge.status === "COMPLETED" && challenge.match_result) {
+        return { matchId: challenge.match_id, result: challenge.match_result, replayed: true };
+      }
+      if (challenge.status !== "LINEUP" || !challenge.creator_formation || !challenge.opponent_formation) {
+        return reply.code(409).send({ error: "DRAFT_NOT_READY_TO_PLAY" });
+      }
+      if (typeof challenge.expires_at !== "string" || Date.parse(challenge.expires_at) <= Date.now()) {
+        return reply.code(409).send({ error: "DRAFT_EXPIRED" });
+      }
+      const picks = await client.select<Array<Record<string, unknown>>>("legends_draft_picks", {
+        select: "pick_number,user_id,player_id,player_snapshot",
+        challenge_id: "eq." + params.data.id, order: "pick_number.asc",
+      });
+      if (picks.length !== 10) return reply.code(409).send({ error: "DRAFT_NOT_READY_TO_PLAY" });
+
+      const toMatchPosition = (line: unknown): "GK" | "CB" | "CM" | "ST" => {
+        if (line === "GK") return "GK";
+        if (line === "DEF") return "CB";
+        if (line === "MID") return "CM";
+        if (line === "ATT") return "ST";
+        throw new Error("DRAFT_PLAYER_POSITION_INVALID");
+      };
+      const makeSide = (ownerId: string, formation: string, teamPicks: Record<string, unknown>[]) => ({
+        clubId: ownerId,
+        clubName: "Legends Draft",
+        formation,
+        tactics: { mentality: "BALANCED" as const, pressing: "MID_BLOCK" as const, tempo: "NORMAL" as const, passingStyle: "MIXED" as const },
+        players: teamPicks.map((pick) => {
+          const player = pick.player_snapshot as Record<string, unknown>;
+          if (!player || typeof player.id !== "string" || typeof player.name !== "string"
+            || typeof player.overall !== "number" || !Number.isFinite(player.overall)) {
+            throw new Error("DRAFT_PLAYER_SNAPSHOT_INVALID");
+          }
+          const overall = Math.max(1, Math.min(99, player.overall));
+          const goalkeeper = player.line === "GK";
+          const attributes = {
+            pace: overall, shooting: overall, passing: overall, dribbling: overall,
+            defending: overall, physical: overall, goalkeeping: goalkeeper ? overall : 25,
+          };
+          return {
+            id: player.id, name: player.name, position: toMatchPosition(player.line),
+            overall, morale: 100, fitness: 100, attributes,
+          };
+        }),
+        stadiumCapacity: 0, ticketPrice: 0n, reputation: 0, coachMedicalSkill: 100,
+      });
+      const creatorId = String(challenge.creator_user_id);
+      const opponentId = String(challenge.opponent_user_id);
+      const home = makeSide(creatorId, String(challenge.creator_formation), picks.filter((pick) => pick.user_id === creatorId));
+      const away = makeSide(opponentId, String(challenge.opponent_formation), picks.filter((pick) => pick.user_id === opponentId));
+      const simulation = simulateFootballMatch({
+        seed: "legends-draft:" + params.data.id,
+        home, away, format: "5v5",
+      });
+      const result = JSON.parse(JSON.stringify(simulation, (_key, value: unknown) =>
+        typeof value === "bigint" ? value.toString() : value)) as Record<string, unknown>;
+      return await client.rpc<Record<string, unknown>>("legends_draft_complete_match", {
+        p_challenge_id: params.data.id,
+        p_user_id: user.id,
+        p_match_result: result,
+      });
+    } catch (error) {
+      const code = errorCode(error);
+      const conflict = ["DRAFT_NOT_READY_TO_PLAY", "DRAFT_EXPIRED", "DRAFT_NOT_PARTICIPANT",
+        "DRAFT_MATCH_ALREADY_COMPLETED"].includes(code);
+      request.log.warn({ code }, "Legends Draft match rejected");
+      return reply.code(conflict ? 409 : 503).send({ error: code });
     }
   });
 
