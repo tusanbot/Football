@@ -42,10 +42,10 @@ test("draft rejects invalid users and duplicate pool identities", () => {
 });
 
 test("2-1-1 keeps the draft lines unchanged", () => {
-  const lineup = arrangeLegendsDraftLineup([pool[0]!, pool[1]!, pool[3]!, pool[5]!, pool[6]!], "2-1-1");
-  assert.deepEqual(lineup.lines.DEF.map((p) => p.id), ["d1"]);
+  const lineup = arrangeLegendsDraftLineup([pool[0]!, pool[1]!, pool[2]!, pool[3]!, pool[5]!], "2-1-1");
+  assert.deepEqual(lineup.lines.DEF.map((p) => p.id), ["d1", "d2"]);
   assert.deepEqual(lineup.lines.MID.map((p) => p.id), ["m1"]);
-  assert.deepEqual(lineup.lines.ATT.map((p) => p.id), ["a1", "a2"]);
+  assert.deepEqual(lineup.lines.ATT.map((p) => p.id), ["a1"]);
 });
 
 test("2-1-1 shifts an excess defender into midfield for 1-2-1", () => {
