@@ -982,6 +982,39 @@ bot.command("admingroup", async (ctx) => {
   }
 });
 
+bot.command("draft", async (ctx) => {
+  if (!ctx.from || ctx.chat?.type !== "private") {
+    return ctx.reply("برای ساخت یا ادامهٔ درفت، دستور /draft را در گفت‌وگوی خصوصی ربات اجرا کن.");
+  }
+  if (!webAppUrl) return ctx.reply("آدرس Mini App تنظیم نشده است.");
+  const url = new URL("/legends-draft", webAppUrl).toString();
+  await ctx.reply("🏆 درفت اسطوره‌ها\nدو نفر به‌صورت نوبتی ۱۰ بازیکن انتخاب می‌کنند؛ سپس آرایش را ثبت و مسابقه را اجرا می‌کنند.", {
+    reply_markup: new InlineKeyboard().webApp("ورود به درفت اسطوره‌ها", url),
+  });
+});
+
+bot.command("draftresult", async (ctx) => {
+  if (!ctx.from || !ctx.chat || !["group", "supergroup"].includes(ctx.chat.type)) {
+    return ctx.reply("این دستور را داخل گروهی اجرا کن که درفت در آن ثبت شده است.");
+  }
+  try {
+    const groupId = String(ctx.chat.id);
+    const response = await api<{ latest: { updated_at?: string }; result: Record<string, unknown> }>(
+      "/v1/legends-draft/groups/" + encodeURIComponent(groupId) + "/latest", ctx.from.id,
+    );
+    const compact = JSON.stringify(response.result);
+    const rendered = compact.length > 2800 ? compact.slice(0, 2800) + "…" : compact;
+    await ctx.reply("🏆 آخرین نتیجهٔ درفت این گروه\n" +
+      (response.latest.updated_at ? new Date(response.latest.updated_at).toLocaleString("fa-IR", { timeZone: "Asia/Tehran" }) + "\n" : "") +
+      rendered);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "خطای نامشخص";
+    await ctx.reply(message.includes("NO_LATEST_DRAFT_RESULT")
+      ? "هنوز نتیجهٔ ثبت‌شده‌ای برای درفت این گروه وجود ندارد."
+      : "دریافت نتیجهٔ درفت ناموفق بود: " + message);
+  }
+});
+
 bot.command("adminchallenge", async (ctx) => {
   if (!ctx.from || !adminOnlyInPrivate(ctx)) return;
   const [operation, targetId] = String(ctx.match ?? "").trim().split(/\s+/);
