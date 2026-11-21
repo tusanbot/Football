@@ -983,13 +983,14 @@ bot.command("admingroup", async (ctx) => {
 });
 
 bot.command("draft", async (ctx) => {
-  if (!ctx.from || ctx.chat?.type !== "private") {
-    return ctx.reply("برای ساخت یا ادامهٔ درفت، دستور /draft را در گفت‌وگوی خصوصی ربات اجرا کن.");
-  }
+  if (!ctx.from || !ctx.chat || ctx.chat.type === "channel") return;
   if (!webAppUrl) return ctx.reply("آدرس Mini App تنظیم نشده است.");
-  const url = new URL("/legends-draft", webAppUrl).toString();
+  const url = new URL("/legends-draft", webAppUrl);
+  if (ctx.chat.type === "group" || ctx.chat.type === "supergroup") {
+    url.searchParams.set("group", String(ctx.chat.id));
+  }
   await ctx.reply("🏆 درفت اسطوره‌ها\nدو نفر به‌صورت نوبتی ۱۰ بازیکن انتخاب می‌کنند؛ سپس آرایش را ثبت و مسابقه را اجرا می‌کنند.", {
-    reply_markup: new InlineKeyboard().webApp("ورود به درفت اسطوره‌ها", url),
+    reply_markup: new InlineKeyboard().webApp("ورود به درفت اسطوره‌ها", url.toString()),
   });
 });
 
