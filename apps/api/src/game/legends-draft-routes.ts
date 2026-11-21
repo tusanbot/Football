@@ -131,4 +131,26 @@ export function registerLegendsDraftRoutes(app: FastifyInstance, client: Supabas
       return reply.code(503).send({ error: errorCode(error) });
     }
   });
+  app.post("/v1/legends-draft/:id/formation", async (request, reply) => {
+    const user = await requireTelegramUser(request);
+    if (!user) return reply.code(401).send({ error: "UNAUTHENTICATED" });
+    const params = z.object({ id: z.string().uuid() }).safeParse(request.params);
+    const body = z.object({
+      formation: z.enum(["2-2", "1-2-1", "1-1-2", "2-1-1"]),
+      expectedVersion: z.number().int().nonnegative(),
+    }).strict().safeParse(request.body);
+    if (!params.success || !body.success) return reply.code(400).send({ error: "INVALID_DRAFT_FORMATION" });
+    try {
+      return await client.rpc<Record<string, unknown>>("legends_draft_set_formation", {
+        p_challenge_id: params.data.id, p_user_id: user.id,
+        p_formation: body.data.formation, p_expected_version: body.data.expectedVersion,
+      });
+    } catch (error) {
+      const code = errorCode(error);
+      const conflict = ["DRAFT_VERSION_CONFLICT", "DRAFT_NOT_READY_FOR_FORMATION",
+        "DRAFT_NOT_PARTICIPANT", "DRAFT_EXPIRED"].includes(code);
+      return reply.code(conflict ? 409 : 400).send({ error: code });
+    }
+  });
+
 }
