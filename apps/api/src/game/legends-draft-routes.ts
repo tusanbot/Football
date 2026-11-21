@@ -27,6 +27,7 @@ export function registerLegendsDraftRoutes(app: FastifyInstance, client: Supabas
     if (!user) return reply.code(401).send({ error: "UNAUTHENTICATED" });
     const parsed = z.object({
       opponentUserId: z.string().min(1).max(128),
+      telegramGroupId: z.string().min(1).max(128).optional(),
       expiresAt: z.string().datetime().optional(),
     }).strict().safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ error: "INVALID_LEGENDS_DRAFT" });
@@ -51,6 +52,7 @@ export function registerLegendsDraftRoutes(app: FastifyInstance, client: Supabas
       const id = randomUUID();
       const rows = await client.insert<Array<Record<string, unknown>>>("legends_draft_challenges", {
         id, creator_user_id: user.id, opponent_user_id: parsed.data.opponentUserId,
+        telegram_group_id: parsed.data.telegramGroupId ?? null,
         status: "INVITED", player_pool: playerPool,
         current_pick_number: 1, expires_at: expiresAt.toISOString(),
       });
@@ -236,6 +238,44 @@ export function registerLegendsDraftRoutes(app: FastifyInstance, client: Supabas
         "DRAFT_MATCH_ALREADY_COMPLETED"].includes(code);
       request.log.warn({ code }, "Legends Draft match rejected");
       return reply.code(conflict ? 409 : 503).send({ error: code });
+    }
+  });
+
+  app.get("/v1/legends-draft/groups/:groupId/latest", async (request, reply) => {
+    const user = await requireTelegramUser(request);
+    if (!user) return reply.code(401).send({ error: "UNAUTHENTICATED" });
+    const params = z.object({ groupId: z.string().min(1).max(128) }).safeParse(request.params);
+    if (!params.success) return reply.code(400).send({ error: "INVALID_GROUP_ID" });
+    try {
+      const rows = await client.select<Array<Record<string, unknown>>>("legends_draft_group_latest_results", {
+        select: "telegram_group_id,challenge_id,result_id,updated_at",
+        telegram_group_id: "eq." + params.data.groupId, limit: "1",
+      });
+      if (!rows[0]) return reply.code(404).send({ error: "NO_LATEST_DRAFT_RESULT" });
+      const result = await client.select<Array<Record<string, unknown>>>("legends_draft_match_results", {
+        select: "*", id: "eq." + String(rows[0].result_id), limit: "1",
+      });
+      return { latest: rows[0], result: result[0] ?? null };
+    } catch (error) {
+      request.log.error({ error }, "Legends Draft group result read failed");
+      return reply.code(503).send({ error: errorCode(error) });
+    }
+  });
+
+  app.get("/v1/legends-draft/players/:userId/records", async (request, reply) => {
+    const user = await requireTelegramUser(request);
+    if (!user) return reply.code(401).send({ error: "UNAUTHENTICATED" });
+    const params = z.object({ userId: z.string().min(1).max(128) }).safeParse(request.params);
+    if (!params.success) return reply.code(400).send({ error: "INVALID_PLAYER_ID" });
+    try {
+      const rows = await client.select<Array<Record<string, unknown>>>("legends_draft_player_records", {
+        select: "user_id,wins,losses,draws,matches,updated_at",
+        user_id: "eq." + params.data.userId, limit: "1",
+      });
+      return { records: rows[0] ?? { user_id: params.data.userId, wins: 0, losses: 0, draws: 0, matches: 0 } };
+    } catch (error) {
+      request.log.error({ error }, "Legends Draft player records read failed");
+      return reply.code(503).send({ error: errorCode(error) });
     }
   });
 
