@@ -142,11 +142,28 @@ export function registerLegendsDraftRoutes(app: FastifyInstance, client: Supabas
     const user = await requireTelegramUser(request);
     if (!user) return reply.code(401).send({ error: "UNAUTHENTICATED" });
     try {
-      const rows = await client.select<Array<Record<string, unknown>>>("legends_draft_player_records", {
-        select: "user_id,wins,losses,draws,matches,updated_at",
-        user_id: "eq." + user.id, limit: "1",
-      });
-      return { userId: user.id, records: rows[0] ?? { user_id: user.id, wins: 0, losses: 0, draws: 0, matches: 0 } };
+      const [rows, homeHistory, awayHistory] = await Promise.all([
+        client.select<Array<Record<string, unknown>>>("legends_draft_player_records", {
+          select: "user_id,wins,losses,draws,matches,updated_at",
+          user_id: "eq." + user.id, limit: "1",
+        }),
+        client.select<Array<Record<string, unknown>>>("legends_draft_match_results", {
+          select: "id,challenge_id,telegram_group_id,creator_user_id,opponent_user_id,home_score,away_score,result,completed_at",
+          creator_user_id: "eq." + user.id, order: "completed_at.desc", limit: "20",
+        }),
+        client.select<Array<Record<string, unknown>>>("legends_draft_match_results", {
+          select: "id,challenge_id,telegram_group_id,creator_user_id,opponent_user_id,home_score,away_score,result,completed_at",
+          opponent_user_id: "eq." + user.id, order: "completed_at.desc", limit: "20",
+        }),
+      ]);
+      const history = [...homeHistory, ...awayHistory]
+        .sort((a, b) => Date.parse(String(b.completed_at)) - Date.parse(String(a.completed_at)))
+        .slice(0, 20);
+      return {
+        userId: user.id,
+        records: rows[0] ?? { user_id: user.id, wins: 0, losses: 0, draws: 0, matches: 0 },
+        history,
+      };
     } catch (error) {
       request.log.error({ error }, "Supabase Legends Draft own records read failed");
       return reply.code(503).send({ error: errorCode(error) });
