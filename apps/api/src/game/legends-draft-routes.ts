@@ -4,6 +4,7 @@ import { z } from "zod";
 import { requireTelegramUser } from "../auth/require-telegram-user.js";
 import type { SupabaseHttpClient } from "../node-supabase-http.js";
 import { simulateFootballMatch } from "@football/domain";
+import { verifyTelegramGroupActor, TelegramGroupAuthorizationError } from "../groups/telegram-group-authorization.js";
 
 type DraftLine = "GK" | "DEF" | "MID" | "ATT";
 function toDraftLine(positions: unknown): DraftLine | null {
@@ -32,6 +33,17 @@ export function registerLegendsDraftRoutes(app: FastifyInstance, client: Supabas
     }).strict().safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ error: "INVALID_LEGENDS_DRAFT" });
     if (parsed.data.opponentUserId === user.id) return reply.code(400).send({ error: "DRAFT_USERS_MUST_DIFFER" });
+    if (parsed.data.telegramGroupId) {
+      try {
+        await verifyTelegramGroupActor({
+          telegramGroupId: parsed.data.telegramGroupId,
+          telegramUserId: user.id,
+        });
+      } catch (error) {
+        const code = error instanceof TelegramGroupAuthorizationError ? error.code : "TELEGRAM_GROUP_CHECK_FAILED";
+        return reply.code(403).send({ error: code });
+      }
+    }
     const expiresAt = parsed.data.expiresAt ? new Date(parsed.data.expiresAt) : new Date(Date.now() + 24 * 60 * 60 * 1000);
     if (expiresAt.getTime() <= Date.now() || expiresAt.getTime() > Date.now() + 7 * 24 * 60 * 60 * 1000) {
       return reply.code(400).send({ error: "INVALID_DRAFT_EXPIRY" });
@@ -255,7 +267,20 @@ export function registerLegendsDraftRoutes(app: FastifyInstance, client: Supabas
       const result = await client.select<Array<Record<string, unknown>>>("legends_draft_match_results", {
         select: "*", id: "eq." + String(rows[0].result_id), limit: "1",
       });
-      return { latest: rows[0], result: result[0] ?? null };
+      const match = result[0];
+      if (!match) return reply.code(404).send({ error: "NO_LATEST_DRAFT_RESULT" });
+      if (match.creator_user_id !== user.id && match.opponent_user_id !== user.id) {
+        try {
+          await verifyTelegramGroupActor({
+            telegramGroupId: params.data.groupId,
+            telegramUserId: user.id,
+          });
+        } catch (error) {
+          const code = error instanceof TelegramGroupAuthorizationError ? error.code : "TELEGRAM_GROUP_CHECK_FAILED";
+          return reply.code(403).send({ error: code });
+        }
+      }
+      return { latest: rows[0], result: match };
     } catch (error) {
       request.log.error({ error }, "Legends Draft group result read failed");
       return reply.code(503).send({ error: errorCode(error) });
