@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import type { CSSProperties } from "react";
 import { createTelegramSession } from "../../lib/telegram-session";
 
 declare global {
@@ -25,13 +25,12 @@ type RecordData = { wins: number; losses: number; draws: number; matches: number
 const formations = ["2-2", "1-2-1", "1-1-2", "2-1-1"];
 
 export default function LegendsDraftPage() {
-  const params = useSearchParams();
   const [initData, setInitData] = useState("");
   const [token, setToken] = useState("");
   const [userId, setUserId] = useState("");
   const [telegramId, setTelegramId] = useState("");
-  const [draftId, setDraftId] = useState(params.get("draft") ?? "");
-  const groupId = params.get("group") ?? "";
+  const [draftId, setDraftId] = useState("");
+  const [groupId, setGroupId] = useState("");
   const [data, setData] = useState<DraftData | null>(null);
   const [records, setRecords] = useState<RecordData | null>(null);
   const [formation, setFormation] = useState("2-2");
@@ -45,6 +44,9 @@ export default function LegendsDraftPage() {
   }), [token]);
 
   useEffect(() => {
+    const query = new URLSearchParams(window.location.search);
+    setDraftId(query.get("draft") ?? "");
+    setGroupId(query.get("group") ?? "");
     const init = window.Telegram?.WebApp?.initData ?? "";
     setInitData(init);
     window.Telegram?.WebApp?.ready?.();
@@ -200,7 +202,7 @@ export default function LegendsDraftPage() {
   </main>;
 }
 
-const panel: React.CSSProperties = { border: "1px solid #374151", borderRadius: 14, padding: 16, marginBottom: 16, background: "rgba(15,23,42,.7)" };
-const field: React.CSSProperties = { display: "block", width: "100%", padding: 12, margin: "8px 0 12px", borderRadius: 8, border: "1px solid #64748b", background: "#111827", color: "white" };
-const button: React.CSSProperties = { padding: "10px 14px", borderRadius: 8, border: 0, margin: "4px", cursor: "pointer" };
-const playerButton: React.CSSProperties = { display: "flex", flexDirection: "column", gap: 4, padding: 12, textAlign: "right", borderRadius: 8, border: "1px solid #64748b", background: "#1f2937", color: "white", cursor: "pointer" };
+const panel: CSSProperties = { border: "1px solid #374151", borderRadius: 14, padding: 16, marginBottom: 16, background: "rgba(15,23,42,.7)" };
+const field: CSSProperties = { display: "block", width: "100%", padding: 12, margin: "8px 0 12px", borderRadius: 8, border: "1px solid #64748b", background: "#111827", color: "white" };
+const button: CSSProperties = { padding: "10px 14px", borderRadius: 8, border: 0, margin: "4px", cursor: "pointer" };
+const playerButton: CSSProperties = { display: "flex", flexDirection: "column", gap: 4, padding: 12, textAlign: "right", borderRadius: 8, border: "1px solid #64748b", background: "#1f2937", color: "white", cursor: "pointer" };
