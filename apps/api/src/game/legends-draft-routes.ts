@@ -138,6 +138,21 @@ export function registerLegendsDraftRoutes(app: FastifyInstance, client: Supabas
     }
   });
 
+  app.get("/v1/legends-draft/me/records", async (request, reply) => {
+    const user = await requireTelegramUser(request);
+    if (!user) return reply.code(401).send({ error: "UNAUTHENTICATED" });
+    try {
+      const rows = await client.select<Array<Record<string, unknown>>>("legends_draft_player_records", {
+        select: "user_id,wins,losses,draws,matches,updated_at",
+        user_id: "eq." + user.id, limit: "1",
+      });
+      return { userId: user.id, records: rows[0] ?? { user_id: user.id, wins: 0, losses: 0, draws: 0, matches: 0 } };
+    } catch (error) {
+      request.log.error({ error }, "Supabase Legends Draft own records read failed");
+      return reply.code(503).send({ error: errorCode(error) });
+    }
+  });
+
   app.get("/v1/legends-draft/:id", async (request, reply) => {
     const user = await requireTelegramUser(request);
     if (!user) return reply.code(401).send({ error: "UNAUTHENTICATED" });
