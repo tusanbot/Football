@@ -1,0 +1,12 @@
+ALTER TYPE "GroupPointSource" ADD VALUE IF NOT EXISTS 'SHOP_PURCHASE';
+ALTER TABLE "GroupChallenge" ADD COLUMN "rewardPoints" BIGINT NOT NULL DEFAULT 0;
+ALTER TABLE "GroupChallenge" ADD COLUMN "createdByUserId" TEXT NOT NULL DEFAULT '';
+CREATE TABLE "GroupChallengeParticipant" ("id" TEXT NOT NULL,"challengeId" TEXT NOT NULL,"userId" TEXT NOT NULL,"joinedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,CONSTRAINT "GroupChallengeParticipant_pkey" PRIMARY KEY ("id"));
+CREATE UNIQUE INDEX "GroupChallengeParticipant_challengeId_userId_key" ON "GroupChallengeParticipant"("challengeId","userId");
+CREATE INDEX "GroupChallengeParticipant_userId_joinedAt_idx" ON "GroupChallengeParticipant"("userId","joinedAt");
+ALTER TABLE "GroupChallengeParticipant" ADD CONSTRAINT "GroupChallengeParticipant_challengeId_fkey" FOREIGN KEY ("challengeId") REFERENCES "GroupChallenge"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "GroupChallengeParticipant" ADD CONSTRAINT "GroupChallengeParticipant_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+CREATE TABLE "GroupMemberRewardBalance" ("id" TEXT NOT NULL,"groupId" TEXT NOT NULL,"userId" TEXT NOT NULL,"balance" BIGINT NOT NULL DEFAULT 0,"updatedAt" TIMESTAMP(3) NOT NULL,CONSTRAINT "GroupMemberRewardBalance_pkey" PRIMARY KEY ("id"));
+CREATE UNIQUE INDEX "GroupMemberRewardBalance_groupId_userId_key" ON "GroupMemberRewardBalance"("groupId","userId");
+ALTER TABLE "GroupMemberRewardBalance" ADD CONSTRAINT "GroupMemberRewardBalance_groupId_fkey" FOREIGN KEY ("groupId") REFERENCES "TelegramGroup"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "GroupMemberRewardBalance" ADD CONSTRAINT "GroupMemberRewardBalance_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
