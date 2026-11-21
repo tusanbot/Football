@@ -2702,6 +2702,74 @@ bot.command("legendsdraft", async (ctx) => {
   }
 });
 
+bot.command("draftview", async (ctx) => {
+  if (!ctx.from) return;
+  const id = String(ctx.match ?? "").trim().split(/\s+/)[0];
+  if (!id) return ctx.reply("روش استفاده: /draftview DRAFT_ID");
+  try {
+    const data = await api<{ challenge: { id: string; status: string; current_pick_number: number; creator_user_id: string; opponent_user_id: string; player_pool: Array<{ id: string; name: string; line: string; overall: number }> }; picks: Array<{ pick_number: number; user_id: string; player_snapshot: { name: string; line: string; overall: number } }> }>(
+      "/v1/legends-draft/" + encodeURIComponent(id), ctx.from.id,
+    );
+    const picks = data.picks.map((pick) => pick.pick_number + ". " + pick.player_snapshot.name + " (" + pick.player_snapshot.line + ")").join("\n");
+    const pool = data.challenge.player_pool.filter((player) => !data.picks.some((pick) => pick.player_snapshot.name === player.name)).slice(0, 20)
+      .map((player) => player.name + " · " + player.line + " · " + player.overall + " · " + player.id).join("\n");
+    await ctx.reply("🏆 درفت اسطوره‌ها\nوضعیت: " + data.challenge.status + " · نوبت " + data.challenge.current_pick_number + "/10\n\nانتخاب‌ها:\n"
+      + (picks || "هنوز انتخابی ثبت نشده") + "\n\nبازیکنان قابل مشاهده:\n" + (pool || "بازیکنی باقی نمانده")
+      + "\n\nانتخاب: /draftpick " + id + " PLAYER_ID\nآرایش: /draftformation " + id + " 2-2|1-2-1|1-1-2|2-1-1\nنتیجه: /draftplay " + id);
+  } catch (error) { await ctx.reply("دریافت درفت ناموفق بود: " + (error instanceof Error ? error.message : "خطای نامشخص")); }
+});
+
+bot.command("draftaccept", async (ctx) => {
+  if (!ctx.from) return;
+  const id = String(ctx.match ?? "").trim().split(/\s+/)[0];
+  if (!id) return ctx.reply("روش استفاده: /draftaccept DRAFT_ID");
+  try {
+    await api("/v1/legends-draft/" + encodeURIComponent(id) + "/accept", ctx.from.id, "POST", {});
+    await ctx.reply("دعوت پذیرفته شد. انتخاب نوبتی آغاز شد؛ برای دیدن بازیکنان از /draftview " + id + " استفاده کن.");
+  } catch (error) { await ctx.reply("پذیرش درفت ناموفق بود: " + (error instanceof Error ? error.message : "خطای نامشخص")); }
+});
+
+bot.command("draftpick", async (ctx) => {
+  if (!ctx.from) return;
+  const [id, playerId] = String(ctx.match ?? "").trim().split(/\s+/);
+  if (!id || !playerId) return ctx.reply("روش استفاده: /draftpick DRAFT_ID PLAYER_ID");
+  try {
+    const data = await api<{ challenge: { version: number } }>("/v1/legends-draft/" + encodeURIComponent(id), ctx.from.id);
+    await api("/v1/legends-draft/" + encodeURIComponent(id) + "/picks", ctx.from.id, "POST", {
+      playerId, idempotencyKey: randomUUID(), expectedVersion: data.challenge.version,
+    });
+    await ctx.reply("انتخاب بازیکن ثبت شد. وضعیت را با /draftview " + id + " بررسی کن.");
+  } catch (error) { await ctx.reply("انتخاب بازیکن ناموفق بود: " + (error instanceof Error ? error.message : "خطای نامشخص")); }
+});
+
+bot.command("draftformation", async (ctx) => {
+  if (!ctx.from) return;
+  const [id, formation] = String(ctx.match ?? "").trim().split(/\s+/);
+  if (!id || !formation || !["2-2", "1-2-1", "1-1-2", "2-1-1"].includes(formation)) {
+    return ctx.reply("روش استفاده: /draftformation DRAFT_ID 2-2|1-2-1|1-1-2|2-1-1");
+  }
+  try {
+    const data = await api<{ challenge: { version: number } }>("/v1/legends-draft/" + encodeURIComponent(id), ctx.from.id);
+    await api("/v1/legends-draft/" + encodeURIComponent(id) + "/formation", ctx.from.id, "POST", {
+      formation, expectedVersion: data.challenge.version,
+    });
+    await ctx.reply("آرایش ثبت شد. هر دو بازیکن باید آرایش خود را ثبت کنند؛ سپس /draftplay " + id);
+  } catch (error) { await ctx.reply("ثبت آرایش ناموفق بود: " + (error instanceof Error ? error.message : "خطای نامشخص")); }
+});
+
+bot.command("draftplay", async (ctx) => {
+  if (!ctx.from) return;
+  const id = String(ctx.match ?? "").trim().split(/\s+/)[0];
+  if (!id) return ctx.reply("روش استفاده: /draftplay DRAFT_ID");
+  try {
+    const result = await api<{ result: { homeScore: number; awayScore: number }; replayed?: boolean }>(
+      "/v1/legends-draft/" + encodeURIComponent(id) + "/play", ctx.from.id, "POST", {},
+    );
+    await ctx.reply("⚽ نتیجه درفت: " + result.result.homeScore + "–" + result.result.awayScore
+      + (result.replayed ? "\nاین نتیجه قبلاً ثبت شده بود." : "\nنتیجه و رکورد بازیکنان ثبت شد."));
+  } catch (error) { await ctx.reply("اجرای مسابقه ناموفق بود: " + (error instanceof Error ? error.message : "خطای نامشخص")); }
+});
+
 bot.command("challenge", async (ctx) => {
   if (!ctx.from) return;
   try {
