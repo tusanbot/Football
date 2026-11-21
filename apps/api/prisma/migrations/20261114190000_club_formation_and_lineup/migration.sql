@@ -1,0 +1,13 @@
+ALTER TABLE "Club"
+  ADD COLUMN "formation" TEXT NOT NULL DEFAULT '4-3-3',
+  ADD COLUMN "mentality" TEXT NOT NULL DEFAULT 'BALANCED',
+  ADD COLUMN "pressing" TEXT NOT NULL DEFAULT 'MID_BLOCK',
+  ADD COLUMN "tempo" TEXT NOT NULL DEFAULT 'NORMAL',
+  ADD COLUMN "passingStyle" TEXT NOT NULL DEFAULT 'MIXED',
+  ADD COLUMN "lineupVersion" INTEGER NOT NULL DEFAULT 0;
+
+ALTER TABLE "Player"
+  ADD COLUMN "lineupSlot" INTEGER;
+
+CREATE UNIQUE INDEX "Player_clubId_lineupSlot_key"
+  ON "Player"("clubId", "lineupSlot");

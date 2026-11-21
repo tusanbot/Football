@@ -1,0 +1,27 @@
+{
+  "name": "football-empire",
+  "private": true,
+  "version": "0.1.0",
+  "packageManager": "pnpm@10.0.0",
+  "scripts": {
+    "dev": "pnpm --parallel --filter @football/api --filter @football/bot --filter @football/web dev",
+    "dev:api": "pnpm --filter @football/api dev",
+    "dev:bot": "pnpm --filter @football/bot dev",
+    "dev:web": "pnpm --filter @football/web dev",
+    "build": "pnpm -r build",
+    "typecheck": "pnpm --filter @football/domain build && pnpm -r typecheck",
+    "test": "pnpm --filter @football/domain test && pnpm --filter @football/api test && pnpm --filter @football/bot test",
+    "db:generate": "pnpm --filter @football/api db:generate",
+    "db:migrate": "pnpm --filter @football/api db:migrate",
+    "db:migrate:deploy": "pnpm --filter @football/api db:migrate:deploy",
+    "start:api": "node apps/api/dist/server.js",
+    "start:bot": "node apps/bot/dist/bot.js",
+    "start:web": "pnpm --filter @football/web start",
+    "verify": "pnpm typecheck && pnpm test && pnpm build"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.3",
+    "tsx": "^4.19.3",
+    "@types/node": "^22.13.10"
+  }
+}
