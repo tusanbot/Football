@@ -62,19 +62,6 @@ export default function LegendsDraftPage() {
     return () => { active = false; };
   }, [initData]);
 
-  useEffect(() => {
-    if (!token) return;
-    let active = true;
-    void fetch(API + "/v1/me", { headers: { authorization: "Bearer " + token } })
-      .then((response) => response.json())
-      .then((payload: { user?: { id?: string }; id?: string }) => {
-        const id = payload.user?.id ?? payload.id;
-        if (active && typeof id === "string") setUserId(id);
-      })
-      .catch(() => undefined);
-    return () => { active = false; };
-  }, [token]);
-
   const request = useCallback(async <T,>(path: string, method = "GET", body?: unknown): Promise<T> => {
     const response = await fetch(API + path, {
       method, headers, ...(body === undefined ? {} : { body: JSON.stringify(body) }),
@@ -84,15 +71,24 @@ export default function LegendsDraftPage() {
     return payload;
   }, [headers]);
 
+  useEffect(() => {
+    if (!token) return;
+    let active = true;
+    void request<{ userId: string; records: RecordData }>("/v1/legends-draft/me/records")
+      .then((result) => {
+        if (!active) return;
+        setUserId(result.userId);
+        setRecords(result.records);
+      })
+      .catch((e) => { if (active) setError(e instanceof Error ? e.message : "بارگذاری رکوردها ناموفق بود."); });
+    return () => { active = false; };
+  }, [request, token]);
+
   const load = useCallback(async (id = draftId) => {
     if (!id) return;
     const result = await request<DraftData>("/v1/legends-draft/" + encodeURIComponent(id));
     setData(result);
-    if (userId) {
-      const r = await request<{ records: RecordData }>("/v1/legends-draft/players/" + encodeURIComponent(userId) + "/records");
-      setRecords(r.records);
-    }
-  }, [draftId, request, userId]);
+  }, [draftId, request]);
 
   useEffect(() => { if (token && draftId) void load().catch((e) => setError(e instanceof Error ? e.message : "بارگذاری درفت ناموفق بود.")); }, [token, draftId, load]);
 
