@@ -76,7 +76,7 @@ export function registerLegendsDraftRoutes(app: FastifyInstance, client: Supabas
           || typeof row.overall !== "number" || !line) return [];
         return [{ id: row.id, name: row.fullName, line, overall: row.overall }];
       });
-      if (playerPool.length < 10) return reply.code(503).send({ error: "LEGENDS_DRAFT_POOL_UNAVAILABLE" });
+      if (playerPool.length < 10 || playerPool.filter((player) => player.line === "GK").length < 2\n        || playerPool.filter((player) => player.line !== "GK").length < 8) {\n        return reply.code(503).send({ error: "LEGENDS_DRAFT_POOL_UNAVAILABLE" });\n      }
       const id = randomUUID();
       const rows = await client.insert<Array<Record<string, unknown>>>("legends_draft_challenges", {
         id, creator_user_id: user.id, opponent_user_id: opponentUserId,
