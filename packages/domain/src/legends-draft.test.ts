@@ -29,7 +29,7 @@ test("draft serializes picks, alternates users and rejects duplicate picks", () 
   assert.throws(() => pickLegendsDraftPlayer(state, "u1", "d1"), /DRAFT_PLAYER_ALREADY_PICKED/);
   const remainingPicks = ["d2", "gk2", "m1", "m2", "a1", "a2", "a3", "d3"];
   for (const playerId of remainingPicks) {
-    const user = state.users[state.picks.length % 2];
+    const user = state.users[state.picks.length % 2]!;
     state = pickLegendsDraftPlayer(state, user, playerId);
     assert.equal(state.picks[state.picks.length - 1]?.player.id, playerId);
   }
