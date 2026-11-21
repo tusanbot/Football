@@ -27,12 +27,28 @@ export function registerLegendsDraftRoutes(app: FastifyInstance, client: Supabas
     const user = await requireTelegramUser(request);
     if (!user) return reply.code(401).send({ error: "UNAUTHENTICATED" });
     const parsed = z.object({
-      opponentUserId: z.string().min(1).max(128),
+      opponentUserId: z.string().min(1).max(128).optional(),
+      opponentTelegramId: z.string().regex(/^\\d{1,20}$/).optional(),
       telegramGroupId: z.string().min(1).max(128).optional(),
       expiresAt: z.string().datetime().optional(),
     }).strict().safeParse(request.body);
-    if (!parsed.success) return reply.code(400).send({ error: "INVALID_LEGENDS_DRAFT" });
-    if (parsed.data.opponentUserId === user.id) return reply.code(400).send({ error: "DRAFT_USERS_MUST_DIFFER" });
+    if (!parsed.success || Boolean(parsed.data.opponentUserId) === Boolean(parsed.data.opponentTelegramId)) {
+      return reply.code(400).send({ error: "INVALID_LEGENDS_DRAFT" });
+    }
+    let opponentUserId = parsed.data.opponentUserId;
+    if (parsed.data.opponentTelegramId) {
+      try {
+        const matches = await client.select<Array<Record<string, unknown>>>("User", {
+          select: "id", telegramId: "eq." + parsed.data.opponentTelegramId, limit: "1",
+        });
+        opponentUserId = typeof matches[0]?.id === "string" ? matches[0].id : undefined;
+      } catch (error) {
+        request.log.error({ error }, "Legends Draft opponent lookup failed");
+        return reply.code(503).send({ error: "LEGENDS_DRAFT_OPPONENT_LOOKUP_FAILED" });
+      }
+      if (!opponentUserId) return reply.code(404).send({ error: "DRAFT_OPPONENT_NOT_FOUND" });
+    }
+    if (opponentUserId === user.id) return reply.code(400).send({ error: "DRAFT_USERS_MUST_DIFFER" });
     if (parsed.data.telegramGroupId) {
       try {
         await verifyTelegramGroupActor({
@@ -63,7 +79,7 @@ export function registerLegendsDraftRoutes(app: FastifyInstance, client: Supabas
       if (playerPool.length < 10) return reply.code(503).send({ error: "LEGENDS_DRAFT_POOL_UNAVAILABLE" });
       const id = randomUUID();
       const rows = await client.insert<Array<Record<string, unknown>>>("legends_draft_challenges", {
-        id, creator_user_id: user.id, opponent_user_id: parsed.data.opponentUserId,
+        id, creator_user_id: user.id, opponent_user_id: opponentUserId,
         telegram_group_id: parsed.data.telegramGroupId ?? null,
         status: "INVITED", player_pool: playerPool,
         current_pick_number: 1, expires_at: expiresAt.toISOString(),
