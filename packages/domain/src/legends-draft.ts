@@ -49,6 +49,15 @@ export function pickLegendsDraftPlayer(state: LegendsDraftState, userId: string,
   if (state.picks.some((pick) => pick.player.id === playerId)) throw new Error("DRAFT_PLAYER_ALREADY_PICKED");
   const player = state.pool.find((candidate) => candidate.id === playerId);
   if (!player) throw new Error("DRAFT_PLAYER_NOT_IN_POOL");
+  const ownPicks = state.picks.filter((pick) => pick.userId === userId);
+  const ownKeepers = ownPicks.filter((pick) => pick.player.line === "GK").length;
+  const ownOutfield = ownPicks.length - ownKeepers;
+  const picksRemaining = 5 - ownPicks.length;
+  if (player.line === "GK" && ownKeepers > 0) throw new Error("DRAFT_TEAM_ALREADY_HAS_GOALKEEPER");
+  if (player.line !== "GK" && ownOutfield >= 4) throw new Error("DRAFT_TEAM_ALREADY_HAS_FOUR_OUTFIELD_PLAYERS");
+  if (picksRemaining === 1 && ((ownKeepers === 0 && player.line !== "GK") || (ownOutfield < 4 && player.line === "GK"))) {
+    throw new Error("DRAFT_PICK_MUST_COMPLETE_TEAM_ROSTER");
+  }
   const picks = [...state.picks, { pickNumber: state.picks.length + 1, userId, player: { ...player } }];
   return { ...state, picks, status: picks.length === 10 ? "COMPLETE" : "DRAFTING" };
 }

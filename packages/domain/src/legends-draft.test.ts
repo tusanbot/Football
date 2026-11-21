@@ -9,6 +9,7 @@ import {
 
 const pool: DraftPoolPlayer[] = [
   { id: "gk", name: "Keeper", line: "GK", overall: 90 },
+  { id: "gk2", name: "Keeper 2", line: "GK", overall: 90 },
   { id: "d1", name: "Defender 1", line: "DEF", overall: 90 },
   { id: "d2", name: "Defender 2", line: "DEF", overall: 90 },
   { id: "m1", name: "Midfielder 1", line: "MID", overall: 90 },
@@ -26,10 +27,11 @@ test("draft serializes picks, alternates users and rejects duplicate picks", () 
   assert.throws(() => pickLegendsDraftPlayer(state, "u1", "d1"), /DRAFT_NOT_YOUR_TURN/);
   state = pickLegendsDraftPlayer(state, "u2", "d1");
   assert.throws(() => pickLegendsDraftPlayer(state, "u1", "d1"), /DRAFT_PLAYER_ALREADY_PICKED/);
-  for (const [index, player] of pool.slice(2).entries()) {
+  const remainingPicks = ["gk2", "d2", "m1", "m2", "a1", "a2", "a3", "d3"];
+  for (const playerId of remainingPicks) {
     const user = state.users[state.picks.length % 2];
-    state = pickLegendsDraftPlayer(state, user, player.id);
-    assert.equal(state.picks[index + 2]?.player.id, player.id);
+    state = pickLegendsDraftPlayer(state, user, playerId);
+    assert.equal(state.picks[state.picks.length - 1]?.player.id, playerId);
   }
   assert.equal(state.status, "COMPLETE");
   assert.equal(state.picks.length, 10);
@@ -39,6 +41,11 @@ test("draft serializes picks, alternates users and rejects duplicate picks", () 
 test("draft rejects invalid users and duplicate pool identities", () => {
   assert.throws(() => createLegendsDraft(["u1", "u1"], pool), /DRAFT_USERS_MUST_DIFFER/);
   assert.throws(() => createLegendsDraft(["u1", "u2"], [...pool, pool[0]!]), /DRAFT_POOL_PLAYER_IDS_MUST_BE_UNIQUE/);
+  let state = createLegendsDraft(["u1", "u2"], pool);
+  state = pickLegendsDraftPlayer(state, "u1", "gk");
+  assert.throws(() => pickLegendsDraftPlayer(state, "u1", "gk2"), /DRAFT_NOT_YOUR_TURN/);
+  state = pickLegendsDraftPlayer(state, "u2", "d1");
+  assert.throws(() => pickLegendsDraftPlayer(state, "u1", "gk2"), /DRAFT_TEAM_ALREADY_HAS_GOALKEEPER/);
 });
 
 test("2-1-1 keeps the draft lines unchanged", () => {
