@@ -31,7 +31,7 @@ const healthResponse = z.object({
 });
 
 export function buildApp() {
-  const corsOrigins = parseCorsOrigins(process.env.CORS_ORIGIN);
+  const corsOrigins = parseCorsOrigins(process.env.CORS_ORIGINS);
   const app = Fastify({
     logger: process.env.NODE_ENV !== "test",
     requestIdHeader: "x-request-id",
@@ -59,7 +59,7 @@ export function buildApp() {
       ...(!process.env.DATABASE_URL ? ["DATABASE_URL"] : []),
       ...(!process.env.TELEGRAM_BOT_TOKEN ? ["TELEGRAM_BOT_TOKEN"] : []),
       ...(!process.env.BOT_API_SECRET || process.env.BOT_API_SECRET.length < 32 ? ["BOT_API_SECRET"] : []),
-      ...(!process.env.CORS_ORIGIN?.split(",").some((origin) => origin.trim()) ? ["CORS_ORIGIN"] : []),
+      ...(!process.env.CORS_ORIGINS?.split(",").some((origin) => origin.trim()) ? ["CORS_ORIGINS"] : []),
       ...(parseAdminTelegramIds(process.env.GAME_ADMIN_TELEGRAM_IDS).length === 0 ? ["GAME_ADMIN_TELEGRAM_IDS"] : []),
       ...(/^(replace-with|change-me|your-)/i.test(process.env.BOT_API_SECRET ?? "") ? ["BOT_API_SECRET"] : []),
     ];
