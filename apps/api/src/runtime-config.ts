@@ -17,13 +17,13 @@ export function parseCorsOrigins(value: string | undefined, production = process
     try {
       parsed = new URL(origin);
     } catch {
-      throw new Error("CORS_ORIGIN contains an invalid origin.");
+      throw new Error("CORS_ORIGINS contains an invalid origin.");
     }
     if (parsed.origin !== origin || parsed.username || parsed.password
       || !["http:", "https:"].includes(parsed.protocol)
       || (production && parsed.protocol !== "https:")
       || parsed.hostname === "*" || origin === "null") {
-      throw new Error("CORS_ORIGIN must contain exact HTTP(S) origins; production origins must use HTTPS.");
+      throw new Error("CORS_ORIGINS must contain exact HTTP(S) origins; production origins must use HTTPS.");
     }
     return parsed.origin;
   });
